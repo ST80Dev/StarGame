@@ -83,45 +83,47 @@ stargame/
 
 ## 4. TEMPO (TEMPO STANDARD GALATTICO)
 
-**Principio fondamentale:** Il tempo scorre quando il giocatore lo fa scorrere. Nessuna attesa reale. Il **tempo è il cardine del gioco**: produzione, costruzione, ricerca, viaggi, eventi e diplomazia sono tutti espressi come *tassi per Ciclo* e *durate in Cicli*. Niente è scollegato dal flusso temporale.
+**Principio fondamentale:** Il tempo scorre quando il giocatore lo fa scorrere. Nessuna attesa reale. Il **tempo è il cardine del gioco**: produzione, costruzione, ricerca, viaggi, eventi e diplomazia sono tutti espressi come *tassi per Impulso* e *durate in Impulsi*. Niente è scollegato dal flusso temporale.
 
 ### 4.1 Unità di tempo — niente giorni/anni terrestri
 Il gioco si svolge attraverso la galassia e usa uno standard temporale slegato dalla rotazione di qualunque pianeta. L'unità è ancorata a un riferimento galattico (il **Faro di Orion**, una pulsar) ed è valida ovunque.
 
 | Unità | Valore | Ruolo nel gioco |
 |-------|--------|-----------------|
-| **Ciclo (C)** | unità atomica | passo base dell'avanzamento; granularità di tutti i timer |
-| **Fase (F)** | 10 Cicli | timer brevi, finestre di evento |
-| **Orbita (O)** | 100 Cicli | pianificazione strategica, durata accordi diplomatici/commerciali |
-| **Èra (È)** | 1000 Cicli | scala storica (Memoria Storica §17.2) |
+| **Impulso (I)** | unità atomica | passo base dell'avanzamento; granularità di tutti i timer |
+| **Arco (A)** | 10 Impulsi | timer brevi, finestre di evento |
+| **Orbita (O)** | 100 Impulsi | pianificazione strategica, durata accordi diplomatici/commerciali |
+| **Èra (È)** | 1000 Impulsi | scala storica (Memoria Storica §17.2) |
 
-> Il termine **"Ciclo" sostituisce ovunque il vecchio "turno"** usato nelle prime bozze: ogni durata nel resto del documento è in Cicli.
+> Il termine **"Impulso" sostituisce ovunque il vecchio "turno"** usato nelle prime bozze: ogni durata nel resto del documento è in Impulsi.
 
 ### 4.2 Data Stellare (display HUD)
-Il tempo corrente è mostrato come **Data Stellare**: `DS <orbita>.<cicli-nell'orbita>` (due decimali).
-Esempi: avvio partita `DS 100.00` → dopo 13 Cicli `DS 100.13` → dopo 100 Cicli `DS 101.00`.
-La parte intera sono le Orbite trascorse, i decimali il Ciclo all'interno dell'orbita corrente.
+Il tempo corrente è mostrato come **Data Stellare**: `DS <orbita>.<impulsi-nell'orbita>` (due decimali).
+La parte intera sono le Orbite trascorse dallo zero del calendario (la calibrazione del Faro di Orion); i due decimali sono l'Impulso corrente all'interno dell'orbita (00-99). Il decimale delle decine corrisponde all'Arco.
+Esempio di avanzamento: `DS 1873.00` → dopo 13 Impulsi `DS 1873.13` → dopo 100 Impulsi `DS 1874.00`.
+
+**Epoca d'inizio randomizzata:** a ogni nuova partita la Data Stellare iniziale è estratta a caso nell'intervallo **DS 800.00 – DS 3000.00** (Orbita casuale, Impulsi a `.00`). La galassia preesiste sempre al giocatore: le civiltà AI e l'ICG sono già in moto. _(La randomizzazione effettiva avverrà con la generazione della partita, M02/M05.)_
 
 ### 4.3 Controllo dell'avanzamento
-- **Salti rapidi:** pulsanti **+1 / +2 / +5 / +10 Cicli** per il controllo fine.
+- **Salti rapidi:** pulsanti **+1 / +2 / +5 / +10 Impulsi** per il controllo fine.
 - **"Avanza fino al prossimo evento":** salta automaticamente al prossimo momento significativo (fine costruzione, completamento ricerca, arrivo flotta, evento programmato). Evita il click-spam sui tempi lunghi e mantiene il giocatore padrone del ritmo (§21).
 - **Salvataggio:** possibile in qualsiasi momento, anche tra un salto e l'altro.
 
-### 4.4 Esempi di costi temporali (in Cicli)
-Valori ricalibrati perché i salti da 1-10 Cicli restino significativi, mantenendo i rapporti relativi tra le voci.
-- Struttura base (miniera semplice): **8-15 Cicli**
-- Struttura avanzata (cantiere navale): **45-75 Cicli**
-- Caccia leggero: **8-12 Cicli**
-- Corvetta / Incrociatore: **20-40 Cicli**
-- Fregata: **60-90 Cicli**
-- Dreadnought: **180-240 Cicli** (~2 Orbite)
-- Stazione orbitale: **120-150 Cicli**
-- Tecnologia base: **30-60 Cicli**
-- Tecnologia avanzata: **150-300 Cicli**
-- Colonizzazione secondo corpo stesso sistema: **90-150 Cicli** + risorse
+### 4.4 Esempi di costi temporali (in Impulsi)
+Valori ricalibrati perché i salti da 1-10 Impulsi restino significativi, mantenendo i rapporti relativi tra le voci.
+- Struttura base (miniera semplice): **8-15 Impulsi**
+- Struttura avanzata (cantiere navale): **45-75 Impulsi**
+- Caccia leggero: **8-12 Impulsi**
+- Corvetta / Incrociatore: **20-40 Impulsi**
+- Fregata: **60-90 Impulsi**
+- Dreadnought: **180-240 Impulsi** (~2 Orbite)
+- Stazione orbitale: **120-150 Impulsi**
+- Tecnologia base: **30-60 Impulsi**
+- Tecnologia avanzata: **150-300 Impulsi**
+- Colonizzazione secondo corpo stesso sistema: **90-150 Impulsi** + risorse
 
 ### 4.5 Interconnessione eventi-tempo
-Tutto fluisce in modo continuo. Gli eventi hanno conseguenze temporali (un embargo dura X Cicli, una guerra cambia rotte, una carestia rallenta le costruzioni). Le AI agiscono nei Cicli che il giocatore fa scorrere. Niente è isolato.
+Tutto fluisce in modo continuo. Gli eventi hanno conseguenze temporali (un embargo dura X Impulsi, una guerra cambia rotte, una carestia rallenta le costruzioni). Le AI agiscono negli Impulsi che il giocatore fa scorrere. Niente è isolato.
 
 ---
 
@@ -176,7 +178,7 @@ Ogni sistema contiene:
 - Il giocatore sceglie quale colonizzare per primo — scelta che condiziona tutto
 - Gli altri rimangono disponibili ma a costo elevato finché il primo è produttivo
 - **Eccezione:** Se il primo pianeta è esaurito o gravemente impoverito, colonizzare un secondo diventa più accessibile (migrazione naturale forzata)
-- Colonizzare un secondo corpo richiede: tecnologia specifica + infrastruttura consolidata sul primo + risorse significative + tempo (90-150 Cicli)
+- Colonizzare un secondo corpo richiede: tecnologia specifica + infrastruttura consolidata sul primo + risorse significative + tempo (90-150 Impulsi)
 
 ### 6.3 Tipi di corpo celeste e caratteristiche
 | Tipo | Vantaggi | Svantaggi |
@@ -211,18 +213,18 @@ Ogni sistema contiene:
 
 ### 7.3 Scoperta risorse
 - Risorse base: visibili subito alla colonizzazione
-- Risorse avanzate: si scoprono costruendo strutture esplorative, dopo X Cicli, o tramite eventi
+- Risorse avanzate: si scoprono costruendo strutture esplorative, dopo X Impulsi, o tramite eventi
 - Alcune risorse rarissime appaiono solo come eventi speciali o nelle reliquie
 
 ### 7.4 Scarsità
 - La scarsità crea **frizione e rallentamenti**, non game over improvvisi
 - Sotto soglia critica: malus a produzione, morale, velocità costruzione
 - Non si "fermano" le operazioni di colpo — si degradano gradualmente
-- Il giocatore ha sempre un Ciclo di preavviso negli eventi
+- Il giocatore ha sempre un Impulso di preavviso negli eventi
 
 ### 7.5 Mercato interno
 - Pianeti colonizzati possono rifornirsi a vicenda
-- Costo di trasporto proporzionale alla distanza (Cicli + risorse)
+- Costo di trasporto proporzionale alla distanza (Impulsi + risorse)
 - Surplus automaticamente redistribuito se rotte interne attive
 - Distanza tra sistemi influisce significativamente sull'efficienza
 
@@ -243,14 +245,14 @@ Ogni sistema contiene:
 | Fase civiltà | Costo base | Note |
 |-------------|-----------|------|
 | Piccola/giovane | Basso | Poco da smontare, popolazione adattabile |
-| Media | Significativo | Qualche Ciclo di instabilità, fattibile |
-| Grande | Alto | Traumatico, molti Cicli, rischio eventi |
+| Media | Significativo | Qualche Impulso di instabilità, fattibile |
+| Grande | Alto | Traumatico, molti Impulsi, rischio eventi |
 | Impero consolidato | Altissimo | Quasi scelta disperata se tech bassa |
 
 **Tecnologia come moltiplicatore:** Livello tech alto riduce il costo proporzionalmente — navi migliori, smontaggio rapido, architetture modulari.
 
 **Due modalità:**
-1. **Graduale:** X Cicli con due capitali parziali, bonus dimezzati su entrambe — meno traumatico
+1. **Graduale:** X Impulsi con due capitali parziali, bonus dimezzati su entrambe — meno traumatico
 2. **Immediato:** Costo enorme in risorse, shock immediato — solo per emergenze
 
 **Limiti:** Max 2 trasferimenti per partita (costo del terzo è proibitivo)
@@ -272,7 +274,7 @@ La popolazione è gestita in background — non si assegnano singoli lavoratori 
 | **Tecnici** | Efficienza strutture, riduzione consumi energia |
 
 ### 9.3 Crescita
-- La popolazione cresce automaticamente ogni Ciclo in base a: cibo, acqua, morale, strutture abitative
+- La popolazione cresce automaticamente ogni Impulso in base a: cibo, acqua, morale, strutture abitative
 - La composizione per classi si aggiusta lentamente in base alle strutture presenti
 - Più cantieri navali → più militari nel tempo
 - Più laboratori → più scienziati
@@ -284,7 +286,7 @@ La popolazione è gestita in background — non si assegnano singoli lavoratori 
 - **Consigliere Economico** — monitora risorse, commercio, segnala criticità
 - **Consigliere Scientifico** — guida priorità ricerca, segnala opportunità tech
 
-Il Consiglio interviene tramite **eventi testuali** periodici — non ogni Ciclo. Il giocatore può ignorare i suggerimenti ma con possibili conseguenze non immediate.
+Il Consiglio interviene tramite **eventi testuali** periodici — non ogni Impulso. Il giocatore può ignorare i suggerimenti ma con possibili conseguenze non immediate.
 
 ---
 
@@ -299,7 +301,7 @@ Il Consiglio interviene tramite **eventi testuali** periodici — non ogni Ciclo
 - **Avanzate:** Stazioni di trasferimento, impianti esotici (richiedono risorse rare)
 
 ### 10.2 Regole costruzione
-- Ogni struttura ha costo in risorse + tempo (Cicli)
+- Ogni struttura ha costo in risorse + tempo (Impulsi)
 - Alcune strutture richiedono prerequisiti tecnologici
 - Strutture danneggiate in guerra riducono efficienza, riparabili
 - Limite slot costruzione per pianeta (espandibile con tech)
@@ -441,7 +443,7 @@ Quando più flotte (proprie e/o alleate vs nemiche) convergono sullo stesso sist
 ## 15. COMMERCIO
 
 - Rotte commerciali per singola risorsa, frutto di accordi diplomatici
-- Gestione non dettagliata: si attivano, generano flusso automatico ogni Ciclo
+- Gestione non dettagliata: si attivano, generano flusso automatico ogni Impulso
 - **Eventi perturbativi:** Pirati, embargo, crisi di produzione, guerra nel sistema di transito
 - Mercato interno tra propri pianeti: automatico, influenzato da distanza
 - Commercio esterno con AI: proposta semplice (risorsa X per risorsa Y, durata accordo)
@@ -451,7 +453,7 @@ Quando più flotte (proprie e/o alleate vs nemiche) convergono sullo stesso sist
 ## 16. SPIONAGGIO
 
 - Leggero, non predominante
-- Si mandano agenti in sistemi nemici (costo risorse + Cicli di viaggio)
+- Si mandano agenti in sistemi nemici (costo risorse + Impulsi di viaggio)
 - **Azioni disponibili:** Raccolta informazioni (flotte, strutture), sabotaggio occasionale (rallenta costruzione), corruzione (indebolisce lealtà popolazione)
 - Agenti possono essere scoperti → incidente diplomatico
 - Non microgestione — eventi agenzia occasionali, non sistema complesso
@@ -461,7 +463,7 @@ Quando più flotte (proprie e/o alleate vs nemiche) convergono sullo stesso sist
 ## 17. EVENTI E NARRAZIONE
 
 ### 17.1 Cronaca Galattica
-- Pannello "notiziario" aggiornato ogni X Cicli
+- Pannello "notiziario" aggiornato ogni X Impulsi
 - Riporta eventi galattici dal punto di vista esterno
 - Esempi: "La flotta del Dominio Keth-Var ha raso al suolo il sistema di Rigel." / "La Confederazione di Aethon propone un trattato di non aggressione alle civiltà della zona nord."
 - Dà senso di mondo vivo senza che il giocatore veda tutto direttamente
@@ -536,7 +538,7 @@ Sviluppare rigorosamente in questo ordine, confermando ogni modulo prima del suc
 2. **[M02] Galassia** — Generazione procedurale, Canvas 2D mappa, nebbia di guerra, nomi
 3. **[M03] Sistema stellare** — Vista sistema, pianeti/lune, selezione colonizzazione
 4. **[M04] Pianeta base** — Risorse, strutture, popolazione, tempo, costruzione
-5. **[M05] Tempo e Cicli** — Game loop, avanzamento Cicli (TSG), timer costruzioni
+5. **[M05] Tempo e avanzamento** — Game loop, avanzamento in Impulsi (TSG), timer costruzioni
 6. **[M06] Salvataggio** — localStorage, slot multipli, caricamento
 7. **[M07] Esplorazione** — Navicelle esplorazione, viaggio, scoperta sistemi
 8. **[M08] Flotta base** — Caccia/corvette, costruzione, movimento
@@ -562,5 +564,5 @@ Sviluppare rigorosamente in questo ordine, confermando ogni modulo prima del suc
 - **Niente è isolato** — guerra cambia commercio, commercio cambia diplomazia, tecnologia cambia tutto.
 - **Il giocatore controlla il ritmo** — mai forzare attese, mai bloccare su un singolo evento.
 - **Salvare sempre prima di ogni azione irreversibile** — prompt discreto, non invasivo.
-- **La galassia vive** — le AI agiscono anche quando il giocatore non avanza i Cicli (al prossimo avanzamento vengono processati i Cicli AI).
+- **La galassia vive** — le AI agiscono anche quando il giocatore non avanza i Impulsi (al prossimo avanzamento vengono processati i Impulsi AI).
 - Aggiornare `CLAUDE.md` a ogni sessione con: moduli completati, moduli in corso, decisioni prese, problemi aperti.

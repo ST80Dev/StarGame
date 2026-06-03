@@ -430,7 +430,7 @@ button { font-family: inherit; }
   background: linear-gradient(180deg, rgba(47, 230, 224, 0.30), rgba(47, 230, 224, 0.10));
   box-shadow: var(--glow-accent);
 }
-/* Pulsanti-passo +1/+2/+5/+10 Cicli */
+/* Pulsanti-passo +1/+2/+5/+10 Impulsi */
 .btn--step {
   font-family: var(--font-data);
   font-size: 0.95rem;
