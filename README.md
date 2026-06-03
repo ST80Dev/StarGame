@@ -12,7 +12,7 @@ Interfaccia testuale/HUD in stile *Master of Orion* — niente action, niente li
 In sviluppo **modulo per modulo**. Lo stato corrente è tracciato in [`CLAUDE.md`](./CLAUDE.md).
 Il design completo è in [`ORION_EMPIRES_GDD.md`](./ORION_EMPIRES_GDD.md) (fonte di verità).
 
-Modulo corrente: **M01 — Struttura base** (shell HTML, tema scuro spaziale, layout pannelli).
+Modulo corrente: **M02 — Galassia** (generazione procedurale deterministica dal seed, nomi dei sistemi, mappa a nodi su Canvas 2D responsivo). M01 (shell, tema, layout) completato.
 
 ## Eseguire in locale
 
@@ -26,9 +26,13 @@ python3 -m http.server 8000
 ## Struttura
 
 ```
-index.html            shell UI
+index.html            shell UI + caricamento moduli
 css/style.css         tema scuro spaziale (custom properties)
-js/main.js            bootstrap della shell
+js/rng.js             PRNG deterministico (seed → galassia riproducibile)
+js/names.js           nomi dei sistemi (40% reali / 60% inventati)
+js/galaxy.js          generazione procedurale galassia + stato (seed+delta)
+js/galaxy-map.js      mappa a nodi su Canvas 2D (responsivo, Pointer Events)
+js/main.js            bootstrap + integrazione moduli
 CLAUDE.md             stato di sviluppo
 ORION_EMPIRES_GDD.md  game design document
 ```
