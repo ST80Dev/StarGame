@@ -23,7 +23,7 @@ Mantieni sempre un `CLAUDE.md` aggiornato nella root del repository con lo stato
 **Interfaccia:** Testuale/pannelli — NON un action game, NON un libro game  
 **Definizione "testuale":** Interfaccia a pannelli, tabelle, numeri, pulsanti, testo narrativo — stile Master of Orion / Dwarf Fortress UI  
 **Piattaforma:** Browser (GitHub Pages), vanilla JS, nessuna dipendenza esterna  
-**Salvataggio:** localStorage, slot multipli  
+**Salvataggio:** localStorage (slot multipli) + Export/Import file `.json` per trasferire le partite tra dispositivi (PC ↔ tablet)  
 
 ---
 
@@ -61,9 +61,10 @@ stargame/
 - Vanilla JS puro, no framework, no CDN esterni
 - CSS custom properties per tutto il theming
 - Canvas 2D solo per mappa galattica e sistemi (no WebGL)
-- localStorage per salvataggi
-- Nessuna chiamata a server esterni
-- Mobile-friendly ma ottimizzato desktop
+- localStorage per i salvataggi (slot multipli); in più Export/Import file `.json` con `schemaVersion` per il trasferimento manuale tra dispositivi
+- Nessuna chiamata a server esterni (eventuale cloud-sync resta opzionale e futuro: stesso payload del save)
+- Target: **desktop (browser PC) + tablet**; telefoni non supportati (viewport troppo ridotta). Larghezza minima ~768px, layout responsive a due fasce (desktop/tablet-landscape · tablet-portrait con pannello dettagli collassabile)
+- Canvas responsivo (resize al contenitore + `devicePixelRatio`) e input unificato mouse/touch via Pointer Events
 
 ---
 
@@ -539,7 +540,7 @@ Sviluppare rigorosamente in questo ordine, confermando ogni modulo prima del suc
 3. **[M03] Sistema stellare** — Vista sistema, pianeti/lune, selezione colonizzazione
 4. **[M04] Pianeta base** — Risorse, strutture, popolazione, tempo, costruzione
 5. **[M05] Tempo e avanzamento** — Game loop, avanzamento in Impulsi (TSG), timer costruzioni
-6. **[M06] Salvataggio** — localStorage, slot multipli, caricamento
+6. **[M06] Salvataggio** — localStorage (slot multipli) + Export/Import `.json` (schemaVersion, validazione); galassia salvata come **seed + delta** (struttura rigenerata, salvato solo lo stato mutevole); cronaca con **log limitato** (ultimi N eventi)
 7. **[M07] Esplorazione** — Navicelle esplorazione, viaggio, scoperta sistemi
 8. **[M08] Flotta base** — Caccia/corvette, costruzione, movimento
 9. **[M09] Combattimento** — Risoluzione battaglia, report, veteranità

@@ -27,7 +27,7 @@ Legenda: ✅ completato · 🚧 in corso · ⬜ non iniziato · ⏸️ in attesa
 | M03 | Sistema stellare               | ⬜ | |
 | M04 | Pianeta base                   | ⬜ | |
 | M05 | Tempo e avanzamento (TSG, game loop) | ⬜ | |
-| M06 | Salvataggio (localStorage)     | ⬜ | |
+| M06 | Salvataggio (localStorage + export/import .json) | ⬜ | seed+delta, schemaVersion, log limitato |
 | M07 | Esplorazione                   | ⬜ | |
 | M08 | Flotta base                    | ⬜ | |
 | M09 | Combattimento                  | ⬜ | |
@@ -82,13 +82,20 @@ Legenda: ✅ completato · 🚧 in corso · ⬜ non iniziato · ⏸️ in attesa
    - **Epoca d'inizio randomizzata** a ogni partita nell'intervallo **DS 800.00–3000.00** (galassia sempre preesistente); la randomizzazione effettiva arriva con la generazione partita (M02/M05)
    - Durate del GDD §4 ricalibrate in Impulsi (passi 1-10 sensati); termine "turno" sostituito da "Impulso" in tutto il GDD
    - Nomenclatura concordata con l'utente (Impulso/Arco scelti al posto di Ciclo/Fase/Battito).
+5. **Salvataggio: Export/Import `.json` (decisione per M06).** Confermato il modello GDD (`localStorage`, slot multipli) con in più **export/import di file `.json`** per giocare su più dispositivi — trasferimento **manuale** (Drive/USB/email), **nessun backend**, §2 intatto. Strategia anti-crescita:
+   - galassia salvata come **seed + delta** (la struttura immutabile si rigenera dal seed; si salva solo lo stato mutevole)
+   - **`schemaVersion`** nel payload per migrazioni future tra moduli
+   - **cronaca/eventi con log limitato** (ultimi N) — unica fonte di crescita illimitata
+   - dimensione attesa: ~20-50 KB (early) → ~200-500 KB (late; con seed+delta anche meno), ben sotto il limite localStorage (~5 MB). Un solo `.json` basta.
+   - porta aperta a un **cloud-sync opzionale futuro** (stesso payload → Supabase, già collegato a questo ambiente).
+6. **Target dispositivi: desktop + tablet (no telefono).** Ottimizzazione per **browser PC e tablet**; smartphone non supportati (visuale troppo ridotta). Larghezza minima **~768px**; sotto, avviso "schermo troppo piccolo". Implicazioni: responsive a due fasce (desktop/tablet-landscape a 3 colonne · tablet-portrait con pannello destro collassabile); **Canvas responsivo** (resize + `devicePixelRatio`) e **input unificato mouse/touch** (Pointer Events) fin da M02/M03; niente funzioni affidate solo all'`hover`.
 
 ---
 
 ## Problemi aperti / da decidere più avanti
 
 - Includere o meno il font Orbitron come asset locale (`/fonts`) in un modulo di polish (M20).
-- Definire lo schema dello stato di gioco (game state) prima di M04/M05.
+- Definire lo schema dello stato di gioco (game state) e il `schemaVersion` del save prima di M04/M05.
 - Strategia di layout della mappa galattica su Canvas (clustering procedurale) da affrontare in M02.
 
 ---
@@ -112,4 +119,4 @@ verranno aggiunti nei moduli corrispondenti.
 
 ---
 
-_Ultimo aggiornamento: 2026-06-03 — M01 + modello a tempo TSG (Impulso/Arco/Orbita/Èra, epoca random DS 800–3000)._
+_Ultimo aggiornamento: 2026-06-03 — M01 + TSG; decisioni di design: salvataggio export/import .json (seed+delta, schemaVersion, log limitato) e target desktop+tablet._
