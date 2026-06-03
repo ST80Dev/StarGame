@@ -202,7 +202,7 @@ button { font-family: inherit; }
 .index__value { font-family: var(--font-data); font-size: 1.05rem; }
 .index--icg .index__value  { color: var(--c-accent-warm); }
 .index--rep .index__value  { color: var(--c-accent); }
-.index--turn .index__value { color: var(--c-text); }
+.index--date .index__value { color: var(--c-text); font-size: 0.9rem; }
 
 /* =====================================================================
    Corpo principale a tre colonne
@@ -326,11 +326,11 @@ button { font-family: inherit; }
 }
 
 /* =====================================================================
-   HUD inferiore: cronaca + controllo turni
+   HUD inferiore: cronaca + controllo del tempo
    ===================================================================== */
 .hud-bottom {
   display: grid;
-  grid-template-columns: 1fr 220px;
+  grid-template-columns: 1fr 240px;
   gap: var(--gap);
   min-height: 0;
 }
@@ -366,12 +366,12 @@ button { font-family: inherit; }
 }
 .chronicle__entry--system { color: var(--c-text-faint); font-style: italic; }
 
-/* --- Controllo turni --- */
-.turn-control {
+/* --- Controllo del tempo (Tempo Standard Galattico) --- */
+.time-control {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 10px;
+  gap: 9px;
   padding: 14px;
   background: var(--c-panel);
   border: 1px solid var(--c-border);
@@ -379,6 +379,27 @@ button { font-family: inherit; }
   box-shadow: var(--shadow-panel);
   backdrop-filter: blur(6px);
 }
+.time-control__title {
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-text-soft);
+  text-align: center;
+}
+.time-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.time-control__unit {
+  margin: 2px 0 0;
+  font-size: 0.66rem;
+  text-align: center;
+  color: var(--c-text-faint);
+  letter-spacing: 0.04em;
+}
+.time-control__unit strong { color: var(--c-accent); font-weight: 600; }
 
 .btn {
   display: inline-flex;
@@ -409,7 +430,19 @@ button { font-family: inherit; }
   background: linear-gradient(180deg, rgba(47, 230, 224, 0.30), rgba(47, 230, 224, 0.10));
   box-shadow: var(--glow-accent);
 }
-.btn--ghost { font-size: 0.72rem; padding: 8px 12px; color: var(--c-text-soft); }
+/* Pulsanti-passo +1/+2/+5/+10 Cicli */
+.btn--step {
+  font-family: var(--font-data);
+  font-size: 0.95rem;
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 10px 0;
+  color: var(--c-text);
+}
+.btn--step:hover:not(:disabled) {
+  background: rgba(47, 230, 224, 0.10);
+  border-color: var(--c-accent);
+}
 
 /* =====================================================================
    Scrollbar coerente col tema

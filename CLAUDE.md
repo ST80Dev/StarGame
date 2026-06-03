@@ -26,7 +26,7 @@ Legenda: ✅ completato · 🚧 in corso · ⬜ non iniziato · ⏸️ in attesa
 | M02 | Galassia (gen. procedurale, mappa Canvas) | ⬜ | |
 | M03 | Sistema stellare               | ⬜ | |
 | M04 | Pianeta base                   | ⬜ | |
-| M05 | Turni e tempo                  | ⬜ | |
+| M05 | Tempo e Cicli (TSG, game loop) | ⬜ | |
 | M06 | Salvataggio (localStorage)     | ⬜ | |
 | M07 | Esplorazione                   | ⬜ | |
 | M08 | Flotta base                    | ⬜ | |
@@ -51,9 +51,9 @@ Legenda: ✅ completato · 🚧 in corso · ⬜ non iniziato · ⏸️ in attesa
 
 - `index.html` — shell completa con:
   - Sfondo stellare parallax (3 layer, CSS puro)
-  - **HUD superiore:** brand, barra risorse base (Metalli/Energia/Cibo/Acqua), indici globali (ICG, Reputazione, Turno) — valori segnaposto `—`
+  - **HUD superiore:** brand, barra risorse base (Metalli/Energia/Cibo/Acqua), indici globali (ICG, Reputazione, **Data Stellare**) — valori segnaposto `—`
   - **Corpo a 3 colonne:** pannello navigazione (sinistra), viewport centrale (futura mappa Canvas), pannello Consiglio/dettagli (destra)
-  - **HUD inferiore:** Cronaca Galattica + controllo turni (pulsanti "Avanza Turno" / "Avanza ×5", disabilitati finché non c'è un game loop)
+  - **HUD inferiore:** Cronaca Galattica + **controllo del tempo** (salti +1/+2/+5/+10 Cicli + "Prossimo evento", disabilitati finché non c'è un game loop)
 - `css/style.css` — tema scuro spaziale completo:
   - Tutto il theming via **CSS custom properties** (`:root`)
   - Palette: nero profondo + blu/viola + accenti ciano/arancio (come da §3)
@@ -64,9 +64,9 @@ Legenda: ✅ completato · 🚧 in corso · ⬜ non iniziato · ⏸️ in attesa
 - Gli attributi `data-bind="..."` sui valori HUD sono predisposti per il binding dati dei moduli futuri.
 
 ### Aggancio per i moduli futuri
-- I valori HUD usano `data-bind` (es. `data-bind="metalli"`, `data-bind="icg"`, `data-bind="turno"`).
+- I valori HUD usano `data-bind` (es. `data-bind="metalli"`, `data-bind="icg"`, `data-bind="data-stellare"`).
 - Il viewport centrale ha `[data-view-stage]`: lì verrà montato il Canvas 2D (M02/M03).
-- I pulsanti turno hanno `data-action="advance-turn"` / `data-action="advance-many"`.
+- I controlli del tempo: `data-action="advance"` con `data-cicli="1|2|5|10"`, e `data-action="advance-to-event"`. Il game loop temporale arriva in M05.
 
 ---
 
@@ -75,6 +75,12 @@ Legenda: ✅ completato · 🚧 in corso · ⬜ non iniziato · ⏸️ in attesa
 1. **Font senza CDN.** Il GDD suggerisce *Orbitron* da Google Fonts (§3), ma vieta anche dipendenze/CDN esterni (§2). Per rispettare il vincolo più stringente si usa uno **stack di font** (`--font-display`) che impiega Orbitron se installato localmente, con fallback di sistema. In futuro si potrà includere il font come file locale (`/fonts`) senza chiamate esterne.
 2. **Branch `main`.** Il repository era vuoto: l'impalcatura iniziale fa da base. Lo sviluppo avviene sul branch dedicato indicato per la sessione.
 3. **JS minimale in M01.** Nessuna struttura di gioco anticipata: i file `js/galaxy.js`, `js/planet.js`, ecc. previsti dal GDD §2 verranno creati nei rispettivi moduli.
+4. **Tempo al posto dei turni (GDD §4 riscritto).** Su richiesta utente l'avanzamento non è più "a turni" ma a **tempo**, cardine del gioco. Introdotto il **Tempo Standard Galattico (TSG)**, slegato da giorno/anno terrestri e ancorato a un riferimento galattico (Faro di Orion):
+   - Unità: **Ciclo** (atomica) · **Fase** = 10 C · **Orbita** = 100 C · **Èra** = 1000 C
+   - HUD mostra la **Data Stellare** `DS <orbita>.<cicli>` (es. `DS 100.13`)
+   - Avanzamento: salti **+1/+2/+5/+10 Cicli** + **"Avanza fino al prossimo evento"**
+   - Durate del GDD §4 ricalibrate in Cicli (passi 1-10 sensati); termine "turno" sostituito da "Ciclo" in tutto il GDD
+   - Nomi delle unità rinominabili se l'utente preferisce.
 
 ---
 
@@ -105,4 +111,4 @@ verranno aggiunti nei moduli corrispondenti.
 
 ---
 
-_Ultimo aggiornamento: 2026-06-03 — fine implementazione M01._
+_Ultimo aggiornamento: 2026-06-03 — M01 + modello a tempo (TSG) al posto dei turni._

@@ -18,7 +18,7 @@
   <!-- ===== Shell applicativa ===== -->
   <div class="app-shell">
 
-    <!-- ---- HUD superiore: risorse, turno, indici globali ---- -->
+    <!-- ---- HUD superiore: risorse, data stellare, indici globali ---- -->
     <header class="hud-top" role="banner">
       <div class="hud-top__brand">
         <span class="brand-mark" aria-hidden="true">◈</span>
@@ -57,9 +57,9 @@
           <span class="index__label">REP</span>
           <span class="index__value" data-bind="reputazione">—</span>
         </div>
-        <div class="index index--turn" title="Turno corrente">
-          <span class="index__label">TURNO</span>
-          <span class="index__value" data-bind="turno">—</span>
+        <div class="index index--date" title="Data Stellare — Tempo Standard Galattico (unità: Ciclo)">
+          <span class="index__label">DATA</span>
+          <span class="index__value" data-bind="data-stellare">DS&nbsp;—</span>
         </div>
       </div>
     </header>
@@ -132,7 +132,7 @@
       </aside>
     </main>
 
-    <!-- ---- HUD inferiore: cronaca galattica + controllo turni ---- -->
+    <!-- ---- HUD inferiore: cronaca galattica + controllo del tempo ---- -->
     <footer class="hud-bottom" role="contentinfo">
       <section class="chronicle" aria-label="Cronaca galattica">
         <div class="panel__header panel__header--inline">
@@ -145,14 +145,19 @@
         </ul>
       </section>
 
-      <div class="turn-control">
-        <button class="btn btn--primary" data-action="advance-turn" type="button" disabled>
-          <span class="btn__glyph" aria-hidden="true">⏵</span>
-          Avanza Turno
+      <div class="time-control">
+        <span class="time-control__title">Avanza nel tempo</span>
+        <div class="time-steps" role="group" aria-label="Salti temporali (Cicli)">
+          <button class="btn btn--step" data-action="advance" data-cicli="1" type="button" disabled>+1</button>
+          <button class="btn btn--step" data-action="advance" data-cicli="2" type="button" disabled>+2</button>
+          <button class="btn btn--step" data-action="advance" data-cicli="5" type="button" disabled>+5</button>
+          <button class="btn btn--step" data-action="advance" data-cicli="10" type="button" disabled>+10</button>
+        </div>
+        <button class="btn btn--primary" data-action="advance-to-event" type="button" disabled>
+          <span class="btn__glyph" aria-hidden="true">⏭</span>
+          Prossimo evento
         </button>
-        <button class="btn btn--ghost" data-action="advance-many" type="button" disabled>
-          Avanza ×5
-        </button>
+        <span class="time-control__unit">unità: <strong>Ciclo</strong> · TSG</span>
       </div>
     </footer>
   </div>

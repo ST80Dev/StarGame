@@ -7,7 +7,13 @@
 'use strict';
 
 const ORION = {
-  version: '0.1.0-M01',
+  version: '0.1.1-M01',
+  /* Tempo Standard Galattico (TSG) — unità base: Ciclo.
+     Gerarchia decimale: 1 Fase = 10 Cicli · 1 Orbita = 100 Cicli · 1 Èra = 1000 Cicli.
+     Data Stellare visualizzata: DS <orbita>.<cicli-nell'orbita>.
+     I controlli di avanzamento (data-action="advance" con data-cicli, e
+     data-action="advance-to-event") sono predisposti ma inerti: il game
+     loop temporale verrà implementato in M05. */
   /* Etichette provvisorie del viewport per ciascuna vista.
      Verranno sostituite dal rendering reale (Canvas) nei moduli futuri. */
   viewLabels: {
