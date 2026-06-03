@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Orion Empires — 4X strategico spaziale a pannelli. Vanilla JS, GitHub Pages.">
+  <title>Orion Empires</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- ===== Sfondo stellare parallax (puramente decorativo) ===== -->
+  <div class="starfield" aria-hidden="true">
+    <div class="star-layer star-layer--far"></div>
+    <div class="star-layer star-layer--mid"></div>
+    <div class="star-layer star-layer--near"></div>
+  </div>
+
+  <!-- ===== Shell applicativa ===== -->
+  <div class="app-shell">
+
+    <!-- ---- HUD superiore: risorse, data stellare, indici globali ---- -->
+    <header class="hud-top" role="banner">
+      <div class="hud-top__brand">
+        <span class="brand-mark" aria-hidden="true">◈</span>
+        <h1 class="brand-title">ORION&nbsp;EMPIRES</h1>
+      </div>
+
+      <ul class="resource-bar" aria-label="Risorse base">
+        <li class="resource" data-resource="metalli">
+          <span class="resource__icon" aria-hidden="true">⛭</span>
+          <span class="resource__label">Metalli</span>
+          <span class="resource__value" data-bind="metalli">—</span>
+        </li>
+        <li class="resource" data-resource="energia">
+          <span class="resource__icon" aria-hidden="true">⚡</span>
+          <span class="resource__label">Energia</span>
+          <span class="resource__value" data-bind="energia">—</span>
+        </li>
+        <li class="resource" data-resource="cibo">
+          <span class="resource__icon" aria-hidden="true">❖</span>
+          <span class="resource__label">Cibo</span>
+          <span class="resource__value" data-bind="cibo">—</span>
+        </li>
+        <li class="resource" data-resource="acqua">
+          <span class="resource__icon" aria-hidden="true">≈</span>
+          <span class="resource__label">Acqua</span>
+          <span class="resource__value" data-bind="acqua">—</span>
+        </li>
+      </ul>
+
+      <div class="hud-top__indices">
+        <div class="index index--icg" title="Indice Corruzione Galattica">
+          <span class="index__label">ICG</span>
+          <span class="index__value" data-bind="icg">—</span>
+        </div>
+        <div class="index index--rep" title="Reputazione galattica">
+          <span class="index__label">REP</span>
+          <span class="index__value" data-bind="reputazione">—</span>
+        </div>
+        <div class="index index--date" title="Data Stellare — Tempo Standard Galattico (unità: Impulso)">
+          <span class="index__label">DATA</span>
+          <span class="index__value" data-bind="data-stellare">DS&nbsp;—</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ---- Corpo principale a tre colonne ---- -->
+    <main class="hud-body">
+
+      <!-- Pannello sinistro: navigazione / sistemi -->
+      <aside class="panel panel--left" aria-label="Navigazione">
+        <div class="panel__header">
+          <h2 class="panel__title">Navigazione</h2>
+        </div>
+        <div class="panel__content">
+          <nav class="nav-list">
+            <button class="nav-item is-active" data-view="galaxy" type="button">
+              <span class="nav-item__glyph" aria-hidden="true">✦</span> Galassia
+            </button>
+            <button class="nav-item" data-view="system" type="button">
+              <span class="nav-item__glyph" aria-hidden="true">◉</span> Sistema
+            </button>
+            <button class="nav-item" data-view="planet" type="button">
+              <span class="nav-item__glyph" aria-hidden="true">○</span> Pianeta
+            </button>
+            <button class="nav-item" data-view="fleet" type="button">
+              <span class="nav-item__glyph" aria-hidden="true">▸</span> Flotta
+            </button>
+            <button class="nav-item" data-view="research" type="button">
+              <span class="nav-item__glyph" aria-hidden="true">⌬</span> Ricerca
+            </button>
+            <button class="nav-item" data-view="diplomacy" type="button">
+              <span class="nav-item__glyph" aria-hidden="true">⚑</span> Diplomazia
+            </button>
+          </nav>
+        </div>
+      </aside>
+
+      <!-- Viewport centrale: qui andranno mappa galattica / sistema (Canvas, M02+) -->
+      <section class="viewport" aria-label="Vista principale">
+        <div class="viewport__stage" data-view-stage>
+          <div class="viewport__placeholder">
+            <span class="viewport__glyph" aria-hidden="true">◈</span>
+            <p class="viewport__caption">VISTA GALASSIA</p>
+            <p class="viewport__hint">La mappa galattica verrà generata nel modulo M02.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Pannello destro: dettagli / Consiglio della Civiltà -->
+      <aside class="panel panel--right" aria-label="Dettagli">
+        <div class="panel__header">
+          <h2 class="panel__title">Consiglio</h2>
+        </div>
+        <div class="panel__content">
+          <div class="council">
+            <div class="council__member">
+              <span class="council__role">Militare</span>
+              <span class="council__status">In attesa</span>
+            </div>
+            <div class="council__member">
+              <span class="council__role">Economico</span>
+              <span class="council__status">In attesa</span>
+            </div>
+            <div class="council__member">
+              <span class="council__role">Scientifico</span>
+              <span class="council__status">In attesa</span>
+            </div>
+          </div>
+          <p class="panel__note">I dettagli contestuali appariranno qui in base alla selezione.</p>
+        </div>
+      </aside>
+    </main>
+
+    <!-- ---- HUD inferiore: cronaca galattica + controllo del tempo ---- -->
+    <footer class="hud-bottom" role="contentinfo">
+      <section class="chronicle" aria-label="Cronaca galattica">
+        <div class="panel__header panel__header--inline">
+          <h2 class="panel__title">Cronaca Galattica</h2>
+        </div>
+        <ul class="chronicle__log" data-bind="chronicle">
+          <li class="chronicle__entry chronicle__entry--system">
+            Sistema inizializzato. In attesa della prima partita.
+          </li>
+        </ul>
+      </section>
+
+      <div class="time-control">
+        <span class="time-control__title">Avanza nel tempo</span>
+        <div class="time-steps" role="group" aria-label="Salti temporali (Impulsi)">
+          <button class="btn btn--step" data-action="advance" data-impulsi="1" type="button" disabled>+1</button>
+          <button class="btn btn--step" data-action="advance" data-impulsi="2" type="button" disabled>+2</button>
+          <button class="btn btn--step" data-action="advance" data-impulsi="5" type="button" disabled>+5</button>
+          <button class="btn btn--step" data-action="advance" data-impulsi="10" type="button" disabled>+10</button>
+        </div>
+        <button class="btn btn--primary" data-action="advance-to-event" type="button" disabled>
+          <span class="btn__glyph" aria-hidden="true">⏭</span>
+          Prossimo evento
+        </button>
+        <span class="time-control__unit">unità: <strong>Impulso</strong> · TSG</span>
+      </div>
+    </footer>
+  </div>
+
+  <script src="js/main.js"></script>
+</body>
+</html>
