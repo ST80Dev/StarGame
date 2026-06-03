@@ -22,8 +22,8 @@ Legenda: ✅ completato · 🚧 in corso · ⬜ non iniziato · ⏸️ in attesa
 
 | #   | Modulo                         | Stato | Note |
 |-----|--------------------------------|:----:|------|
-| M01 | Struttura base (shell, tema, layout) | ⏸️ | Implementato — in attesa di conferma utente |
-| M02 | Galassia (gen. procedurale, mappa Canvas) | ⬜ | |
+| M01 | Struttura base (shell, tema, layout) | ✅ | Confermato. Shell, tema, layout, TSG. |
+| M02 | Galassia (gen. procedurale, mappa Canvas) | ⏸️ | Implementato — in attesa di conferma utente. Gen. procedurale (seed+delta), nomi §5.2, mappa a nodi su Canvas responsivo + Pointer Events. |
 | M03 | Sistema stellare               | ⬜ | |
 | M04 | Pianeta base                   | ⬜ | |
 | M05 | Tempo e avanzamento (TSG, game loop) | ⬜ | |
@@ -70,6 +70,27 @@ Legenda: ✅ completato · 🚧 in corso · ⬜ non iniziato · ⏸️ in attesa
 
 ---
 
+## M02 — Galassia · cosa è stato fatto
+
+**Obiettivo (GDD §5):** generazione procedurale (seed salvabile), nomi §5.2, grafo a nodi su Canvas 2D nel viewport.
+
+Architettura a moduli vanilla (namespace globale `ORION`, niente bundler), caricati in ordine di dipendenza in `index.html`:
+
+- **`js/rng.js` — PRNG deterministico.** Fondamento del **seed+delta** (decisione #5). `mulberry32` + hashing seed `xmur3`; helper `int/range/pick/shuffle/gauss/chance`. `newSeed()` genera un seed breve e leggibile (8 caratteri, niente ambigui). Dato lo stesso seed, la galassia si rigenera **identica** (verificato su 300 seed).
+- **`js/names.js` — nomi §5.2.** Pool 20 nomi reali + generatore procedurale a 3 stili (latino/classico, aspro/alieno, poetico/misterioso) con banchi di sillabe che includono gli esempi del GDD. Ratio **40% reali / 60% inventati**, unici, distribuiti casualmente. Quando la quota reali supera il pool di 20, i nomi reali eccedenti ricevono una **designazione di catalogo romana** (`Rigel II`, `Vega III`) — convenzione 4X (vedi decisione #7).
+- **`js/galaxy.js` — generazione + stato.** Separa nettamente:
+  - **Struttura immutabile** (`generate(seed)`): 80–120 sistemi (§5.1), layout con **clustering** (4–7 cluster, dispersione gaussiana, distanza minima anti-overlap), grafo rotte stellari (**MST di Prim** per connettività garantita + rotte extra corte per anelli locali), tipo stella (uso minimale: colore nodo; contenuto pieno è M03), **pericolo §5.3** crescente con la distanza dal pianeta base, sistema di partenza centrale e ben connesso. Coordinate in spazio normalizzato `[0,1]²`. NON va salvata: basta il seed.
+  - **Stato mutevole / delta** (`createState`): livello di scoperta per sistema (nebbia di guerra §5.1: home `EXPLORED`, adiacenti `DETECTED`, resto `UNKNOWN`), selezione corrente. È ciò che andrà salvato in M06. Include `schemaVersion`.
+- **`js/galaxy-map.js` — mappa su Canvas.** Classe `GalaxyMap`:
+  - **Canvas responsivo** (decisione #6): `ResizeObserver` sul contenitore + `devicePixelRatio` (cap 2.5) per nitidezza HiDPI; render **on-demand** via `requestAnimationFrame` (non loop continuo).
+  - **Input unificato mouse/touch** (decisione #6): tutto via **Pointer Events** — pan (trascinamento), zoom (rotella + pinch a 2 dita), tap/click per selezionare, hover per evidenziare, doppio click per reinquadrare. `touch-action:none`. Nessuna funzione legata al solo hover.
+  - Disegna rotte, nodi (colore = tipo stella, alone = pericolo), **nebbia di guerra** (sconosciuti = solo posizione approssimativa), etichette dei nomi noti, anello sul pianeta base, evidenziazione hover/selezione. Hit-testing per la selezione.
+- **`js/main.js`** — integra M02: genera la prima galassia al boot (seed casuale), monta la mappa nella vista *Galassia*, mostra i **dettagli del sistema** selezionato nel pannello destro, popola la **Data Stellare** iniziale (epoca DS 800–3000 derivata dal seed, deterministica) e la Cronaca. Overlay sul viewport con **seed**, n° sistemi e comandi *Inquadra* / *Nuova galassia*.
+
+**Note di scope:** l'esplorazione vera (rivelare sistemi muovendo flotte) è **M07**; qui la nebbia di guerra è solo inizializzata. Il contenuto dei sistemi (corpi celesti, anomalie §6) è **M03**. ICG/Reputazione restano segnaposto fino ai moduli dedicati.
+
+---
+
 ## Decisioni prese
 
 1. **Font senza CDN.** Il GDD suggerisce *Orbitron* da Google Fonts (§3), ma vieta anche dipendenze/CDN esterni (§2). Per rispettare il vincolo più stringente si usa uno **stack di font** (`--font-display`) che impiega Orbitron se installato localmente, con fallback di sistema. In futuro si potrà includere il font come file locale (`/fonts`) senza chiamate esterne.
@@ -89,14 +110,15 @@ Legenda: ✅ completato · 🚧 in corso · ⬜ non iniziato · ⏸️ in attesa
    - dimensione attesa: ~20-50 KB (early) → ~200-500 KB (late; con seed+delta anche meno), ben sotto il limite localStorage (~5 MB). Un solo `.json` basta.
    - porta aperta a un **cloud-sync opzionale futuro** (stesso payload → Supabase, già collegato a questo ambiente).
 6. **Target dispositivi: desktop + tablet (no telefono).** Ottimizzazione per **browser PC e tablet**; smartphone non supportati (visuale troppo ridotta). Larghezza minima **~768px**; sotto, avviso "schermo troppo piccolo". Implicazioni: responsive a due fasce (desktop/tablet-landscape a 3 colonne · tablet-portrait con pannello destro collassabile); **Canvas responsivo** (resize + `devicePixelRatio`) e **input unificato mouse/touch** (Pointer Events) fin da M02/M03; niente funzioni affidate solo all'`hover`.
+7. **Nomi reali oltre il pool: designazione di catalogo (M02).** Il GDD §5.2 chiede **40% nomi reali**, ma il pool fisso è di soli **20** nomi: con galassie fino a 120 sistemi la quota del 40% (fino a 48) supera il pool. I nomi reali eccedenti ricevono quindi una **designazione romana** (`Rigel II`, `Vega III`, …), convenzione comune nei 4X (MoO, Stellaris). Così la regola 40/60 è rispettata senza inventare false stelle reali. Gli inventati restano interamente procedurali (3 stili §5.2), quindi illimitati.
 
 ---
 
 ## Problemi aperti / da decidere più avanti
 
 - Includere o meno il font Orbitron come asset locale (`/fonts`) in un modulo di polish (M20).
-- Definire lo schema dello stato di gioco (game state) e il `schemaVersion` del save prima di M04/M05.
-- Strategia di layout della mappa galattica su Canvas (clustering procedurale) da affrontare in M02.
+- Definire lo schema dello stato di gioco (game state) e il `schemaVersion` del save prima di M04/M05 (M02 ha già introdotto `schemaVersion: 1` per galassia/stato).
+- Avviso "schermo troppo piccolo" sotto ~768px (decisione #6) ancora da implementare (candidato M20/polish).
 
 ---
 
@@ -104,19 +126,23 @@ Legenda: ✅ completato · 🚧 in corso · ⬜ non iniziato · ⏸️ in attesa
 
 ```
 stargame/
-├── index.html          ✅ shell UI
+├── index.html          ✅ shell UI + caricamento moduli M02
 ├── css/
-│   └── style.css        ✅ tema scuro spaziale
+│   └── style.css        ✅ tema scuro spaziale + mappa/galassia (M02)
 ├── js/
-│   └── main.js          ✅ bootstrap shell
+│   ├── rng.js           ✅ PRNG deterministico (M02 — seed+delta)
+│   ├── names.js         ✅ nomi sistemi §5.2 (M02)
+│   ├── galaxy.js        ✅ generazione galassia + stato/delta (M02)
+│   ├── galaxy-map.js    ✅ mappa a nodi su Canvas (M02)
+│   └── main.js          ✅ bootstrap + integrazione M02
 ├── CLAUDE.md            ✅ questo file
 ├── README.md            ✅
 └── ORION_EMPIRES_GDD.md ✅ documento di design (fonte di verità)
 ```
 
-Gli altri file/cartelle previsti dal GDD §2 (`js/galaxy.js`, `data/`, ecc.)
+Gli altri file/cartelle previsti dal GDD §2 (`js/planet.js`, `data/`, ecc.)
 verranno aggiunti nei moduli corrispondenti.
 
 ---
 
-_Ultimo aggiornamento: 2026-06-03 — M01 + TSG; decisioni di design: salvataggio export/import .json (seed+delta, schemaVersion, log limitato) e target desktop+tablet._
+_Ultimo aggiornamento: 2026-06-03 — M02: galassia procedurale (seed+delta deterministico), nomi §5.2 (40/60 + designazioni catalogo), mappa a nodi su Canvas responsivo + Pointer Events. M01 confermato ✅. Decisione #7 aggiunta._
