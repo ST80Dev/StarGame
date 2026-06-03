@@ -1,0 +1,445 @@
+/* =====================================================================
+   ORION EMPIRES — style.css
+   Modulo M01: tema scuro spaziale, HUD sci-fi, layout pannelli.
+   Tutto il theming passa per le custom properties qui sotto.
+   ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   Design tokens
+   --------------------------------------------------------------------- */
+:root {
+  /* --- Palette: nero profondo + blu/viola spaziale + accenti ciano/arancio --- */
+  --c-void:        #04060f;   /* nero profondo di fondo                */
+  --c-space:       #070b1c;   /* blu-nero spaziale                     */
+  --c-deep:        #0c1230;   /* viola-blu profondo                    */
+  --c-panel:       rgba(16, 22, 48, 0.72);   /* pannello semitrasparente */
+  --c-panel-solid: #101630;
+  --c-border:      rgba(86, 122, 220, 0.28);
+  --c-border-soft: rgba(86, 122, 220, 0.14);
+
+  --c-accent:        #2fe6e0;   /* ciano — elementi attivi             */
+  --c-accent-dim:    #1b8c8a;
+  --c-accent-warm:   #ff9d3c;   /* arancio — allerta / evidenza        */
+  --c-accent-warm-dim:#b8662a;
+  --c-violet:        #8a6cff;   /* viola — accento secondario          */
+
+  --c-text:        #d8e2ff;   /* testo principale                      */
+  --c-text-soft:   #9aa6cc;   /* testo secondario                      */
+  --c-text-faint:  #5d678f;   /* testo tenue / placeholder             */
+
+  --c-good:        #4fe08a;
+  --c-warn:        #ffca55;
+  --c-bad:         #ff5c6c;
+
+  /* --- Tipografia ---
+     NB: niente CDN/Google Fonts (vincolo "nessuna dipendenza esterna").
+     Lo stack usa Orbitron se presente localmente, con fallback di sistema. */
+  --font-display: "Orbitron", "Eurostile", "Bank Gothic", "Segoe UI", system-ui, sans-serif;
+  --font-data:    "JetBrains Mono", "SF Mono", "Consolas", "Roboto Mono", ui-monospace, monospace;
+  --font-text:    "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+
+  /* --- Geometria --- */
+  --gap:          12px;
+  --radius:       8px;
+  --radius-sm:    4px;
+  --panel-left-w: 220px;
+  --panel-right-w:260px;
+  --hud-top-h:    64px;
+  --hud-bottom-h: 168px;
+
+  /* --- Effetti --- */
+  --glow-accent: 0 0 10px rgba(47, 230, 224, 0.45);
+  --shadow-panel: 0 8px 28px rgba(0, 0, 0, 0.5);
+  --transition: 180ms ease;
+}
+
+/* ---------------------------------------------------------------------
+   Reset essenziale
+   --------------------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font-text);
+  color: var(--c-text);
+  background: var(--c-void);
+  overflow: hidden;             /* lo scroll vive dentro i pannelli */
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { margin: 0; font-weight: 600; }
+ul { margin: 0; padding: 0; list-style: none; }
+button { font-family: inherit; }
+
+/* =====================================================================
+   Sfondo stellare parallax (CSS puro)
+   ===================================================================== */
+.starfield {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse at 20% 10%, rgba(60, 40, 140, 0.22), transparent 55%),
+    radial-gradient(ellipse at 85% 80%, rgba(20, 90, 130, 0.20), transparent 55%),
+    linear-gradient(160deg, var(--c-space) 0%, var(--c-void) 60%);
+  overflow: hidden;
+}
+
+.star-layer {
+  position: absolute;
+  inset: -50%;
+  background-repeat: repeat;
+  will-change: transform;
+}
+
+/* Le stelle sono generate con radial-gradient ripetuti su tile diverse. */
+.star-layer--far {
+  background-image:
+    radial-gradient(1px 1px at 20px 30px, #aab6e8 50%, transparent),
+    radial-gradient(1px 1px at 140px 80px, #8090c0 50%, transparent),
+    radial-gradient(1px 1px at 90px 160px, #ffffff 50%, transparent),
+    radial-gradient(1px 1px at 200px 120px, #99a8d8 50%, transparent);
+  background-size: 240px 240px;
+  opacity: 0.5;
+  animation: drift-far 220s linear infinite;
+}
+.star-layer--mid {
+  background-image:
+    radial-gradient(1.4px 1.4px at 50px 60px, #ffffff 50%, transparent),
+    radial-gradient(1.4px 1.4px at 170px 30px, #cfe0ff 50%, transparent),
+    radial-gradient(1.4px 1.4px at 110px 190px, #bcd0ff 50%, transparent);
+  background-size: 320px 320px;
+  opacity: 0.65;
+  animation: drift-mid 150s linear infinite;
+}
+.star-layer--near {
+  background-image:
+    radial-gradient(2px 2px at 80px 100px, #ffffff 50%, transparent),
+    radial-gradient(2px 2px at 260px 200px, #d8e6ff 50%, transparent);
+  background-size: 420px 420px;
+  opacity: 0.8;
+  animation: drift-near 90s linear infinite;
+}
+
+@keyframes drift-far  { from { transform: translate3d(0,0,0); } to { transform: translate3d(-120px, 60px, 0); } }
+@keyframes drift-mid  { from { transform: translate3d(0,0,0); } to { transform: translate3d(160px, -90px, 0); } }
+@keyframes drift-near { from { transform: translate3d(0,0,0); } to { transform: translate3d(-200px, 120px, 0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .star-layer { animation: none; }
+}
+
+/* =====================================================================
+   Shell — griglia generale
+   ===================================================================== */
+.app-shell {
+  display: grid;
+  grid-template-rows: var(--hud-top-h) 1fr var(--hud-bottom-h);
+  height: 100vh;
+  height: 100dvh;
+  padding: var(--gap);
+  gap: var(--gap);
+}
+
+/* =====================================================================
+   HUD superiore
+   ===================================================================== */
+.hud-top {
+  display: flex;
+  align-items: center;
+  gap: clamp(12px, 3vw, 40px);
+  padding: 0 18px;
+  background: var(--c-panel);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+  backdrop-filter: blur(6px);
+}
+
+.hud-top__brand { display: flex; align-items: center; gap: 10px; }
+.brand-mark {
+  color: var(--c-accent);
+  font-size: 1.4rem;
+  text-shadow: var(--glow-accent);
+}
+.brand-title {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  letter-spacing: 0.18em;
+  color: var(--c-text);
+  text-transform: uppercase;
+}
+
+.resource-bar { display: flex; gap: 10px; flex: 1; }
+.resource {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: rgba(8, 12, 30, 0.6);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+.resource__icon { color: var(--c-accent); font-size: 0.95rem; }
+.resource__label { font-size: 0.7rem; color: var(--c-text-soft); text-transform: uppercase; letter-spacing: 0.06em; }
+.resource__value { font-family: var(--font-data); font-size: 0.95rem; color: var(--c-text); }
+
+.hud-top__indices { display: flex; gap: 8px; }
+.index {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 58px;
+  padding: 4px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  background: rgba(8, 12, 30, 0.5);
+}
+.index__label { font-size: 0.6rem; letter-spacing: 0.12em; color: var(--c-text-faint); }
+.index__value { font-family: var(--font-data); font-size: 1.05rem; }
+.index--icg .index__value  { color: var(--c-accent-warm); }
+.index--rep .index__value  { color: var(--c-accent); }
+.index--turn .index__value { color: var(--c-text); }
+
+/* =====================================================================
+   Corpo principale a tre colonne
+   ===================================================================== */
+.hud-body {
+  display: grid;
+  grid-template-columns: var(--panel-left-w) 1fr var(--panel-right-w);
+  gap: var(--gap);
+  min-height: 0;   /* permette lo scroll interno */
+}
+
+/* --- Pannelli laterali generici --- */
+.panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--c-panel);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+  backdrop-filter: blur(6px);
+  min-height: 0;
+}
+.panel__header {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--c-border-soft);
+}
+.panel__header--inline { border-bottom: none; padding-bottom: 4px; }
+.panel__title {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--c-accent);
+}
+.panel__content { padding: 12px 14px; overflow-y: auto; flex: 1; }
+.panel__note { margin-top: 14px; font-size: 0.75rem; color: var(--c-text-faint); line-height: 1.5; }
+
+/* --- Lista di navigazione --- */
+.nav-list { display: flex; flex-direction: column; gap: 4px; }
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  font-size: 0.85rem;
+  text-align: left;
+  color: var(--c-text-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.nav-item__glyph { color: var(--c-text-faint); transition: var(--transition); }
+.nav-item:hover {
+  color: var(--c-text);
+  background: rgba(47, 230, 224, 0.06);
+  border-color: var(--c-border-soft);
+}
+.nav-item.is-active {
+  color: var(--c-text);
+  background: rgba(47, 230, 224, 0.10);
+  border-color: var(--c-accent-dim);
+  box-shadow: inset 2px 0 0 var(--c-accent);
+}
+.nav-item.is-active .nav-item__glyph { color: var(--c-accent); text-shadow: var(--glow-accent); }
+
+/* --- Consiglio della Civiltà --- */
+.council { display: flex; flex-direction: column; gap: 8px; }
+.council__member {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  background: rgba(8, 12, 30, 0.5);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+}
+.council__role { font-size: 0.82rem; color: var(--c-text); }
+.council__status { font-size: 0.7rem; color: var(--c-text-faint); font-style: italic; }
+
+/* =====================================================================
+   Viewport centrale (Canvas mappa in M02+)
+   ===================================================================== */
+.viewport {
+  position: relative;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background:
+    radial-gradient(ellipse at center, rgba(20, 28, 64, 0.55) 0%, rgba(6, 9, 22, 0.85) 75%);
+  box-shadow: var(--shadow-panel), inset 0 0 60px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  min-height: 0;
+}
+.viewport__stage { position: absolute; inset: 0; display: grid; place-items: center; }
+.viewport__placeholder { text-align: center; color: var(--c-text-faint); user-select: none; }
+.viewport__glyph {
+  display: block;
+  font-size: 3.2rem;
+  color: var(--c-accent-dim);
+  text-shadow: var(--glow-accent);
+  margin-bottom: 12px;
+  animation: pulse 4s ease-in-out infinite;
+}
+.viewport__caption {
+  font-family: var(--font-display);
+  letter-spacing: 0.3em;
+  font-size: 0.95rem;
+  color: var(--c-text-soft);
+  margin: 0 0 6px;
+}
+.viewport__hint { font-size: 0.78rem; margin: 0; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 1;    transform: scale(1.05); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .viewport__glyph { animation: none; }
+}
+
+/* =====================================================================
+   HUD inferiore: cronaca + controllo turni
+   ===================================================================== */
+.hud-bottom {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  gap: var(--gap);
+  min-height: 0;
+}
+.chronicle {
+  display: flex;
+  flex-direction: column;
+  background: var(--c-panel);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+  backdrop-filter: blur(6px);
+  padding: 10px 14px;
+  min-height: 0;
+}
+.chronicle__log {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+.chronicle__entry {
+  padding-left: 14px;
+  position: relative;
+  color: var(--c-text-soft);
+}
+.chronicle__entry::before {
+  content: "›";
+  position: absolute;
+  left: 0;
+  color: var(--c-accent);
+}
+.chronicle__entry--system { color: var(--c-text-faint); font-style: italic; }
+
+/* --- Controllo turni --- */
+.turn-control {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px;
+  background: var(--c-panel);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+  backdrop-filter: blur(6px);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-text);
+  background: transparent;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.btn__glyph { font-size: 0.9rem; }
+.btn:hover:not(:disabled) { border-color: var(--c-accent); color: #fff; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn--primary {
+  background: linear-gradient(180deg, rgba(47, 230, 224, 0.18), rgba(47, 230, 224, 0.06));
+  border-color: var(--c-accent-dim);
+}
+.btn--primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(47, 230, 224, 0.30), rgba(47, 230, 224, 0.10));
+  box-shadow: var(--glow-accent);
+}
+.btn--ghost { font-size: 0.72rem; padding: 8px 12px; color: var(--c-text-soft); }
+
+/* =====================================================================
+   Scrollbar coerente col tema
+   ===================================================================== */
+.panel__content::-webkit-scrollbar,
+.chronicle__log::-webkit-scrollbar { width: 8px; }
+.panel__content::-webkit-scrollbar-thumb,
+.chronicle__log::-webkit-scrollbar-thumb {
+  background: var(--c-border);
+  border-radius: 4px;
+}
+.panel__content::-webkit-scrollbar-track,
+.chronicle__log::-webkit-scrollbar-track { background: transparent; }
+
+/* =====================================================================
+   Responsive — riduzione su schermi stretti.
+   (Ottimizzato desktop, ma mobile-friendly come da GDD.)
+   ===================================================================== */
+@media (max-width: 900px) {
+  :root { --panel-left-w: 160px; --panel-right-w: 0px; }
+  .panel--right { display: none; }
+  .resource__label { display: none; }
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    grid-template-rows: auto 1fr auto;
+  }
+  .hud-top { flex-wrap: wrap; height: auto; padding: 10px 12px; gap: 10px; }
+  .hud-body { grid-template-columns: 1fr; }
+  .panel--left { display: none; }
+  .hud-bottom { grid-template-columns: 1fr; --hud-bottom-h: auto; }
+}
