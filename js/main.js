@@ -1503,8 +1503,12 @@ function secPerImpulse(level) {
 function timerLabel() {
   const l = ORION.timer.level;
   const s = secPerImpulse(l);
-  const sStr = (s >= 1) ? s.toFixed(s % 1 ? 2 : 0).replace(/\.?0+$/, '') + 's'
-                        : Math.round(s * 1000) + 'ms';
+  /* Formato secondi: "30s" / "7.5s" / "375ms". Niente regex sui trailing 0
+     (strippava anche gli zeri di "30" → "3"). */
+  let sStr;
+  /* parseFloat rimuove gli zeri di coda: "7.50" → "7.5", "30.00" → "30". */
+  if (s >= 1) sStr = parseFloat(s.toFixed(2)) + 's';
+  else        sStr = Math.round(s * 1000) + 'ms';
   return l + '× · ' + sStr + '/Ι';
 }
 
