@@ -1519,7 +1519,7 @@ function updateTimeControlsHint() {
   const glyph = btn.querySelector('.btn__glyph');
   // ricostruzione minima per non rompere il markup pre-esistente
   btn.innerHTML = (glyph ? '<span class="btn__glyph" aria-hidden="true">⏭</span>' : '') +
-    '<span class="btn__label">Prossimo evento</span>' +
+    '<span class="btn__label">Next</span>' +
     '<span class="time-control__delta">+' + n + ' I</span>';
 }
 
