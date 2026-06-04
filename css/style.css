@@ -1158,29 +1158,89 @@ button { font-family: inherit; }
    Responsive — riduzione su schermi stretti.
    (Ottimizzato desktop, ma mobile-friendly come da GDD.)
    ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   Tablet portrait / finestre strette (≤900px) — decisione #6.
+   Obiettivo: risparmiare spazio orizzontale senza perdere contenuto.
+   - Header compatto, solo icone sui pulsanti (label nascoste).
+   - Sidebar sinistra → rail a sole icone (navigazione sempre visibile).
+   - Pannello destro (dettagli contestuali) NON più nascosto: ricollocato
+     SOTTO la mappa, così la scheda pianeta/sistema resta raggiungibile.
+   - Cronaca → striscia compatta a piè di pagina.
+   - Padding interni ridotti ovunque.
+   --------------------------------------------------------------------- */
 @media (max-width: 900px) {
-  :root { --panel-left-w: 160px; --panel-right-w: 0px; }
-  .panel--right { display: none; }
-  .resource__label { display: none; }
   .app-shell {
-    grid-template-columns: var(--panel-left-w) 1fr;
+    grid-template-columns: 56px 1fr;
+    grid-template-rows: auto minmax(0, 1.5fr) minmax(0, 1fr) auto;
     grid-template-areas:
       "top   top"
       "left  view"
+      "left  right"
       "chron chron";
+    gap: 8px;
+    padding: 8px;
   }
+
+  /* --- Header compatto, icon-first --- */
+  .hud-top {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 50px;
+    padding: 6px 10px;
+    gap: 8px;
+    row-gap: 6px;
+  }
+  .brand-title { display: none; }                /* resta solo il segno ◈ */
+  .resource__label { display: none; }
+  .resource { padding: 5px 8px; gap: 5px; }
+  .resource__value { font-size: 0.92rem; }
+  .index { min-width: 50px; padding: 4px 8px; }
+  .index__value { font-size: 1rem; }
+  .index--date .index__value { font-size: 0.82rem; }
+  /* SAVE → solo icona ◇ */
+  .btn--save { padding: 6px 9px; margin-left: 6px; }
+  .btn--save .btn__label { display: none; }
+  /* "Prossimo evento" → solo glifo ⏭ */
+  .time-control--inline { padding: 4px 6px; gap: 6px; }
+  .time-control--inline .btn--next-event { padding: 7px 9px; }
+  .time-control--inline .btn--next-event .btn__label { display: none; }
+  .time-control--inline .btn--step { padding: 6px 8px; min-width: 34px; }
+
+  /* --- Sidebar sinistra → rail a sole icone --- */
+  .panel--left .panel__header { display: none; }
+  .panel--left .panel__content { padding: 6px 4px; }
+  .nav-item { gap: 0; justify-content: center; padding: 11px 0; }
+  .nav-item__label { display: none; }
+  .nav-item__glyph { font-size: 1.2rem; }
+
+  /* --- Pannello destro: ricomparso sotto la mappa --- */
+  .panel--right { display: flex; }
+
+  /* --- Padding interni ridotti --- */
+  .panel__header { padding: 8px 10px; }
+  .panel__content { padding: 9px 11px; }
+
+  /* --- Cronaca → striscia compatta --- */
+  .chronicle { padding: 6px 10px; }
+  .chronicle .panel__header--inline { padding: 0 0 2px; }
+  .chronicle__log { font-size: 0.76rem; gap: 4px; max-height: 78px; }
 }
 
-@media (max-width: 640px) {
+/* ---------------------------------------------------------------------
+   Telefono / finestre molto strette (≤560px) — non supportato (decisione
+   #6) ma reso in modo aggraziato: colonna singola, rail nascosto.
+   --------------------------------------------------------------------- */
+@media (max-width: 560px) {
   .app-shell {
     grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr auto;
+    grid-template-rows: auto minmax(0, 1.4fr) minmax(0, 1fr) auto;
     grid-template-areas:
       "top"
       "view"
+      "right"
       "chron";
   }
-  .hud-top { flex-wrap: wrap; height: auto; padding: 10px 12px; gap: 10px; }
   .panel--left { display: none; }
 }
 
