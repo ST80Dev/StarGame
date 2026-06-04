@@ -209,7 +209,8 @@ function colonizeHomePlanet(game, startDS) {
 /* Aggrega lo stock di tutte le colonie nell'HUD risorse-base. La vera
    produzione/aggiornamento per Impulso arriverà con M05. */
 function updateGlobalResourceHud() {
-  const totals = { met: 0, en: 0, food: 0, water: 0, pop: 0 };
+  const totals = { met: 0, en: 0, food: 0, water: 0 };
+  let people = 0;
   if (ORION.game && ORION.game.colonies) {
     Object.keys(ORION.game.colonies).forEach(function (k) {
       const c = ORION.game.colonies[k];
@@ -218,7 +219,9 @@ function updateGlobalResourceHud() {
       totals.en  += c.stock.en  || 0;
       totals.food += c.stock.food || 0;
       totals.water += c.stock.water || 0;
-      totals.pop += (c.pop && c.pop.total) || 0;
+      // Popolazione: somma delle PERSONE reali (curva per-pianeta §9).
+      const planet = planetForColony(c);
+      if (planet) people += ORION.planet.peopleAt((c.pop.total || 0) + (c.pop.accum || 0), planet);
     });
   }
   const setVal = function (key, v) {
@@ -229,7 +232,8 @@ function updateGlobalResourceHud() {
   setVal('energia', totals.en);
   setVal('cibo', totals.food);
   setVal('acqua', totals.water);
-  setVal('popolazione', totals.pop);
+  const popEl = document.querySelector('[data-bind="popolazione"]');
+  if (popEl) popEl.textContent = ORION.planet.formatPeople(people);
 }
 
 /* ---------------------------------------------------------------------
@@ -418,13 +422,39 @@ function findGroup(id) {
 
 function row(k, v) { return '<dt>' + k + '</dt><dd>' + v + '</dd>'; }
 
-/* La popolazione (§9) è in "unità", un'astrazione di background: ogni unità
-   rappresenta miliardi di abitanti, non un censimento di individui (decisione
-   di presentazione — i numeri piccoli sono convenzione 4X tipo Stellaris).
-   Helper unici così l'etichetta resta coerente ovunque venga mostrata. */
-const POP_UNIT_HINT = 'Unità di popolazione astratte (§9): ogni unità rappresenta miliardi di abitanti.';
-function popUnits(v) { return v + ' <span class="pop-unit" title="' + POP_UNIT_HINT + '">unità</span>'; }
-function popRange(total, cap) { return total + ' / ' + cap + ' <span class="pop-unit" title="' + POP_UNIT_HINT + '">unità</span>'; }
+/* Popolazione (§9): il motore lavora in unità intere, ma a schermo le
+   traduciamo in PERSONE plausibili via la curva per-pianeta di planet.js
+   (ORION.planet.peopleAt / popCeiling / formatPeople). Solo presentazione:
+   nessun calcolo tarato dipende da questi numeri. `units` può essere
+   frazionario (pop.total + accum) per uno scorrimento fluido. */
+function popPeople(units, planet) {
+  return ORION.planet.formatPeople(ORION.planet.peopleAt(units, planet));
+}
+function popMaxPeople(planet) {
+  const m = ORION.planet.popCeiling(planet);
+  return m > 0 ? ORION.planet.formatPeople(m) : '—';
+}
+/* "Persone correnti / tetto del pianeta", con units frazionarie per fluidità. */
+function popRangePeople(colony, planet) {
+  const u = (colony.pop.total || 0) + (colony.pop.accum || 0);
+  return popPeople(u, planet) + ' / ' + popMaxPeople(planet);
+}
+
+/* Memo runtime dei pianeti generati (deterministici dal seed): serve per
+   sommare le persone nell'HUD senza rigenerare a ogni refresh. NON è
+   serializzato — è solo una cache di derivati. */
+ORION._planetMemo = ORION._planetMemo || {};
+function planetForColony(colony) {
+  if (!colony) return null;
+  const key = colony.systemId + ':' + colony.bodyKey;
+  let p = ORION._planetMemo[key];
+  if (!p && ORION.game && ORION.game.galaxy) {
+    const system = ORION.system.generate(ORION.game.galaxy, colony.systemId);
+    p = ORION.planet.generate(ORION.game.galaxy, system, colony.bodyKey);
+    if (p) ORION._planetMemo[key] = p;
+  }
+  return p;
+}
 
 /* ---------------------------------------------------------------------
    Decisione #26 — Tag di appartenenza (sigla regione, nome sistema)
@@ -1016,7 +1046,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
         (colony.isHomeBase ? '<p class="sysinfo__home">★ Pianeta base — bonus +20% produzione (§8.1)</p>' : '<p class="sysinfo__home">◉ Colonia attiva</p>') +
         '<dl class="sysinfo__list">' +
           row('Colonizzato dal', colony.colonizedDS || '—') +
-          row('Popolazione', popRange(colony.pop.total, colony.pop.cap)) +
+          row('Popolazione', popRangePeople(colony, planet)) +
           row('Slot utilizzati', out.used + ' / ' + planet.slots) +
         '</dl>' +
         '<p class="sysinfo__sub">Riepilogo produzione (/Impulso)</p>' +
@@ -1273,15 +1303,19 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
   const classes = colony.pop.classes;
   const total = colony.pop.total;
   const cap = colony.pop.cap;
+  // Persone correnti (units frazionarie per fluidità): le classi ne sono
+  // una quota proporzionale (interi internamente → persone a schermo).
+  const peopleNow = ORION.planet.peopleAt(total + (colony.pop.accum || 0), planet);
   const order = ['operai', 'scienziati', 'militari', 'mercanti', 'tecnici'];
   const labels = { operai: 'Operai', scienziati: 'Scienziati', militari: 'Militari', mercanti: 'Mercanti', tecnici: 'Tecnici' };
   let bars = '<ul class="class-list">';
   order.forEach(function (k) {
     const v = classes[k] || 0;
     const pct = total > 0 ? Math.round(v * 100 / total) : 0;
+    const peopleK = total > 0 ? ORION.planet.formatPeople(peopleNow * v / total) : '0';
     bars += '<li class="class-item"><span class="class-item__label">' + labels[k] + '</span>' +
       '<div class="class-item__bar"><div class="class-item__fill class--' + k + '" style="width:' + pct + '%"></div></div>' +
-      '<span class="class-item__val">' + v + '</span></li>';
+      '<span class="class-item__val">' + peopleK + '</span></li>';
   });
   bars += '</ul>';
 
@@ -1301,9 +1335,19 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
     growthEst = CFG.POP_GROWTH_BASE * morale;
     if (colony.structures['ospedale']) growthEst *= (1 + CFG.POP_GROWTH_HOSPITAL);
   }
-  const growthStr = canGrow
-    ? '+' + (Math.round(growthEst * 1000) / 1000) + ' / I'
-    : (total >= cap ? 'al cap' : 'ferma (carestia)');
+  // Crescita in PERSONE/Impulso: pendenza della curva nel punto attuale ×
+  // crescita in unità/I. Cresce man mano che la colonia si sviluppa (effetto
+  // demografico esponenziale), coerente col display in persone.
+  let growthStr;
+  if (canGrow) {
+    const M = ORION.planet.popCeiling(planet);
+    const refCap = Math.max(2, planet.popCap || 2);
+    const slope = M > 0 ? Math.log(M / ORION.planet.POP_FLOOR) / (refCap - 1) : 0;
+    const marginal = peopleNow * slope * growthEst;
+    growthStr = '+' + ORION.planet.formatPeople(marginal) + ' / Impulso';
+  } else {
+    growthStr = (total >= cap ? 'al cap' : 'ferma (carestia)');
+  }
 
   // Target classi suggerito dalle strutture
   const tw = ORION.time.targetClassWeights(colony);
@@ -1320,7 +1364,7 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
   host.innerHTML =
     '<div class="sysinfo">' +
       '<dl class="sysinfo__list">' +
-        row('Popolazione', popRange(total, cap)) +
+        row('Popolazione', popRangePeople(colony, planet)) +
         row('Crescita', '<span class="rate ' + (canGrow ? 'rate--pos' : 'rate--neg') + '">' + growthStr + '</span>') +
       '</dl>' +
       '<p class="sysinfo__sub">Classi funzionali (§9.2)</p>' +
@@ -2120,7 +2164,7 @@ function homeCandidateCardHtml(c) {
       '<div><dt>Sistema</dt><dd>' + escapeHtml(c.system.name) + ' · ' + escapeHtml(c.system.starLabel) + '</dd></div>' +
       '<div><dt>Pericolo</dt><dd>' + escapeHtml(c.system.dangerTier) + ' (' + c.system.danger + ')</dd></div>' +
       '<div><dt>Ostilità</dt><dd>' + c.planet.hostility + '</dd></div>' +
-      '<div><dt>Pop. max</dt><dd>' + popUnits(c.planet.popCap) + '</dd></div>' +
+      '<div><dt>Pop. max</dt><dd>' + popMaxPeople(c.planet) + '</dd></div>' +
       '<div><dt>Slot</dt><dd>' + c.planet.slots + '</dd></div>' +
     '</dl>' +
     '<div class="main-menu__pot-bars">' +
