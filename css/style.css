@@ -844,6 +844,42 @@ button { font-family: inherit; }
 .planet-tab:disabled { opacity: 0.4; cursor: not-allowed; }
 .planet-tab-content { display: block; }
 
+/* Alert sulle linguette non attive: pulsa una piccola pastiglia colorata
+   in alto a destra (info=ciano, warn=ambra, bad=rosso). Le linguette
+   attive non lampeggiano: la scheda sotto già mostra lo stato. */
+.planet-tab { position: relative; }
+.planet-tab.has-alert::after {
+  content: '';
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--c-warn);
+  box-shadow: 0 0 6px var(--c-warn);
+  animation: tab-alert-pulse 1.6s ease-in-out infinite;
+}
+.planet-tab.has-alert--info {
+  border-color: color-mix(in srgb, var(--c-accent) 60%, var(--c-border-soft));
+}
+.planet-tab.has-alert--info::after {
+  background: var(--c-accent);
+  box-shadow: 0 0 6px var(--c-accent);
+}
+.planet-tab.has-alert--warn {
+  border-color: color-mix(in srgb, var(--c-warn) 60%, var(--c-border-soft));
+}
+.planet-tab.has-alert--bad {
+  border-color: color-mix(in srgb, var(--c-bad) 65%, var(--c-border-soft));
+}
+.planet-tab.has-alert--bad::after {
+  background: var(--c-bad);
+  box-shadow: 0 0 7px var(--c-bad);
+}
+@keyframes tab-alert-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.78); }
+}
+
 /* Barre dei potenziali risorse (§7.1) */
 .pot-list, .class-list, .adv-list {
   display: flex;
@@ -966,7 +1002,7 @@ button { font-family: inherit; }
 }
 .struct-item {
   display: grid;
-  grid-template-columns: 1.6em 1fr auto;
+  grid-template-columns: 1.6em 1fr auto auto;
   align-items: center;
   gap: 6px;
   padding: 6px 8px;
@@ -1029,7 +1065,51 @@ button { font-family: inherit; }
   letter-spacing: 0.04em;
   white-space: nowrap;
 }
+.struct-item__locked.is-building {
+  color: var(--c-accent);
+  border: 1px solid color-mix(in srgb, var(--c-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--c-accent) 12%, transparent);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-family: var(--font-data);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.struct-item.is-building {
+  opacity: 0.75;
+  filter: saturate(0.7);
+  background: color-mix(in srgb, var(--c-accent) 5%, transparent);
+}
+.struct-item__locked.is-demolish {
+  color: var(--c-bad);
+  border: 1px solid color-mix(in srgb, var(--c-bad) 55%, transparent);
+  background: color-mix(in srgb, var(--c-bad) 10%, transparent);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-family: var(--font-data);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.struct-item.is-queue.is-demolish {
+  background: color-mix(in srgb, var(--c-bad) 6%, transparent);
+}
+.struct-item.is-queue.is-demolish .progress-bar__fill {
+  background: var(--c-bad);
+}
+.struct-item__demolish {
+  padding: 2px 8px;
+  font-family: var(--font-data);
+  font-size: 0.85rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--c-bad);
+  opacity: 0.7;
+}
+.struct-item__demolish:hover { opacity: 1; }
 .struct-item__cancel {
+  grid-column: 3 / -1;
   padding: 2px 8px;
   font-family: var(--font-data);
   font-size: 0.85rem;
@@ -1045,12 +1125,26 @@ button { font-family: inherit; }
 /* M06.7: bottone "ⓘ" della scheda strutture — più piccolo, accento viola
    per distinguerlo da "Costruisci" (azione vs informazione). */
 .struct-item__info {
-  padding: 4px 8px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0 !important;
+  border: 1.4px solid var(--c-violet);
+  border-radius: 50%;
   color: var(--c-violet);
-  opacity: 0.75;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 700;
+  font-size: 0.78rem;
+  line-height: 1;
+  opacity: 0.8;
+  background: transparent;
 }
 .struct-item__info:hover {
   opacity: 1;
+  background: color-mix(in srgb, var(--c-violet) 18%, transparent);
 }
 
 /* btn--mini lite (riusa lo stile dei mini-pulsanti dell'overlay galassia) */

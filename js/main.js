@@ -970,6 +970,45 @@ function renderPlanetBreadcrumb() {
 }
 
 /* --- Pannello: scheda pianeta con tab --- */
+/* Stato di alert per ogni linguetta del pianeta (ambra/rosso). Usato
+   per evidenziare attività in corso sulle schede non attive. */
+function planetTabAlerts(colony) {
+  const a = {};
+  // strutture: coda di cantiere o osservatorio in scansione
+  if (colony.queue && colony.queue.length) {
+    a.strutture = colony.queue[0].target === 'demolish' ? 'bad' : 'info';
+  } else if (colony.structures && colony.structures['osservatorio'] && colony.scanned && !colony.scanned.active) {
+    a.strutture = 'info';
+  }
+  // risorse: scarsità low/crit
+  if (colony.scarcity) {
+    ['met','en','food','water'].forEach(function (k) {
+      const s = colony.scarcity[k] && colony.scarcity[k].state;
+      if (s === 'crit') a.risorse = 'bad';
+      else if (s === 'low' && a.risorse !== 'bad') a.risorse = 'warn';
+    });
+  }
+  // popolazione: malus morale temporaneo
+  if (colony.moraleMalus) a.popolazione = 'warn';
+  // colonia: insediamento o colonizzazione in corso
+  if (colony.colonizing || colony.phase === 'settling') a.colonia = 'info';
+  return a;
+}
+
+function alertTitle(tab, colony, level) {
+  if (tab === 'strutture' && colony.queue && colony.queue.length) {
+    const q = colony.queue[0];
+    const def = ORION.structures.get(q.id);
+    const verb = q.target === 'demolish' ? 'Smantellamento' : 'Costruzione';
+    return verb + ' di ' + (def ? def.name : q.id) + ' (' + (q.duration | 0) + ' Ι)';
+  }
+  if (tab === 'strutture') return 'Osservatorio in scansione';
+  if (tab === 'risorse') return level === 'bad' ? 'Scarsità critica' : 'Scarsità in allerta';
+  if (tab === 'popolazione') return 'Morale in calo';
+  if (tab === 'colonia') return colony.phase === 'settling' ? 'Insediamento in corso' : 'Colonizzazione in corso';
+  return '';
+}
+
 function renderPlanetPanel(title, content) {
   const planet = ORION.currentPlanet;
   const colony = ORION.game.colonies[ORION.openPlanetKey];
@@ -980,6 +1019,7 @@ function renderPlanetPanel(title, content) {
   const tabs = ['colonia', 'risorse', 'strutture', 'popolazione'];
   if (!colony.colonized) ORION.planetTab = 'colonia';
   const activeTab = ORION.planetTab;
+  const alerts = planetTabAlerts(colony);
 
   const head =
     '<div class="planet-head">' +
@@ -988,18 +1028,21 @@ function renderPlanetPanel(title, content) {
     '<nav class="planet-tabs" role="tablist">' +
       tabs.map(function (t) {
         const meta = {
-          colonia:     { icon: '◉', label: 'Colonia',  full: 'Colonia' },
-          risorse:     { icon: '◈', label: 'Risorse',  full: 'Risorse' },
-          strutture:   { icon: '▣', label: 'Strutt.',  full: 'Strutture' },
-          popolazione: { icon: '☻', label: 'Pop.',     full: 'Popolazione' }
+          colonia:     { icon: '⚑', label: 'Colonia',  full: 'Colonia' },
+          risorse:     { icon: '⛁', label: 'Risorse',  full: 'Risorse' },
+          strutture:   { icon: '⌂', label: 'Strutt.',  full: 'Strutture' },
+          popolazione: { icon: '♟', label: 'Pop.',     full: 'Popolazione' }
         }[t];
         const disabled = (!colony.colonized && t !== 'colonia');
         const isActive = (t === activeTab);
+        const alert = alerts[t];
+        const alertCls = (alert && !isActive) ? ' has-alert has-alert--' + alert : '';
+        const titleFull = meta.full + (alert ? ' · ' + alertTitle(t, colony, alert) : '');
         const inner = isActive
           ? '<span class="planet-tab__icon">' + meta.icon + '</span><span class="planet-tab__label">' + meta.label + '</span>'
           : '<span class="planet-tab__icon">' + meta.icon + '</span>';
-        return '<button class="planet-tab' + (isActive ? ' is-active' : '') + '" data-tab="' + t + '" type="button"' +
-          ' title="' + meta.full + '" aria-label="' + meta.full + '"' +
+        return '<button class="planet-tab' + (isActive ? ' is-active' : '') + alertCls + '" data-tab="' + t + '" type="button"' +
+          ' title="' + titleFull + '" aria-label="' + titleFull + '"' +
           (disabled ? ' disabled' : '') + '>' + inner + '</button>';
       }).join('') +
     '</nav>' +
@@ -1223,10 +1266,15 @@ function renderPlanetStruttureTab(host, planet, colony) {
     builtIds.forEach(function (id) {
       const def = S.get(id);
       const ent = colony.structures[id];
+      const demoCheck = ORION.planet.canDemolish(colony, planet, id);
+      const demoBtn = demoCheck.ok
+        ? '<button class="btn btn--mini struct-item__demolish" data-demolish="' + id + '" type="button" title="Smantella (rimborso 50% · 70% sulla colonia natale · morale −0,10 per 30 Ι)">🗑</button>'
+        : '<span class="struct-item__locked is-busy" title="' + demoCheck.reason + '">🗑</span>';
       html += '<li class="struct-item is-built">' +
         '<span class="struct-item__glyph">' + def.glyph + '</span>' +
         '<span class="struct-item__name">' + def.name + ' <span class="struct-item__lvl">lvl ' + (ent.level || 1) + '</span></span>' +
         '<span class="struct-item__cat">' + S.CATEGORIES[def.cat].label + '</span>' +
+        demoBtn +
       '</li>';
     });
     html += '</ul>';
@@ -1237,16 +1285,19 @@ function renderPlanetStruttureTab(host, planet, colony) {
     html += '<p class="sysinfo__sub">In costruzione</p><ul class="struct-list">';
     colony.queue.forEach(function (q, idx) {
       const def = S.get(q.id);
-      const total = def.time || 1;
+      const isDemo = q.target === 'demolish';
+      const total = isDemo ? Math.max(1, Math.round((def.time || 2) / 2)) : (def.time || 1);
       const remain = Math.max(0, q.duration | 0);
       const pct = Math.round(((total - remain) / total) * 100);
-      html += '<li class="struct-item is-queue">' +
+      const label = isDemo ? ('Smantellamento di ' + def.name) : def.name;
+      const cancelTitle = isDemo ? 'Annulla smantellamento (nessuna penalità)' : 'Annulla (rimborso 80%)';
+      html += '<li class="struct-item is-queue' + (isDemo ? ' is-demolish' : '') + '">' +
         '<span class="struct-item__glyph">' + def.glyph + '</span>' +
         '<div class="struct-item__main">' +
-          '<div class="struct-item__name">' + def.name + ' <span class="struct-item__cat">' + remain + ' / ' + total + ' I</span></div>' +
+          '<div class="struct-item__name">' + label + ' <span class="struct-item__cat">' + remain + ' / ' + total + ' I</span></div>' +
           '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
         '</div>' +
-        '<button class="btn btn--mini struct-item__cancel" data-cancel="' + idx + '" type="button" title="Annulla (rimborso 80%)">×</button>' +
+        '<button class="btn btn--mini struct-item__cancel" data-cancel="' + idx + '" type="button" title="' + cancelTitle + '">×</button>' +
       '</li>';
     });
     html += '</ul>';
@@ -1281,18 +1332,35 @@ function renderPlanetStruttureTab(host, planet, colony) {
       const check = ORION.planet.canBuild(colony, planet, def.id);
       const cost = def.cost || {};
       const costStr = Object.keys(cost).map(function (k) { return resGlyph(k) + cost[k]; }).join(' · ');
-      html += '<li class="struct-item' + (check.ok ? '' : ' is-locked') + '" title="' + def.desc + '">' +
+      let statusCell;
+      let extraClass = check.ok ? '' : ' is-locked';
+      if (check.ok) {
+        statusCell = '<button class="btn btn--mini" data-build="' + def.id + '" type="button">Costruisci</button>';
+      } else if (check.code === 'building') {
+        const qEntry = colony.queue.find(function (q) { return q.id === def.id; });
+        const total = def.time || 1;
+        const remain = qEntry ? Math.max(0, qEntry.duration | 0) : total;
+        statusCell = '<span class="struct-item__locked is-building" title="In costruzione (' + remain + ' / ' + total + ' I)">▶ In costruzione · ' + remain + '/' + total + ' I</span>';
+        extraClass += ' is-building';
+      } else if (check.code === 'demolishing') {
+        const qEntry = colony.queue.find(function (q) { return q.id === def.id; });
+        const total = Math.max(1, Math.round((def.time || 2) / 2));
+        const remain = qEntry ? Math.max(0, qEntry.duration | 0) : total;
+        statusCell = '<span class="struct-item__locked is-demolish" title="In smantellamento (' + remain + ' / ' + total + ' I)">🛠 Smantellamento · ' + remain + '/' + total + ' I</span>';
+        extraClass += ' is-building';
+      } else if (check.code === 'busy') {
+        statusCell = '<span class="struct-item__locked is-busy" title="' + check.reason + '">⏳ Occupato</span>';
+      } else {
+        statusCell = '<span class="struct-item__locked" title="' + check.reason + '">◌</span>';
+      }
+      html += '<li class="struct-item' + extraClass + '" title="' + def.desc + '">' +
         '<span class="struct-item__glyph">' + def.glyph + '</span>' +
         '<div class="struct-item__main">' +
           '<div class="struct-item__name">' + def.name + ' <span class="struct-item__cat">' + def.time + ' I</span></div>' +
           '<div class="struct-item__cost">' + costStr + '</div>' +
         '</div>' +
-        '<button class="btn btn--mini struct-item__info" data-info="' + def.id + '" type="button" title="Cosa fa, bonus/malus, concatenazioni" aria-label="Informazioni su ' + def.name + '">ⓘ</button>' +
-        (check.ok
-          ? '<button class="btn btn--mini" data-build="' + def.id + '" type="button">Costruisci</button>'
-          : check.code === 'busy'
-            ? '<span class="struct-item__locked is-busy" title="' + check.reason + '">⏳ Occupato</span>'
-            : '<span class="struct-item__locked" title="' + check.reason + '">◌</span>') +
+        '<button class="btn btn--mini struct-item__info" data-info="' + def.id + '" type="button" title="Cosa fa, bonus/malus, concatenazioni" aria-label="Informazioni su ' + def.name + '">i</button>' +
+        statusCell +
       '</li>';
     });
     html += '</ul></details>';
@@ -1306,6 +1374,9 @@ function renderPlanetStruttureTab(host, planet, colony) {
   });
   host.querySelectorAll('[data-cancel]').forEach(function (btn) {
     btn.addEventListener('click', function () { tryCancel(Number(btn.dataset.cancel)); });
+  });
+  host.querySelectorAll('[data-demolish]').forEach(function (btn) {
+    btn.addEventListener('click', function () { tryDemolish(btn.dataset.demolish); });
   });
   /* M06.7: bottone ⓘ apre la scheda tutorial della struttura (on-demand,
      ignora isEnabled — è un manuale leggero). */
@@ -1340,6 +1411,28 @@ function tryBuild(id) {
 function tryCancel(idx) {
   const colony = ORION.game.colonies[ORION.openPlanetKey];
   ORION.planet.cancelBuild(colony, idx);
+  updateGlobalResourceHud();
+  updatePlanetUI();
+}
+
+function tryDemolish(id) {
+  const g = ORION.game;
+  const colony = g.colonies[ORION.openPlanetKey];
+  const planet = ORION.currentPlanet;
+  const def = ORION.structures.get(id);
+  if (!def) return;
+  const refundPct = colony.isHomeBase ? 70 : 50;
+  const dur = Math.max(1, Math.round((def.time || 2) / 2));
+  const confirmMsg = 'Smantellare "' + def.name + '"?\n\n'
+    + '· Tempo: ' + dur + ' Ι (occupa il cantiere)\n'
+    + '· Rimborso: ' + refundPct + '% del costo originale\n'
+    + '· Morale −0,10 per 30 Ι (decadimento lineare)\n\n'
+    + 'La struttura resta operativa fino alla fine dello smantellamento.';
+  if (!window.confirm(confirmMsg)) return;
+  const r = ORION.planet.startDemolish(colony, planet, id, ORION.time.currentDS(g));
+  if (!r.ok) { console.info('Smantellamento rifiutato:', r.reason); return; }
+  pushChronicle(ORION.time.currentDS(g) + ' — Avviato smantellamento: <strong>' + def.name + '</strong> su ' + planet.name + bodyTagHtml(planet.systemId) + ' (' + dur + ' Ι).', 'planet');
+  persistGame(g);
   updateGlobalResourceHud();
   updatePlanetUI();
 }
@@ -1491,7 +1584,7 @@ const PLAY_DEFAULT_LEVEL = 1;                     // default: 1× (30s/Ι)
 const PLAY_LS_LEVEL  = 'orion.playSpeed';
 const PLAY_LS_PAUSES = 'orion.autopause';
 const DEFAULT_AUTOPAUSE = {
-  'build-done': true, 'colony-done': true, 'scan-done': true,
+  'build-done': true, 'demolish-done': true, 'colony-done': true, 'scan-done': true,
   'scarcity': true, 'scarcity-recover': true, 'pop-loss': true,
   'victory': true, 'settle-stage': true, 'settle-done': true
 };
@@ -1678,6 +1771,7 @@ function showEventOverlay(events) {
   const triggered = events.filter(function (e) { return prefs[e.kind]; });
   const KIND_LABELS = {
     'build-done': 'Completamento struttura',
+    'demolish-done': 'Smantellamento completato',
     'colony-done': 'Nuova colonia',
     'scan-done': 'Scansione completata',
     'scarcity': 'Carenza',
@@ -1783,6 +1877,9 @@ function chronicleEvent(ev) {
   const ptag = sysId >= 0 ? bodyTagHtml(sysId) : '';
   if (ev.kind === 'build-done') {
     pushChronicle(ds + ' — <strong>' + ev.structName + '</strong> operativa su ' + pname + ptag + '.', 'planet');
+  } else if (ev.kind === 'demolish-done') {
+    const refundPct = Math.round((ev.refundRate || 0) * 100);
+    pushChronicle(ds + ' — <strong>' + ev.structName + '</strong> smantellata su ' + pname + ptag + ' (rimborso ' + refundPct + '%, morale −0,10 per 30 Ι).', 'planet');
   } else if (ev.kind === 'colony-done') {
     pushChronicle(ds + ' — Nuova colonia attiva su <strong>' + pname + '</strong>' + ptag + '.', 'planet');
   } else if (ev.kind === 'scan-done') {

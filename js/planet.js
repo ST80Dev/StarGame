@@ -420,6 +420,14 @@
     // tipo di corpo compatibile
     const types = def.bodyTypes;
     if (types && types.indexOf(planet.type) < 0) return { ok: false, reason: 'Non costruibile su ' + planet.type };
+    // in coda al cantiere (build o demolish): prioritario perché lo stato
+    // transitorio è ciò che il giocatore deve vedere
+    for (let qi = 0; qi < colony.queue.length; qi++) {
+      if (colony.queue[qi].id === structId) {
+        const isDemo = colony.queue[qi].target === 'demolish';
+        return { ok: false, reason: isDemo ? 'In smantellamento' : 'In costruzione', code: isDemo ? 'demolishing' : 'building' };
+      }
+    }
     // già costruita (M04: niente upgrade-in-coda multiplo; max una istanza
     // per id, gli upgrade si fanno tramite livelli — gestione M05)
     if (colony.structures[structId]) return { ok: false, reason: 'Già costruita (upgrade in M05)' };
@@ -484,16 +492,49 @@
     return { ok: true };
   }
 
-  /* Annulla una voce in coda (rimborsa l'80% del costo, decisione locale). */
+  /* Annulla una voce in coda. Build: rimborsa l'80% del costo speso.
+     Demolish: nessun rimborso (non era stato speso nulla), la struttura
+     resta intatta. */
   function cancelBuild(colony, index) {
     if (index < 0 || index >= colony.queue.length) return { ok: false };
     const q = colony.queue.splice(index, 1)[0];
+    if (q.target === 'demolish') return { ok: true };
     const def = root.ORION.structures.get(q.id);
     if (def && def.cost) {
       Object.keys(def.cost).forEach(function (k) {
         colony.stock[k] = (colony.stock[k] || 0) + Math.floor(def.cost[k] * 0.8);
       });
     }
+    return { ok: true };
+  }
+
+  /* Verifica se una struttura costruita può essere smantellata. */
+  function canDemolish(colony, planet, structId) {
+    const def = root.ORION.structures.get(structId);
+    if (!def) return { ok: false, reason: 'Struttura sconosciuta' };
+    if (!colony.structures[structId]) return { ok: false, reason: 'Non costruita' };
+    if (colony.queue.length >= 1) {
+      return { ok: false, reason: 'Cantiere planetario occupato', code: 'busy' };
+    }
+    return { ok: true };
+  }
+
+  /* Avvia uno smantellamento. Occupa il cantiere come una build (coda
+     lunga 1), durata = metà del tempo di costruzione, niente costo
+     immediato. Il rimborso (50%, 70% sulla colonia natale) e il malus
+     morale -0.10 per 30 Ι vengono applicati al completamento in time.js
+     (decisione recovery-friendly: il malus decade da solo). */
+  function startDemolish(colony, planet, structId, startedAtDS) {
+    const check = canDemolish(colony, planet, structId);
+    if (!check.ok) return check;
+    const def = root.ORION.structures.get(structId);
+    const dur = Math.max(1, Math.round((def.time || 2) / 2));
+    colony.queue.push({
+      id: structId,
+      target: 'demolish',
+      startedAt: startedAtDS || null,
+      duration: dur
+    });
     return { ok: true };
   }
 
@@ -525,6 +566,8 @@
     canBuild: canBuild,
     startBuild: startBuild,
     cancelBuild: cancelBuild,
+    canDemolish: canDemolish,
+    startDemolish: startDemolish,
     applyScan: applyScan
   };
 })(typeof window !== 'undefined' ? window : this);
