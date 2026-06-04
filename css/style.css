@@ -171,8 +171,8 @@ button { font-family: inherit; }
   position: relative;
   display: flex;
   align-items: center;
-  gap: clamp(8px, 1.5vw, 18px);
-  padding: 0 14px;
+  gap: clamp(6px, 1vw, 12px);
+  padding: 0 10px;
   background: var(--c-panel);
   border: 2px solid var(--c-border-strong);
   border-radius: var(--radius);
@@ -194,12 +194,12 @@ button { font-family: inherit; }
   text-transform: uppercase;
 }
 
-.resource-bar { display: flex; gap: 8px; flex: 0 1 auto; margin-right: auto; }
+.resource-bar { display: flex; gap: 5px; flex: 0 1 auto; margin-right: auto; }
 .resource {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 11px;
+  gap: 6px;
+  padding: 5px 8px;
   background: rgba(8, 12, 30, 0.7);
   border: 1px solid var(--c-border);
   border-radius: var(--radius-sm);
@@ -228,13 +228,13 @@ button { font-family: inherit; }
   text-shadow: 0 0 6px rgba(255, 174, 92, 0.35);
 }
 
-.hud-top__indices { display: flex; gap: 8px; }
+.hud-top__indices { display: flex; gap: 5px; }
 .index {
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 64px;
-  padding: 5px 10px;
+  min-width: 52px;
+  padding: 4px 8px;
   border: 1px solid var(--c-border);
   border-radius: var(--radius-sm);
   background: rgba(8, 12, 30, 0.65);
@@ -1043,8 +1043,8 @@ button { font-family: inherit; }
 .time-control--inline {
   flex-direction: row;
   align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
+  gap: 6px;
+  padding: 4px 6px;
   background: rgba(8, 12, 30, 0.65);
   border: 1px solid var(--c-border);
   box-shadow: none;
@@ -1056,12 +1056,12 @@ button { font-family: inherit; }
   gap: 4px;
 }
 .time-control--inline .btn--step {
-  padding: 6px 10px;
-  font-size: 0.85rem;
-  min-width: 38px;
+  padding: 5px 8px;
+  font-size: 0.82rem;
+  min-width: 32px;
 }
 .time-control--inline .btn--next-event {
-  padding: 8px 12px;
+  padding: 7px 10px;
   font-size: 0.72rem;
   letter-spacing: 0.10em;
   white-space: nowrap;
