@@ -1076,3 +1076,61 @@ button { font-family: inherit; }
   .panel--left { display: none; }
   .hud-bottom { grid-template-columns: 1fr; --hud-bottom-h: auto; }
 }
+
+/* ============================================================
+   M05 — game loop temporale: pulse HUD, scarsità, progress bar
+   ============================================================ */
+@keyframes hud-pulse-kf {
+  0%   { transform: scale(1);    color: var(--c-accent); text-shadow: 0 0 14px rgba(47,230,224,0.6); }
+  60%  { transform: scale(1.12); color: var(--c-accent); text-shadow: 0 0 18px rgba(47,230,224,0.85); }
+  100% { transform: scale(1); }
+}
+.hud-pulse { animation: hud-pulse-kf 380ms ease-out; transform-origin: center; display: inline-block; }
+@media (prefers-reduced-motion: reduce) { .hud-pulse { animation: none; } }
+
+.time-control__delta {
+  margin-left: 6px;
+  padding: 2px 6px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--c-accent);
+  background: rgba(47, 230, 224, 0.10);
+  border: 1px solid rgba(47, 230, 224, 0.35);
+  border-radius: 4px;
+}
+
+/* Stati di scarsità §7.4 — frizione recuperabile, mai fail-state */
+.scar-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; }
+.scar-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+.scar--low  { color: #ffb000; background: rgba(255, 176, 0, 0.10); }
+.scar--crit { color: #ff6f5c; background: rgba(255, 111, 92, 0.14); }
+
+/* Progress bar generica per code (costruzione, scansione, colonizzazione) */
+.progress-bar {
+  height: 6px;
+  margin-top: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--c-border, rgba(255,255,255,0.15));
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-bar--mini { height: 4px; margin-top: 4px; }
+.progress-bar__fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--c-accent, #2fe6e0), var(--c-accent-warm, #ff9d3c));
+  transition: width 200ms ease-out;
+}
+
+.struct-item.is-queue .progress-bar__fill {
+  background: linear-gradient(90deg, var(--c-accent), rgba(47,230,224,0.5));
+}

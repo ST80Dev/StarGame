@@ -13,7 +13,7 @@
 
 const ORION = window.ORION || (window.ORION = {});
 
-ORION.version = '0.4.0-M04';
+ORION.version = '0.5.0-M05';
 
 /* Etichette provvisorie del viewport per le viste non ancora implementate. */
 ORION.viewLabels = {
@@ -43,12 +43,15 @@ ORION.lastChronicleId = -1;
 /* ---------------------------------------------------------------------
    Generazione/avvio di una partita (galassia)
    --------------------------------------------------------------------- */
-/* Preview leggera della persistenza (M06): il seed della partita corrente
-   vive in localStorage così l'F5 NON cambia galassia. Il salvataggio
-   completo (delta colonie, scoperte, cronaca) arriva con M06; qui basta
-   il seed perché la struttura della galassia si rigenera identica
-   (decisione #5 seed+delta). Il pulsante "Nuova" del menu rigenera. */
+/* Preview leggera della persistenza (M06): seed + delta delle colonie +
+   Impulsi cumulati vivono in localStorage così l'F5 NON perde la partita.
+   Il save completo (slot multipli + export/import .json + log limitato
+   della cronaca) è M06 — il payload qui è già nel formato seed+delta con
+   schemaVersion: 1, quindi M06 lo estenderà senza rifacimenti.
+   "Nuova" rigenera. */
 const SEED_KEY = 'orion.seed';
+const GAME_KEY = 'orion.game';
+const GAME_SCHEMA = 1;
 
 function loadSavedSeed() {
   try { return window.localStorage.getItem(SEED_KEY) || null; }
@@ -60,8 +63,35 @@ function persistSeed(seed) {
 function clearSavedSeed() {
   try { window.localStorage.removeItem(SEED_KEY); } catch (e) {}
 }
+function loadSavedGame() {
+  try {
+    const raw = window.localStorage.getItem(GAME_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || data.schema !== GAME_SCHEMA) return null;
+    return data;
+  } catch (e) { return null; }
+}
+function persistGame(game) {
+  if (!game) return;
+  try {
+    const payload = {
+      schema: GAME_SCHEMA,
+      seed: game.seed,
+      startEpochOrbita: game.startEpochOrbita,
+      timeImpulsi: game.timeImpulsi || 0,
+      homePlanetKey: game.homePlanetKey,
+      colonies: game.colonies
+    };
+    window.localStorage.setItem(GAME_KEY, JSON.stringify(payload));
+  } catch (e) {}
+}
+function clearSavedGame() {
+  try { window.localStorage.removeItem(GAME_KEY); } catch (e) {}
+}
 
-function newGame(seed) {
+function newGame(seed, opts) {
+  opts = opts || {};
   seed = seed || ORION.rng.newSeed();
   persistSeed(seed);
   const galaxy = ORION.galaxy.generate(seed);
@@ -71,21 +101,38 @@ function newGame(seed) {
   // dal seed così da restare deterministica (parte del seed+delta).
   const erng = ORION.rng.makeRng(seed + ':epoch');
   const startOrbita = erng.int(800, 3000);
-  const startDS = 'DS ' + startOrbita + '.00';
 
   ORION.game = {
-    galaxy: galaxy, state: state, seed: seed, startDS: startDS,
+    galaxy: galaxy, state: state, seed: seed,
+    startEpochOrbita: startOrbita,
+    timeImpulsi: 0,
     /* M04: stato colonie. Chiave "<sysId>:<bodyKey>" → ColonyState (delta,
        serializzabile per M06). La struttura immutabile del pianeta è
        rigenerata dal seed (decisione #5). */
     colonies: {}
   };
+  // startDS = Data Stellare INIZIALE (epoca .00), fissa per la partita.
+  ORION.game.startDS = ORION.time.format(startOrbita * 100);
 
   // M04: colonizza il pianeta natale (homeWorld del sistema d'origine).
-  colonizeHomePlanet(ORION.game, startDS);
+  colonizeHomePlanet(ORION.game, ORION.game.startDS);
 
-  setHudDate(startDS);
-  resetChronicle(galaxy, startDS);
+  // Se è una "continua" e c'è uno snapshot compatibile, ripristina lo
+  // stato persistito (delta colonie + Impulsi cumulati). La galassia
+  // resta rigenerata dal seed (decisione #5).
+  if (opts.restore) {
+    const saved = loadSavedGame();
+    if (saved && saved.seed === seed) {
+      ORION.game.timeImpulsi = saved.timeImpulsi || 0;
+      ORION.game.colonies = saved.colonies || ORION.game.colonies;
+      ORION.game.homePlanetKey = saved.homePlanetKey || ORION.game.homePlanetKey;
+    }
+  }
+
+  setHudDate(ORION.time.currentDS(ORION.game));
+  updateGlobalResourceHud();
+  resetChronicle(galaxy, ORION.game.startDS);
+  persistGame(ORION.game);
   return ORION.game;
 }
 
@@ -251,8 +298,10 @@ function renderGalaxyView(stage) {
     ORION.map.focusGalaxy();
   });
   if (newBtn) newBtn.addEventListener('click', () => {
+    clearSavedGame();
     newGame();
     renderGalaxyView(stage);
+    updateTimeControlsHint();
   });
 }
 
@@ -338,7 +387,7 @@ function renderGalaxyPanel(title, content) {
         row('Sistemi', String(g.galaxy.count)) +
         row('Gruppi stellari', String(g.galaxy.groups.length)) +
         row('Noti', known + ' / ' + g.galaxy.count) +
-        row('Data Stellare', g.startDS) +
+        row('Data Stellare', ORION.time.currentDS(g)) +
         row('Pericolo medio', '<span class="danger-badge tier--' + ORION.galaxy.dangerTier(avgDanger) + '">' + avgDanger + '</span>') +
       '</dl>' +
       '<p class="sysinfo__sub">Gruppi stellari</p>' +
@@ -709,7 +758,7 @@ function openPlanet(sysId, bodyKey) {
   setGalaxyHint('planet');
   updatePlanetUI();
 
-  pushChronicle(((g.startDS || 'DS —')) + ' — Apertura scheda planetaria di <strong>' + body.name + '</strong>.', 'planet');
+  pushChronicle(ORION.time.currentDS(g) + ' — Apertura scheda planetaria di <strong>' + body.name + '</strong>.', 'planet');
 }
 
 function closePlanet() {
@@ -814,6 +863,19 @@ function renderPlanetColoniaTab(host, planet, colony) {
 
   if (colony.colonized) {
     const out = ORION.planet.structureOutput(colony, planet);
+    const scar = colony._scar;
+    let scarRow = '';
+    if (scar) {
+      const labels = { met: 'Metalli', en: 'Energia', food: 'Cibo', water: 'Acqua' };
+      const bits = [];
+      ['met', 'en', 'food', 'water'].forEach(function (k) {
+        if (scar[k].state !== 'ok') {
+          const t = scar[k].state === 'crit' ? 'critica' : 'allerta';
+          bits.push('<span class="scar-tag scar--' + scar[k].state + '">' + labels[k] + ' · ' + t + '</span>');
+        }
+      });
+      if (bits.length) scarRow = '<p class="sysinfo__sub">Stato risorse (§7.4)</p><p class="scar-row">' + bits.join(' ') + '</p>';
+    }
     host.innerHTML =
       '<div class="sysinfo">' +
         (colony.isHomeBase ? '<p class="sysinfo__home">★ Pianeta base — bonus +20% produzione (§8.1)</p>' : '<p class="sysinfo__home">◉ Colonia attiva</p>') +
@@ -822,9 +884,28 @@ function renderPlanetColoniaTab(host, planet, colony) {
           row('Popolazione', colony.pop.total + ' / ' + colony.pop.cap) +
           row('Slot utilizzati', out.used + ' / ' + planet.slots) +
         '</dl>' +
-        '<p class="sysinfo__sub">Riepilogo produzione</p>' +
+        '<p class="sysinfo__sub">Riepilogo produzione (/Impulso)</p>' +
         rateGrid(out.rates, out.upkeep) +
-        '<p class="panel__note">L\'avanzamento della produzione richiede il game loop temporale (M05).</p>' +
+        scarRow +
+      '</div>';
+    return;
+  }
+
+  // Colonizzazione in corso (M05)
+  if (colony.colonizing) {
+    const total = planet.colCost.impulsi;
+    const remain = Math.max(0, colony.colonizing.duration | 0);
+    const pct = Math.round(((total - remain) / total) * 100);
+    host.innerHTML =
+      '<div class="sysinfo">' +
+        '<p class="sysinfo__home">◌ Spedizione coloniale in viaggio</p>' +
+        '<dl class="sysinfo__list">' +
+          row('Partenza',  colony.colonizing.startedAt || '—') +
+          row('Restanti', remain + ' I') +
+          row('Avanzamento', pct + '%') +
+        '</dl>' +
+        '<div class="progress-bar"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
+        '<p class="panel__note">Avanza il tempo per veder arrivare la nave coloniale. La colonia si attiverà automaticamente.</p>' +
       '</div>';
     return;
   }
@@ -834,12 +915,16 @@ function renderPlanetColoniaTab(host, planet, colony) {
   const hostility = planet.hostility;
   const reasons = [];
   if (!def.habitable) reasons.push('Corpo non abitabile — solo estrazione (§6.3).');
-  const homeColonized = !!(g.colonies[g.homePlanetKey] && g.colonies[g.homePlanetKey].colonized);
-  // §6.2: finché il primo pianeta è "produttivo" il costo è elevato. In M04
-  // segnaliamo, l'aggiustamento numerico è da gestire in M05.
-  const costMul = (homeColonized && !colony.isHomeBase) ? 5 : 1;
+  const home = g.colonies[g.homePlanetKey];
+  const homeColonized = !!(home && home.colonized);
+  // §6.2: finché il primo pianeta è "produttivo" il costo è elevato — ma
+  // se è in crisi (cibo/acqua critici), il costo torna basso ("migrazione
+  // naturale forzata", §6.2 eccezione). Recovery-friendly (decisione M05).
+  const homeInTrouble = !!(home && home._scar &&
+    (home._scar.food.state === 'crit' || home._scar.water.state === 'crit'));
+  const costMul = (homeColonized && !colony.isHomeBase && !homeInTrouble) ? 5 : 1;
 
-  const stockHome = homeColonized ? g.colonies[g.homePlanetKey].stock : { met: 0, en: 0, food: 0, water: 0 };
+  const stockHome = homeColonized ? home.stock : { met: 0, en: 0, food: 0, water: 0 };
   const canPay =
     stockHome.met   >= cost.met   * costMul &&
     stockHome.en    >= cost.en    * costMul &&
@@ -861,10 +946,11 @@ function renderPlanetColoniaTab(host, planet, colony) {
         row('Ostilità', hostility) +
       '</dl>' +
       (costMul > 1 ? '<p class="panel__note">×' + costMul + ' perché la colonia primaria è ancora produttiva (§6.2).</p>' : '') +
+      (homeInTrouble ? '<p class="panel__note">⚠ Crisi sulla colonia primaria: costo di migrazione ridotto (§6.2).</p>' : '') +
       (reasons.length ? '<p class="panel__note">' + reasons.join(' ') + '</p>' : '') +
       '<button class="btn btn--mini btn--enter" data-action="colonize" type="button"' +
         (canPay && def.habitable ? '' : ' disabled') + '>◉ Colonizza ▸</button>' +
-      '<p class="panel__note">Colonizzare ulteriori corpi richiede tempo (90-150 Impulsi) — il timer di completamento gira in M05. In M04 la prima colonizzazione (pianeta natale) è istantanea, le altre vengono accodate.</p>' +
+      '<p class="panel__note">Le spedizioni coloniali richiedono ' + cost.impulsi + ' Impulsi di viaggio. Avanza il tempo per veder arrivare la nave.</p>' +
     '</div>';
 
   const btn = host.querySelector('[data-action="colonize"]');
@@ -875,22 +961,27 @@ function tryColonize(planet) {
   const g = ORION.game;
   const colKey = planet.systemId + ':' + planet.bodyKey;
   const colony = g.colonies[colKey];
-  if (!colony || colony.colonized) return;
+  if (!colony || colony.colonized || colony.colonizing) return;
   const homeColony = g.colonies[g.homePlanetKey];
   if (!homeColony || !homeColony.colonized) return;
   const cost = planet.colCost;
-  const mul = (!colony.isHomeBase) ? 5 : 1;
+  // §6.2: finché il primo pianeta è "produttivo" il costo è elevato.
+  // §6.2 eccezione: se il pianeta base è in carestia/critico, il costo
+  // torna basso (migrazione naturale forzata) — recovery-friendly.
+  const homeInTrouble = !!(homeColony._scar &&
+    (homeColony._scar.food.state === 'crit' || homeColony._scar.water.state === 'crit'));
+  const mul = (homeInTrouble || colony.isHomeBase) ? 1 : 5;
   ['met', 'en', 'water', 'food'].forEach(function (k) {
-    homeColony.stock[k] -= cost[k] * mul;
+    homeColony.stock[k] = Math.max(0, (homeColony.stock[k] || 0) - cost[k] * mul);
   });
-  // In M04 segniamo la colonia come "in arrivo": completata istantaneamente
-  // qui, ma il timer reale arriverà in M05. Per ora niente coda separata.
-  colony.colonized = true;
-  colony.colonizedDS = g.startDS;
-  colony.pop.total = 1;
-  colony.pop.classes.operai = 1;
-  colony.stock = { met: 30, en: 20, food: 15, water: 15 };
-  pushChronicle((g.startDS || 'DS —') + ' — Nuova colonia su <strong>' + planet.name + '</strong>.', 'planet');
+  // M05: la colonia entra in stato "in arrivo" — il loop la attiverà al
+  // termine del countdown (Impulsi da §4.4/§6.2).
+  colony.colonizing = {
+    startedAt: ORION.time.currentDS(g),
+    duration: cost.impulsi
+  };
+  pushChronicle(ORION.time.currentDS(g) + ' — Spedizione coloniale in viaggio verso <strong>' + planet.name + '</strong> (' + cost.impulsi + ' I).', 'planet');
+  persistGame(g);
   updateGlobalResourceHud();
   updatePlanetUI();
   if (ORION.planetView) ORION.planetView.refresh(colony);
@@ -946,19 +1037,41 @@ function renderPlanetStruttureTab(host, planet, colony) {
     html += '</ul>';
   }
 
-  // in coda
+  // in coda — con countdown e barra di avanzamento (M05)
   if (colony.queue.length) {
-    html += '<p class="sysinfo__sub">In costruzione (timer M05)</p><ul class="struct-list">';
+    html += '<p class="sysinfo__sub">In costruzione</p><ul class="struct-list">';
     colony.queue.forEach(function (q, idx) {
       const def = S.get(q.id);
+      const total = def.time || 1;
+      const remain = Math.max(0, q.duration | 0);
+      const pct = Math.round(((total - remain) / total) * 100);
       html += '<li class="struct-item is-queue">' +
         '<span class="struct-item__glyph">' + def.glyph + '</span>' +
-        '<span class="struct-item__name">' + def.name + '</span>' +
-        '<span class="struct-item__cat">' + q.duration + ' I</span>' +
+        '<div class="struct-item__main">' +
+          '<div class="struct-item__name">' + def.name + ' <span class="struct-item__cat">' + remain + ' / ' + total + ' I</span></div>' +
+          '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
+        '</div>' +
         '<button class="btn btn--mini struct-item__cancel" data-cancel="' + idx + '" type="button" title="Annulla (rimborso 80%)">×</button>' +
       '</li>';
     });
     html += '</ul>';
+  }
+
+  // Osservatorio in scansione (decisione M05): mostra il progresso
+  if (colony.structures['osservatorio'] && !colony.scanned.active) {
+    const lvl = colony.structures['osservatorio'].level || 1;
+    const total = ORION.time.CFG.SCAN_OBSERVATION_I;
+    const cur = Math.min(total, colony.scanned.progress || 0);
+    const pct = Math.round(cur * 100 / total);
+    const remain = Math.max(0, Math.ceil((total - cur) / lvl));
+    html += '<p class="sysinfo__sub">Osservatorio · scansione (§7.3)</p>' +
+      '<div class="struct-item is-queue">' +
+        '<span class="struct-item__glyph">◎</span>' +
+        '<div class="struct-item__main">' +
+          '<div class="struct-item__name">Mappatura risorse avanzate <span class="struct-item__cat">' + remain + ' I</span></div>' +
+          '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
+        '</div>' +
+      '</div>';
   }
 
   // costruibili
@@ -1002,16 +1115,13 @@ function tryBuild(id) {
   const g = ORION.game;
   const colony = g.colonies[ORION.openPlanetKey];
   const planet = ORION.currentPlanet;
-  const r = ORION.planet.startBuild(colony, planet, id, g.startDS);
+  // M05: la struttura va in coda e maturerà col game loop. Niente più
+  // auto-complete (era lo stub M04).
+  const r = ORION.planet.startBuild(colony, planet, id, ORION.time.currentDS(g));
   if (!r.ok) { console.info('Costruzione rifiutata:', r.reason); return; }
-  // In M04 senza game loop: completiamo immediatamente la struttura dopo
-  // l'accodamento. Quando arriverà M05 sarà il loop a maturare il timer.
   const def = ORION.structures.get(id);
-  colony.queue.pop();    // rimuove l'entry appena aggiunta
-  colony.structures[id] = { level: 1, hp: 100 };
-  // se costruisco l'osservatorio, la scansione si attiva → svela avanzate
-  if (def.id === 'osservatorio') ORION.planet.applyScan(colony, planet);
-  pushChronicle((g.startDS || 'DS —') + ' — <strong>' + def.name + '</strong> completata su ' + planet.name + '.', 'planet');
+  pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione: <strong>' + def.name + '</strong> su ' + planet.name + ' (' + def.time + ' I).', 'planet');
+  persistGame(g);
   updateGlobalResourceHud();
   updatePlanetUI();
 }
@@ -1040,15 +1150,47 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
   });
   bars += '</ul>';
 
+  // Calcolo crescita stimata per Impulso (visualizzazione)
+  const CFG = ORION.time.CFG;
+  const scar = colony._scar;
+  const canGrow = total < cap && colony.stock.food > 0 && colony.stock.water > 0
+    && (!scar || (scar.food.state !== 'crit' && scar.water.state !== 'crit'));
+  let growthEst = 0;
+  if (canGrow) {
+    let morale = 1.0;
+    if (colony.isHomeBase) morale += CFG.POP_MORALE_HOMEBASE;
+    const habit = (colony.structures['centro-abitativo'] && colony.structures['centro-abitativo'].level) || 0;
+    morale += Math.min(CFG.POP_MORALE_MAX - 1.0, habit * CFG.POP_MORALE_HABITATION);
+    if (morale > CFG.POP_MORALE_MAX) morale = CFG.POP_MORALE_MAX;
+    if (scar && (scar.food.state === 'low' || scar.water.state === 'low')) morale *= 0.6;
+    growthEst = CFG.POP_GROWTH_BASE * morale;
+    if (colony.structures['ospedale']) growthEst *= (1 + CFG.POP_GROWTH_HOSPITAL);
+  }
+  const growthStr = canGrow
+    ? '+' + (Math.round(growthEst * 1000) / 1000) + ' / I'
+    : (total >= cap ? 'al cap' : 'ferma (carestia)');
+
+  // Target classi suggerito dalle strutture
+  const tw = ORION.time.targetClassWeights(colony);
+  let twSum = 0; Object.keys(tw).forEach(function (k) { twSum += tw[k]; });
+  let targetHtml = '';
+  if (twSum > 0) {
+    const targetBits = order.map(function (k) {
+      const pct = Math.round((tw[k] || 0) / twSum * 100);
+      return pct > 0 ? labels[k] + ' ' + pct + '%' : '';
+    }).filter(Boolean).join(' · ');
+    targetHtml = '<p class="panel__note">Mix tendenziale (§9.3): ' + targetBits + '</p>';
+  }
+
   host.innerHTML =
     '<div class="sysinfo">' +
       '<dl class="sysinfo__list">' +
         row('Popolazione', total + ' / ' + cap) +
-        row('Crescita', '+ via M05') +
+        row('Crescita', '<span class="rate ' + (canGrow ? 'rate--pos' : 'rate--neg') + '">' + growthStr + '</span>') +
       '</dl>' +
       '<p class="sysinfo__sub">Classi funzionali (§9.2)</p>' +
       bars +
-      '<p class="panel__note">La composizione si aggiusta lentamente in base alle strutture (§9.3). L\'aggiornamento richiede il game loop (M05).</p>' +
+      targetHtml +
     '</div>';
 }
 
@@ -1103,6 +1245,90 @@ function bodyDotColor(b) {
   const pal = ORION.system.BODY_TYPES[b.type].palette;
   if (pal.bands) return ORION.system.GAS_VARIANTS[b.variant || 0].base;
   return pal.land || pal.rock || '#9aa6cc';
+}
+
+/* ---------------------------------------------------------------------
+   M05 — Controllo del tempo (GDD §4.3)
+   --------------------------------------------------------------------- */
+function initTimeControls() {
+  document.querySelectorAll('[data-action="advance"]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const n = parseInt(btn.dataset.impulsi, 10) || 1;
+      runAdvance(n);
+    });
+  });
+  const nextBtn = document.querySelector('[data-action="advance-to-event"]');
+  if (nextBtn) nextBtn.addEventListener('click', function () { runAdvance(null); });
+  updateTimeControlsHint();
+}
+
+/* Esegue un avanzamento, traduce gli eventi in cronaca, aggiorna HUD/UI. */
+function runAdvance(impulsi) {
+  const g = ORION.game;
+  if (!g) return;
+  const before = g.timeImpulsi || 0;
+  const res = (impulsi == null) ? ORION.time.advanceToNextEvent() : ORION.time.advance(impulsi);
+  const after = g.timeImpulsi || 0;
+  if (after === before) return;
+
+  // Eventi → cronaca (raggruppiamo eventi identici dello stesso Impulso
+  // per non spammare; in M05 sono comunque pochi)
+  if (res.events && res.events.length) {
+    res.events.forEach(function (ev) { chronicleEvent(ev); });
+  }
+  // Update visuali (snap a fine batch — decisione M05)
+  setHudDate(ORION.time.currentDS(g));
+  pulseHud();
+  updateGlobalResourceHud();
+  if (ORION.openPlanetKey) updatePlanetUI();
+  updateTimeControlsHint();
+  persistGame(g);
+}
+
+function chronicleEvent(ev) {
+  const ds = ORION.time.format((ORION.game.startEpochOrbita || 0) * 100 + ev.impulso);
+  const pname = (ev.planet && ev.planet.name) || '—';
+  if (ev.kind === 'build-done') {
+    pushChronicle(ds + ' — <strong>' + ev.structName + '</strong> operativa su ' + pname + '.', 'planet');
+  } else if (ev.kind === 'colony-done') {
+    pushChronicle(ds + ' — Nuova colonia attiva su <strong>' + pname + '</strong>.', 'planet');
+  } else if (ev.kind === 'scan-done') {
+    const n = (ev.planet && ev.planet.advanced) ? ev.planet.advanced.length : 0;
+    pushChronicle(ds + ' — Osservatorio di ' + pname + ': scansione completata, ' + n + ' risorse avanzate rivelate (§7.2).', 'explore');
+  } else if (ev.kind === 'scarcity') {
+    const RES = { met: 'metalli', en: 'energia', food: 'cibo', water: 'acqua' };
+    const sev = ev.sev === 'crit' ? 'critica' : 'in allerta';
+    pushChronicle(ds + ' — ' + pname + ': carenza ' + sev + ' di <strong>' + RES[ev.res] + '</strong>.', 'system');
+  } else if (ev.kind === 'scarcity-recover') {
+    const RES = { met: 'metalli', en: 'energia', food: 'cibo', water: 'acqua' };
+    pushChronicle(ds + ' — ' + pname + ': situazione <strong>' + RES[ev.res] + '</strong> rientrata.', 'system');
+  } else if (ev.kind === 'pop-loss') {
+    pushChronicle(ds + ' — ' + pname + ': la popolazione cala per la carestia prolungata.', 'system');
+  }
+}
+
+/* Aggiorna l'etichetta "Prossimo evento" con il delta in Impulsi. */
+function updateTimeControlsHint() {
+  const g = ORION.game;
+  const btn = document.querySelector('[data-action="advance-to-event"]');
+  if (!btn || !g) return;
+  const n = ORION.time.nextEventImpulsi(g);
+  const glyph = btn.querySelector('.btn__glyph');
+  // ricostruzione minima per non rompere il markup pre-esistente
+  btn.innerHTML = (glyph ? '<span class="btn__glyph" aria-hidden="true">⏭</span>' : '') +
+    'Prossimo evento <span class="time-control__delta">+' + n + ' I</span>';
+}
+
+/* Pulse rapida sui valori HUD per segnalare l'aggiornamento. */
+function pulseHud() {
+  const targets = document.querySelectorAll('.resource__value, .index--date .index__value');
+  targets.forEach(function (el) {
+    el.classList.remove('hud-pulse');
+    // forza reflow per riavviare l'animazione
+    // eslint-disable-next-line no-unused-expressions
+    void el.offsetWidth;
+    el.classList.add('hud-pulse');
+  });
 }
 
 /* Sincronizza l'evidenziazione della navigazione sinistra. */
@@ -1175,7 +1401,7 @@ function chronicleSystemEntry(system, disc) {
   if (ORION.lastChronicleId === system.id) return;
   ORION.lastChronicleId = system.id;
   const DISCOVERY = ORION.galaxy.DISCOVERY;
-  const ds = (ORION.game && ORION.game.startDS) ? ORION.game.startDS : 'DS —';
+  const ds = ORION.time.currentDS(ORION.game);
   const n = system.bodies.length;
   let text, mod;
   if (disc >= DISCOVERY.EXPLORED) {
@@ -1197,11 +1423,13 @@ function chronicleSystemEntry(system, disc) {
    Avvio
    --------------------------------------------------------------------- */
 function boot() {
-  // Se in localStorage c'è un seed di una partita precedente, lo riusiamo
-  // (preview M06: l'F5 mantiene la stessa galassia). "Nuova" rigenera.
-  newGame(loadSavedSeed());
+  // Se in localStorage c'è un save compatibile, lo ripristiniamo (seed +
+  // delta colonie + Impulsi cumulati). "Nuova" rigenera tutto.
+  const seed = loadSavedSeed();
+  newGame(seed, { restore: !!seed });
   initNavigation();
-  console.info('%cOrion Empires ' + ORION.version + ' — galassia pronta (seed ' + ORION.game.seed + ').', 'color:#2fe6e0');
+  initTimeControls();
+  console.info('%cOrion Empires ' + ORION.version + ' — galassia pronta (seed ' + ORION.game.seed + ', ' + ORION.time.currentDS(ORION.game) + ').', 'color:#2fe6e0');
 }
 
 document.addEventListener('DOMContentLoaded', boot);

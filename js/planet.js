@@ -216,8 +216,10 @@
     colony.pop.total = Math.max(2, Math.round(planet.popCap * 0.25));
     colony.pop.classes.operai = Math.floor(colony.pop.total * 0.5);
     colony.pop.classes.tecnici = colony.pop.total - colony.pop.classes.operai;
-    // stock di avvio (qualche risorsa per iniziare a costruire)
-    colony.stock = { met: 120, en: 60, food: 40, water: 40 };
+    // Stock di avvio generoso (recovery-friendly M05): copre il quartetto
+    // estrattivo iniziale (miniera+centrale+impianto-idrico+fattoria) e
+    // lascia ~25-30 I di buffer su cibo/acqua mentre maturano le code.
+    colony.stock = { met: 220, en: 110, food: 70, water: 70 };
     return colony;
   }
 
