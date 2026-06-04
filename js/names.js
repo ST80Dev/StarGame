@@ -167,18 +167,32 @@
   }
 
   /* refs: array allineato ai gruppi, ogni elemento { real: 'Vega' | null }.
-     Ritorna un array di nomi-regione unici, stesso ordine. */
+     Ritorna un array di nomi-regione unici, stesso ordine.
+
+     Il RIFERIMENTO è unico: una stella reale nomina una sola regione; se
+     più gruppi citerebbero la stessa reale (es. Altair + le sue
+     designazioni di catalogo finite in cluster diversi) i successivi
+     ricevono un nome evocativo, così le regioni restano distinte. */
   function generateRegions(rng, refs) {
-    const used = new Set();
+    const used = new Set();      // nomi-regione completi
+    const usedRefs = new Set();  // riferimenti già usati
     const out = [];
+
+    function freshEvocative() {
+      let r = '', guard = 0;
+      do { r = inventEvocative(rng); guard++; } while (usedRefs.has(r) && guard < 40);
+      return r;
+    }
+
     for (let i = 0; i < refs.length; i++) {
-      const ref = refs[i] && refs[i].real ? refs[i].real : inventEvocative(rng);
-      // scegli un descrittore non ancora abbinato a questo riferimento
-      let name = '';
-      let guard = 0;
+      let ref = refs[i] && refs[i].real ? refs[i].real : null;
+      if (!ref || usedRefs.has(ref)) ref = freshEvocative();
+      usedRefs.add(ref);
+
+      // scegli un descrittore non ancora abbinato
+      let name = '', guard = 0;
       do {
-        const kind = rng.pick(REGION_KINDS);
-        name = kind + ' di ' + ref;
+        name = rng.pick(REGION_KINDS) + ' di ' + ref;
         guard++;
       } while (used.has(name) && guard < 40);
       if (used.has(name)) name = name + ' ' + (i + 1); // fallback estremo
