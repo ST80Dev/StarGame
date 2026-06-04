@@ -424,6 +424,14 @@ function findGroup(id) {
 
 function row(k, v) { return '<div class="kv"><dt>' + k + '</dt><dd>' + v + '</dd></div>'; }
 
+/* Sostantivo del corpo per etichette ("Ostilità pianeta/luna/oggetto"). */
+function hostilityNoun(planet) {
+  if (!planet) return 'corpo';
+  if (planet.cat === 'moon') return 'luna';
+  if (planet.cat === 'belt') return 'oggetto';
+  return 'pianeta';
+}
+
 /* Popolazione (§9): il motore lavora in unità intere, ma a schermo le
    traduciamo in PERSONE plausibili via la curva per-pianeta di planet.js
    (ORION.planet.peopleAt / popCeiling / formatPeople). Solo presentazione:
@@ -1077,7 +1085,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
           row('Colonizzato dal', colony.colonizedDS || '—') +
           row('Popolazione', popRangePeople(colony, planet)) +
           row('Slot utilizzati', out.used + ' / ' + planet.slots) +
-          row('Ostilità', planet.hostility) +
+          row('Ostilità ' + hostilityNoun(planet), planet.hostility) +
         '</dl>' +
         '<p class="sysinfo__sub">Riepilogo produzione (/Impulso)</p>' +
         rateGrid(out.rates, out.upkeep) +
@@ -1138,7 +1146,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
         row('Acqua',    Math.round(cost.water * costMul)) +
         row('Cibo',     Math.round(cost.food  * costMul)) +
         row('Impulsi',  Math.round(cost.impulsi)) +
-        row('Ostilità', hostility) +
+        row('Ostilità ' + hostilityNoun(planet), hostility) +
       '</dl>' +
       (costMul > 1 ? '<p class="panel__note">×' + costMul + ' perché la colonia primaria è ancora produttiva.</p>' : '') +
       (homeInTrouble ? '<p class="panel__note">⚠ Crisi sulla colonia primaria: costo di migrazione ridotto.</p>' : '') +
@@ -2493,7 +2501,7 @@ function homeCandidateCardHtml(c) {
       '<div><dt>Regione</dt><dd>' + escapeHtml(c.groupName) + '</dd></div>' +
       '<div><dt>Sistema</dt><dd>' + escapeHtml(c.system.name) + ' · ' + escapeHtml(c.system.starLabel) + '</dd></div>' +
       '<div><dt>Pericolo</dt><dd>' + escapeHtml(c.system.dangerTier) + ' (' + c.system.danger + ')</dd></div>' +
-      '<div><dt>Ostilità</dt><dd>' + c.planet.hostility + '</dd></div>' +
+      '<div><dt>Ostilità ' + hostilityNoun(c.planet) + '</dt><dd>' + c.planet.hostility + '</dd></div>' +
       '<div><dt>Pop. max</dt><dd>' + popMaxPeople(c.planet) + '</dd></div>' +
       '<div><dt>Slot</dt><dd>' + c.planet.slots + '</dd></div>' +
     '</dl>' +
