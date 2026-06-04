@@ -24,7 +24,7 @@
 
   /* Numerali romani per la designazione dei corpi (Vega I, Vega II…). */
   const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
-  const MOON_LETTERS = ['a', 'b', 'c', 'd'];
+  const MOON_LETTERS = ['A', 'B', 'C', 'D'];
 
   /* ------------------------------------------------------------------
      Caratteristiche fisiche delle stelle (mappa dai tipi M02).
@@ -236,8 +236,8 @@
           key: body.key + 'm' + m,
           index: m,
           type: 'luna',
-          name: body.name + ' ' + MOON_LETTERS[m],   // es. "Zaffiro a"
-          designation: ROMAN[i] + ' ' + MOON_LETTERS[m],
+          name: body.name + ' L-' + MOON_LETTERS[m],   // es. "Zaffiro L-A"
+          designation: ROMAN[i] + ' L-' + MOON_LETTERS[m],
           systemName: sys.name,
           parentKey: body.key,
           moonOrbit: body.radius + 0.026 + m * 0.022 + rng.range(0, 0.02),
