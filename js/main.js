@@ -1478,10 +1478,13 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
   });
   bars += '</ul>';
 
-  // Calcolo crescita stimata per Impulso (visualizzazione)
+  // Calcolo crescita stimata per Impulso (visualizzazione).
+  // Durante l'Insediamento (M06.5) il motore congela la crescita
+  // (time.js processPopulation), quindi la stima dev'essere coerente: 0.
   const CFG = ORION.time.CFG;
   const scar = colony._scar;
-  const canGrow = total < cap && colony.stock.food > 0 && colony.stock.water > 0
+  const settling = colony.phase === 'settling';
+  const canGrow = !settling && total < cap && colony.stock.food > 0 && colony.stock.water > 0
     && (!scar || (scar.food.state !== 'crit' && scar.water.state !== 'crit'));
   // Morale: calcolato sempre (anche se la crescita è bloccata) per dare
   // visibilità della leva §9.3. Breakdown dei contributi mostrato sotto.
@@ -1518,6 +1521,8 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
     const slope = M > 0 ? Math.log(M / ORION.planet.POP_FLOOR) / (refCap - 1) : 0;
     const marginal = peopleNow * slope * growthEst;
     growthStr = '+' + ORION.planet.formatPeople(marginal) + ' / Impulso';
+  } else if (settling) {
+    growthStr = 'ferma (Insediamento)';
   } else {
     growthStr = (total >= cap ? 'al cap' : 'ferma (carestia)');
   }
