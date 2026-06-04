@@ -260,6 +260,7 @@ stargame/
 │   └── main.js          ✅ bootstrap + integrazione M02/M03/M04 + controlli del tempo + persistenza M05 (schema 2)
 ├── CLAUDE.md            ✅ questo file
 ├── README.md            ✅
+├── MODALITA_GIOCO.md    ✅ riferimento di dettaglio decisione #23 (modalità di gioco + impatto sui 20 moduli)
 └── ORION_EMPIRES_GDD.md ✅ documento di design (fonte di verità)
 ```
 
