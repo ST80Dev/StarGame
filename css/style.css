@@ -1564,7 +1564,7 @@ select.main-menu__input { cursor: pointer; }
 }
 
 /* =====================================================================
-   M06.5 — Step "Scegli colonia originaria" (decisione #26 / GDD §6.2.bis)
+   M06.5 — Step "Scegli colonia originaria" (decisione #27 / GDD §6.2.bis)
    ===================================================================== */
 .main-menu__pick {
   display: flex;
@@ -1637,7 +1637,7 @@ select.main-menu__input { cursor: pointer; }
 }
 
 /* =====================================================================
-   M06.5 — Banner fase Insediamento (decisione #26 / GDD §6.2.bis)
+   M06.5 — Banner fase Insediamento (decisione #27 / GDD §6.2.bis)
    ===================================================================== */
 .settle-banner {
   padding: 10px 12px;

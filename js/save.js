@@ -30,7 +30,7 @@
 (function (root) {
   const ORION = root.ORION = root.ORION || {};
 
-  /* Schema 4 (M06.5 / decisione #26): v3 + scelta colonia originaria
+  /* Schema 4 (M06.5 / decisione #27): v3 + scelta colonia originaria
      (`homeWorld`) + fase Insediamento sulle colonie (`phase`,
      `settlingStart`, `settlingDuration`).
      Sub-migrazioni componibili: v1→v2 (victory), v2→v3 (chronicle),
@@ -85,7 +85,7 @@
       victoryTracks: game.victoryTracks,
       eventSchedule: game.eventSchedule || [],
       chronicle: capChronicle(game.chronicle),
-      /* M06.5 (decisione #26): scelta colonia originaria, salvata
+      /* M06.5 (decisione #27): scelta colonia originaria, salvata
          esplicitamente per non doverla rideterminare al runtime. */
       homeWorld: game.homeWorld || null
     };
@@ -113,7 +113,7 @@
       if (!Array.isArray(payload.chronicle)) payload.chronicle = [];
       payload.schema = 3;
     }
-    /* v3 → v4 (M06.5 / decisione #26): aggiungi homeWorld:null e marca
+    /* v3 → v4 (M06.5 / decisione #27): aggiungi homeWorld:null e marca
        ogni colonia esistente come 'operational'. NIENTE Insediamento
        retroattivo per i save vecchi (sarebbe punitivo: chi ha già
        giocato deve restare operativo). */

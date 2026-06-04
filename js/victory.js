@@ -67,7 +67,7 @@
        - tsgSpeed:   ×1/×2/×4 — divisore sul tick principale (vedi
                      time.js — in M05 esposto, applicazione completa M20)
        - ironman:    blocca i load multipli (M06) */
-  /* M06.5 (decisione #26): tarature per la fase Insediamento (GDD §6.2.bis).
+  /* M06.5 (decisione #27): tarature per la fase Insediamento (GDD §6.2.bis).
        - settlingDuration: Impulsi della fase `settling` (durante la quale
                            produzione 50%, +50% velocità prima struttura
                            in coda, crescita pop bloccata)

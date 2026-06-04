@@ -138,7 +138,7 @@
   /* 1) Coda di costruzione: decrementa duration, completa quelle a 0. */
   function processQueue(game, colony, planet, events) {
     if (!colony.queue || !colony.queue.length) return;
-    /* M06.5 (decisione #26): durante l'Insediamento la PRIMA entry in
+    /* M06.5 (decisione #27): durante l'Insediamento la PRIMA entry in
        coda matura il 50% più in fretta (bonus "moduli avanguardia"
        della fondazione). Decremento 1.5 invece di 1.0 sulla prima. */
     const settling = (colony.phase === 'settling');
@@ -190,7 +190,7 @@
   }
 
   /* 3) Produzione/consumo per Impulso con malus di scarsità.
-        M06.5 (decisione #26): durante `settling` la produzione è al 50%
+        M06.5 (decisione #27): durante `settling` la produzione è al 50%
         ("atterraggio, scarico moduli"). Recovery-friendly: finisce sola. */
   function processProduction(colony, planet, scar) {
     if (!colony.colonized) return null;
@@ -289,7 +289,7 @@
           e a ritmo lento (1 unità ogni POP_FAMINE_RATE I) */
   function processPopulation(game, colony, planet, prod, events) {
     if (!colony.colonized || !prod) return;
-    /* M06.5 (decisione #26): durante l'Insediamento la pop è bloccata.
+    /* M06.5 (decisione #27): durante l'Insediamento la pop è bloccata.
        Niente crescita, niente decremento (il famine timer non scatta
        perché stock parte sopra zero e settling dura poco). Esce dopo
        settlingDuration Impulsi. */
@@ -449,7 +449,7 @@
     }
   }
 
-  /* M06.5 (decisione #26): scriptata della fase Insediamento.
+  /* M06.5 (decisione #27): scriptata della fase Insediamento.
      Voci di cronaca emerse ai tick 0/20/40/fine + transizione automatica
      a `operational`. Niente RNG: tutto deterministico.
      Recovery-friendly (decisione #22): la fase finisce SEMPRE da sola,
@@ -553,7 +553,7 @@
         const rem = Math.ceil((CFG.SCAN_OBSERVATION_I - (c.scanned.progress || 0)) / lvl);
         if (rem > 0 && rem < best) best = rem;
       }
-      // M06.5: fase Insediamento in corso (decisione #26)
+      // M06.5: fase Insediamento in corso (decisione #27)
       if (c.phase === 'settling' && c.settlingStart != null) {
         const end = c.settlingStart + (c.settlingDuration || 60);
         const rem = end - (game.timeImpulsi || 0);

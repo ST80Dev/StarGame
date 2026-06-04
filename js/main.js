@@ -71,12 +71,12 @@ function newGame(seed, opts) {
      viene da lì — coerente con seed+delta (decisione #5/#24). */
   if (opts.payload && opts.payload.seed) seed = opts.payload.seed;
   /* M06.5: payload v4 contiene esplicitamente la scelta della colonia
-     originaria (decisione #26). Se presente, sovrascrive opts.homeWorld. */
+     originaria (decisione #27). Se presente, sovrascrive opts.homeWorld. */
   if (opts.payload && opts.payload.homeWorld) opts.homeWorld = opts.payload.homeWorld;
   seed = seed || ORION.rng.newSeed();
   const galaxy = ORION.galaxy.generate(seed);
   /* M06.5: se il giocatore ha scelto un home diverso dal default
-     generato (decisione #26), ricalibra prima di createState così la
+     generato (decisione #27), ricalibra prima di createState così la
      nebbia di guerra rispetta la nuova origine. */
   if (opts.homeWorld && Number.isInteger(opts.homeWorld.systemId)) {
     ORION.galaxy.recomputeDanger(galaxy, opts.homeWorld.systemId);
@@ -110,7 +110,7 @@ function newGame(seed, opts) {
     /* M06: cronaca persistita (decisione #24, cap a ORION.save.CHRONICLE_CAP).
        Più recente in TESTA all'array, identico al DOM. */
     chronicle: [],
-    /* M06.5: scelta della colonia originaria (decisione #26). Salvata
+    /* M06.5: scelta della colonia originaria (decisione #27). Salvata
        esplicitamente come delta per non doverla rideterminare al runtime
        (vincolo seed+delta). Se null, fallback al homeWorld scelto da
        system.js — retro-compat con save schema 3. */
@@ -154,7 +154,7 @@ function newGame(seed, opts) {
 
 /* Genera struttura+colonia per il mondo natale e popola l'HUD risorse.
    M06.5: se `game.homeWorld` è stato impostato dalla scelta menu
-   (decisione #26), usa il bodyKey esplicito (può differire dall'
+   (decisione #27), usa il bodyKey esplicito (può differire dall'
    `homeWorld` flaggato da system.js, perché il candidato è stato pescato
    con scoring leggermente diverso). */
 function colonizeHomePlanet(game, startDS) {
@@ -174,7 +174,7 @@ function colonizeHomePlanet(game, startDS) {
   if (!homeBody) homeBody = homeSys.bodies[Math.floor(homeSys.bodies.length / 2)];
   const planet = ORION.planet.generate(galaxy, homeSys, homeBody.key);
   const colony = ORION.planet.createColony(planet);
-  /* M06.5 (decisione #26): leggi le tarature dal preset corrente. */
+  /* M06.5 (decisione #27): leggi le tarature dal preset corrente. */
   const mods = (game.mode && game.mode.modifiers) || {};
   const settlingOpts = {
     duration: mods.settlingDuration || 60,
@@ -909,7 +909,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
       });
       if (bits.length) scarRow = '<p class="sysinfo__sub">Stato risorse (§7.4)</p><p class="scar-row">' + bits.join(' ') + '</p>';
     }
-    /* M06.5 (decisione #26): banner fase Insediamento con countdown e
+    /* M06.5 (decisione #27): banner fase Insediamento con countdown e
        progress bar. Recovery-friendly: finisce sempre da sola. */
     let settlingBanner = '';
     if (colony.phase === 'settling' && colony.settlingStart != null) {
@@ -1361,7 +1361,7 @@ function chronicleEvent(ev) {
     const label = (ORION.victory && ORION.victory.TRACK_LABELS[ev.track]) || ev.track;
     pushChronicle(ds + ' — <strong>Pista chiusa</strong>: ' + label + ' (M20 attiverà la schermata di vittoria).', 'explore');
   } else if (ev.kind === 'settle-stage') {
-    /* M06.5 (decisione #26): voci scriptate della fase Insediamento. */
+    /* M06.5 (decisione #27): voci scriptate della fase Insediamento. */
     const stage = ev.stage;
     let txt;
     if (stage === 'landing')       txt = 'Atterraggio dei moduli avanguardia su <strong>' + pname + '</strong>.';
@@ -1935,13 +1935,13 @@ function startNewGameFromMenu() {
      dell'origine è già "azione irreversibile" che porterà a partita. */
   const auto = ORION.save && ORION.save.loadAutosave ? ORION.save.loadAutosave() : null;
   if (auto && !confirm('Iniziare una nuova partita? L\'autosave corrente verrà sostituito (gli slot manuali restano).')) return;
-  /* M06.5 (decisione #26): non avvii subito la partita — passi allo
+  /* M06.5 (decisione #27): non avvii subito la partita — passi allo
      step "scegli colonia" che genera la galassia in anteprima e mostra
      i candidati. La partita parte solo a scelta confermata. */
   showMainMenu('home-pick');
 }
 
-/* M06.5 — Step "Scegli colonia originaria" (decisione #26 / GDD §6.2.bis).
+/* M06.5 — Step "Scegli colonia originaria" (decisione #27 / GDD §6.2.bis).
    Genera la galassia in anteprima dal seed cristallizzato, pesca i
    candidati (uno per gruppo, max 6), mostra la griglia di card.
    Niente Canvas: le card sono puramente testuali (riusa lo stile delle

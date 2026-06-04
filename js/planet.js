@@ -189,7 +189,7 @@
      ================================================================== */
 
   /* Stato iniziale: NON colonizzato.
-     M06.5 (decisione #26): aggiunti i campi della fase Insediamento.
+     M06.5 (decisione #27): aggiunti i campi della fase Insediamento.
      Default `phase: 'operational'` mantiene la retro-compat coi save
      schema 3 (colonie pre-M06.5 sono già operative). */
   function createColony(planet) {
@@ -213,7 +213,7 @@
   }
 
   /* Colonizzazione del pianeta natale all'avvio della partita.
-     M06.5 (decisione #26): la colonia non parte più "operativa" ma in
+     M06.5 (decisione #27): la colonia non parte più "operativa" ma in
      fase `settling` con stock ridotto e pop bloccata. Le tarature
      vivono in victory.js → PRESETS (settlingDuration, startStockMul,
      startPopBase). La promozione a `operational` la fa il loop in
@@ -234,7 +234,7 @@
     colony.pop.total = popBase;
     colony.pop.classes.operai = Math.floor(popBase * 0.5);
     colony.pop.classes.tecnici = popBase - colony.pop.classes.operai;
-    /* Stock di avvio M06.5: ridotto a ~55% del buffer M06 (decisione #26)
+    /* Stock di avvio M06.5: ridotto a ~55% del buffer M06 (decisione #27)
        — l'atterraggio consuma. Moltiplicatore da preset. */
     const mul = (typeof opts.stockMul === 'number') ? opts.stockMul : 1.0;
     colony.stock = {
