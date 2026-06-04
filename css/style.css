@@ -1635,3 +1635,29 @@ select.main-menu__input { cursor: pointer; }
   font-size: 0.72rem;
   color: rgba(186, 142, 255, 0.95);
 }
+
+/* =====================================================================
+   M06.5 — Banner fase Insediamento (decisione #26 / GDD §6.2.bis)
+   ===================================================================== */
+.settle-banner {
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(255, 176, 0, 0.45);
+  background: rgba(255, 176, 0, 0.08);
+  border-radius: 5px;
+}
+.settle-banner__title {
+  margin: 0 0 4px;
+  font-family: var(--font-data);
+  font-size: 0.86rem;
+  letter-spacing: 0.05em;
+  color: #ffb000;
+}
+.settle-banner__hint {
+  margin: 0 0 6px;
+  font-size: 0.72rem;
+  color: var(--c-text-soft);
+}
+.settle-banner .progress-bar__fill {
+  background: linear-gradient(90deg, rgba(255,176,0,0.95), rgba(255,176,0,0.55));
+}

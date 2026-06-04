@@ -174,7 +174,14 @@ function colonizeHomePlanet(game, startDS) {
   if (!homeBody) homeBody = homeSys.bodies[Math.floor(homeSys.bodies.length / 2)];
   const planet = ORION.planet.generate(galaxy, homeSys, homeBody.key);
   const colony = ORION.planet.createColony(planet);
-  ORION.planet.colonizeHome(colony, planet, startDS);
+  /* M06.5 (decisione #26): leggi le tarature dal preset corrente. */
+  const mods = (game.mode && game.mode.modifiers) || {};
+  const settlingOpts = {
+    duration: mods.settlingDuration || 60,
+    stockMul: (typeof mods.startStockMul === 'number') ? mods.startStockMul : 1.0,
+    popBase:  mods.startPopBase || 3
+  };
+  ORION.planet.colonizeHome(colony, planet, startDS, settlingOpts);
   game.colonies[galaxy.homeId + ':' + homeBody.key] = colony;
   game.homePlanetKey = galaxy.homeId + ':' + homeBody.key;
   updateGlobalResourceHud();
@@ -902,8 +909,28 @@ function renderPlanetColoniaTab(host, planet, colony) {
       });
       if (bits.length) scarRow = '<p class="sysinfo__sub">Stato risorse (§7.4)</p><p class="scar-row">' + bits.join(' ') + '</p>';
     }
+    /* M06.5 (decisione #26): banner fase Insediamento con countdown e
+       progress bar. Recovery-friendly: finisce sempre da sola. */
+    let settlingBanner = '';
+    if (colony.phase === 'settling' && colony.settlingStart != null) {
+      const dur = colony.settlingDuration || 60;
+      const elapsed = Math.max(0, (g.timeImpulsi || 0) - colony.settlingStart);
+      const remain = Math.max(0, dur - elapsed);
+      const pct = Math.min(100, Math.round((elapsed / dur) * 100));
+      settlingBanner =
+        '<div class="settle-banner">' +
+          '<p class="settle-banner__title">⏳ Insediamento in corso</p>' +
+          '<p class="settle-banner__hint">Produzione al 50% · +50% velocità prima struttura · crescita pop bloccata (§6.2.bis).</p>' +
+          '<dl class="sysinfo__list">' +
+            row('Restanti', remain + ' I') +
+            row('Avanzamento', pct + '%') +
+          '</dl>' +
+          '<div class="progress-bar"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
+        '</div>';
+    }
     host.innerHTML =
       '<div class="sysinfo">' +
+        settlingBanner +
         (colony.isHomeBase ? '<p class="sysinfo__home">★ Pianeta base — bonus +20% produzione (§8.1)</p>' : '<p class="sysinfo__home">◉ Colonia attiva</p>') +
         '<dl class="sysinfo__list">' +
           row('Colonizzato dal', colony.colonizedDS || '—') +
@@ -1333,6 +1360,16 @@ function chronicleEvent(ev) {
   } else if (ev.kind === 'victory') {
     const label = (ORION.victory && ORION.victory.TRACK_LABELS[ev.track]) || ev.track;
     pushChronicle(ds + ' — <strong>Pista chiusa</strong>: ' + label + ' (M20 attiverà la schermata di vittoria).', 'explore');
+  } else if (ev.kind === 'settle-stage') {
+    /* M06.5 (decisione #26): voci scriptate della fase Insediamento. */
+    const stage = ev.stage;
+    let txt;
+    if (stage === 'landing')       txt = 'Atterraggio dei moduli avanguardia su <strong>' + pname + '</strong>.';
+    else if (stage === 'founding') txt = 'Fondazione di <strong>' + pname + '</strong>.';
+    else /* civic */               txt = 'Primi insediamenti civili su <strong>' + pname + '</strong>.';
+    pushChronicle(ds + ' — ' + txt, 'planet');
+  } else if (ev.kind === 'settle-done') {
+    pushChronicle(ds + ' — Insediamento completato — la colonia di <strong>' + pname + '</strong> è operativa.', 'planet');
   }
 }
 

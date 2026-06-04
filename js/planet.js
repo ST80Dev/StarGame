@@ -188,7 +188,10 @@
      STATO COLONIA (delta — serializzabile per M06)
      ================================================================== */
 
-  /* Stato iniziale: NON colonizzato. */
+  /* Stato iniziale: NON colonizzato.
+     M06.5 (decisione #26): aggiunti i campi della fase Insediamento.
+     Default `phase: 'operational'` mantiene la retro-compat coi save
+     schema 3 (colonie pre-M06.5 sono già operative). */
   function createColony(planet) {
     return {
       schemaVersion: SCHEMA_VERSION,
@@ -201,25 +204,67 @@
       queue: [],                   // [{ id, target:'build|upgrade', startedAt, duration }]
       pop:   { total: 0, cap: planet.popCap, classes: { operai: 0, scienziati: 0, militari: 0, mercanti: 0, tecnici: 0 } },
       stock: { met: 0, en: 0, food: 0, water: 0 },
-      scanned: { active: false, advancedKnown: [] }   // §7.3 — sblocca con osservatorio (M05)
+      scanned: { active: false, advancedKnown: [] },   // §7.3 — sblocca con osservatorio (M05)
+      /* M06.5: fase Insediamento. */
+      phase: 'operational',         // 'settling' | 'operational'
+      settlingStart: null,          // Impulso (game.timeImpulsi) in cui inizia l'Insediamento
+      settlingDuration: 60          // durata in Impulsi (sovrascritta dal preset all'init)
     };
   }
 
-  /* Colonizzazione "istantanea" del pianeta natale all'avvio della
-     partita. La colonizzazione di altri corpi richiede tempo+risorse e
-     verrà processata dal game loop (M05). */
-  function colonizeHome(colony, planet, startDS) {
+  /* Colonizzazione del pianeta natale all'avvio della partita.
+     M06.5 (decisione #26): la colonia non parte più "operativa" ma in
+     fase `settling` con stock ridotto e pop bloccata. Le tarature
+     vivono in victory.js → PRESETS (settlingDuration, startStockMul,
+     startPopBase). La promozione a `operational` la fa il loop in
+     time.js dopo `settlingDuration` Impulsi.
+
+     `opts` (opzionale):
+       - duration:    override settlingDuration (default 60)
+       - stockMul:    override moltiplicatore stock (default 1.0)
+       - popBase:     override popolazione iniziale (default 3)
+       - phase:       'operational' per saltare l'Insediamento (load save) */
+  function colonizeHome(colony, planet, startDS, opts) {
+    opts = opts || {};
     colony.colonized = true;
     colony.colonizedDS = startDS || null;
     colony.isHomeBase = true;
-    // popolazione iniziale §8.1 (pianeta base): qualche "unità" di partenza
-    colony.pop.total = Math.max(2, Math.round(planet.popCap * 0.25));
-    colony.pop.classes.operai = Math.floor(colony.pop.total * 0.5);
-    colony.pop.classes.tecnici = colony.pop.total - colony.pop.classes.operai;
-    // Stock di avvio generoso (recovery-friendly M05): copre il quartetto
-    // estrattivo iniziale (miniera+centrale+impianto-idrico+fattoria) e
-    // lascia ~25-30 I di buffer su cibo/acqua mentre maturano le code.
-    colony.stock = { met: 220, en: 110, food: 70, water: 70 };
+    /* Popolazione iniziale §9: M06.5 fissa (no più % di popCap). */
+    const popBase = Math.max(1, Math.min(opts.popBase || 3, planet.popCap || 12));
+    colony.pop.total = popBase;
+    colony.pop.classes.operai = Math.floor(popBase * 0.5);
+    colony.pop.classes.tecnici = popBase - colony.pop.classes.operai;
+    /* Stock di avvio M06.5: ridotto a ~55% del buffer M06 (decisione #26)
+       — l'atterraggio consuma. Moltiplicatore da preset. */
+    const mul = (typeof opts.stockMul === 'number') ? opts.stockMul : 1.0;
+    colony.stock = {
+      met:   Math.round(120 * mul),
+      en:    Math.round(60  * mul),
+      food:  Math.round(50  * mul),
+      water: Math.round(50  * mul)
+    };
+    /* Fase Insediamento. `'operational'` come override solo per i load
+       di save vecchi (retro-compat schema 3). */
+    if (opts.phase === 'operational') {
+      colony.phase = 'operational';
+      colony.settlingStart = null;
+    } else {
+      colony.phase = 'settling';
+      colony.settlingStart = 0;   // riferito a game.timeImpulsi (parte da 0)
+      colony.settlingDuration = Math.max(1, opts.duration || 60);
+    }
+    return colony;
+  }
+
+  /* M06.5: avvia la fase Insediamento su una colonia esistente. Usato
+     se in futuro vorremo applicare l'Insediamento anche al SECONDO
+     corpo colonizzato (oggi non lo facciamo, il task limita a Fase 0
+     della colonia originaria). Lasciato come API pubblica per
+     coerenza con future estensioni. */
+  function startSettling(colony, planet, startImpulsi, duration) {
+    colony.phase = 'settling';
+    colony.settlingStart = startImpulsi || 0;
+    colony.settlingDuration = Math.max(1, duration || 60);
     return colony;
   }
 
@@ -389,6 +434,7 @@
     generate: generate,
     createColony: createColony,
     colonizeHome: colonizeHome,
+    startSettling: startSettling,
     structureOutput: structureOutput,
     theoreticalOutput: theoreticalOutput,
     canBuild: canBuild,

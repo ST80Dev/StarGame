@@ -138,10 +138,15 @@
   /* 1) Coda di costruzione: decrementa duration, completa quelle a 0. */
   function processQueue(game, colony, planet, events) {
     if (!colony.queue || !colony.queue.length) return;
+    /* M06.5 (decisione #26): durante l'Insediamento la PRIMA entry in
+       coda matura il 50% più in fretta (bonus "moduli avanguardia"
+       della fondazione). Decremento 1.5 invece di 1.0 sulla prima. */
+    const settling = (colony.phase === 'settling');
     const stillQueued = [];
     for (let i = 0; i < colony.queue.length; i++) {
       const q = colony.queue[i];
-      q.duration = (q.duration || 0) - 1;
+      const dec = (settling && i === 0) ? 1.5 : 1;
+      q.duration = (q.duration || 0) - dec;
       if (q.duration <= 0) {
         // Completa la struttura (oppure upgrade futuro M13)
         const def = root.ORION.structures.get(q.id);
@@ -184,15 +189,18 @@
     }
   }
 
-  /* 3) Produzione/consumo per Impulso con malus di scarsità. */
+  /* 3) Produzione/consumo per Impulso con malus di scarsità.
+        M06.5 (decisione #26): durante `settling` la produzione è al 50%
+        ("atterraggio, scarico moduli"). Recovery-friendly: finisce sola. */
   function processProduction(colony, planet, scar) {
     if (!colony.colonized) return null;
     const out = root.ORION.planet.structureOutput(colony, planet);
     const malus = scarcityMalus(scar);
+    const settling = (colony.phase === 'settling') ? 0.5 : 1.0;
     const stock = colony.stock;
     const net = {};
     ['met', 'en', 'food', 'water'].forEach(function (k) {
-      const r = (out.rates[k] || 0) * malus;
+      const r = (out.rates[k] || 0) * malus * settling;
       const u = out.upkeep[k] || 0;
       net[k] = r - u;
       stock[k] = (stock[k] || 0) + net[k];
@@ -281,6 +289,11 @@
           e a ritmo lento (1 unità ogni POP_FAMINE_RATE I) */
   function processPopulation(game, colony, planet, prod, events) {
     if (!colony.colonized || !prod) return;
+    /* M06.5 (decisione #26): durante l'Insediamento la pop è bloccata.
+       Niente crescita, niente decremento (il famine timer non scatta
+       perché stock parte sopra zero e settling dura poco). Esce dopo
+       settlingDuration Impulsi. */
+    if (colony.phase === 'settling') return;
     const pop = ensureGrowth(colony);
     const scar = ensureScarcity(colony);
 
@@ -432,6 +445,45 @@
       processScarcity(game, colony, planet, prod, events);
       processPopulation(game, colony, planet, prod, events);
       processObservatory(game, colony, planet, events);
+      processSettling(game, colony, planet, events);
+    }
+  }
+
+  /* M06.5 (decisione #26): scriptata della fase Insediamento.
+     Voci di cronaca emerse ai tick 0/20/40/fine + transizione automatica
+     a `operational`. Niente RNG: tutto deterministico.
+     Recovery-friendly (decisione #22): la fase finisce SEMPRE da sola,
+     non c'è azione utente che possa bloccarla. */
+  function processSettling(game, colony, planet, events) {
+    if (colony.phase !== 'settling') return;
+    if (colony.settlingStart == null) return;
+    const elapsed = game.timeImpulsi - colony.settlingStart;
+    const dur = Math.max(1, colony.settlingDuration || 60);
+
+    /* Voci scriptate a frazioni della durata (0%, ~33%, ~66%, 100%).
+       Frazioni invece di tick fissi così le voci scalano coi preset
+       (Speedrun 30 I, Incubo 90 I, Lungo respiro 120 I). */
+    if (!colony._settlingMilestones) colony._settlingMilestones = {};
+    const milestones = colony._settlingMilestones;
+    const tick33 = Math.floor(dur * 0.33);
+    const tick66 = Math.floor(dur * 0.66);
+
+    if (elapsed === 1 && !milestones.start) {
+      milestones.start = true;
+      events.push({ kind: 'settle-stage', stage: 'landing',  colony: colony, planet: planet, impulso: game.timeImpulsi });
+    }
+    if (elapsed === tick33 && !milestones.mid1) {
+      milestones.mid1 = true;
+      events.push({ kind: 'settle-stage', stage: 'founding', colony: colony, planet: planet, impulso: game.timeImpulsi });
+    }
+    if (elapsed === tick66 && !milestones.mid2) {
+      milestones.mid2 = true;
+      events.push({ kind: 'settle-stage', stage: 'civic',    colony: colony, planet: planet, impulso: game.timeImpulsi });
+    }
+    if (elapsed >= dur) {
+      colony.phase = 'operational';
+      colony._settlingMilestones = null;
+      events.push({ kind: 'settle-done', colony: colony, planet: planet, impulso: game.timeImpulsi });
     }
   }
 
@@ -499,6 +551,12 @@
       if (c.structures && c.structures['osservatorio'] && !c.scanned.active) {
         const lvl = c.structures['osservatorio'].level || 1;
         const rem = Math.ceil((CFG.SCAN_OBSERVATION_I - (c.scanned.progress || 0)) / lvl);
+        if (rem > 0 && rem < best) best = rem;
+      }
+      // M06.5: fase Insediamento in corso (decisione #26)
+      if (c.phase === 'settling' && c.settlingStart != null) {
+        const end = c.settlingStart + (c.settlingDuration || 60);
+        const rem = end - (game.timeImpulsi || 0);
         if (rem > 0 && rem < best) best = rem;
       }
     });
