@@ -50,6 +50,9 @@ ORION.lastChronicleId = -1;
    vivono nel modulo dedicato. */
 function persistGame(game) {
   if (ORION.save && ORION.save.autosave) ORION.save.autosave(game);
+  // Le colonie sono cambiate (build/colonize/advance): la mappa galassia
+  // mostra anelli caldi sui sistemi colonizzati → forziamo un redraw.
+  if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
 }
 function clearSavedGame() {
   if (ORION.save && ORION.save.clearAutosave) ORION.save.clearAutosave();
@@ -755,10 +758,27 @@ function renderSystemInteriorPanel(title, content, system, disc) {
   if (explored) {
     const chips = system.bodies.map((b) => {
       const def = ORION.system.BODY_TYPES[b.type];
-      const moonNote = b.moons && b.moons.length ? '<span class="body-chip__moons">☾' + b.moons.length + '</span>' : '';
-      return '<button class="sys-chip' + (b.key === selKey ? ' is-sel' : '') + '" data-body="' + b.key + '" type="button" title="' + def.label + '">' +
+      const moonCount = b.moons ? b.moons.length : 0;
+      const moonNote = moonCount
+        ? '<span class="body-chip__moons" title="' + moonCount + ' lun' + (moonCount === 1 ? 'a' : 'e') + '">☾' + moonCount + '</span>'
+        : '';
+      const bodyColony = ORION.game.colonies[system.id + ':' + b.key] || null;
+      let badge = '';
+      let classMod = '';
+      if (bodyColony && bodyColony.colonized) {
+        if (bodyColony.isHomeBase) {
+          badge = '<span class="body-chip__badge body-chip__badge--home" title="Pianeta base">★ BASE</span>';
+          classMod = ' is-home';
+        } else {
+          badge = '<span class="body-chip__badge body-chip__badge--colony" title="Colonia attiva">◉ COLONIA</span>';
+          classMod = ' is-colony';
+        }
+      } else if (b.homeWorld) {
+        badge = '<span class="body-chip__badge body-chip__badge--candidate" title="Mondo natale candidato">★</span>';
+      }
+      return '<button class="sys-chip' + (b.key === selKey ? ' is-sel' : '') + classMod + '" data-body="' + b.key + '" type="button" title="' + def.label + '">' +
         '<span class="sys-chip__dot" style="--sc:' + bodyDotColor(b) + '"></span>' +
-        '<span class="body-chip__name">' + b.name + '</span> · ' + def.label + (b.homeWorld ? ' ★' : '') + moonNote +
+        '<span class="body-chip__name">' + b.name + '</span> · ' + def.label + badge + moonNote +
         '</button>';
     }).join('');
     detail = '<p class="sysinfo__sub">Corpi celesti</p><div class="sys-list">' + chips + '</div>';
