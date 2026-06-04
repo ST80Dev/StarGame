@@ -209,7 +209,7 @@ function colonizeHomePlanet(game, startDS) {
 /* Aggrega lo stock di tutte le colonie nell'HUD risorse-base. La vera
    produzione/aggiornamento per Impulso arriverà con M05. */
 function updateGlobalResourceHud() {
-  const totals = { met: 0, en: 0, food: 0, water: 0 };
+  const totals = { met: 0, en: 0, food: 0, water: 0, pop: 0 };
   if (ORION.game && ORION.game.colonies) {
     Object.keys(ORION.game.colonies).forEach(function (k) {
       const c = ORION.game.colonies[k];
@@ -218,6 +218,7 @@ function updateGlobalResourceHud() {
       totals.en  += c.stock.en  || 0;
       totals.food += c.stock.food || 0;
       totals.water += c.stock.water || 0;
+      totals.pop += (c.pop && c.pop.total) || 0;
     });
   }
   const setVal = function (key, v) {
@@ -228,6 +229,7 @@ function updateGlobalResourceHud() {
   setVal('energia', totals.en);
   setVal('cibo', totals.food);
   setVal('acqua', totals.water);
+  setVal('popolazione', totals.pop);
 }
 
 /* ---------------------------------------------------------------------

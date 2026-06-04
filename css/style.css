@@ -220,6 +220,14 @@ button { font-family: inherit; }
   color: var(--c-text);
 }
 
+/* La popolazione non è una risorsa stoccata come le altre 4: la separo con un
+   margine e un accento ambra per segnalarne la natura diversa (§9). */
+.resource--pop { margin-left: 6px; }
+.resource--pop .resource__icon {
+  color: var(--c-amber);
+  text-shadow: 0 0 6px rgba(255, 174, 92, 0.35);
+}
+
 .hud-top__indices { display: flex; gap: 8px; }
 .index {
   display: flex;
