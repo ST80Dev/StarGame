@@ -56,6 +56,77 @@
   };
 
   /* ------------------------------------------------------------------
+     POPOLAZIONE — display "realistico" (solo presentazione, §9).
+     Il motore lavora in UNITÀ intere (BASE_POP_CAP, crescita in time.js):
+     queste funzioni traducono le unità in un numero di PERSONE plausibile
+     senza toccare nessun calcolo tarato (produzione/scarsità/classi).
+
+     Mappatura per-pianeta: ogni corpo interpola geometricamente da
+     POP_FLOOR (50 coloni a 1 unità = fondazione) fino al proprio TETTO
+     di tipo quando raggiunge la sua capacità base. Così un terrestre pieno
+     fa ~10 Mld, un mondo piccolo ~qualche 100 Mln, una luna ~50.000 — i
+     numeri richiesti, e una curva demografica credibile (piccola all'inizio,
+     esplode a metà, satura al tetto). NON va salvato: è puro display.
+     ------------------------------------------------------------------ */
+  const POP_FLOOR = 50;                  // persone a 1 unità (colonia appena fondata)
+  const POP_CEILING = {
+    terrestre:  1.0e10,  // 10 Mld
+    forestale:  7.0e9,   // 7 Mld
+    oceanico:   5.0e9,   // 5 Mld
+    desertico:  6.0e8,   // 600 Mln
+    vulcanico:  4.0e8,   // 400 Mln
+    ghiacciato: 3.0e8,   // 300 Mln
+    luna:       5.0e4,   // 50.000
+    gassoso:    0, cintura: 0
+  };
+
+  function popCeiling(planet) {
+    if (!planet) return 0;
+    const m = POP_CEILING[planet.type];
+    return (m == null) ? 0 : m;
+  }
+
+  /* Persone stimate per `units` unità su `planet` (units può essere
+     frazionario per uno scorrimento fluido del numero). */
+  function peopleAt(units, planet) {
+    const M = popCeiling(planet);
+    if (M <= 0) return 0;
+    const refCap = Math.max(2, (planet && planet.popCap) || 2);
+    let u = units;
+    if (u < 1) u = 1;
+    const t = (u - 1) / (refCap - 1);
+    let people = POP_FLOOR * Math.pow(M / POP_FLOOR, t);
+    if (people < POP_FLOOR) people = POP_FLOOR;
+    if (people > M) people = M;     // clamp se i centri abitativi spingono oltre la capacità base
+    return Math.round(people);
+  }
+
+  /* Formattazione italiana compatta: intero < 1.000, migliaia col punto,
+     poi "Mln" / "Mld" con max 1 decimale (niente decimale ≥ 100). */
+  function formatPeople(n) {
+    n = Math.round(n || 0);
+    if (n <= 0) return '0';
+    if (n < 1000) return String(n);
+    if (n < 1.0e6) return groupThousands(n);
+    if (n < 1.0e9) return abbrev(n / 1.0e6) + ' Mln';
+    return abbrev(n / 1.0e9) + ' Mld';
+  }
+  function abbrev(v) {
+    const s = (v >= 100) ? Math.round(v).toString()
+                         : (Math.round(v * 10) / 10).toString();
+    return s.replace('.', ',');   // separatore decimale italiano
+  }
+  function groupThousands(n) {
+    const s = String(n);
+    let out = '';
+    for (let i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 === 0) out += '.';
+      out += s[i];
+    }
+    return out;
+  }
+
+  /* ------------------------------------------------------------------
      Risorse avanzate (§7.2). Candidate per tipo: l'identità si rivela
      con la struttura "osservatorio" (decisione #15 — gancio scansione).
      ------------------------------------------------------------------ */
@@ -431,6 +502,11 @@
     SCHEMA_VERSION: SCHEMA_VERSION,
     ADVANCED: ADVANCED,
     BASE_POTENTIAL: BASE_POTENTIAL,
+    POP_FLOOR: POP_FLOOR,
+    POP_CEILING: POP_CEILING,
+    popCeiling: popCeiling,
+    peopleAt: peopleAt,
+    formatPeople: formatPeople,
     generate: generate,
     createColony: createColony,
     colonizeHome: colonizeHome,

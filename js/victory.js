@@ -74,10 +74,10 @@
        - startStockMul:    moltiplicatore dello stock iniziale di colonia
        - startPopBase:     popolazione totale iniziale (unità intere) */
   const PRESETS = {
-    classic:    { galaxySize: 1.0,  hostility: 1.0, tsgSpeed: 1, ironman: false, settlingDuration: 60,  startStockMul: 1.0, startPopBase: 3 },
-    speedrun:   { galaxySize: 0.65, hostility: 1.0, tsgSpeed: 4, ironman: false, settlingDuration: 30,  startStockMul: 1.5, startPopBase: 5 },
-    nightmare:  { galaxySize: 1.0,  hostility: 2.0, tsgSpeed: 1, ironman: true,  settlingDuration: 90,  startStockMul: 0.5, startPopBase: 2 },
-    longBreath: { galaxySize: 1.5,  hostility: 0.7, tsgSpeed: 1, ironman: false, settlingDuration: 120, startStockMul: 1.2, startPopBase: 3 }
+    classic:    { galaxySize: 1.0,  hostility: 1.0, tsgSpeed: 1, ironman: false, settlingDuration: 60,  startStockMul: 1.0, startPopBase: 1 },
+    speedrun:   { galaxySize: 0.65, hostility: 1.0, tsgSpeed: 4, ironman: false, settlingDuration: 30,  startStockMul: 1.5, startPopBase: 1 },
+    nightmare:  { galaxySize: 1.0,  hostility: 2.0, tsgSpeed: 1, ironman: true,  settlingDuration: 90,  startStockMul: 0.5, startPopBase: 1 },
+    longBreath: { galaxySize: 1.5,  hostility: 0.7, tsgSpeed: 1, ironman: false, settlingDuration: 120, startStockMul: 1.2, startPopBase: 1 }
   };
 
   function defaultMode() {

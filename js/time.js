@@ -177,7 +177,11 @@
     if (colony.colonizing.duration <= 0) {
       colony.colonized = true;
       colony.colonizedDS = currentDS(game);
-      colony.pop.total = Math.max(1, Math.round(planet.popCap * 0.15));
+      // Ogni nuova colonia nasce con un seme di 1 unità (≈ 50 coloni nel
+      // display §9). In futuro (migrazione, M07+) si potrà seminare di più
+      // spostando popolazione da una colonia sorgente — l'engine accetta
+      // qualsiasi pop.total senza ribilanciare (la pop non guida i calcoli).
+      colony.pop.total = 1;
       colony.pop.classes.operai = colony.pop.total;
       colony.stock = { met: 40, en: 30, food: 20, water: 20 };
       colony.colonizing = null;
