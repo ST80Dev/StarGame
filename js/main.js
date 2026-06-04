@@ -50,6 +50,9 @@ ORION.lastChronicleId = -1;
    vivono nel modulo dedicato. */
 function persistGame(game) {
   if (ORION.save && ORION.save.autosave) ORION.save.autosave(game);
+  // Le colonie sono cambiate (build/colonize/advance): la mappa galassia
+  // mostra anelli caldi sui sistemi colonizzati → forziamo un redraw.
+  if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
 }
 function clearSavedGame() {
   if (ORION.save && ORION.save.clearAutosave) ORION.save.clearAutosave();
@@ -331,18 +334,11 @@ function renderGalaxyView(stage) {
       '<div class="system-holder" data-system-holder hidden></div>' +
       '<div class="planet-holder" data-planet-holder hidden></div>' +
       '<nav class="galaxy-breadcrumb" data-breadcrumb aria-label="Percorso di navigazione"></nav>' +
-      '<div class="galaxy-overlay">' +
-        '<div class="galaxy-overlay__row">' +
-          '<span class="galaxy-overlay__label">SEED</span>' +
-          '<code class="galaxy-overlay__seed" data-bind="seed">' + g.seed + '</code>' +
-        '</div>' +
-        '<div class="galaxy-overlay__row">' +
-          '<span class="galaxy-overlay__meta">' + g.galaxy.count + ' sistemi · ' + g.galaxy.groups.length + ' gruppi</span>' +
-        '</div>' +
-        '<div class="galaxy-overlay__actions">' +
-          '<button class="btn btn--mini" data-action="galaxy-reset" type="button" title="Torna alla vista galassia">⤢ Galassia</button>' +
-        '</div>' +
-      '</div>' +
+      '<button class="seed-chip" data-action="copy-seed" type="button" ' +
+        'title="Copia il seed negli appunti">' +
+        '<span class="seed-chip__label">SEED</span>' +
+        '<code class="seed-chip__value" data-bind="seed">' + g.seed + '</code>' +
+      '</button>' +
       '<div class="galaxy-hint">Trascina · zoom rotella/pinch · <kbd>Shift</kbd>+trascina = ruota libera · <kbd>Alt</kbd>+trascina = roll · pinch a 2 dita ruota su touch</div>' +
     '</div>';
 
@@ -356,10 +352,16 @@ function renderGalaxyView(stage) {
   // contesto iniziale (galassia)
   onMapContext({ level: 'galaxy', groupId: -1, systemId: -1 });
 
-  const resetBtn = stage.querySelector('[data-action="galaxy-reset"]');
-  if (resetBtn) resetBtn.addEventListener('click', () => {
-    if (ORION.openSystemId >= 0) closeSystem();
-    ORION.map.focusGalaxy();
+  const seedChip = stage.querySelector('[data-action="copy-seed"]');
+  if (seedChip) seedChip.addEventListener('click', () => {
+    const seed = ORION.game && ORION.game.seed;
+    if (!seed) return;
+    const done = () => showToast('Seed ' + seed + ' copiato');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(seed).then(done, () => showToast('Seed: ' + seed));
+    } else {
+      showToast('Seed: ' + seed);
+    }
   });
 }
 
@@ -473,7 +475,7 @@ function regionAcronymFor(sysId) {
 
 function tagHtml(text) {
   if (!text) return '';
-  return ' <span class="name-tag">[' + text + ']</span>';
+  return ' <span class="name-tag">' + text + '</span>';
 }
 
 /* Tag per il nome di un sistema: [VLV] */
@@ -755,10 +757,27 @@ function renderSystemInteriorPanel(title, content, system, disc) {
   if (explored) {
     const chips = system.bodies.map((b) => {
       const def = ORION.system.BODY_TYPES[b.type];
-      const moonNote = b.moons && b.moons.length ? '<span class="body-chip__moons">☾' + b.moons.length + '</span>' : '';
-      return '<button class="sys-chip' + (b.key === selKey ? ' is-sel' : '') + '" data-body="' + b.key + '" type="button" title="' + def.label + '">' +
+      const moonCount = b.moons ? b.moons.length : 0;
+      const moonNote = moonCount
+        ? '<span class="body-chip__moons" title="' + moonCount + ' lun' + (moonCount === 1 ? 'a' : 'e') + '">● ' + moonCount + '</span>'
+        : '';
+      const bodyColony = ORION.game.colonies[system.id + ':' + b.key] || null;
+      let badge = '';
+      let classMod = '';
+      if (bodyColony && bodyColony.colonized) {
+        if (bodyColony.isHomeBase) {
+          badge = '<span class="body-chip__badge body-chip__badge--home" title="Pianeta base">★ BASE</span>';
+          classMod = ' is-home';
+        } else {
+          badge = '<span class="body-chip__badge body-chip__badge--colony" title="Colonia attiva">◉ COLONIA</span>';
+          classMod = ' is-colony';
+        }
+      } else if (b.homeWorld) {
+        badge = '<span class="body-chip__badge body-chip__badge--candidate" title="Mondo natale candidato">★</span>';
+      }
+      return '<button class="sys-chip' + (b.key === selKey ? ' is-sel' : '') + classMod + '" data-body="' + b.key + '" type="button" title="' + def.label + '">' +
         '<span class="sys-chip__dot" style="--sc:' + bodyDotColor(b) + '"></span>' +
-        '<span class="body-chip__name">' + b.name + '</span> · ' + def.label + (b.homeWorld ? ' ★' : '') + moonNote +
+        '<span class="body-chip__name">' + b.name + '</span> · ' + def.label + badge + moonNote +
         '</button>';
     }).join('');
     detail = '<p class="sysinfo__sub">Corpi celesti</p><div class="sys-list">' + chips + '</div>';
@@ -782,7 +801,7 @@ function renderSystemInteriorPanel(title, content, system, disc) {
         row('Pericolo', '<span class="danger-badge ' + tierClass + '">' + system.danger + ' · ' + system.dangerTier + '</span>') +
       '</dl>' +
       detail +
-      '<p class="panel__note">Clicca un corpo per i dati base · doppio click per inquadrarlo. Colonizzazione e gestione: modulo M04.</p>' +
+      '<p class="panel__note">Clicca un oggetto per i dati base · doppio click per inquadrarlo. Colonizzazione e gestione: modulo M04.</p>' +
     '</div>';
 
   content.querySelectorAll('[data-body]').forEach((btn) => {
@@ -811,7 +830,7 @@ function renderBodyPanel(title, content, system, body) {
   const colKey = system.id + ':' + body.key;
   const colony = ORION.game.colonies[colKey] || null;
   let statusLine = '';
-  if (def.cat === 'belt') statusLine = '<p class="panel__note">Cintura asteroidale: solo estrazione orbitale (§6.3).</p>';
+  if (def.cat === 'belt') statusLine = '<p class="panel__note">Cintura asteroidale: solo estrazione orbitale.</p>';
   else if (colony && colony.colonized) {
     statusLine = colony.isHomeBase
       ? '<p class="sysinfo__home">★ Pianeta base</p>'
@@ -828,7 +847,7 @@ function renderBodyPanel(title, content, system, body) {
         row('Abitabile', def.habitable ? 'Sì' : 'No') +
         extra +
       '</dl>' +
-      '<p class="sysinfo__sub">Caratteristiche (§6.3)</p>' +
+      '<p class="sysinfo__sub">Caratteristiche</p>' +
       '<dl class="sysinfo__list">' +
         row('Vantaggi', def.vantaggi) +
         row('Svantaggi', def.svantaggi) +
@@ -1019,7 +1038,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
           bits.push('<span class="scar-tag scar--' + scar[k].state + '">' + labels[k] + ' · ' + t + '</span>');
         }
       });
-      if (bits.length) scarRow = '<p class="sysinfo__sub">Stato risorse (§7.4)</p><p class="scar-row">' + bits.join(' ') + '</p>';
+      if (bits.length) scarRow = '<p class="sysinfo__sub">Stato risorse</p><p class="scar-row">' + bits.join(' ') + '</p>';
     }
     /* M06.5 (decisione #27): banner fase Insediamento con countdown e
        progress bar. Recovery-friendly: finisce sempre da sola. */
@@ -1032,7 +1051,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
       settlingBanner =
         '<div class="settle-banner">' +
           '<p class="settle-banner__title">⏳ Insediamento in corso</p>' +
-          '<p class="settle-banner__hint">Produzione al 50% · +50% velocità prima struttura · crescita pop bloccata (§6.2.bis).</p>' +
+          '<p class="settle-banner__hint">Produzione al 50% · +50% velocità prima struttura · crescita pop bloccata.</p>' +
           '<dl class="sysinfo__list">' +
             row('Restanti', remain + ' I') +
             row('Avanzamento', pct + '%') +
@@ -1043,7 +1062,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
     host.innerHTML =
       '<div class="sysinfo">' +
         settlingBanner +
-        (colony.isHomeBase ? '<p class="sysinfo__home">★ Pianeta base — bonus +20% produzione (§8.1)</p>' : '<p class="sysinfo__home">◉ Colonia attiva</p>') +
+        (colony.isHomeBase ? '<p class="sysinfo__home">★ Pianeta base — bonus +20% produzione</p>' : '<p class="sysinfo__home">◉ Colonia attiva</p>') +
         '<dl class="sysinfo__list">' +
           row('Colonizzato dal', colony.colonizedDS || '—') +
           row('Popolazione', popRangePeople(colony, planet)) +
@@ -1079,7 +1098,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
   const cost = planet.colCost;
   const hostility = planet.hostility;
   const reasons = [];
-  if (!def.habitable) reasons.push('Corpo non abitabile — solo estrazione (§6.3).');
+  if (!def.habitable) reasons.push('Corpo non abitabile — solo estrazione.');
   const home = g.colonies[g.homePlanetKey];
   const homeColonized = !!(home && home.colonized);
   // §6.2: finché il primo pianeta è "produttivo" il costo è elevato — ma
@@ -1098,10 +1117,10 @@ function renderPlanetColoniaTab(host, planet, colony) {
 
   host.innerHTML =
     '<div class="sysinfo">' +
-      '<p class="panel__note">Tutti i corpi sono colonizzabili, ma con caratteristiche diverse (§6.2). La prima colonia condiziona tutto.</p>' +
-      '<p class="sysinfo__sub">Potenziale risorse (§7.1)</p>' +
+      '<p class="panel__note">Tutti i corpi sono colonizzabili, ma con caratteristiche diverse. La prima colonia condiziona tutto.</p>' +
+      '<p class="sysinfo__sub">Potenziale risorse</p>' +
       potentialBars(planet) +
-      '<p class="sysinfo__sub">Costo colonizzazione (§4.4 · §6.2)</p>' +
+      '<p class="sysinfo__sub">Costo colonizzazione</p>' +
       '<dl class="sysinfo__list">' +
         row('Metalli',  Math.round(cost.met   * costMul)) +
         row('Energia',  Math.round(cost.en    * costMul)) +
@@ -1110,8 +1129,8 @@ function renderPlanetColoniaTab(host, planet, colony) {
         row('Impulsi',  Math.round(cost.impulsi)) +
         row('Ostilità', hostility) +
       '</dl>' +
-      (costMul > 1 ? '<p class="panel__note">×' + costMul + ' perché la colonia primaria è ancora produttiva (§6.2).</p>' : '') +
-      (homeInTrouble ? '<p class="panel__note">⚠ Crisi sulla colonia primaria: costo di migrazione ridotto (§6.2).</p>' : '') +
+      (costMul > 1 ? '<p class="panel__note">×' + costMul + ' perché la colonia primaria è ancora produttiva.</p>' : '') +
+      (homeInTrouble ? '<p class="panel__note">⚠ Crisi sulla colonia primaria: costo di migrazione ridotto.</p>' : '') +
       (reasons.length ? '<p class="panel__note">' + reasons.join(' ') + '</p>' : '') +
       '<button class="btn btn--mini btn--enter" data-action="colonize" type="button"' +
         (canPay && def.habitable ? '' : ' disabled') + '>◉ Colonizza ▸</button>' +
@@ -1161,13 +1180,13 @@ function renderPlanetRisorseTab(host, planet, colony) {
   }).join('');
   host.innerHTML =
     '<div class="sysinfo">' +
-      '<p class="sysinfo__sub">Potenziali del corpo (§7.1)</p>' +
+      '<p class="sysinfo__sub">Potenziali ' + bodyKindGen(planet) + '</p>' +
       potentialBars(planet) +
       '<p class="sysinfo__sub">Scorte in colonia</p>' +
       '<dl class="sysinfo__list">' + stockRows + '</dl>' +
       '<p class="sysinfo__sub">Produzione potenziale per Impulso (M05)</p>' +
       rateGrid(out.rates, out.upkeep) +
-      '<p class="sysinfo__sub">Risorse avanzate (§7.2)</p>' +
+      '<p class="sysinfo__sub">Risorse avanzate</p>' +
       advancedHtml +
     '</div>';
 }
@@ -1229,7 +1248,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
     const cur = Math.min(total, colony.scanned.progress || 0);
     const pct = Math.round(cur * 100 / total);
     const remain = Math.max(0, Math.ceil((total - cur) / lvl));
-    html += '<p class="sysinfo__sub">Osservatorio · scansione (§7.3)</p>' +
+    html += '<p class="sysinfo__sub">Osservatorio · scansione</p>' +
       '<div class="struct-item is-queue">' +
         '<span class="struct-item__glyph">◎</span>' +
         '<div class="struct-item__main">' +
@@ -1358,7 +1377,7 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
       const pct = Math.round((tw[k] || 0) / twSum * 100);
       return pct > 0 ? labels[k] + ' ' + pct + '%' : '';
     }).filter(Boolean).join(' · ');
-    targetHtml = '<p class="panel__note">Mix tendenziale (§9.3): ' + targetBits + '</p>';
+    targetHtml = '<p class="panel__note">Mix tendenziale: ' + targetBits + '</p>';
   }
 
   host.innerHTML =
@@ -1367,7 +1386,7 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
         row('Popolazione', popRangePeople(colony, planet)) +
         row('Crescita', '<span class="rate ' + (canGrow ? 'rate--pos' : 'rate--neg') + '">' + growthStr + '</span>') +
       '</dl>' +
-      '<p class="sysinfo__sub">Classi funzionali (§9.2)</p>' +
+      '<p class="sysinfo__sub">Classi funzionali</p>' +
       bars +
       targetHtml +
     '</div>';
@@ -1399,10 +1418,10 @@ function rateGrid(rates, upkeep) {
 }
 
 function advancedResHtml(planet, colony) {
-  if (!planet.advanced.length) return '<p class="panel__note">Nessuna risorsa avanzata rilevata su questo corpo.</p>';
+  if (!planet.advanced.length) return '<p class="panel__note">Nessuna risorsa avanzata rilevata su ' + bodyKindDem(planet) + '.</p>';
   const known = colony.scanned.active;
   if (!known) {
-    return '<p class="advanced-hint">⚛ <strong>' + planet.advanced.length + ' risorse avanzate</strong> presenti — identità da scansionare (costruisci un <em>osservatorio</em>, §7.3).</p>';
+    return '<p class="advanced-hint">⚛ <strong>' + planet.advanced.length + ' risorse avanzate</strong> presenti — identità da scansionare (costruisci un <em>osservatorio</em>).</p>';
   }
   const ADV = ORION.planet.ADVANCED;
   return '<ul class="adv-list">' + planet.advanced.map(function (a) {
@@ -1415,6 +1434,10 @@ function advancedResHtml(planet, colony) {
     '</li>';
   }).join('') + '</ul>';
 }
+
+function bodyIsMoon(planet) { return planet && planet.type === 'luna'; }
+function bodyKindGen(planet) { return bodyIsMoon(planet) ? 'della luna' : 'del pianeta'; }
+function bodyKindDem(planet) { return bodyIsMoon(planet) ? 'questa luna' : 'questo pianeta'; }
 
 function resLabel(k) { return { met: 'Metalli', en: 'Energia', food: 'Cibo', water: 'Acqua' }[k] || k; }
 function resGlyph(k) { return { met: '⛭', en: '⚡', food: '❖', water: '≈' }[k] || '·'; }
@@ -1735,7 +1758,7 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — Nuova colonia attiva su <strong>' + pname + '</strong>' + ptag + '.', 'planet');
   } else if (ev.kind === 'scan-done') {
     const n = (ev.planet && ev.planet.advanced) ? ev.planet.advanced.length : 0;
-    pushChronicle(ds + ' — Osservatorio di ' + pname + ptag + ': scansione completata, ' + n + ' risorse avanzate rivelate (§7.2).', 'explore');
+    pushChronicle(ds + ' — Osservatorio di ' + pname + ptag + ': scansione completata, ' + n + ' risorse avanzate rivelate.', 'explore');
   } else if (ev.kind === 'scarcity') {
     const RES = { met: 'metalli', en: 'energia', food: 'cibo', water: 'acqua' };
     const sev = ev.sev === 'crit' ? 'critica' : 'in allerta';
@@ -1801,7 +1824,7 @@ function setGalaxyHint(mode) {
   if (mode === 'planet')
     el.textContent = 'Trascina · zoom rotella/pinch · click sulle lune per aprirle · doppio click nel vuoto per uscire';
   else if (mode === 'system')
-    el.textContent = 'Trascina · zoom rotella/pinch · click su un corpo per i dati · doppio click nel vuoto per uscire';
+    el.textContent = 'Trascina · zoom rotella/pinch · click su un oggetto per i dati · doppio click nel vuoto per uscire';
   else
     el.textContent = 'Trascina · zoom rotella/pinch · Shift+trascina = ruota libera · Alt+trascina = roll · pinch a 2 dita ruota su touch';
 }
@@ -2391,7 +2414,7 @@ function renderMainMenuHomePick(body) {
       '<h2 class="main-menu__form-title">Scegli la colonia originaria</h2>' +
       '<p class="main-menu__field-hint">' +
         candidates.length + ' candidati (uno per regione · seed <code>' + escapeHtml(seed) + '</code>). ' +
-        'La scelta cristallizza il sistema d\'origine: il pericolo §5.3 si ricalibra da lì.' +
+        'La scelta cristallizza il sistema d\'origine: il pericolo della galassia si ricalibra da lì.' +
       '</p>' +
       '<div class="save-grid">' + cards + '</div>' +
       '<div class="main-menu__form-actions">' +
