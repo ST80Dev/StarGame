@@ -1039,11 +1039,12 @@ button { font-family: inherit; }
 }
 .time-control__unit strong { color: var(--c-accent); font-weight: 600; }
 
-/* Versione inline nell'header: compatta orizzontale accanto a DATA */
+/* Versione inline nell'header — decisione #31 (auto-advance):
+   5 controlli compatti [−][▶ velocità][+][⏵Ι][⏭ Evento]. */
 .time-control--inline {
   flex-direction: row;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 5px 8px;
   background: rgba(8, 12, 30, 0.65);
   border: 1px solid var(--c-border);
@@ -1051,19 +1052,38 @@ button { font-family: inherit; }
   backdrop-filter: none;
 }
 .time-control--inline::before { display: none; }
-.time-control--inline .time-steps {
-  grid-template-columns: repeat(4, auto);
-  gap: 4px;
+.time-control--inline .btn--mini {
+  padding: 6px 8px;
+  font-size: 0.95rem;
+  min-width: 30px;
+  font-family: var(--font-data);
+  letter-spacing: 0;
+  text-transform: none;
 }
-.time-control--inline .btn--step {
+.time-control--inline .btn--play {
   padding: 6px 10px;
-  font-size: 0.85rem;
-  min-width: 38px;
+  font-size: 0.74rem;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  text-transform: none;
+  font-family: var(--font-data);
+  min-width: 130px;
+  justify-content: flex-start;
+  background: rgba(47, 230, 224, 0.06);
+  border-color: var(--c-accent-dim);
+}
+.time-control--inline .btn--play:hover:not(:disabled) {
+  background: rgba(47, 230, 224, 0.18);
+  border-color: var(--c-accent);
+}
+.time-control--inline .btn--play .btn__glyph {
+  font-size: 1rem;
+  color: var(--c-accent);
 }
 .time-control--inline .btn--next-event {
-  padding: 8px 12px;
+  padding: 6px 10px;
   font-size: 0.72rem;
-  letter-spacing: 0.10em;
+  letter-spacing: 0.08em;
   white-space: nowrap;
 }
 .time-control--inline .btn__glyph { font-size: 0.85rem; }
@@ -1939,4 +1959,85 @@ select.main-menu__input { cursor: pointer; }
 }
 .settle-banner .progress-bar__fill {
   background: linear-gradient(90deg, rgba(255,176,0,0.95), rgba(255,176,0,0.55));
+}
+
+/* =====================================================================
+   Decisione #31 — Overlay di auto-pausa (eventi notevoli)
+   Niente modale invasiva: una card flottante in alto a destra con
+   l'elenco compatto degli eventi + bottoni "Riprendi" / "Chiudi" +
+   checkbox "non pausare più su questo tipo". Si chiude con Esc o
+   cliccando "Riprendi".
+   ===================================================================== */
+.event-overlay {
+  position: fixed;
+  top: 80px;
+  right: 18px;
+  z-index: 250;
+  max-width: 340px;
+  pointer-events: none;
+}
+.event-overlay[hidden] { display: none; }
+.event-overlay__panel {
+  pointer-events: auto;
+  padding: 12px 14px;
+  background: var(--c-panel);
+  border: 2px solid var(--c-accent-dim);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel), 0 0 18px rgba(47, 230, 224, 0.20);
+  backdrop-filter: blur(6px);
+}
+.event-overlay__title {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-accent);
+}
+.event-overlay__list {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.event-overlay__item {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--c-border-soft);
+}
+.event-overlay__item:last-child { border-bottom: none; }
+.event-overlay__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+.event-overlay__kind {
+  font-family: var(--font-display);
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-text);
+}
+.event-overlay__count {
+  font-family: var(--font-data);
+  font-size: 0.72rem;
+  color: var(--c-text-faint);
+}
+.event-overlay__pref {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: var(--c-text-soft);
+  cursor: pointer;
+}
+.event-overlay__pref input {
+  vertical-align: middle;
+  margin-right: 4px;
+  accent-color: var(--c-accent);
+}
+.event-overlay__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }
