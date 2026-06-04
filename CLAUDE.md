@@ -106,6 +106,13 @@ Su feedback utente (i gruppi 2D si sovrapponevano, distanze poco leggibili) la m
   - `focusGalaxy` ripristina yaw a 0 oltre a scala/offset (animato).
 - **`main.js`/`css`:** hint aggiornata con `<kbd>Shift</kbd>+trascina` come scorciatoia di rotazione; stile sobrio per il `<kbd>`.
 
+**Refinements post-feedback (stessa sessione):**
+- Rotazione più libera e sensibile: sensibilità yaw 0.012→0.020, pitch 0.006→0.010, range pitch espanso a [~1°, ~88°] così la rotazione si avverte anche grabbing al centro (prima si percepiva solo dai punti periferici).
+- Alone bianco/saturazione mappa attenuato: polvere stellare ridotta (520→360 punti, alpha −30%), nebulose ridotte (14→10, alpha cap 0.11), bloom delle stelle eroe con parallax cappato a 1.3 (niente più esplosioni vicino al viewer).
+- Etichette regione più leggibili: backdrop scuro sottile dietro al testo (fillRect dinamico basato su `measureText`).
+- Forma della galassia variabile per seed (sostituisce il placement random nei [0.12, 0.88]): ellisse con `aspect` e `lobes` distribuiti in 4 fasce — ~30% rotondeggiante (aspect 0.92-1.0) · ~32% ellittica moderata (0.65-0.85) · ~23% schiacciata (0.45-0.62) · ~15% irregolare (lobi 2-4 con ampiezza 10-20%). Asse maggiore ruotato di un angolo casuale, sample radiale `sqrt(rng) * rMax` per uniformità d'area. Determinismo verificato (aspect dei centroidi: 0.67 → 1.59 su 8 seed).
+- Preview leggera M06 — persistenza del seed: il seed della partita corrente vive in `localStorage['orion.seed']`, così l'F5 non rigenera una galassia diversa. "Nuova" rigenera. Lo stato della colonia non è ancora salvato (resta lavoro per M06).
+
 ---
 
 ## M03 — Sistema stellare · cosa è stato fatto
