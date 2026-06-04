@@ -1077,6 +1077,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
           row('Colonizzato dal', colony.colonizedDS || '—') +
           row('Popolazione', popRangePeople(colony, planet)) +
           row('Slot utilizzati', out.used + ' / ' + planet.slots) +
+          row('Ostilità', planet.hostility) +
         '</dl>' +
         '<p class="sysinfo__sub">Riepilogo produzione (/Impulso)</p>' +
         rateGrid(out.rates, out.upkeep) +
@@ -1369,14 +1370,28 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
   const scar = colony._scar;
   const canGrow = total < cap && colony.stock.food > 0 && colony.stock.water > 0
     && (!scar || (scar.food.state !== 'crit' && scar.water.state !== 'crit'));
+  // Morale: calcolato sempre (anche se la crescita è bloccata) per dare
+  // visibilità della leva §9.3. Breakdown dei contributi mostrato sotto.
+  const moraleParts = [];
+  let morale = 1.0;
+  moraleParts.push('base 1.00');
+  if (colony.isHomeBase) {
+    morale += CFG.POP_MORALE_HOMEBASE;
+    moraleParts.push('+' + CFG.POP_MORALE_HOMEBASE.toFixed(2) + ' base');
+  }
+  const habit = (colony.structures['centro-abitativo'] && colony.structures['centro-abitativo'].level) || 0;
+  if (habit > 0) {
+    const habitBonus = Math.min(CFG.POP_MORALE_MAX - 1.0, habit * CFG.POP_MORALE_HABITATION);
+    morale += habitBonus;
+    moraleParts.push('+' + habitBonus.toFixed(2) + ' centri abitativi ×' + habit);
+  }
+  if (morale > CFG.POP_MORALE_MAX) morale = CFG.POP_MORALE_MAX;
+  if (scar && (scar.food.state === 'low' || scar.water.state === 'low')) {
+    morale *= 0.6;
+    moraleParts.push('×0.6 carenza cibo/acqua');
+  }
   let growthEst = 0;
   if (canGrow) {
-    let morale = 1.0;
-    if (colony.isHomeBase) morale += CFG.POP_MORALE_HOMEBASE;
-    const habit = (colony.structures['centro-abitativo'] && colony.structures['centro-abitativo'].level) || 0;
-    morale += Math.min(CFG.POP_MORALE_MAX - 1.0, habit * CFG.POP_MORALE_HABITATION);
-    if (morale > CFG.POP_MORALE_MAX) morale = CFG.POP_MORALE_MAX;
-    if (scar && (scar.food.state === 'low' || scar.water.state === 'low')) morale *= 0.6;
     growthEst = CFG.POP_GROWTH_BASE * morale;
     if (colony.structures['ospedale']) growthEst *= (1 + CFG.POP_GROWTH_HOSPITAL);
   }
@@ -1410,8 +1425,10 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
     '<div class="sysinfo">' +
       '<dl class="sysinfo__list">' +
         row('Popolazione', popRangePeople(colony, planet)) +
+        row('Morale', morale.toFixed(2) + ' / ' + CFG.POP_MORALE_MAX.toFixed(2)) +
         row('Crescita', '<span class="rate ' + (canGrow ? 'rate--pos' : 'rate--neg') + '">' + growthStr + '</span>') +
       '</dl>' +
+      '<p class="panel__note">Morale: ' + moraleParts.join(' · ') + '. Moltiplica la crescita pop §9.3.</p>' +
       '<p class="sysinfo__sub">Classi funzionali</p>' +
       bars +
       targetHtml +
