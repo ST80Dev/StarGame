@@ -301,11 +301,42 @@ Su feedback utente (i gruppi 2D si sovrapponevano, distanze poco leggibili) la m
 
 ---
 
+31. **Linea-guida lessicale Star Wars-flavor (atmosfera condivisa, non reskin).** Scelta utente per dare alla galassia un sapore SW riconoscibile **senza** farne una replica. Progetto privato, no scopi commerciali → questione di marchi non rilevante; la regola è di **coerenza narrativa**, non legale. Punti fermi:
+    - **Cosa adottiamo (lessico di categoria, sicuro):**
+      - **Classi astronavi (M08, M15):** *caccia stellare, intercettore, bombardiere, cannoniera, corvetta, fregata, incrociatore, dreadnought, ammiraglia*.
+      - **Iperspazio (M07, M08):** *iperguida, iperspazio, salto iperspaziale, rotta iperspaziale, coordinate iperspaziali, velocità subluce, propulsori subluce*.
+      - **Geografia galattica (estensione M02 + ganci M07/M10):** *Mondi del Nucleo · Colonie · Frontiera · Orlo Esterno · Spazio Sconosciuto/Selvaggio* — categorizzano i gruppi stellari (#9, #26) per **posizione + civiltà**; legano §5.3 pericolo (Orlo Esterno alto, Nucleo basso) e densità AI (M10). Sostituiscono il "tutte le regioni equivalenti" attuale di M02.
+      - **Governi/fazioni archetipi (M10, M11):** *Repubblica, Impero, Federazione, Sindacato, Egemonia, Confederazione, Ordine* — **sparsi per regione**, NON un unico Impero galattico né un'unica Repubblica (esplicito vincolo utente: niente replica completa di SW). Plurale e regionale: "Repubblica di Cygnus", "Impero Keth-Var", "Sindacato Mekhari" (già nel GDD §13.2), "Ordine di Serenthal". M10 distribuisce gli archetipi per regione coerentemente con la geografia (Nucleo → Repubbliche/Federazioni civilizzate, Orlo → Imperi/Sindacati/Ordini marziali).
+      - **Diplomazia/governo (M11):** *Senato, Consiglio, Concilio, dispaccio, comunicato cifrato*.
+      - **Ranghi militari (M14):** *Ammiraglio, Generale, Comandante, Capitano, Maresciallo*. Ordini cavallereschi (NON Jedi): *Maestro, Cavaliere, Ordine di X* come fazione religioso-marziale tra le AI.
+      - **Figure indipendenti (M14):** *Cacciatore di taglie, Contrabbandiere, Mercenario, Diplomatico, Esploratore*. **I nomi propri delle figure speciali restano procedurali** come oggi (no Han Solo / Boba Fett 1:1) — il vincolo dell'utente è "non aderenza nei singoli personaggi".
+      - **Fanteria/truppe (M08+/M09):** *droide da battaglia, soldato d'assalto, guardia d'élite/pretoriana, clone, milizia coloniale, mercenario*.
+      - **Comunicazione (M11, M17):** *rete galattica, trasmissione, dispaccio, crittazione iperspaziale*.
+      - **Gergo cronaca (M17):** "salto iperspaziale verso…", "squadrone non identificato avvistato nel settore…", "avamposto sotto attacco", "comunicazione cifrata in arrivo dal Consiglio di…".
+    - **Cosa NON adottiamo (paletti dell'utente):**
+      - **Nomi propri di pianeti** (#28): restano i nostri temi procedurali (Gemme/Pigmenti/Venti…). Niente Tatooine/Naboo/Coruscant.
+      - **Nomi propri di figure speciali** (M14): restano procedurali. Niente personaggi SW per nome.
+      - **Repubblica/Impero come elementi pervasivi**: NO un unico Impero galattico tipo Galactic Empire, NO una Vecchia Repubblica galattica. Sono **archetipi tra molti**, distribuiti per regione/cluster, mai egemoni. La galassia resta poli-fazione (coerente con M10/M11 che presuppongono molte civiltà parallele).
+      - **Marchi narrativi forti**: niente *Jedi/Sith*, *Forza* come sistema magico-tech, *Holocron*, *Mandaloriano* come cultura specifica. Gli ordini cavallereschi nostri sono "Ordine di X" senza La Forza.
+    - **Implementazione pratica**: questa decisione è **linea-guida**, non codice. Ogni modulo futuro vi attinge nei propri stringhe UI/cronaca/generatori:
+      - **M02 polish** (estensione regioni): aggiungere campo `tier` ai gruppi (Nucleo/Colonie/Frontiera/Orlo/Sconosciuto) basato su distanza dal centro galattico + collegamento a §5.3 pericolo. Mutazione di delta, no impatto su seed.
+      - **M07 esplorazione**: stringhe UI e cronaca usano "salto iperspaziale", "iperguida", "coordinate iperspaziali".
+      - **M08 flotta base**: catalogo classi navi = caccia/intercettore/bombardiere/corvetta/fregata.
+      - **M10 civiltà AI**: generatore di nomi-fazione usa i 7 archetipi + qualificatore tematico per regione.
+      - **M11 diplomazia**: organi = Senato/Consiglio. Verbi diplomatici in gergo (dispaccio, ambasciata, concilio).
+      - **M14 figure speciali**: classi = ranghi militari + figure indipendenti; nomi propri restano procedurali.
+      - **M15 grandi navi**: incrociatore/dreadnought/ammiraglia; nomi propri delle ammiraglie generati dal seed (es. "Sentinella di Vega", "Falce di Keth").
+      - **M17 eventi**: gergo cronaca in tono SW.
+    - **Niente bump di schema**, niente codice modificato in questa decisione — è una **linea-guida cui rimandare** dai prossimi moduli. Tracciata in CLAUDE.md per riferimento; il GDD verrà aggiornato in coda con un glossario quando i moduli relativi saranno avviati.
+
+---
+
 ## Problemi aperti / da decidere più avanti
 
 - Includere o meno il font Orbitron come asset locale (`/fonts`) in un modulo di polish (M20).
 - Avviso "schermo troppo piccolo" sotto ~768px (decisione #6) ancora da implementare (candidato M20/polish).
 - Estendere **GDD §15 Commercio** con la versione *leggera* delle valute regionali (decisione #13) prima dell'implementazione di **M12**: nome generato dal seed, regole di acquisizione/spesa esclusive per regione, hub di cambio (Mekhari), tassi dinamici come vettore eventi §17. Nessun impatto su M04–M11.
+- **Estendere GDD con glossario lessicale (decisione #31)** prima di M07/M08/M10: formalizzare classi navi, gerarchia iperspaziale, categorizzazione regioni (Nucleo→Sconosciuto), archetipi di fazione (Repubblica/Impero/… come sotto-categorie regionali e non galattiche). Da non confondere col GDD §15 (Commercio): la decisione #31 tocca il **lessico**, non le meccaniche. M02 dovrà ricevere il campo `tier` per gruppi come polish minimo prima di M10.
 - **Creare GDD §16 "Vittoria e modalità di gioco" prima di M20** (decisione #23): formalizzare le 7 piste con le loro condizioni numeriche di chiusura (oggi placeholder in `victory.js`), definire i preset *Classico/Speedrun/Incubo/Lungo respiro* con i valori finali dei 4 modificatori, specificare la semantica esatta di `tsgSpeed` (moltiplicatore di Impulsi/click o scaling dei rates a parità di tick), descrivere i 2-3 verbi morali di Tiranno/Pacifista e dove vivranno (M09/M11/M19). Nessun impatto su M06–M19; M20 implementerà UI + formule.
 
 ---
