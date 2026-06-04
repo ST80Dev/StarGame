@@ -386,6 +386,17 @@ button { font-family: inherit; }
   pointer-events: none;
   white-space: nowrap;
 }
+.galaxy-hint kbd {
+  display: inline-block;
+  padding: 0 5px;
+  margin: 0 1px;
+  font-family: var(--font-data);
+  font-size: 0.66rem;
+  color: var(--c-text-soft);
+  background: rgba(86, 122, 220, 0.18);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 3px;
+}
 
 /* =====================================================================
    Pannello destro — dettagli sistema selezionato (M02)

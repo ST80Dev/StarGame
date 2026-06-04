@@ -90,6 +90,22 @@ Architettura a moduli vanilla (namespace globale `ORION`, niente bundler), caric
 
 **Note di scope:** l'esplorazione vera (rivelare sistemi muovendo flotte) è **M07**; qui la nebbia di guerra è solo inizializzata (e rispettata anche a livello di gruppo: i tipi-stella dei sistemi ignoti non sono rivelati). La **vista interna** di Sistema/Pianeta (corpi celesti, anomalie §6, stelle binarie) è **M03/M04**: in M02 i due livelli inferiori esistono come scala di navigazione ma rimandano ai moduli dedicati. ICG/Reputazione restano segnaposto fino ai moduli dedicati.
 
+### Estensione M02 — mappa pseudo-3D (post-M04, decisione #18)
+
+Su feedback utente (i gruppi 2D si sovrapponevano, distanze poco leggibili) la mappa galattica è stata convertita in **pseudo-3D in Canvas 2D** (no WebGL, §2 rispettato):
+
+- **`galaxy.js`:** ogni cluster ha una propria **banda z** (zBase ±18-35‰); ogni sistema riceve un `z` ∈ ~[-0.15, 0.17] determinato dal seed. I gruppi calcolano `cz`, `minZ`, `maxZ` oltre al bbox 2D. Lo schema dati resta retro-compatibile (z è additivo, le coordinate x/y non cambiano → seed esistenti producono galassie identiche tranne per la separazione in altezza).
+- **`galaxy-map.js`:** introdotto un layer di **proiezione 3D**:
+  - `project(wx, wy, wz)` applica yaw (rotazione attorno all'asse galattico Z) → pitch (~31° fissi, tilt del disco) → prospettiva (`VIEWER_D = 1.55`, gli oggetti vicini risultano leggermente più grandi);
+  - tutti i render usano `project()` invece di `worldToScreen`: nebulose, polvere, stelle eroe, regioni (hull), rotte, nodi-sistema, label;
+  - **z-sort dei nodi**: lontani disegnati prima, vicini sopra; **depth fade** (alfa scalato con la profondità) per dare senso di volume;
+  - **rotazione interattiva**: `Shift`+drag (mouse) ruota lo yaw e modula il pitch; pinch a 2 dita ruota lo yaw insieme allo zoom (touch); tasti `Q`/`E` per accessibilità;
+  - **ecliptic guide**: cerchio tratteggiato sul piano galattico z=0, ancora di profondità (più visibile a galaxy zoom);
+  - **highlight cluster all'hover**: al passaggio del mouse su una stella, tutti i membri dello stesso cluster ricevono un anello del colore del gruppo (risponde al "non si capiscono i gruppi");
+  - `focusGalaxy`/`focusGroup`/`focusSystem` calcolano i bbox sulla 2D ruotata (post yaw+pitch, pre-prospettiva) — frame quasi-perfetto del gruppo a costo computazionale basso;
+  - `focusGalaxy` ripristina yaw a 0 oltre a scala/offset (animato).
+- **`main.js`/`css`:** hint aggiornata con `<kbd>Shift</kbd>+trascina` come scorciatoia di rotazione; stile sobrio per il `<kbd>`.
+
 ---
 
 ## M03 — Sistema stellare · cosa è stato fatto
@@ -177,6 +193,7 @@ Architettura a moduli vanilla (namespace globale `ORION`, niente bundler), caric
 15. **Catalogo strutture "medio" per M04 (~14 strutture).** Scelta dell'utente: 2-3 strutture per categoria §10.1 (4 estrattive base + 2 produttive + 2 ricerca + 2 militari + 3 civili + 1 avanzata). I prerequisiti tech sono **solo marker** (`requires: ['tech:<id>']`), bloccano la costruzione finché M13 non li attiverà. I cantieri/accademia/mercato sono **ganci** per i rispettivi moduli (M08/M14/M12). Vantaggio: M04 ha scelte di costruzione significative senza anticipare M13, e il catalogo può crescere senza rifare le scaffolding.
 16. **Risorse avanzate §7.2 — numero rivelato, identità nascosta (M04).** Scelta dell'utente, coerente con §7.3 ("si scoprono costruendo strutture esplorative"): alla colonizzazione la scheda *Risorse* mostra "⚛ N risorse avanzate presenti — identità da scansionare". Costruire un **osservatorio** (struttura ricerca) attiva `colony.scanned.active = true` e svela le identità (`advancedKnown`). Le 6 famiglie §7.2 (cristalli, esotici, biomassa, gas nobili, dati, reliquie) hanno pesi per tipo di corpo (vulcanico→esotici/cristalli, gassoso→gasNobili/cristalli, ecc.). Ogni candidata ha un `potential` 30-100 (deterministico dal seed).
 17. **Resa "tridimensionale" del pianeta — bake offscreen + shading sferico (M04).** Scelta dell'utente (più ricco del disco di M03, "diverso da pianeta a pianeta/luna"): la vista pianeta usa una **texture procedurale bakata** (offscreen canvas 360px) con **FBM 3D hash-based** campionato in coordinate sferiche, **shading sferico** (normale calcolata dal disco, Lambert + specular su mari/ghiacci + limb darkening + terminatore morbido), dettagli per tipo (nuvole, tempeste, crateri, calotte, lava, anelli), **luci notturne** dopo la colonizzazione. Il bake si fa **una sola volta** all'apertura (~150-300 ms), il render runtime è un `drawImage` + overlay leggero. Determinismo dal seed `<body.seed>:planet` (nessun costo di salvataggio). Niente WebGL, niente loop continuo — coerente con tutte le decisioni precedenti.
+18. **Mappa galassia pseudo-3D in Canvas 2D (estensione M02, post-M04).** Su feedback utente: la mappa 2D rendeva i gruppi sovrapposti e le distanze confuse. Scelta: **tilt fisso del disco galattico** (pitch ~31°), **z per cluster** (bande deterministiche dal seed così le regioni si separano anche in altezza), **prospettiva leggera** (parallax sulle dimensioni dei nodi), **z-sort** + **depth fade**, **rotazione interattiva yaw** (`Shift`+drag mouse, pinch a 2 dita touch, Q/E tastiera), **ecliptic guide** sul piano z=0, **highlight di tutto il cluster all'hover** per leggere subito l'appartenenza. **Tutto in Canvas 2D** (vincolo §2 "no WebGL" preservato). Lo schema dati esistente è retro-compatibile (z è additivo; le coordinate x/y dei sistemi non cambiano per lo stesso seed).
 
 ---
 
@@ -216,5 +233,7 @@ Gli altri file/cartelle previsti dal GDD §2 (`js/fleet.js`, `data/`, ecc.)
 verranno aggiunti nei moduli corrispondenti.
 
 ---
+
+_Aggiornamento successivo (estensione M02 pseudo-3D): la mappa galattica è stata convertita in pseudo-3D su Canvas 2D (decisione #18) — tilt fisso del disco, z per cluster (gruppi separati anche in altezza, niente più overlap), prospettiva leggera, rotazione yaw con `Shift`+drag (mouse) / pinch a 2 dita (touch) / Q/E (tastiera), z-sort + depth fade, ecliptic guide tratteggiata sul piano z=0, highlight di tutto il cluster all'hover. Nessun WebGL (§2 rispettato). Seed esistenti continuano a generare galassie identiche (z è additivo a x/y immutate)._
 
 _Ultimo aggiornamento: 2026-06-04 — M04 Pianeta base: vista pianeta su Canvas (`planet-view.js`) come **sfera procedurale bakata** (FBM 3D hash-based campionato in coordinate sferiche, shading Lambert + specular + limb darkening + terminatore morbido, dettagli per tipo, luci notturne dopo colonizzazione), scheda M04 a 4 tab nel pannello destro (Colonia/Risorse/Strutture/Popolazione), catalogo 14 strutture su 6 categorie (`structures.js`), data model pianeta con seed+delta (`planet.js`): struttura immutabile (potenziali §7.1, slot §10.2, popCap §9, candidate avanzate §7.2 nascoste fino a osservatorio §7.3, costo colonizzazione §6.2), stato colonia con `schemaVersion: 1` pronto per M06. Mondo natale auto-colonizzato al boot con bonus pianeta base §8.1 (+20%). Breadcrumb a 4 livelli `Galassia › Gruppo › Sistema › Pianeta` e voce di navigazione *Pianeta* attiva. Scelte utente: layer Canvas full-stage (decisione #14), catalogo medio ~14 strutture (decisione #15), numero rivelato/identità nascosta per avanzate (decisione #16), resa "tridimensionale" via bake offscreen + shading sferico (decisione #17). Tassi-per-Impulso e durate-in-Impulsi definiti; l'avanzamento effettivo nel tempo è M05. Resta ⏸️ in attesa di conferma utente._

@@ -75,7 +75,11 @@
       clusters.push({
         x: margin + rng.range(0.12, 0.88) * span,
         y: margin + rng.range(0.12, 0.88) * span,
-        spread: rng.range(0.10, 0.20)
+        // §5.5 / decisione #18: ogni cluster a una propria "banda" in z
+        // (il disco galattico è sottile ma i gruppi si separano in altezza).
+        zBase: rng.range(-0.11, 0.11),
+        spread: rng.range(0.10, 0.20),
+        zSpread: rng.range(0.018, 0.035)
       });
     }
 
@@ -88,12 +92,14 @@
       const c = clusters[positions.length % clusterCount];
       const x = c.x + rng.gauss() * c.spread;
       const y = c.y + rng.gauss() * c.spread;
+      const z = c.zBase + rng.gauss() * c.zSpread;
 
       // dentro i confini con margine
       if (x < margin || x > 1 - margin || y < margin || y > 1 - margin) continue;
 
-      // rispetta la distanza minima dagli altri
-      const p = { x: x, y: y, cluster: positions.length % clusterCount };
+      // rispetta la distanza minima dagli altri (solo XY: la separazione in z
+      // è gestita dalle bande dei cluster e non deve allungare i tempi di gen)
+      const p = { x: x, y: y, z: z, cluster: positions.length % clusterCount };
       let ok = true;
       for (let j = 0; j < positions.length; j++) {
         if (dist2(positions[j], p) < minDist2) { ok = false; break; }
@@ -107,6 +113,7 @@
       positions.push({
         x: Math.min(1 - margin, Math.max(margin, c.x + rng.gauss() * c.spread)),
         y: Math.min(1 - margin, Math.max(margin, c.y + rng.gauss() * c.spread)),
+        z: c.zBase + rng.gauss() * c.zSpread,
         cluster: positions.length % clusterCount
       });
     }
@@ -259,13 +266,16 @@
 
     const groups = Object.keys(byCluster).map(function (k) {
       const members = byCluster[k];
-      let cx = 0, cy = 0, minX = 1, minY = 1, maxX = 0, maxY = 0, dangerSum = 0;
+      let cx = 0, cy = 0, cz = 0, minX = 1, minY = 1, maxX = 0, maxY = 0,
+          minZ = Infinity, maxZ = -Infinity, dangerSum = 0;
       members.forEach(function (m) {
-        cx += m.x; cy += m.y; dangerSum += m.danger;
+        cx += m.x; cy += m.y; cz += m.z || 0; dangerSum += m.danger;
         if (m.x < minX) minX = m.x; if (m.x > maxX) maxX = m.x;
         if (m.y < minY) minY = m.y; if (m.y > maxY) maxY = m.y;
+        const mz = m.z || 0;
+        if (mz < minZ) minZ = mz; if (mz > maxZ) maxZ = mz;
       });
-      cx /= members.length; cy /= members.length;
+      cx /= members.length; cy /= members.length; cz /= members.length;
 
       // raggio = distanza massima dal centroide (per l'alone della regione)
       let radius = 0;
@@ -283,8 +293,9 @@
       return {
         id: Number(k),
         members: members.map(function (m) { return m.id; }),
-        cx: cx, cy: cy,
+        cx: cx, cy: cy, cz: cz,
         minX: minX, minY: minY, maxX: maxX, maxY: maxY,
+        minZ: minZ, maxZ: maxZ,
         radius: radius,
         hull: convexHull(members.map(function (m) { return { x: m.x, y: m.y }; })),
         danger: Math.round(dangerSum / members.length),
@@ -331,6 +342,7 @@
         realName: names[i].real,
         x: p.x,
         y: p.y,
+        z: p.z || 0,      // §5.5 / decisione #18: spessore del disco galattico
         cluster: p.cluster,
         star: pickStarType(rng),
         danger: 0,        // calcolato dopo (serve homeId)
