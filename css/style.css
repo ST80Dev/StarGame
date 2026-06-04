@@ -45,7 +45,7 @@
   --radius:       8px;
   --radius-sm:    4px;
   --panel-left-w: 220px;
-  --panel-right-w:260px;
+  --panel-right-w:320px;
   --hud-top-h:    64px;
   --hud-bottom-h: 168px;
 
@@ -552,8 +552,6 @@ button { font-family: inherit; }
   display: flex;
   flex-direction: column;
   gap: 3px;
-  max-height: 240px;
-  overflow-y: auto;
 }
 .sys-chip {
   display: flex;
@@ -633,7 +631,7 @@ button { font-family: inherit; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 9.5em;
+  max-width: 13em;
 }
 .body-chip__moons {
   margin-left: auto;
