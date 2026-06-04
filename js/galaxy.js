@@ -507,12 +507,114 @@
     };
   }
 
+  /* ==================================================================
+     M06.5 — Scelta colonia originaria (GDD §6.2.bis / decisione #27)
+
+     Solo lettura sulla galassia: pesca un candidato per gruppo (cap
+     `count`), ognuno = miglior corpo abitabile del proprio sistema.
+     Determinismo dal seed: stessa galassia → stessi candidati.
+     ================================================================== */
+
+  /* Scoring del corpo migliore in un sistema: riusa la stessa logica
+     interna di system.js (corpo rocky+habitable più vicino alla fascia
+     ottimale t=0.45). Ritorna { bodyKey, score } oppure null. */
+  function pickBestHabitableBody(system) {
+    const bodies = system.bodies || [];
+    let bestKey = null, bestDist = Infinity;
+    for (let i = 0; i < bodies.length; i++) {
+      const b = bodies[i];
+      const def = root.ORION.system.BODY_TYPES[b.type];
+      if (!def || !def.habitable || def.cat !== 'rocky') continue;
+      const t = bodies.length > 1 ? i / (bodies.length - 1) : 0.5;
+      const dH = Math.abs(t - 0.45);
+      if (dH < bestDist) { bestDist = dH; bestKey = b.key; }
+    }
+    return bestKey;
+  }
+
+  /* Restituisce N candidati (uno per gruppo, cap a `count`, default 6).
+     Per ogni gruppo: sceglie deterministicamente UN sistema con almeno
+     un corpo abitabile, poi UN corpo del sistema (vedi sopra). */
+  function pickHomeCandidates(galaxy, count) {
+    count = Math.max(1, Math.min(count || 6, 6));
+    const groups = galaxy.groups || [];
+    const candidates = [];
+
+    /* Ordine deterministico dei gruppi: per indice. Cap a `count`. */
+    const groupOrder = groups.map(function (_, i) { return i; }).slice(0, count);
+
+    for (let gi = 0; gi < groupOrder.length; gi++) {
+      const groupId = groupOrder[gi];
+      const group = groups[groupId];
+      if (!group || !group.members || !group.members.length) continue;
+
+      /* Scansione deterministica dei sistemi del gruppo (ordine fisso) */
+      const sysIds = group.members.slice().sort(function (a, b) { return a - b; });
+      let chosen = null;
+
+      for (let si = 0; si < sysIds.length; si++) {
+        const sid = sysIds[si];
+        const system = root.ORION.system.generate(galaxy, sid);
+        const bodyKey = pickBestHabitableBody(system);
+        if (!bodyKey) continue;
+        const planet = root.ORION.planet.generate(galaxy, system, bodyKey);
+        if (!planet || !planet.habitable) continue;
+        chosen = { system: system, bodyKey: bodyKey, planet: planet };
+        break;
+      }
+      if (!chosen) continue;
+
+      const sys = chosen.system;
+      const planet = chosen.planet;
+      candidates.push({
+        systemId: sys.id,
+        bodyKey: chosen.bodyKey,
+        groupId: groupId,
+        groupName: group.name || ('Regione ' + (groupId + 1)),
+        system: {
+          name: sys.name,
+          starLabel: sys.stars.label,
+          bodiesCount: sys.bodies.length,
+          danger: galaxy.systems[sys.id].danger,
+          dangerTier: galaxy.systems[sys.id].dangerTier
+        },
+        planet: {
+          name: planet.name,
+          type: planet.type,
+          popCap: planet.popCap,
+          slots: planet.slots,
+          potentials: planet.potentials,
+          advancedCount: (planet.advanced || []).length,
+          hostility: planet.hostility
+        }
+      });
+    }
+    return candidates;
+  }
+
+  /* Ricalibra `homeId` + `homeGroupId` + `danger`/`dangerTier` di tutti
+     i sistemi in base alla nuova origine scelta dal giocatore. Mutazione
+     RUNTIME localizzata: la struttura immutabile generata da `generate()`
+     resta intatta nei suoi assi cardine (coordinate, cluster, rotte,
+     nomi, tipi stella). Determinismo: stesso (seed, newHomeId) →
+     stesso `danger[]`. */
+  function recomputeDanger(galaxy, newHomeId) {
+    if (!galaxy || !galaxy.systems[newHomeId]) return;
+    const rng = root.ORION.rng.makeRng(galaxy.seed + ':danger:' + newHomeId);
+    computeDanger(rng, galaxy.systems, newHomeId);
+    galaxy.systems.forEach(function (s) { s.dangerTier = dangerTier(s.danger); });
+    galaxy.homeId = newHomeId;
+    galaxy.homeGroupId = galaxy.systems[newHomeId].cluster;
+  }
+
   root.ORION = root.ORION || {};
   root.ORION.galaxy = {
     generate: generate,
     createState: createState,
     DISCOVERY: DISCOVERY,
     dangerTier: dangerTier,
+    pickHomeCandidates: pickHomeCandidates,
+    recomputeDanger: recomputeDanger,
     SCHEMA_VERSION: SCHEMA_VERSION
   };
 })(typeof window !== 'undefined' ? window : this);
