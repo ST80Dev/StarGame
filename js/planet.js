@@ -41,11 +41,14 @@
     luna:       { met: 40, en: 30, food: 8,  water: 28 }    // sovrascritta dal padre
   };
 
-  /* Slot di costruzione (§10.2). Espandibili con tech (M13). */
+  /* Slot di costruzione (§10.2). Espandibili con tech (M13).
+     Mondi piccoli (ghiacciato/luna/gassoso/cintura) +1 rispetto al baseline
+     iniziale per dare spazio a una specializzazione minima (3-4 estrattive
+     base + qualcosa). Decisione di sessione post-M06.7. */
   const BASE_SLOTS = {
     terrestre:  8, desertico:  6, oceanico:  6,
-    ghiacciato: 5, vulcanico:  6, forestale: 7,
-    gassoso:    3, cintura:    3, luna:      4
+    ghiacciato: 6, vulcanico:  6, forestale: 7,
+    gassoso:    4, cintura:    4, luna:      5
   };
 
   /* Popolazione massima (in "unità popolazione", §9). 0 = non abitabile. */
