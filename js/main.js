@@ -801,7 +801,7 @@ function renderSystemInteriorPanel(title, content, system, disc) {
         row('Pericolo', '<span class="danger-badge ' + tierClass + '">' + system.danger + ' · ' + system.dangerTier + '</span>') +
       '</dl>' +
       detail +
-      '<p class="panel__note">Clicca un corpo per i dati base · doppio click per inquadrarlo. Colonizzazione e gestione: modulo M04.</p>' +
+      '<p class="panel__note">Clicca un oggetto per i dati base · doppio click per inquadrarlo. Colonizzazione e gestione: modulo M04.</p>' +
     '</div>';
 
   content.querySelectorAll('[data-body]').forEach((btn) => {
@@ -1180,7 +1180,7 @@ function renderPlanetRisorseTab(host, planet, colony) {
   }).join('');
   host.innerHTML =
     '<div class="sysinfo">' +
-      '<p class="sysinfo__sub">Potenziali del corpo</p>' +
+      '<p class="sysinfo__sub">Potenziali ' + bodyKindGen(planet) + '</p>' +
       potentialBars(planet) +
       '<p class="sysinfo__sub">Scorte in colonia</p>' +
       '<dl class="sysinfo__list">' + stockRows + '</dl>' +
@@ -1418,7 +1418,7 @@ function rateGrid(rates, upkeep) {
 }
 
 function advancedResHtml(planet, colony) {
-  if (!planet.advanced.length) return '<p class="panel__note">Nessuna risorsa avanzata rilevata su questo corpo.</p>';
+  if (!planet.advanced.length) return '<p class="panel__note">Nessuna risorsa avanzata rilevata su ' + bodyKindDem(planet) + '.</p>';
   const known = colony.scanned.active;
   if (!known) {
     return '<p class="advanced-hint">⚛ <strong>' + planet.advanced.length + ' risorse avanzate</strong> presenti — identità da scansionare (costruisci un <em>osservatorio</em>).</p>';
@@ -1434,6 +1434,10 @@ function advancedResHtml(planet, colony) {
     '</li>';
   }).join('') + '</ul>';
 }
+
+function bodyIsMoon(planet) { return planet && planet.type === 'luna'; }
+function bodyKindGen(planet) { return bodyIsMoon(planet) ? 'della luna' : 'del pianeta'; }
+function bodyKindDem(planet) { return bodyIsMoon(planet) ? 'questa luna' : 'questo pianeta'; }
 
 function resLabel(k) { return { met: 'Metalli', en: 'Energia', food: 'Cibo', water: 'Acqua' }[k] || k; }
 function resGlyph(k) { return { met: '⛭', en: '⚡', food: '❖', water: '≈' }[k] || '·'; }
@@ -1568,7 +1572,7 @@ function setGalaxyHint(mode) {
   if (mode === 'planet')
     el.textContent = 'Trascina · zoom rotella/pinch · click sulle lune per aprirle · doppio click nel vuoto per uscire';
   else if (mode === 'system')
-    el.textContent = 'Trascina · zoom rotella/pinch · click su un corpo per i dati · doppio click nel vuoto per uscire';
+    el.textContent = 'Trascina · zoom rotella/pinch · click su un oggetto per i dati · doppio click nel vuoto per uscire';
   else
     el.textContent = 'Trascina · zoom rotella/pinch · Shift+trascina = ruota libera · Alt+trascina = roll · pinch a 2 dita ruota su touch';
 }
