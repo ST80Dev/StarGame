@@ -268,9 +268,18 @@ function renderView(stage, view) {
   // Galassia / Sistema / Pianeta condividono lo stage: ogni livello è un
   // layer sopra il precedente (#9). La mappa rimane sotto e preserva lo
   // zoom anche quando entriamo nel sistema o nel pianeta.
-  if (view === 'galaxy' || view === 'system' || view === 'planet') {
+  if (view === 'galaxy' || view === 'group' || view === 'system' || view === 'planet') {
     if (!ORION.map) renderGalaxyView(stage);
     const g = ORION.game;
+
+    if (view === 'group') {
+      if (ORION.openPlanetKey) closePlanet();
+      if (ORION.openSystemId >= 0) closeSystem();
+      const selId = (g.state.selectedId >= 0) ? g.state.selectedId : g.galaxy.homeId;
+      const cluster = g.galaxy.systems[selId].cluster;
+      if (ORION.map) ORION.map.focusGroup(cluster);
+      return;
+    }
 
     if (view === 'planet') {
       // se non c'è ancora un sistema aperto, apriamo quello del pianeta natale
@@ -375,6 +384,7 @@ function onMapContext(ctx) {
   if (ORION.openSystemId >= 0) return;
   /* M06.6: tutorial — entrata nel livello "gruppo" (zoom o click su regione). */
   if (ORION.tutorial && ctx.level === 'group') ORION.tutorial.fire('galaxy');
+  setNavActive(ctx.level === 'group' ? 'group' : 'galaxy');
   renderBreadcrumb(ctx);
   const panel = document.querySelector('.panel--right');
   if (!panel) return;
@@ -667,6 +677,7 @@ function openSystem(id) {
   ORION.systemView = new ORION.SystemView().mount(sysHolder, system, {
     discovery: disc,
     onSelectBody: (key) => updateSystemUI(system, key),
+    onActivateBody: (key) => openPlanet(id, key),
     onExit: () => {
       const cluster = g.galaxy.systems[id].cluster;
       closeSystem();
@@ -1975,7 +1986,7 @@ function setGalaxyHint(mode) {
   if (mode === 'planet')
     el.textContent = 'Trascina · zoom rotella/pinch · click sulle lune per aprirle · doppio click nel vuoto per uscire';
   else if (mode === 'system')
-    el.textContent = 'Trascina · zoom rotella/pinch · click su un oggetto per i dati · doppio click nel vuoto per uscire';
+    el.textContent = 'Trascina · zoom rotella/pinch · click su un oggetto per i dati · doppio click su un corpo per aprirlo · doppio click nel vuoto per uscire';
   else
     el.textContent = 'Trascina · zoom rotella/pinch · Shift+trascina = ruota libera · Alt+trascina = roll · pinch a 2 dita ruota su touch';
 }

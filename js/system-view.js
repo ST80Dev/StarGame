@@ -50,6 +50,7 @@
       this.system = null;
       this.discovery = DISCOVERY.UNKNOWN;
       this.onSelectBody = null;
+      this.onActivateBody = null;
       this.onExit = null;
 
       this.scale = 1;
@@ -83,6 +84,7 @@
       this.system = system;
       this.discovery = opts.discovery == null ? DISCOVERY.UNKNOWN : opts.discovery;
       this.onSelectBody = opts.onSelectBody || null;
+      this.onActivateBody = opts.onActivateBody || null;
       this.onExit = opts.onExit || null;
 
       container.innerHTML = '';
@@ -315,7 +317,11 @@
       e.preventDefault();
       const p = this._localPos(e);
       const key = this.pickBody(p.x, p.y);
-      if (key) { this._frameBody(key); return; }
+      if (key) {
+        if (this.onActivateBody) { this.selectBody(key); this.onActivateBody(key); }
+        else this._frameBody(key);
+        return;
+      }
       // doppio click nel vuoto: esci verso la galassia
       if (this.onExit) this.onExit();
     }
