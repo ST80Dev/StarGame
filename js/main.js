@@ -1160,7 +1160,7 @@ function renderPlanetRisorseTab(host, planet, colony) {
   }).join('');
   host.innerHTML =
     '<div class="sysinfo">' +
-      '<p class="sysinfo__sub">Potenziali del corpo (§7.1)</p>' +
+      '<p class="sysinfo__sub">Potenziali ' + bodyKindGen(planet) + ' (§7.1)</p>' +
       potentialBars(planet) +
       '<p class="sysinfo__sub">Scorte in colonia</p>' +
       '<dl class="sysinfo__list">' + stockRows + '</dl>' +
@@ -1398,7 +1398,7 @@ function rateGrid(rates, upkeep) {
 }
 
 function advancedResHtml(planet, colony) {
-  if (!planet.advanced.length) return '<p class="panel__note">Nessuna risorsa avanzata rilevata su questo corpo.</p>';
+  if (!planet.advanced.length) return '<p class="panel__note">Nessuna risorsa avanzata rilevata su ' + bodyKindDem(planet) + '.</p>';
   const known = colony.scanned.active;
   if (!known) {
     return '<p class="advanced-hint">⚛ <strong>' + planet.advanced.length + ' risorse avanzate</strong> presenti — identità da scansionare (costruisci un <em>osservatorio</em>, §7.3).</p>';
@@ -1414,6 +1414,10 @@ function advancedResHtml(planet, colony) {
     '</li>';
   }).join('') + '</ul>';
 }
+
+function bodyIsMoon(planet) { return planet && planet.type === 'luna'; }
+function bodyKindGen(planet) { return bodyIsMoon(planet) ? 'della luna' : 'del pianeta'; }
+function bodyKindDem(planet) { return bodyIsMoon(planet) ? 'questa luna' : 'questo pianeta'; }
 
 function resLabel(k) { return { met: 'Metalli', en: 'Energia', food: 'Cibo', water: 'Acqua' }[k] || k; }
 function resGlyph(k) { return { met: '⛭', en: '⚡', food: '❖', water: '≈' }[k] || '·'; }
