@@ -108,7 +108,15 @@
     '#2fe6e0', '#8a6cff', '#ff9d3c', '#d6457f',
     '#ffb000', '#5cc8ff', '#9d7bff', '#ff6f5c'
   ];
+  /* Varianti "label" — gli stessi accenti con luminosità alzata, così
+     restano leggibili come testo su #04060f anche le tinte più scure
+     (viola/rosa/arancio scuro). */
+  const GROUP_LABEL_COLORS = [
+    '#7df6f0', '#b9a7ff', '#ffc07a', '#ff8fb4',
+    '#ffd35e', '#a3ddff', '#c7adff', '#ffa094'
+  ];
   function groupColor(id) { return GROUP_COLORS[((id % GROUP_COLORS.length) + GROUP_COLORS.length) % GROUP_COLORS.length]; }
+  function groupLabelColor(id) { return GROUP_LABEL_COLORS[((id % GROUP_LABEL_COLORS.length) + GROUP_LABEL_COLORS.length) % GROUP_LABEL_COLORS.length]; }
 
   /* Palette nebulose (allineata agli accenti del tema). */
   const NEBULA_COLORS = ['#2fe6e0', '#8a6cff', '#ff9d3c', '#d6457f', '#ffb000', '#5cc8ff'];
@@ -219,6 +227,11 @@
       window.addEventListener('keyup', this._onKeyUp);
 
       this.resize();
+      // re-render quando i webfont (Orbitron, JetBrains Mono) sono pronti,
+      // così le etichette canvas si "agganciano" senza rimbalzo di fallback.
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(() => { if (this.canvas) this.requestRender(); });
+      }
       return this;
     }
 
@@ -352,7 +365,7 @@
     }
 
     nodeRadius(parallax) {
-      const r = clamp(this.scale * 0.010, 2.6, 7);
+      const r = clamp(this.scale * 0.012, 3.6, 8);
       return r * (parallax || 1);
     }
 
@@ -852,13 +865,13 @@
     /* Piano galattico (z=0) come cerchio tratteggiato: ancora di profondità. */
     _drawEcliptic(ctx) {
       const reveal = this.nodeReveal();
-      const a = 0.10 + (1 - reveal) * 0.10;
+      const a = 0.22 + (1 - reveal) * 0.18;
       if (a < 0.04) return;
       const N = 96;
       ctx.save();
-      ctx.setLineDash([3, 6]);
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = 'rgba(120,150,220,' + a + ')';
+      ctx.setLineDash([4, 6]);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(140,170,230,' + a + ')';
       ctx.beginPath();
       for (let i = 0; i <= N; i++) {
         const t = (i / N) * Math.PI * 2;
@@ -894,25 +907,25 @@
         const isHome = g.id === this.galaxy.homeGroupId;
         const isHover = g.id === this.hoverGroup;
         const c = this.project(g.cx, g.cy, g.cz || 0);
-        const depthFade = clamp(0.55 + c.depth * 1.4, 0.4, 1.05);
+        const depthFade = clamp(0.75 + c.depth * 0.8, 0.7, 1.05);
 
         const zR = Math.max(Math.abs((g.maxZ || 0) - (g.cz || 0)),
                             Math.abs((g.cz || 0) - (g.minZ || 0)), 0.03);
-        const baseAlpha = (isActive || isHover ? 0.60 : 0.32) * alpha * depthFade;
-        const capAlpha  = (isActive || isHover ? 0.36 : 0.18) * alpha * depthFade;
+        const baseAlpha = (isActive || isHover ? 0.78 : 0.52) * alpha * depthFade;
+        const capAlpha  = (isActive || isHover ? 0.50 : 0.32) * alpha * depthFade;
 
         if (g.hull && g.hull.length >= 3) {
           // equatore (z = cz, scala 1.0)
-          this._drawHullAt(ctx, g, g.cz || 0, 1.0, col, baseAlpha, isActive || isHover ? 1.6 : 1.1);
+          this._drawHullAt(ctx, g, g.cz || 0, 1.0, col, baseAlpha, isActive || isHover ? 2.0 : 1.6);
           // tappi sopra/sotto (scala ridotta → forma "a lente")
-          this._drawHullAt(ctx, g, (g.cz || 0) + zR, 0.55, col, capAlpha, 0.9);
-          this._drawHullAt(ctx, g, (g.cz || 0) - zR, 0.55, col, capAlpha, 0.9);
+          this._drawHullAt(ctx, g, (g.cz || 0) + zR, 0.55, col, capAlpha, 1.2);
+          this._drawHullAt(ctx, g, (g.cz || 0) - zR, 0.55, col, capAlpha, 1.2);
 
           // connettori verticali a ~5-7 vertici equispaziati dell'hull
           const N = g.hull.length;
           const stride = Math.max(1, Math.round(N / 6));
           ctx.save();
-          ctx.lineWidth = 0.9;
+          ctx.lineWidth = 1.3;
           ctx.strokeStyle = hexA(col, capAlpha);
           for (let k = 0; k < N; k += stride) {
             const v = g.hull[k];
@@ -930,21 +943,39 @@
           ctx.restore();
         }
 
-        // etichetta regione con backdrop scuro per restare leggibile
+        // etichetta regione con backdrop scuro + stroke per restare leggibile
         // sopra polvere/nebulose. Sempre frontale (proietta al centroide 3D).
         const labelText = (isHome ? '★ ' : '') + g.name.toUpperCase();
-        ctx.font = '600 13px "JetBrains Mono", ui-monospace, monospace';
+        const subText = g.members.length + ' sistemi';
+        ctx.font = '700 15px "Orbitron", "Eurostile", system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         const m = ctx.measureText(labelText);
-        const bgW = m.width + 18, bgH = 32;
-        ctx.fillStyle = 'rgba(8,11,26,' + (0.6 * alpha) + ')';
+        ctx.font = '600 12px "JetBrains Mono", ui-monospace, monospace';
+        const m2 = ctx.measureText(subText);
+        const bgW = Math.max(m.width, m2.width) + 24, bgH = 40;
+        // backdrop più opaco con bordo sottile del colore del gruppo
+        ctx.fillStyle = 'rgba(6,8,18,' + (0.82 * alpha) + ')';
         ctx.fillRect(c.x - bgW / 2, c.y - bgH / 2, bgW, bgH);
-        ctx.fillStyle = hexA(isActive || isHover ? '#ffffff' : col, (isActive || isHover ? 1 : 0.9) * alpha * depthFade);
-        ctx.fillText(labelText, c.x, c.y - 4);
-        ctx.font = '10px "JetBrains Mono", ui-monospace, monospace';
-        ctx.fillStyle = hexA('#cfe0ff', 0.85 * alpha * depthFade);
-        ctx.fillText(g.members.length + ' sistemi', c.x, c.y + 10);
+        ctx.strokeStyle = hexA(col, 0.45 * alpha * depthFade);
+        ctx.lineWidth = 1;
+        ctx.strokeRect(c.x - bgW / 2 + 0.5, c.y - bgH / 2 + 0.5, bgW - 1, bgH - 1);
+        // titolo regione: stroke scuro 3px + fill colore-label brillato
+        ctx.font = '700 15px "Orbitron", "Eurostile", system-ui, sans-serif';
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = 3.5;
+        ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+        ctx.strokeText(labelText, c.x, c.y - 7);
+        const labelCol = isActive || isHover ? '#ffffff' : groupLabelColor(g.id);
+        ctx.fillStyle = hexA(labelCol, (isActive || isHover ? 1 : 0.98) * alpha * depthFade);
+        ctx.fillText(labelText, c.x, c.y - 7);
+        // sottotitolo "N sistemi" mono, anche lui con stroke
+        ctx.font = '600 12px "JetBrains Mono", ui-monospace, monospace';
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+        ctx.strokeText(subText, c.x, c.y + 11);
+        ctx.fillStyle = hexA('#e6edff', 0.95 * alpha * depthFade);
+        ctx.fillText(subText, c.x, c.y + 11);
       }
     }
 
@@ -1016,7 +1047,8 @@
 
         const r = this.nodeRadius(p.parallax);
         // depth fade: nodi più lontani leggermente più tenui
-        const fade = clamp(0.6 + p.depth * 1.4, 0.45, 1.0);
+        // (post-feedback: più piatto, così i sistemi "in fondo" restano leggibili)
+        const fade = clamp(0.78 + p.depth * 0.9, 0.7, 1.0);
 
         if (d === DISCOVERY.UNKNOWN) {
           ctx.fillStyle = 'rgba(120,134,180,' + (0.40 * fade) + ')';
@@ -1072,16 +1104,18 @@
     }
 
     _label(ctx, p, text, r, strong, fade) {
-      ctx.font = (strong ? '600 ' : '') + '11px "JetBrains Mono", ui-monospace, monospace';
+      ctx.font = (strong ? '700 ' : '600 ') + '12px "JetBrains Mono", ui-monospace, monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      const y = p.y + r + 4;
-      const a = (strong ? 0.95 : 0.75) * (fade == null ? 1 : fade);
-      ctx.fillStyle = strong ? 'rgba(216,226,255,' + a + ')' : 'rgba(154,166,204,' + a + ')';
-      ctx.shadowColor = 'rgba(0,0,0,0.8)';
-      ctx.shadowBlur = 3;
+      const y = p.y + r + 5;
+      const a = (strong ? 1 : 0.88) * (fade == null ? 1 : fade);
+      // stroke scuro al posto del solo shadowBlur: più contrasto sui campi nebulosa
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(0,0,0,0.88)';
+      ctx.strokeText(text, p.x, y);
+      ctx.fillStyle = strong ? 'rgba(240,246,255,' + a + ')' : 'rgba(204,216,250,' + a + ')';
       ctx.fillText(text, p.x, y);
-      ctx.shadowBlur = 0;
     }
 
     _dangerColor(d, fade) {
