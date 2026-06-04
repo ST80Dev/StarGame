@@ -1,6 +1,7 @@
 /* =====================================================================
    ORION EMPIRES — tutorial.js
-   Modulo M06.5: tutorial contestuale a schede (decisione #27).
+   Modulo M06.6: tutorial contestuale a schede (decisione #28).
+   (Sviluppato in parallelo a M06.5; rinumerato dopo merge con main.)
 
    Filosofia (richiesta utente):
      - opt-in dal main menu "Nuova partita" (checkbox)
@@ -13,7 +14,7 @@
        non viste, riapertura su demand → manuale leggero)
 
    Persistenza: `game.tutorial = { enabled: bool, seenLessons: [id…] }`.
-   Lo schema save è stato bumpato a 4 (sub-migrazione v3→v4 in save.js).
+   Lo schema save è 4 (sub-migrazione v3→v4 in save.js, fusa con M06.5).
 
    Architettura: namespace globale ORION, niente bundler, niente dipendenze.
    ===================================================================== */
@@ -311,7 +312,7 @@
     host.innerHTML =
       '<div class="tutorial-card tutorial-card--index" role="document">' +
         '<header class="tutorial-card__head">' +
-          '<span class="tutorial-card__tag">M06.5</span>' +
+          '<span class="tutorial-card__tag">M06.6</span>' +
           '<h2 class="tutorial-card__title">Tutorial — indice</h2>' +
           '<button class="btn btn--mini tutorial-card__close" data-action="tut-close" type="button" aria-label="Chiudi">✕</button>' +
         '</header>' +

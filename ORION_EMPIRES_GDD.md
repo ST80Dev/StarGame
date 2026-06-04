@@ -201,6 +201,37 @@ Ogni sistema contiene:
 - **Eccezione:** Se il primo pianeta è esaurito o gravemente impoverito, colonizzare un secondo diventa più accessibile (migrazione naturale forzata)
 - Colonizzare un secondo corpo richiede: tecnologia specifica + infrastruttura consolidata sul primo + risorse significative + tempo (90-150 Impulsi)
 
+#### 6.2.bis Avvio partita (3 fasi)
+
+L'avvio non è "colonia già operativa": l'umanità (o civiltà giocata) **sceglie** la propria origine tra una rosa di candidati e poi affronta una breve fase di **Insediamento** prima della piena operatività. Coerente con §6.2 ("la scelta che condiziona tutto"): la scelta della colonia originaria è la prima decisione strategica.
+
+**Fase 0 — Scelta colonia originaria**
+- Alla pressione di "Nuova partita" il sistema mostra **una rosa di candidati** (uno per gruppo stellare della galassia, cap a **6** per non sovraccaricare la UI).
+- Ogni candidato è il **miglior corpo abitabile** del proprio sistema (fascia abitabile §6.1; tipi rocky-habitable preferiti).
+- Il sistema che contiene il candidato scelto diventa il **sistema d'origine**; il pericolo §5.3 si ricalibra dalla sua posizione (la mappa delle distanze cambia con la scelta).
+- Il giocatore può "Scegli per me" (random tra i candidati) per saltare la decisione.
+- Determinismo (decisione #5): stesso seed → stessi candidati. La scelta finale viene salvata nel game state come `homeWorld: { systemId, bodyKey }`, NON ricavata dal seed al runtime.
+
+**Fase 1 — Insediamento (`settling`)**
+- La colonia parte in stato `settling` per ~**60 Impulsi** (taratura da preset, vedi §16/decisione #23). Durante la fase:
+  - **Produzione strutturale ridotta a 50%** (atterraggio, scarico moduli, prime infrastrutture provvisorie)
+  - **Bonus +50% sulla velocità di costruzione della prima struttura** (la coda parte avvantaggiata: serve far decollare la colonia in fretta)
+  - **Crescita popolazione bloccata** (la pop iniziale non sale finché non finisce l'Insediamento — la fertilità tornerà con l'operatività)
+  - **Cronaca scriptata**: voci predeterminate ("Atterraggio dei moduli avanguardia" al tick 0, "Fondazione di `<nome colonia>`" al tick ~20, "Primi insediamenti civili" al tick ~40, "Insediamento completato — la colonia è operativa" al termine)
+- Tarature da preset (default 60 I): Speedrun 30 I · Incubo 90 I · Lungo respiro 120 I.
+- La fase è **recovery-friendly** (decisione #22): finisce sempre da sola, mai un fail-state. Anche con scelte pessime, il giocatore non resta bloccato.
+
+**Fase 2 — Operativa (`operational`)**
+- Stato pieno: produzione 100%, crescita pop attiva, bonus pianeta base §8.1, scarsità §7.4 normale.
+- Da qui in poi il loop M05 lavora come da specifica.
+
+**Stato iniziale di colonia (preset Classico, default)**
+- `pop.total = 3` (fisso; preset: Speedrun 5 / Incubo 2 / Lungo respiro 3)
+- `stock = { met: 120, en: 60, food: 50, water: 50 }` (≈55% del buffer M06: l'atterraggio consuma)
+- `isHomeBase = true` (§8.1)
+- `phase = 'settling'`, `settlingStart = startDS`, `settlingDuration = 60` (preset)
+- Stock × `startStockMul` (Classico 1.0 · Speedrun 1.5 · Incubo 0.5 · Lungo respiro 1.2)
+
 ### 6.3 Tipi di corpo celeste e caratteristiche
 | Tipo | Vantaggi | Svantaggi |
 |------|----------|-----------|

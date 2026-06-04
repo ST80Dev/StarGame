@@ -13,7 +13,7 @@
 
 const ORION = window.ORION || (window.ORION = {});
 
-ORION.version = '0.6.5-M06.5';
+ORION.version = '0.6.6-M06.6';
 
 /* Etichette provvisorie del viewport per le viste non ancora implementate. */
 ORION.viewLabels = {
@@ -70,8 +70,17 @@ function newGame(seed, opts) {
   /* Se ci viene passato un payload (load slot / import .json), il seed
      viene da lì — coerente con seed+delta (decisione #5/#24). */
   if (opts.payload && opts.payload.seed) seed = opts.payload.seed;
+  /* M06.5: payload v4 contiene esplicitamente la scelta della colonia
+     originaria (decisione #27). Se presente, sovrascrive opts.homeWorld. */
+  if (opts.payload && opts.payload.homeWorld) opts.homeWorld = opts.payload.homeWorld;
   seed = seed || ORION.rng.newSeed();
   const galaxy = ORION.galaxy.generate(seed);
+  /* M06.5: se il giocatore ha scelto un home diverso dal default
+     generato (decisione #27), ricalibra prima di createState così la
+     nebbia di guerra rispetta la nuova origine. */
+  if (opts.homeWorld && Number.isInteger(opts.homeWorld.systemId)) {
+    ORION.galaxy.recomputeDanger(galaxy, opts.homeWorld.systemId);
+  }
   const state = ORION.galaxy.createState(galaxy);
 
   // Epoca d'inizio randomizzata DS 800.00–3000.00 (decisione #4), derivata
@@ -107,13 +116,21 @@ function newGame(seed, opts) {
     /* M06: cronaca persistita (decisione #24, cap a ORION.save.CHRONICLE_CAP).
        Più recente in TESTA all'array, identico al DOM. */
     chronicle: [],
-    /* M06.5: stato tutorial (decisione #27). Persistito nel save (schema 4). */
+    /* M06.5: scelta della colonia originaria (decisione #27). Salvata
+       esplicitamente come delta per non doverla rideterminare al runtime
+       (vincolo seed+delta). Se null, fallback al homeWorld scelto da
+       system.js — retro-compat con save schema 3. */
+    homeWorld: (opts.homeWorld && Number.isInteger(opts.homeWorld.systemId))
+      ? { systemId: opts.homeWorld.systemId, bodyKey: opts.homeWorld.bodyKey }
+      : null,
+    /* M06.6: stato tutorial (decisione #28). Persistito nel save (schema 4). */
     tutorial: { enabled: tutorialEnabled, seenLessons: [] }
   };
   // startDS = Data Stellare INIZIALE (epoca .00), fissa per la partita.
   ORION.game.startDS = ORION.time.format(startOrbita * 100);
 
-  // M04: colonizza il pianeta natale (homeWorld del sistema d'origine).
+  // M04/M06.5: colonizza il pianeta natale (scelta esplicita se passata
+  // dal menu, altrimenti homeWorld flaggato da system.js).
   colonizeHomePlanet(ORION.game, ORION.game.startDS);
 
   // M06: se c'è un payload (autosave/slot/import), ripristina i delta
@@ -154,18 +171,36 @@ function newGame(seed, opts) {
   return ORION.game;
 }
 
-/* Genera struttura+colonia per il mondo natale e popola l'HUD risorse. */
+/* Genera struttura+colonia per il mondo natale e popola l'HUD risorse.
+   M06.5: se `game.homeWorld` è stato impostato dalla scelta menu
+   (decisione #27), usa il bodyKey esplicito (può differire dall'
+   `homeWorld` flaggato da system.js, perché il candidato è stato pescato
+   con scoring leggermente diverso). */
 function colonizeHomePlanet(game, startDS) {
   const galaxy = game.galaxy;
   const homeSys = ORION.system.generate(galaxy, galaxy.homeId);
   let homeBody = null;
-  for (let i = 0; i < homeSys.bodies.length; i++) {
-    if (homeSys.bodies[i].homeWorld) { homeBody = homeSys.bodies[i]; break; }
+  /* Preferenza: bodyKey esplicito dal menu (M06.5) */
+  if (game.homeWorld && game.homeWorld.bodyKey) {
+    homeBody = ORION.system.findBody(homeSys, game.homeWorld.bodyKey);
+  }
+  /* Fallback: bandiera homeWorld di system.js (retro-compat) */
+  if (!homeBody) {
+    for (let i = 0; i < homeSys.bodies.length; i++) {
+      if (homeSys.bodies[i].homeWorld) { homeBody = homeSys.bodies[i]; break; }
+    }
   }
   if (!homeBody) homeBody = homeSys.bodies[Math.floor(homeSys.bodies.length / 2)];
   const planet = ORION.planet.generate(galaxy, homeSys, homeBody.key);
   const colony = ORION.planet.createColony(planet);
-  ORION.planet.colonizeHome(colony, planet, startDS);
+  /* M06.5 (decisione #27): leggi le tarature dal preset corrente. */
+  const mods = (game.mode && game.mode.modifiers) || {};
+  const settlingOpts = {
+    duration: mods.settlingDuration || 60,
+    stockMul: (typeof mods.startStockMul === 'number') ? mods.startStockMul : 1.0,
+    popBase:  mods.startPopBase || 3
+  };
+  ORION.planet.colonizeHome(colony, planet, startDS, settlingOpts);
   game.colonies[galaxy.homeId + ':' + homeBody.key] = colony;
   game.homePlanetKey = galaxy.homeId + ':' + homeBody.key;
   updateGlobalResourceHud();
@@ -330,7 +365,7 @@ function onMapContext(ctx) {
   // Quando la vista interna del sistema è aperta, è lei a gestire
   // breadcrumb e pannello: ignora il contesto della mappa galassia.
   if (ORION.openSystemId >= 0) return;
-  /* M06.5: tutorial — entrata nel livello "gruppo" (zoom o click su regione). */
+  /* M06.6: tutorial — entrata nel livello "gruppo" (zoom o click su regione). */
   if (ORION.tutorial && ctx.level === 'group') ORION.tutorial.fire('galaxy');
   renderBreadcrumb(ctx);
   const panel = document.querySelector('.panel--right');
@@ -558,7 +593,7 @@ function openSystem(id) {
   setGalaxyHint('system');
   updateSystemUI(system, null);
 
-  /* M06.5: tutorial — prima apertura di un sistema. */
+  /* M06.6: tutorial — prima apertura di un sistema. */
   if (ORION.tutorial) ORION.tutorial.fire('system');
 }
 
@@ -782,7 +817,7 @@ function openPlanet(sysId, bodyKey) {
 
   pushChronicle(ORION.time.currentDS(g) + ' — Apertura scheda planetaria di <strong>' + body.name + '</strong>.', 'planet');
 
-  /* M06.5: tutorial — prima apertura di un pianeta. */
+  /* M06.6: tutorial — prima apertura di un pianeta. */
   if (ORION.tutorial) ORION.tutorial.fire('planet');
 }
 
@@ -880,7 +915,7 @@ function renderPlanetPanel(title, content) {
   else if (activeTab === 'strutture') renderPlanetStruttureTab(host, planet, colony);
   else if (activeTab === 'popolazione') renderPlanetPopolazioneTab(host, planet, colony);
 
-  /* M06.5: tutorial — schede per tab pianeta. Risorse copre l'idea delle
+  /* M06.6: tutorial — schede per tab pianeta. Risorse copre l'idea delle
      avanzate mascherate (§7.2); Strutture copre slot/coda/durata. */
   if (ORION.tutorial) {
     if (activeTab === 'strutture') ORION.tutorial.fire('build');
@@ -910,8 +945,28 @@ function renderPlanetColoniaTab(host, planet, colony) {
       });
       if (bits.length) scarRow = '<p class="sysinfo__sub">Stato risorse (§7.4)</p><p class="scar-row">' + bits.join(' ') + '</p>';
     }
+    /* M06.5 (decisione #27): banner fase Insediamento con countdown e
+       progress bar. Recovery-friendly: finisce sempre da sola. */
+    let settlingBanner = '';
+    if (colony.phase === 'settling' && colony.settlingStart != null) {
+      const dur = colony.settlingDuration || 60;
+      const elapsed = Math.max(0, (g.timeImpulsi || 0) - colony.settlingStart);
+      const remain = Math.max(0, dur - elapsed);
+      const pct = Math.min(100, Math.round((elapsed / dur) * 100));
+      settlingBanner =
+        '<div class="settle-banner">' +
+          '<p class="settle-banner__title">⏳ Insediamento in corso</p>' +
+          '<p class="settle-banner__hint">Produzione al 50% · +50% velocità prima struttura · crescita pop bloccata (§6.2.bis).</p>' +
+          '<dl class="sysinfo__list">' +
+            row('Restanti', remain + ' I') +
+            row('Avanzamento', pct + '%') +
+          '</dl>' +
+          '<div class="progress-bar"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
+        '</div>';
+    }
     host.innerHTML =
       '<div class="sysinfo">' +
+        settlingBanner +
         (colony.isHomeBase ? '<p class="sysinfo__home">★ Pianeta base — bonus +20% produzione (§8.1)</p>' : '<p class="sysinfo__home">◉ Colonia attiva</p>') +
         '<dl class="sysinfo__list">' +
           row('Colonizzato dal', colony.colonizedDS || '—') +
@@ -1300,7 +1355,7 @@ function initTimeControls() {
 function runAdvance(impulsi) {
   const g = ORION.game;
   if (!g) return;
-  /* M06.5: tutorial — primo avanzamento del tempo. */
+  /* M06.6: tutorial — primo avanzamento del tempo. */
   if (ORION.tutorial) ORION.tutorial.fire('advance');
   const before = g.timeImpulsi || 0;
   const res = (impulsi == null) ? ORION.time.advanceToNextEvent() : ORION.time.advance(impulsi);
@@ -1335,7 +1390,7 @@ function chronicleEvent(ev) {
     const RES = { met: 'metalli', en: 'energia', food: 'cibo', water: 'acqua' };
     const sev = ev.sev === 'crit' ? 'critica' : 'in allerta';
     pushChronicle(ds + ' — ' + pname + ': carenza ' + sev + ' di <strong>' + RES[ev.res] + '</strong>.', 'system');
-    /* M06.5: tutorial — prima volta che vediamo una carenza (low o crit). */
+    /* M06.6: tutorial — prima volta che vediamo una carenza (low o crit). */
     if (ORION.tutorial) ORION.tutorial.fire('scarcity');
   } else if (ev.kind === 'scarcity-recover') {
     const RES = { met: 'metalli', en: 'energia', food: 'cibo', water: 'acqua' };
@@ -1345,6 +1400,16 @@ function chronicleEvent(ev) {
   } else if (ev.kind === 'victory') {
     const label = (ORION.victory && ORION.victory.TRACK_LABELS[ev.track]) || ev.track;
     pushChronicle(ds + ' — <strong>Pista chiusa</strong>: ' + label + ' (M20 attiverà la schermata di vittoria).', 'explore');
+  } else if (ev.kind === 'settle-stage') {
+    /* M06.5 (decisione #27): voci scriptate della fase Insediamento. */
+    const stage = ev.stage;
+    let txt;
+    if (stage === 'landing')       txt = 'Atterraggio dei moduli avanguardia su <strong>' + pname + '</strong>.';
+    else if (stage === 'founding') txt = 'Fondazione di <strong>' + pname + '</strong>.';
+    else /* civic */               txt = 'Primi insediamenti civili su <strong>' + pname + '</strong>.';
+    pushChronicle(ds + ' — ' + txt, 'planet');
+  } else if (ev.kind === 'settle-done') {
+    pushChronicle(ds + ' — Insediamento completato — la colonia di <strong>' + pname + '</strong> è operativa.', 'planet');
   }
 }
 
@@ -1506,7 +1571,7 @@ function openSaveModal() {
   if (!modal) return;
   modal.removeAttribute('hidden');
   renderSaveModal();
-  /* M06.5: tutorial — prima apertura del pannello salvataggi. */
+  /* M06.6: tutorial — prima apertura del pannello salvataggi. */
   if (ORION.tutorial) ORION.tutorial.fire('save');
 }
 function closeSaveModal() {
@@ -1709,7 +1774,7 @@ function enterGame() {
   updateGlobalResourceHud();
   setHudDate(ORION.time.currentDS(ORION.game));
   updateTimeControlsHint();
-  /* M06.5: tutorial — la "?" diventa attiva solo dentro partita. */
+  /* M06.6: tutorial — la "?" diventa attiva solo dentro partita. */
   updateTutorialButton();
   /* Welcome: prima trigger della partita (solo se tutorial attivo e non già vista). */
   if (ORION.tutorial) ORION.tutorial.fire('welcome');
@@ -1773,8 +1838,9 @@ function hideMainMenu() {
 function renderMainMenu() {
   const body = document.querySelector('[data-bind="main-menu-body"]');
   if (!body) return;
-  if (ORION.menuView === 'new')  return renderMainMenuNew(body);
-  if (ORION.menuView === 'info') return renderMainMenuInfo(body);
+  if (ORION.menuView === 'new')      return renderMainMenuNew(body);
+  if (ORION.menuView === 'home-pick') return renderMainMenuHomePick(body);
+  if (ORION.menuView === 'info')     return renderMainMenuInfo(body);
   return renderMainMenuHome(body);
 }
 
@@ -1919,27 +1985,130 @@ function renderMainMenuNew(body) {
 }
 
 function startNewGameFromMenu() {
+  /* Conferma autosave PRIMA dello step "scegli colonia" — la scelta
+     dell'origine è già "azione irreversibile" che porterà a partita. */
+  const auto = ORION.save && ORION.save.loadAutosave ? ORION.save.loadAutosave() : null;
+  if (auto && !confirm('Iniziare una nuova partita? L\'autosave corrente verrà sostituito (gli slot manuali restano).')) return;
+  /* M06.5 (decisione #27): non avvii subito la partita — passi allo
+     step "scegli colonia" che genera la galassia in anteprima e mostra
+     i candidati. La partita parte solo a scelta confermata. */
+  showMainMenu('home-pick');
+}
+
+/* M06.5 — Step "Scegli colonia originaria" (decisione #27 / GDD §6.2.bis).
+   Genera la galassia in anteprima dal seed cristallizzato, pesca i
+   candidati (uno per gruppo, max 6), mostra la griglia di card.
+   Niente Canvas: le card sono puramente testuali (riusa lo stile delle
+   save-card, decisione #24). */
+function renderMainMenuHomePick(body) {
+  /* Determinismo dal seed: se il seed o le opzioni rilevanti non sono
+     cambiati, riusiamo la galassia di anteprima per evitare la
+     rigenerazione (costa qualche ms). */
+  const seed = ORION.menuForm.seed || ORION.rng.newSeed();
+  ORION.menuForm.seed = seed;
+  if (!ORION.menuPreview || ORION.menuPreview.seed !== seed) {
+    const previewGalaxy = ORION.galaxy.generate(seed);
+    const candidates = ORION.galaxy.pickHomeCandidates(previewGalaxy, 6);
+    ORION.menuPreview = { seed: seed, galaxy: previewGalaxy, candidates: candidates };
+  }
+  const candidates = ORION.menuPreview.candidates;
+
+  if (!candidates.length) {
+    body.innerHTML = '<div class="main-menu__info">' +
+      '<h2 class="main-menu__form-title">Nessun candidato trovato</h2>' +
+      '<p>La galassia di questo seed non offre corpi abitabili sufficienti. Riprova con un seed diverso.</p>' +
+      '<div class="main-menu__form-actions">' +
+        '<button type="button" class="btn btn--mini" data-action="menu-back-new">← Indietro</button>' +
+      '</div></div>';
+    body.querySelector('[data-action="menu-back-new"]').addEventListener('click', function () { showMainMenu('new'); });
+    return;
+  }
+
+  const cards = candidates.map(function (c) { return homeCandidateCardHtml(c); }).join('');
+  body.innerHTML =
+    '<div class="main-menu__pick">' +
+      '<h2 class="main-menu__form-title">Scegli la colonia originaria</h2>' +
+      '<p class="main-menu__field-hint">' +
+        candidates.length + ' candidati (uno per regione · seed <code>' + escapeHtml(seed) + '</code>). ' +
+        'La scelta cristallizza il sistema d\'origine: il pericolo §5.3 si ricalibra da lì.' +
+      '</p>' +
+      '<div class="save-grid">' + cards + '</div>' +
+      '<div class="main-menu__form-actions">' +
+        '<button type="button" class="btn btn--mini" data-action="menu-back-new">← Indietro</button>' +
+        '<button type="button" class="btn btn--mini" data-action="menu-pick-random">🎲 Scegli per me</button>' +
+      '</div>' +
+    '</div>';
+
+  body.querySelectorAll('[data-action="pick-home"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const idx = parseInt(b.dataset.idx, 10);
+      confirmHomeAndStart(candidates[idx]);
+    });
+  });
+  body.querySelector('[data-action="menu-back-new"]').addEventListener('click', function () { showMainMenu('new'); });
+  body.querySelector('[data-action="menu-pick-random"]').addEventListener('click', function () {
+    const rng = ORION.rng.makeRng(seed + ':pick');
+    confirmHomeAndStart(candidates[rng.int(0, candidates.length - 1)]);
+  });
+}
+
+function homeCandidateCardHtml(c) {
+  const typeLabel = (ORION.system.BODY_TYPES[c.planet.type] || {}).label || c.planet.type;
+  const p = c.planet.potentials;
+  const advLine = c.planet.advancedCount > 0
+    ? '<dd class="main-menu__adv">⚛ ' + c.planet.advancedCount + ' avanzate (da scansionare)</dd>'
+    : '<dd class="main-menu__adv">⚛ nessuna avanzata</dd>';
+  return '<div class="save-card save-card--candidate">' +
+    '<div class="save-card__name">' + escapeHtml(c.planet.name) + ' <span class="main-menu__sub-inline">· ' + escapeHtml(typeLabel) + '</span></div>' +
+    '<dl class="save-card__meta">' +
+      '<div><dt>Regione</dt><dd>' + escapeHtml(c.groupName) + '</dd></div>' +
+      '<div><dt>Sistema</dt><dd>' + escapeHtml(c.system.name) + ' · ' + escapeHtml(c.system.starLabel) + '</dd></div>' +
+      '<div><dt>Pericolo</dt><dd>' + escapeHtml(c.system.dangerTier) + ' (' + c.system.danger + ')</dd></div>' +
+      '<div><dt>Ostilità</dt><dd>' + c.planet.hostility + '</dd></div>' +
+      '<div><dt>Pop. max</dt><dd>' + c.planet.popCap + '</dd></div>' +
+      '<div><dt>Slot</dt><dd>' + c.planet.slots + '</dd></div>' +
+    '</dl>' +
+    '<div class="main-menu__pot-bars">' +
+      potBar('Met', p.met) + potBar('En', p.en) + potBar('Cibo', p.food) + potBar('Acqua', p.water) +
+    '</div>' +
+    '<dl class="save-card__meta">' + advLine + '</dl>' +
+    '<div class="save-card__actions">' +
+      '<button type="button" class="btn btn--mini btn--primary" data-action="pick-home" data-idx="' +
+        // Trovo l'indice cercandolo nell'array dei candidati
+        ORION.menuPreview.candidates.indexOf(c) + '">Inizia qui</button>' +
+    '</div></div>';
+}
+
+function potBar(label, val) {
+  const v = Math.max(0, Math.min(100, val));
+  return '<div class="main-menu__pot">' +
+    '<span class="main-menu__pot-label">' + label + '</span>' +
+    '<span class="main-menu__pot-track"><span class="main-menu__pot-fill" style="width:' + v + '%"></span></span>' +
+    '<span class="main-menu__pot-val">' + v + '</span>' +
+  '</div>';
+}
+
+function confirmHomeAndStart(candidate) {
   const PRESETS = (ORION.victory && ORION.victory.PRESETS) || {};
   const presetId = ORION.menuForm.preset || 'classic';
   const presetMods = Object.assign({}, PRESETS[presetId] || PRESETS.classic || {});
-  /* Override ironman se l'utente l'ha scelto su un preset non-ironman. */
   if (ORION.menuForm.ironman) presetMods.ironman = true;
   const mode = {
     startedAs: 'sandbox',
     preset: presetId,
     modifiers: presetMods
   };
-  /* Se c'è un autosave esistente, chiedi conferma prima di sostituirlo
-     (§21 "salva prima delle azioni irreversibili"). Gli slot manuali
-     restano comunque intatti. */
-  const auto = ORION.save && ORION.save.loadAutosave ? ORION.save.loadAutosave() : null;
-  if (auto && !confirm('Iniziare una nuova partita? L\'autosave corrente verrà sostituito (gli slot manuali restano).')) return;
   clearSavedGame();
-  newGame(ORION.menuForm.seed, { mode: mode, tutorialEnabled: !!ORION.menuForm.tutorial });
-  /* Reset del form per la prossima apertura */
+  newGame(ORION.menuForm.seed, {
+    mode: mode,
+    homeWorld: { systemId: candidate.systemId, bodyKey: candidate.bodyKey },
+    tutorialEnabled: !!ORION.menuForm.tutorial
+  });
+  /* Reset preview + form per la prossima apertura */
+  ORION.menuPreview = null;
   ORION.menuForm = { seed: null, preset: presetId, ironman: !!presetMods.ironman, tutorial: !!ORION.menuForm.tutorial };
   enterGame();
-  showToast('Partita avviata · seed ' + ORION.game.seed);
+  showToast('Colonia su ' + candidate.planet.name + ' · seed ' + ORION.game.seed);
 }
 
 /* --- Info / Crediti --- */
@@ -1975,7 +2144,7 @@ function boot() {
   console.info('%cOrion Empires ' + ORION.version + ' — main menu pronto.', 'color:#2fe6e0');
 }
 
-/* M06.5: bottone "?" in HUD — apre l'indice di tutte le lezioni
+/* M06.6: bottone "?" in HUD — apre l'indice di tutte le lezioni
    (decisione #27, manuale leggero). Nascosto finché non c'è partita. */
 function initTutorialControls() {
   const btn = document.querySelector('[data-action="open-tutorial"]');
