@@ -268,9 +268,9 @@
           warm: rng.chance(0.5)
         });
       }
-      // Poche stelle "eroe" con bloom: 4 sole, contenute, per non saturare.
+      // Stelle "eroe" decorative con bloom + spicchi di diffrazione.
       this.brightStars = [];
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < 8; i++) {
         this.brightStars.push({
           x: rng.range(0.06, 0.94),
           y: rng.range(0.06, 0.94),
