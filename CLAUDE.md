@@ -23,9 +23,9 @@ Legenda: ✅ completato · 🚧 in corso · ⬜ non iniziato · ⏸️ in attesa
 | #   | Modulo                         | Stato | Note |
 |-----|--------------------------------|:----:|------|
 | M01 | Struttura base (shell, tema, layout) | ✅ | Confermato. Shell, tema, layout, TSG. |
-| M02 | Galassia (gen. procedurale, mappa Canvas) | ⏸️ | Implementato — in attesa di conferma utente. Gen. procedurale (seed+delta), nomi §5.2, mappa a nodi su Canvas responsivo + Pointer Events. |
-| M03 | Sistema stellare               | ⏸️ | Implementato — in attesa di conferma utente. Vista interna su Canvas: stella/e (incl. binarie §6.1), 4–7 corpi §6.1 come dischi procedurali, anomalie, sidebar/breadcrumb contestuali. Deterministico dal seed. |
-| M04 | Pianeta base                   | ⬜ | |
+| M02 | Galassia (gen. procedurale, mappa Canvas) | ✅ | Confermato (PR #4 mergiata in main). |
+| M03 | Sistema stellare               | ✅ | Confermato (PR #5 mergiata in main). |
+| M04 | Pianeta base                   | ⏸️ | Implementato — in attesa di conferma utente. Vista pianeta su Canvas (`planet-view.js`) come **sfera procedurale bakata** (FBM 3D + shading sferico, diversa per ogni corpo); scheda M04 nel pannello destro a 4 tab (Colonia/Risorse/Strutture/Popolazione); catalogo 14 strutture (`structures.js`); data model colonia come delta+schemaVersion (`planet.js`); risorse avanzate parzialmente nascoste (osservatorio = scan). Tassi-per-Impulso e durate-in-Impulsi definiti; l'avanzamento effettivo nel tempo è M05. |
 | M05 | Tempo e avanzamento (TSG, game loop) | ⬜ | |
 | M06 | Salvataggio (localStorage + export/import .json) | ⬜ | seed+delta, schemaVersion, log limitato |
 | M07 | Esplorazione                   | ⬜ | |
@@ -108,6 +108,37 @@ Architettura a moduli vanilla (namespace globale `ORION`, niente bundler), caric
 
 ---
 
+## M04 — Pianeta base · cosa è stato fatto
+
+**Obiettivo (GDD §6.2 · §7 · §8 · §9 · §10):** livello *Pianeta* della navigazione gerarchica (§5.5) — vista pianeta allargata, colonizzazione del primo corpo, potenziali risorse §7.1 (e candidate avanzate §7.2 parzialmente nascoste, §7.3), strutture §10 con slot, popolazione e classi funzionali §9 in background. Tassi-per-Impulso e durate-in-Impulsi definiti; l'avanzamento è M05.
+
+- **`js/structures.js` — catalogo strutture (decisione #15).** 14 strutture su 6 categorie (estrattive/produttive/ricerca/militari/civili/avanzate), 2-3 per categoria: dà scelte significative senza anticipare M13. Ogni voce: `cost`, `time` (Impulsi, §4.4), `upkeep`, `rates`, `slots`, `requires` con ganci (`tech:*` per M13, `struct:<id>:<lvl>` per prerequisiti locali, `scan` per l'osservatorio), `hooks` per i moduli futuri (`fleet`, `research`, `trade`, ecc.). Le **produttive** (fonderia/raffineria) sono modificatori (`modifiers: { 'miniera.rates.met': 0.25 }`), letti dal calcolo dei tassi.
+- **`js/planet.js` — data model (decisione #5, seed+delta).** Separa nettamente:
+  - **STRUTTURA IMMUTABILE** `generate(galaxy, system, bodyKey)` derivata dal seed del corpo (`<body.seed>:planet`): **potenziali risorse base** §7.1 (0-100, varianza ±15), **slot di costruzione** §10.2 (±1 dalla base per tipo), **popolazione massima** §9 (0 se non abitabile), **candidate risorse avanzate** §7.2 (0-3, pesi per tipo: vulcanico→esotici/cristalli, gassoso→gasNobili/cristalli, forestale→biomassa/dati, ecc.), **ostilità locale**, **costo colonizzazione** (90-150 I + risorse, §4.4/§6.2). Le lune ereditano i potenziali dal padre scalati ×0.55. Determinismo verificato sui 7 corpi del sistema natale.
+  - **STATO MUTEVOLE (delta colonia)** `createColony(planet)` con `schemaVersion`: `colonized`, `isHomeBase` (§8.1: bonus +20%), `structures: { [id]: { level, hp } }`, `queue`, `pop` (totale, capacità, 5 classi §9.2), `stock` (4 risorse base), `scanned` (rivelazione identità delle avanzate). Pronto per la serializzazione in M06.
+  - **Calcoli:** `structureOutput(colony, planet)` aggrega i tassi per Impulso modulati dal **potenziale del corpo** (es. miniera = 4 × pot.met/60), applica il **bonus pianeta base +20%** (§8.1) e i moltiplicatori delle produttive; `theoreticalOutput(planet)` indica cosa offre il pianeta a regime per la scheda di valutazione (colonizzazione). `canBuild`/`startBuild`/`cancelBuild` gestiscono prerequisiti, slot e costo; `applyScan` svela le identità avanzate quando l'osservatorio è in funzione.
+- **`js/planet-view.js` — vista Canvas (decisioni #6, #14, #17).** Classe `PlanetView` analoga a `SystemView`: si monta come **layer** sopra il system-holder, **canvas responsivo** (ResizeObserver + DPR) + **Pointer Events** (pan, zoom rotella/pinch, hover/click sulle lune, doppio click per uscire). La resa è il punto chiave:
+  - **Bake offscreen** della sfera planetaria (360px, una volta sola all'apertura): per ogni pixel dentro il disco si calcola la normale 3D `(dx, dy, √(1-d²))`, da cui **(lat, lon)** sferiche per campionare un **FBM 3D** hash-based (3 ottave); il colore di base è scelto per tipo (terrestre, desertico, oceanico, ghiacciato, vulcanico, forestale, gassoso, luna, cintura) con palette/dettagli specifici (bande+tempeste sui gassosi, crateri irregolari sulle lune, calotte polari sui ghiacciati, crepe di lava luminescenti sui vulcanici, atolli e profondità sull'oceanico).
+  - **Shading sferico**: Lambert (N·L) + specular sul lato sub-stellare per mari/ghiacci + **limb darkening** + **terminatore** morbido. La direzione della luce viene dalla **posizione del corpo nel sistema** (`-x/|p|, -y/|p|, lz≈0.55`), così l'illuminazione è sempre coerente con dove sta la stella.
+  - **Effetti extra:** nuvole stratificate (terrestri/oceanici/forestali), **luci notturne** (rete urbana) sui pianeti **colonizzati** (si attivano via `refresh(colony)` quando colonizzi), **anelli** procedurali sui gassosi (deterministici dal variant), **lune in orbita statica** intorno al pianeta principale (anche queste bakate, cliccabili → aprono la luna come pianeta).
+  - **Performance:** il bake è ~360² pixel × 3-4 ottave di noise = ~150-300 ms una sola volta; il render runtime è un singolo `drawImage` + overlay leggero (atmosfera/glow). Render **on-demand** (no loop), zero costo a riposo.
+- **`js/main.js` — integrazione.** Stato colonie in `ORION.game.colonies` (chiave `<sysId>:<bodyKey>`, delta serializzabile per M06). Al bootstrap il **mondo natale è auto-colonizzato** (`colonizeHomePlanet` riusa `homeWorld` di M03, popolazione iniziale +20% pop cap, stock di partenza per le prime costruzioni). `openPlanet/closePlanet`, **breadcrumb a 4 livelli** `Galassia › Gruppo › Sistema › Pianeta`, voce di navigazione *Pianeta* ora funzionante (apre il pianeta natale di default), pannello destro con **scheda M04 a 4 tab**: *Colonia* (stato/colonizzazione/valutazione), *Risorse* (potenziali, scorte, produzione/I, avanzate con identità mascherate finché manca lo scan, decisione #16), *Strutture* (slot, costruite, in coda, costruibili per categoria con costo+durata+prerequisiti), *Popolazione* (totale/cap + barre delle 5 classi §9.2). La **barra risorse HUD** è popolata sommando lo stock delle colonie attive (la produzione per Impulso arriva con M05).
+- **`css/style.css`** — sezione M04: layer `.planet-holder`/`.planet-canvas` (z-index 2 sopra il sistema), tab della scheda, barre dei potenziali per risorsa con palette dedicata, struct-list per categoria con `<details>` apribili, classi funzionali colorate, bordo `--c-violet` per gli avvisi sulle avanzate.
+
+**Note di scope:**
+- **Confine con M05:** in M04 le strutture vengono **completate istantaneamente** al click (la riga viene aggiunta in coda da `startBuild` e poi subito promossa a "costruita" in `tryBuild` per ragioni di UI); allo stesso modo la colonizzazione di un secondo corpo è istantanea. Il **vero timer** (decremento Impulso per Impulso, processo della coda, produzione/consumo, crescita pop, scoperta avanzate dopo X Impulsi) arriva con M05. Quando M05 sarà attivo, basta togliere il `colony.queue.pop()` da `tryBuild` e lasciare il loop a maturare l'entry: tutta l'infrastruttura (`queue`, `duration`, `startedAt`) è già pronta.
+- **Confine con M06:** lo stato della colonia è già un **delta serializzabile** con `schemaVersion: 1`. Niente da rifare.
+- **Confine con M07:** la nebbia di guerra dei sistemi rimane invariata. La vista pianeta si apre solo per corpi del proprio sistema d'origine o di sistemi esplorati (l'hook esiste nel pannello *Corpo*: senza esplorazione il pannello stesso non mostra il pulsante).
+- **Confine con M13:** i prerequisiti tech delle strutture esistono solo come marker `requires: ['tech:<id>']`, attualmente bloccano la costruzione (l'unica struttura realmente "tech-gated" in M04 è l'impianto esotico, gancio §7.2). Quando M13 attiverà i tech veri, l'impianto si sbloccherà di conseguenza.
+- **Confine con M08/M14/M15/M16:** cantiere navale e accademia militare sono **ganci** — le funzioni vere arrivano con i rispettivi moduli; in M04 si costruiscono e occupano slot (e contano nelle classi), ma non producono navi/figure.
+
+**Limiti per M04 (semplificazioni note):**
+- Per le **cinture asteroidali** non si apre la vista pianeta (le si rappresenta nel sistema; il loro contributo arriverà come "stazione di estrazione orbitale" più avanti).
+- Per i **gassosi** la vista si apre ma la colonizzazione è disabilitata (non abitabile §6.3); l'estrazione orbitale piena è un'estensione futura.
+- Gli **upgrade di livello** delle strutture sono solo letti dal calcolo dei tassi (×1.6 per lvl) — il flusso di upgrade in coda è M05.
+
+---
+
 ## Decisioni prese
 
 1. **Font senza CDN.** Il GDD suggerisce *Orbitron* da Google Fonts (§3), ma vieta anche dipendenze/CDN esterni (§2). Per rispettare il vincolo più stringente si usa uno **stack di font** (`--font-display`) che impiega Orbitron se installato localmente, con fallback di sistema. In futuro si potrà includere il font come file locale (`/fonts`) senza chiamate esterne.
@@ -142,6 +173,10 @@ Architettura a moduli vanilla (namespace globale `ORION`, niente bundler), caric
    - **UI**: niente nuove voci nell'HUD fisso (resta a 4 risorse base + indici). Le valute vivono nel **pannello commercio** dedicato a M12, con possibile **overlay "mappa monetaria"** sulle regioni della mappa M02.
    - **Save (M06)**: bilancio per regione + tassi correnti come delta — gestibile con seed+delta (decisione #5).
    - Il GDD §15 andrà esteso prima dell'implementazione di M12 con questa versione *leggera* (non EVE-style).
+14. **Vista Pianeta come layer Canvas full-stage (M04).** Scelta dell'utente: la vista pianeta si monta come **layer M03-style** dentro `.galaxy-root` (sopra il sistema, che resta vivo sotto). La scheda dati (risorse/strutture/popolazione/colonizzazione) **vive nel pannello destro** come per system/body. Vantaggi: gerarchia (#9) preservata, niente split del viewport, riuso dello stesso pattern di mount/destroy e degli stessi controlli (Pointer Events, ResizeObserver, breadcrumb).
+15. **Catalogo strutture "medio" per M04 (~14 strutture).** Scelta dell'utente: 2-3 strutture per categoria §10.1 (4 estrattive base + 2 produttive + 2 ricerca + 2 militari + 3 civili + 1 avanzata). I prerequisiti tech sono **solo marker** (`requires: ['tech:<id>']`), bloccano la costruzione finché M13 non li attiverà. I cantieri/accademia/mercato sono **ganci** per i rispettivi moduli (M08/M14/M12). Vantaggio: M04 ha scelte di costruzione significative senza anticipare M13, e il catalogo può crescere senza rifare le scaffolding.
+16. **Risorse avanzate §7.2 — numero rivelato, identità nascosta (M04).** Scelta dell'utente, coerente con §7.3 ("si scoprono costruendo strutture esplorative"): alla colonizzazione la scheda *Risorse* mostra "⚛ N risorse avanzate presenti — identità da scansionare". Costruire un **osservatorio** (struttura ricerca) attiva `colony.scanned.active = true` e svela le identità (`advancedKnown`). Le 6 famiglie §7.2 (cristalli, esotici, biomassa, gas nobili, dati, reliquie) hanno pesi per tipo di corpo (vulcanico→esotici/cristalli, gassoso→gasNobili/cristalli, ecc.). Ogni candidata ha un `potential` 30-100 (deterministico dal seed).
+17. **Resa "tridimensionale" del pianeta — bake offscreen + shading sferico (M04).** Scelta dell'utente (più ricco del disco di M03, "diverso da pianeta a pianeta/luna"): la vista pianeta usa una **texture procedurale bakata** (offscreen canvas 360px) con **FBM 3D hash-based** campionato in coordinate sferiche, **shading sferico** (normale calcolata dal disco, Lambert + specular su mari/ghiacci + limb darkening + terminatore morbido), dettagli per tipo (nuvole, tempeste, crateri, calotte, lava, anelli), **luci notturne** dopo la colonizzazione. Il bake si fa **una sola volta** all'apertura (~150-300 ms), il render runtime è un `drawImage` + overlay leggero. Determinismo dal seed `<body.seed>:planet` (nessun costo di salvataggio). Niente WebGL, niente loop continuo — coerente con tutte le decisioni precedenti.
 
 ---
 
@@ -158,9 +193,9 @@ Architettura a moduli vanilla (namespace globale `ORION`, niente bundler), caric
 
 ```
 stargame/
-├── index.html          ✅ shell UI + caricamento moduli M02/M03
+├── index.html          ✅ shell UI + caricamento moduli M02/M03/M04
 ├── css/
-│   └── style.css        ✅ tema scuro spaziale + mappa/galassia (M02) + vista sistema (M03)
+│   └── style.css        ✅ tema scuro spaziale + mappa/galassia (M02) + vista sistema (M03) + scheda pianeta (M04)
 ├── js/
 │   ├── rng.js           ✅ PRNG deterministico (M02 — seed+delta)
 │   ├── names.js         ✅ nomi sistemi §5.2 (M02)
@@ -168,15 +203,18 @@ stargame/
 │   ├── galaxy-map.js    ✅ mappa a nodi su Canvas (M02)
 │   ├── system.js        ✅ generazione interno del sistema §6 (M03 — derivato dal seed)
 │   ├── system-view.js   ✅ vista interna del sistema su Canvas (M03)
-│   └── main.js          ✅ bootstrap + integrazione M02/M03
+│   ├── structures.js    ✅ catalogo strutture §10 (M04, 14 voci, 6 categorie)
+│   ├── planet.js        ✅ data model pianeta §6.2/§7/§8/§9 + delta colonia (M04)
+│   ├── planet-view.js   ✅ vista pianeta su Canvas — sfera bakata, FBM 3D + shading sferico (M04)
+│   └── main.js          ✅ bootstrap + integrazione M02/M03/M04
 ├── CLAUDE.md            ✅ questo file
 ├── README.md            ✅
 └── ORION_EMPIRES_GDD.md ✅ documento di design (fonte di verità)
 ```
 
-Gli altri file/cartelle previsti dal GDD §2 (`js/planet.js`, `data/`, ecc.)
+Gli altri file/cartelle previsti dal GDD §2 (`js/fleet.js`, `data/`, ecc.)
 verranno aggiunti nei moduli corrispondenti.
 
 ---
 
-_Ultimo aggiornamento: 2026-06-04 — M03 Sistema stellare: vista interna su Canvas (`system.js` + `system-view.js`) agganciata al livello *Sistema* della navigazione gerarchica. Stella/e (incl. binarie §6.1), 4–7 corpi §6.1 come **dischi procedurali** (bande/atmosfera/terminatore, niente alone uniforme), lune, cinture e anomalie — tutto **deterministico dal seed** (seed+delta, nessun costo di salvataggio). Breadcrumb `Galassia › Gruppo › Sistema › Pianeta` e sidebar contestuale (sistema → corpo, dati base §6.3, rimando a M04). Scelte utente: orbite **statiche** (decisione #10) e nebbia di guerra **fedele a §5.1** (decisione #11); aggiunta anche #12. Resta ⏸️ in attesa di conferma utente._
+_Ultimo aggiornamento: 2026-06-04 — M04 Pianeta base: vista pianeta su Canvas (`planet-view.js`) come **sfera procedurale bakata** (FBM 3D hash-based campionato in coordinate sferiche, shading Lambert + specular + limb darkening + terminatore morbido, dettagli per tipo, luci notturne dopo colonizzazione), scheda M04 a 4 tab nel pannello destro (Colonia/Risorse/Strutture/Popolazione), catalogo 14 strutture su 6 categorie (`structures.js`), data model pianeta con seed+delta (`planet.js`): struttura immutabile (potenziali §7.1, slot §10.2, popCap §9, candidate avanzate §7.2 nascoste fino a osservatorio §7.3, costo colonizzazione §6.2), stato colonia con `schemaVersion: 1` pronto per M06. Mondo natale auto-colonizzato al boot con bonus pianeta base §8.1 (+20%). Breadcrumb a 4 livelli `Galassia › Gruppo › Sistema › Pianeta` e voce di navigazione *Pianeta* attiva. Scelte utente: layer Canvas full-stage (decisione #14), catalogo medio ~14 strutture (decisione #15), numero rivelato/identità nascosta per avanzate (decisione #16), resa "tridimensionale" via bake offscreen + shading sferico (decisione #17). Tassi-per-Impulso e durate-in-Impulsi definiti; l'avanzamento effettivo nel tempo è M05. Resta ⏸️ in attesa di conferma utente._
