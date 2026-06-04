@@ -695,9 +695,51 @@ button { font-family: inherit; }
 .body-chip__moons {
   margin-left: auto;
   padding-left: 6px;
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   color: var(--c-text-faint);
   flex: 0 0 auto;
+  letter-spacing: 0.02em;
+}
+
+/* Stato colonia sui chip dei corpi celesti */
+.body-chip__badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-family: var(--font-display);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  flex: 0 0 auto;
+}
+.body-chip__badge--home {
+  color: var(--c-accent);
+  background: rgba(47, 230, 224, 0.12);
+}
+.body-chip__badge--colony {
+  color: var(--c-accent-warm);
+  background: rgba(255, 157, 60, 0.12);
+}
+.body-chip__badge--candidate {
+  color: var(--c-text-faint);
+  border-color: var(--c-border-soft);
+  background: transparent;
+  padding: 1px 5px;
+}
+.sys-chip.is-home {
+  background: rgba(47, 230, 224, 0.06);
+  border-color: rgba(47, 230, 224, 0.35);
+  color: var(--c-text);
+}
+.sys-chip.is-colony {
+  background: rgba(255, 157, 60, 0.05);
+  border-color: rgba(255, 157, 60, 0.30);
+  color: var(--c-text);
+}
+.sys-chip.is-home .sys-chip__dot,
+.sys-chip.is-colony .sys-chip__dot {
+  box-shadow: 0 0 6px var(--sc, #fff), 0 0 12px var(--sc, #fff);
 }
 
 /* Elenco anomalie del sistema (§6.1) */

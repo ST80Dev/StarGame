@@ -1025,6 +1025,18 @@
       const showLabels = reveal > 0.7;
       ctx.globalAlpha = reveal;
 
+      // sistemi con almeno una colonia attiva (oltre al sistema base, evidenziato a parte).
+      const colonySys = new Set();
+      const colonies = root.ORION.game && root.ORION.game.colonies;
+      if (colonies) {
+        for (const k in colonies) {
+          const c = colonies[k];
+          if (!c || !c.colonized) continue;
+          const colon = k.indexOf(':');
+          if (colon > 0) colonySys.add(k.slice(0, colon));
+        }
+      }
+
       // proietta tutti e z-sort
       const items = new Array(g.systems.length);
       for (let i = 0; i < g.systems.length; i++) {
@@ -1080,11 +1092,17 @@
         }
 
         if (isHome) { this._ring(ctx, p, r + 5, '#2fe6e0', 1.5); this._ring(ctx, p, r + 8.5, 'rgba(47,230,224,0.5)', 1); }
+        else if (colonySys.has(s.id)) {
+          // colonia secondaria: anello caldo discreto + glifo ◉
+          this._ring(ctx, p, r + 5, '#ff9d3c', 1.4);
+          this._ring(ctx, p, r + 8, 'rgba(255,157,60,0.45)', 1);
+        }
         if (isSel) this._reticle(ctx, p, r + 7, '#ff9d3c');
         else if (isHover) this._ring(ctx, p, r + 6, 'rgba(216,226,255,0.85)', 1.5);
 
-        if (d >= DISCOVERY.DETECTED && (showLabels || isHome || isSel || isHover)) {
-          this._label(ctx, p, s.name, r, isSel || isHover || isHome, fade);
+        const hasColony = colonySys.has(s.id);
+        if (d >= DISCOVERY.DETECTED && (showLabels || isHome || isSel || isHover || hasColony)) {
+          this._label(ctx, p, s.name, r, isSel || isHover || isHome || hasColony, fade);
         }
       }
       ctx.globalAlpha = 1;
