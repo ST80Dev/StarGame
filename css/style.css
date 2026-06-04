@@ -494,6 +494,15 @@ button { font-family: inherit; }
 /* Decisione #26 — tag di appartenenza (sigla regione / sistema) accanto
    ai nomi propri dei corpi celesti. Visivamente discreto, font display per
    richiamare la sensazione "etichetta di catalogo astronomico". */
+/* Etichetta "unità" accanto ai valori di popolazione (§9): la popolazione è
+   un'astrazione di background, non un censimento — l'etichetta lo segnala. */
+.pop-unit {
+  font-size: 0.82em;
+  color: var(--c-text-soft, #b3bee0);
+  letter-spacing: 0.02em;
+  cursor: help;
+}
+
 .name-tag {
   display: inline-block;
   font-family: var(--font-display);

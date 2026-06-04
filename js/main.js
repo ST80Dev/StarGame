@@ -416,6 +416,14 @@ function findGroup(id) {
 
 function row(k, v) { return '<dt>' + k + '</dt><dd>' + v + '</dd>'; }
 
+/* La popolazione (§9) è in "unità", un'astrazione di background: ogni unità
+   rappresenta miliardi di abitanti, non un censimento di individui (decisione
+   di presentazione — i numeri piccoli sono convenzione 4X tipo Stellaris).
+   Helper unici così l'etichetta resta coerente ovunque venga mostrata. */
+const POP_UNIT_HINT = 'Unità di popolazione astratte (§9): ogni unità rappresenta miliardi di abitanti.';
+function popUnits(v) { return v + ' <span class="pop-unit" title="' + POP_UNIT_HINT + '">unità</span>'; }
+function popRange(total, cap) { return total + ' / ' + cap + ' <span class="pop-unit" title="' + POP_UNIT_HINT + '">unità</span>'; }
+
 /* ---------------------------------------------------------------------
    Decisione #26 — Tag di appartenenza (sigla regione, nome sistema)
    I corpi celesti hanno ora nomi propri dal tema del sistema (Zaffiro,
@@ -1006,7 +1014,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
         (colony.isHomeBase ? '<p class="sysinfo__home">★ Pianeta base — bonus +20% produzione (§8.1)</p>' : '<p class="sysinfo__home">◉ Colonia attiva</p>') +
         '<dl class="sysinfo__list">' +
           row('Colonizzato dal', colony.colonizedDS || '—') +
-          row('Popolazione', colony.pop.total + ' / ' + colony.pop.cap) +
+          row('Popolazione', popRange(colony.pop.total, colony.pop.cap)) +
           row('Slot utilizzati', out.used + ' / ' + planet.slots) +
         '</dl>' +
         '<p class="sysinfo__sub">Riepilogo produzione (/Impulso)</p>' +
@@ -1310,7 +1318,7 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
   host.innerHTML =
     '<div class="sysinfo">' +
       '<dl class="sysinfo__list">' +
-        row('Popolazione', total + ' / ' + cap) +
+        row('Popolazione', popRange(total, cap)) +
         row('Crescita', '<span class="rate ' + (canGrow ? 'rate--pos' : 'rate--neg') + '">' + growthStr + '</span>') +
       '</dl>' +
       '<p class="sysinfo__sub">Classi funzionali (§9.2)</p>' +
@@ -2110,7 +2118,7 @@ function homeCandidateCardHtml(c) {
       '<div><dt>Sistema</dt><dd>' + escapeHtml(c.system.name) + ' · ' + escapeHtml(c.system.starLabel) + '</dd></div>' +
       '<div><dt>Pericolo</dt><dd>' + escapeHtml(c.system.dangerTier) + ' (' + c.system.danger + ')</dd></div>' +
       '<div><dt>Ostilità</dt><dd>' + c.planet.hostility + '</dd></div>' +
-      '<div><dt>Pop. max</dt><dd>' + c.planet.popCap + '</dd></div>' +
+      '<div><dt>Pop. max</dt><dd>' + popUnits(c.planet.popCap) + '</dd></div>' +
       '<div><dt>Slot</dt><dd>' + c.planet.slots + '</dd></div>' +
     '</dl>' +
     '<div class="main-menu__pot-bars">' +

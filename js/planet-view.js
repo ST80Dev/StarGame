@@ -771,7 +771,7 @@
       if (col && col.colonized) lines.push(col.isHomeBase ? '★ PIANETA BASE' : '◉ COLONIZZATO');
       else lines.push('○ NON COLONIZZATO');
       lines.push('Slot: ' + this.planet.slots);
-      if (this.planet.popCap > 0) lines.push('Pop cap: ' + this.planet.popCap);
+      if (this.planet.popCap > 0) lines.push('Pop. max: ' + this.planet.popCap + ' unità');
       else lines.push('Solo estrazione');
 
       ctx.font = '11px "JetBrains Mono", ui-monospace, monospace';
