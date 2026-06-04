@@ -181,6 +181,12 @@
     const count = rng.int(4, 7);
     const radii = orbitRadii(rng, count);
 
+    // Decisione #26: ogni sistema ha un proprio tema; i corpi ricevono
+    // nomi propri dal tema (deterministico dal seed). Le lune appendono
+    // la lettera (a/b/c) al nome del pianeta padre, restando "figlie"
+    // visivamente.
+    const themePack = root.ORION.names.bodyNamesForSystem(rng);
+
     const isHome = systemId === galaxy.homeId;
     let habitableSlot = -1;     // per garantire un mondo ospitale al sistema d'origine
     let bestHabT = Infinity;
@@ -191,11 +197,17 @@
       const type = weightedPick(rng, zoneWeights(t));
       const def = BODY_TYPES[type];
       const childSeed = seedBase + ':b' + i;
+      const properName = themePack.names[i % themePack.names.length];
       const body = {
         key: 'b' + i,
         index: i,
         type: type,
-        name: sys.name + ' ' + ROMAN[i],
+        // Nome proprio dal tema del sistema (decisione #26). Il contesto
+        // di appartenenza (sigla regione + sistema) viene mostrato dalla
+        // UI come tag, mai dentro al nome stesso.
+        name: properName,
+        designation: ROMAN[i],
+        systemName: sys.name,
         orbit: radii[i],
         angle: rng.range(0, Math.PI * 2),
         seed: childSeed,
@@ -224,7 +236,9 @@
           key: body.key + 'm' + m,
           index: m,
           type: 'luna',
-          name: body.name + ' ' + MOON_LETTERS[m],
+          name: body.name + ' ' + MOON_LETTERS[m],   // es. "Zaffiro a"
+          designation: ROMAN[i] + ' ' + MOON_LETTERS[m],
+          systemName: sys.name,
           parentKey: body.key,
           moonOrbit: body.radius + 0.026 + m * 0.022 + rng.range(0, 0.02),
           angle: rng.range(0, Math.PI * 2),
@@ -284,7 +298,9 @@
       anomalies: anomalies,
       danger: sys.danger,
       dangerTier: sys.dangerTier,
-      isHome: isHome
+      isHome: isHome,
+      theme: themePack.theme,
+      themeLabel: themePack.themeLabel
     };
   }
 

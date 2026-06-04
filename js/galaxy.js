@@ -404,6 +404,22 @@
       gp.dangerTier = dangerTier(gp.danger);
     });
 
+    // Sigla regione (decisione #26): 3 lettere dal nome del gruppo, con
+    // gestione delle collisioni tra gruppi diversi (suffisso numerico
+    // sostituisce l'ultimo carattere).
+    const usedAcr = {};
+    groups.forEach(function (gp) {
+      const base = root.ORION.names.regionAcronym(gp.name);
+      let candidate = base;
+      let suffix = 1;
+      while (usedAcr[candidate]) {
+        suffix++;
+        candidate = base.slice(0, 2) + String(suffix);
+      }
+      usedAcr[candidate] = 1;
+      gp.acronym = candidate;
+    });
+
     return groups;
   }
 
