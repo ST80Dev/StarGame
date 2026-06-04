@@ -198,7 +198,7 @@
 
     // Slot — ±1 dalla base, mai sotto 2.
     const slotsBase = BASE_SLOTS[def.cat === 'moon' ? 'luna' : body.type] || 4;
-    const slots = Math.max(2, slotsBase + rng.int(-1, 1));
+    const slots = Math.max(2, slotsBase + rng.int(0, 2));
 
     // Capacità popolazione (0 se non abitabile).
     let popCap = BASE_POP_CAP[def.cat === 'moon' ? 'luna' : body.type] || 0;
