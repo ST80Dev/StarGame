@@ -1289,7 +1289,9 @@ function renderPlanetStruttureTab(host, planet, colony) {
         '<button class="btn btn--mini struct-item__info" data-info="' + def.id + '" type="button" title="Cosa fa, bonus/malus, concatenazioni" aria-label="Informazioni su ' + def.name + '">ⓘ</button>' +
         (check.ok
           ? '<button class="btn btn--mini" data-build="' + def.id + '" type="button">Costruisci</button>'
-          : '<span class="struct-item__locked" title="' + check.reason + '">◌</span>') +
+          : check.code === 'busy'
+            ? '<span class="struct-item__locked is-busy" title="' + check.reason + '">⏳ Occupato</span>'
+            : '<span class="struct-item__locked" title="' + check.reason + '">◌</span>') +
       '</li>';
     });
     html += '</ul></details>';

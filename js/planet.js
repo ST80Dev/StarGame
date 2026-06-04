@@ -455,6 +455,12 @@
         return { ok: false, reason: 'Risorse insufficienti (' + keys[i] + ')' };
       }
     }
+    // cantiere planetario occupato: una struttura alla volta per pianeta
+    // (decisione: coda lunga 1; vedi CLAUDE.md). Check ultimo: i blocchi
+    // permanenti hanno priorità nei tooltip.
+    if (colony.queue.length >= 1) {
+      return { ok: false, reason: 'Cantiere planetario occupato', code: 'busy' };
+    }
     return { ok: true };
   }
 
