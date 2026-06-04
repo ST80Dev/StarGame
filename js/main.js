@@ -760,7 +760,7 @@ function renderSystemInteriorPanel(title, content, system, disc) {
       const def = ORION.system.BODY_TYPES[b.type];
       const moonCount = b.moons ? b.moons.length : 0;
       const moonNote = moonCount
-        ? '<span class="body-chip__moons" title="' + moonCount + ' lun' + (moonCount === 1 ? 'a' : 'e') + '">☾' + moonCount + '</span>'
+        ? '<span class="body-chip__moons" title="' + moonCount + ' lun' + (moonCount === 1 ? 'a' : 'e') + '">● ' + moonCount + '</span>'
         : '';
       const bodyColony = ORION.game.colonies[system.id + ':' + b.key] || null;
       let badge = '';
