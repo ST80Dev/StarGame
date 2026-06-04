@@ -1171,3 +1171,150 @@ button { font-family: inherit; }
 .struct-item.is-queue .progress-bar__fill {
   background: linear-gradient(90deg, var(--c-accent), rgba(47,230,224,0.5));
 }
+
+/* =====================================================================
+   M06 — Salvataggio: pulsante HUD, modale, card slot, toast
+   ===================================================================== */
+.btn--save {
+  font-family: var(--font-data);
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  padding: 6px 12px;
+  margin-left: 12px;
+  background: rgba(47, 230, 224, 0.08);
+  border: 1px solid rgba(47, 230, 224, 0.30);
+  color: var(--c-accent);
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.btn--save:hover { background: rgba(47, 230, 224, 0.18); }
+
+.btn--danger {
+  color: #ff8a7c;
+  border-color: rgba(255, 138, 124, 0.45);
+  background: rgba(255, 138, 124, 0.08);
+}
+.btn--danger:hover { background: rgba(255, 138, 124, 0.16); }
+
+.save-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(4, 7, 18, 0.72);
+  backdrop-filter: blur(4px);
+}
+.save-modal[hidden] { display: none; }
+.save-modal__panel {
+  width: min(960px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  background: var(--c-panel);
+  border: 1px solid var(--c-border, rgba(255,255,255,0.15));
+  border-radius: 8px;
+  box-shadow: var(--shadow-panel), inset 0 1px 0 var(--c-panel-hilite);
+}
+.save-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--c-border, rgba(255,255,255,0.10));
+}
+.save-modal__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  letter-spacing: 0.12em;
+  color: var(--c-accent);
+  text-transform: uppercase;
+}
+.save-modal__body { padding: 18px; display: flex; flex-direction: column; gap: 18px; }
+
+.save-section { display: flex; flex-direction: column; gap: 10px; }
+.save-section__title {
+  margin: 0;
+  font-family: var(--font-data);
+  font-size: 0.74rem;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--c-text-soft);
+}
+.save-section--actions {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--c-border, rgba(255,255,255,0.10));
+}
+.save-empty {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--c-text-faint);
+  font-style: italic;
+}
+
+.save-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+.save-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--c-border, rgba(255,255,255,0.15));
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.save-card--auto { border-color: rgba(47, 230, 224, 0.45); background: rgba(47, 230, 224, 0.05); }
+.save-card--empty { background: rgba(255, 255, 255, 0.01); border-style: dashed; opacity: 0.85; }
+.save-card__name {
+  font-family: var(--font-data);
+  font-size: 0.85rem;
+  color: var(--c-text);
+  letter-spacing: 0.04em;
+}
+.save-card__meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 0.72rem;
+}
+.save-card__meta div { display: flex; flex-direction: column; }
+.save-card__meta dt { color: var(--c-text-faint); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.save-card__meta dd { margin: 0; color: var(--c-text-soft); }
+.save-card__meta code { font-family: var(--font-data); font-size: 0.7rem; color: var(--c-accent); }
+.save-card__actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+
+.save-toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  padding: 8px 16px;
+  background: rgba(14, 20, 44, 0.92);
+  border: 1px solid rgba(47, 230, 224, 0.35);
+  border-radius: 999px;
+  color: var(--c-accent);
+  font-family: var(--font-data);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  z-index: 200;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
+}
+.save-toast.is-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}

@@ -13,7 +13,7 @@
 
 const ORION = window.ORION || (window.ORION = {});
 
-ORION.version = '0.5.0-M05';
+ORION.version = '0.6.0-M06';
 
 /* Etichette provvisorie del viewport per le viste non ancora implementate. */
 ORION.viewLabels = {
@@ -43,61 +43,16 @@ ORION.lastChronicleId = -1;
 /* ---------------------------------------------------------------------
    Generazione/avvio di una partita (galassia)
    --------------------------------------------------------------------- */
-/* Preview leggera della persistenza (M06): seed + delta delle colonie +
-   Impulsi cumulati vivono in localStorage così l'F5 NON perde la partita.
-   Il save completo (slot multipli + export/import .json + log limitato
-   della cronaca) è M06 — il payload qui è già nel formato seed+delta con
-   schemaVersion: 1, quindi M06 lo estenderà senza rifacimenti.
-   "Nuova" rigenera. */
-const SEED_KEY = 'orion.seed';
-const GAME_KEY = 'orion.game';
-/* Schema 2 (decisione #23): aggiunge mode + victoryTracks ai save M05.
-   La migrazione da v1 vive in ORION.victory.migrate. */
-const GAME_SCHEMA = 2;
-
-function loadSavedSeed() {
-  try { return window.localStorage.getItem(SEED_KEY) || null; }
-  catch (e) { return null; }
-}
-function persistSeed(seed) {
-  try { window.localStorage.setItem(SEED_KEY, seed); } catch (e) {}
-}
-function clearSavedSeed() {
-  try { window.localStorage.removeItem(SEED_KEY); } catch (e) {}
-}
-function loadSavedGame() {
-  try {
-    const raw = window.localStorage.getItem(GAME_KEY);
-    if (!raw) return null;
-    let data = JSON.parse(raw);
-    if (!data) return null;
-    // Migrazione v1 → v2 (mode + victoryTracks) — decisione #23.
-    if (ORION.victory && data.schema < GAME_SCHEMA) {
-      data = ORION.victory.migrate(data);
-    }
-    if (data.schema !== GAME_SCHEMA) return null;
-    return data;
-  } catch (e) { return null; }
-}
+/* Persistenza M06 (decisione #24): tutta in `ORION.save` (js/save.js).
+   Questi wrapper restano per dare un punto unico di chiamata dentro
+   main.js e per rimanere idempotenti se save.js non fosse ancora carico
+   (defensive). Slot multipli + export/import .json + cronaca persistita
+   vivono nel modulo dedicato. */
 function persistGame(game) {
-  if (!game) return;
-  try {
-    const payload = {
-      schema: GAME_SCHEMA,
-      seed: game.seed,
-      startEpochOrbita: game.startEpochOrbita,
-      timeImpulsi: game.timeImpulsi || 0,
-      homePlanetKey: game.homePlanetKey,
-      colonies: game.colonies,
-      mode: game.mode,
-      victoryTracks: game.victoryTracks,
-      eventSchedule: game.eventSchedule || []
-    };
-    window.localStorage.setItem(GAME_KEY, JSON.stringify(payload));
-  } catch (e) {}
+  if (ORION.save && ORION.save.autosave) ORION.save.autosave(game);
 }
 function clearSavedGame() {
-  try { window.localStorage.removeItem(GAME_KEY); } catch (e) {}
+  if (ORION.save && ORION.save.clearAutosave) ORION.save.clearAutosave();
 }
 
 /* Deep copy difensiva di un oggetto mode (decisione #23). */
@@ -112,8 +67,10 @@ function cloneMode(m) {
 
 function newGame(seed, opts) {
   opts = opts || {};
+  /* Se ci viene passato un payload (load slot / import .json), il seed
+     viene da lì — coerente con seed+delta (decisione #5/#24). */
+  if (opts.payload && opts.payload.seed) seed = opts.payload.seed;
   seed = seed || ORION.rng.newSeed();
-  persistSeed(seed);
   const galaxy = ORION.galaxy.generate(seed);
   const state = ORION.galaxy.createState(galaxy);
 
@@ -140,7 +97,10 @@ function newGame(seed, opts) {
     victoryTracks: ORION.victory ? ORION.victory.defaultTracks() : {},
     /* Scheduler eventi (gancio M17). In M05 vuoto; il Sopravvissuto
        (decisione #23) inietterà una crisi ancorata a DS 0. */
-    eventSchedule: []
+    eventSchedule: [],
+    /* M06: cronaca persistita (decisione #24, cap a ORION.save.CHRONICLE_CAP).
+       Più recente in TESTA all'array, identico al DOM. */
+    chronicle: []
   };
   // startDS = Data Stellare INIZIALE (epoca .00), fissa per la partita.
   ORION.game.startDS = ORION.time.format(startOrbita * 100);
@@ -148,25 +108,29 @@ function newGame(seed, opts) {
   // M04: colonizza il pianeta natale (homeWorld del sistema d'origine).
   colonizeHomePlanet(ORION.game, ORION.game.startDS);
 
-  // Se è una "continua" e c'è uno snapshot compatibile, ripristina lo
-  // stato persistito (delta colonie + Impulsi cumulati). La galassia
-  // resta rigenerata dal seed (decisione #5).
-  if (opts.restore) {
-    const saved = loadSavedGame();
-    if (saved && saved.seed === seed) {
-      ORION.game.timeImpulsi = saved.timeImpulsi || 0;
-      ORION.game.colonies = saved.colonies || ORION.game.colonies;
-      ORION.game.homePlanetKey = saved.homePlanetKey || ORION.game.homePlanetKey;
-      // Multi-pista (decisione #23): ripristina mode/tracks/scheduler se presenti.
-      if (saved.mode) ORION.game.mode = saved.mode;
-      if (saved.victoryTracks) ORION.game.victoryTracks = saved.victoryTracks;
-      if (saved.eventSchedule) ORION.game.eventSchedule = saved.eventSchedule;
-    }
+  // M06: se c'è un payload (autosave/slot/import), ripristina i delta
+  // sopra la galassia rigenerata. La galassia stessa resta sacra
+  // (seed+delta, decisione #5).
+  const saved = opts.payload || null;
+  if (saved && saved.seed === seed) {
+    ORION.game.timeImpulsi = saved.timeImpulsi || 0;
+    ORION.game.colonies = saved.colonies || ORION.game.colonies;
+    ORION.game.homePlanetKey = saved.homePlanetKey || ORION.game.homePlanetKey;
+    if (saved.mode) ORION.game.mode = saved.mode;
+    if (saved.victoryTracks) ORION.game.victoryTracks = saved.victoryTracks;
+    if (saved.eventSchedule) ORION.game.eventSchedule = saved.eventSchedule;
+    if (Array.isArray(saved.chronicle)) ORION.game.chronicle = saved.chronicle.slice();
   }
 
   setHudDate(ORION.time.currentDS(ORION.game));
   updateGlobalResourceHud();
-  resetChronicle(galaxy, ORION.game.startDS);
+  /* Cronaca: se abbiamo entry persistite, le ripristiniamo nel DOM;
+     altrimenti partiamo da capo con la voce di benvenuto. */
+  if (ORION.game.chronicle && ORION.game.chronicle.length) {
+    restoreChronicleDom(ORION.game);
+  } else {
+    resetChronicle(galaxy, ORION.game.startDS);
+  }
   persistGame(ORION.game);
   return ORION.game;
 }
@@ -1407,22 +1371,33 @@ function setHudDate(ds) {
 }
 
 /* Log limitato agli ultimi N (decisione #5): unica fonte di crescita
-   illimitata della cronaca, quindi capata. Più recente in cima. */
+   illimitata della cronaca, quindi capata. Più recente in cima.
+   M06: la cronaca è persistita nel save (decisione #24) — ogni push
+   aggiorna sia il DOM che `game.chronicle[]`. */
 const MAX_CHRONICLE = 40;
 
 function resetChronicle(galaxy, startDS) {
   ORION.lastChronicleId = -1;
+  const home = galaxy.systems[galaxy.homeId];
+  const html = startDS + ' — Galassia generata: ' + galaxy.count + ' sistemi. ' +
+    'Origine nel sistema <strong>' + home.name + '</strong>.';
+  if (ORION.game) ORION.game.chronicle = [{ html: html, mod: 'system' }];
   const log = document.querySelector('[data-bind="chronicle"]');
   if (!log) return;
-  const home = galaxy.systems[galaxy.homeId];
   log.innerHTML =
-    '<li class="chronicle__entry chronicle__entry--system">' +
-      startDS + ' — Galassia generata: ' + galaxy.count + ' sistemi. ' +
-      'Origine nel sistema <strong>' + home.name + '</strong>.' +
-    '</li>';
+    '<li class="chronicle__entry chronicle__entry--system">' + html + '</li>';
 }
 
 function pushChronicle(html, modifier) {
+  /* Persist nel game state: il DOM lo ricaviamo, ma la fonte di verità
+     per il save (e il replay dopo F5) è game.chronicle[]. */
+  if (ORION.game) {
+    if (!Array.isArray(ORION.game.chronicle)) ORION.game.chronicle = [];
+    ORION.game.chronicle.unshift({ html: html, mod: modifier || '' });
+    if (ORION.game.chronicle.length > MAX_CHRONICLE) {
+      ORION.game.chronicle.length = MAX_CHRONICLE;
+    }
+  }
   const log = document.querySelector('[data-bind="chronicle"]');
   if (!log) return;
   const li = document.createElement('li');
@@ -1430,6 +1405,17 @@ function pushChronicle(html, modifier) {
   li.innerHTML = html;
   log.insertBefore(li, log.firstChild);
   while (log.children.length > MAX_CHRONICLE) log.removeChild(log.lastChild);
+}
+
+/* M06: ripristina la cronaca persistita nel DOM dopo un load/import.
+   Ordine: più recente in cima (identico al runtime). */
+function restoreChronicleDom(game) {
+  const log = document.querySelector('[data-bind="chronicle"]');
+  if (!log || !game || !Array.isArray(game.chronicle)) return;
+  log.innerHTML = game.chronicle.map(function (e) {
+    const mod = e.mod ? ' chronicle__entry--' + e.mod : '';
+    return '<li class="chronicle__entry' + mod + '">' + e.html + '</li>';
+  }).join('');
 }
 
 /* Annota in cronaca l'ingresso in un sistema, coerente con la nebbia di
@@ -1458,15 +1444,258 @@ function chronicleSystemEntry(system, disc) {
 }
 
 /* ---------------------------------------------------------------------
+   M06 — Pannello salvataggi (slot multipli, export/import, nuova partita)
+   --------------------------------------------------------------------- */
+function initSaveControls() {
+  const openBtn = document.querySelector('[data-action="open-save"]');
+  if (openBtn) openBtn.addEventListener('click', openSaveModal);
+  const modal = document.querySelector('[data-bind="save-modal"]');
+  if (!modal) return;
+  modal.addEventListener('click', function (e) {
+    if (e.target === modal || e.target.matches('[data-action="save-close"]')) {
+      closeSaveModal();
+    }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !modal.hasAttribute('hidden')) closeSaveModal();
+  });
+}
+
+function openSaveModal() {
+  const modal = document.querySelector('[data-bind="save-modal"]');
+  if (!modal) return;
+  modal.removeAttribute('hidden');
+  renderSaveModal();
+}
+function closeSaveModal() {
+  const modal = document.querySelector('[data-bind="save-modal"]');
+  if (modal) modal.setAttribute('hidden', '');
+}
+
+function renderSaveModal() {
+  const body = document.querySelector('[data-bind="save-body"]');
+  if (!body) return;
+  const data = ORION.save.list();
+  const ironman = ORION.save.isIronman(ORION.game);
+
+  /* Autosave (sempre visibile, sempre caricabile — anche in ironman) */
+  const auto = data.autosave;
+  let html = '<section class="save-section">' +
+    '<h3 class="save-section__title">Autosave</h3>' +
+    (auto ? saveCardHtml(auto, { canLoad: true, canSave: false, canErase: false, isAuto: true })
+          : '<p class="save-empty">Nessun autosave ancora. Avvia il tempo o costruisci qualcosa.</p>') +
+    '</section>';
+
+  /* Slot manuali (5). Nascosti in ironman (decisione #23/#24). */
+  if (!ironman) {
+    html += '<section class="save-section">' +
+      '<h3 class="save-section__title">Slot manuali (5)</h3>' +
+      '<ul class="save-grid">';
+    for (let i = 0; i < ORION.save.MAX_MANUAL_SLOTS; i++) {
+      const slot = data.slots[i];
+      html += '<li class="save-grid__item">' +
+        (slot
+          ? saveCardHtml(slot, { canLoad: true, canSave: true, canErase: true })
+          : emptySlotHtml(i)) +
+        '</li>';
+    }
+    html += '</ul></section>';
+  } else {
+    html += '<section class="save-section">' +
+      '<h3 class="save-section__title">Slot manuali</h3>' +
+      '<p class="save-empty">Modalità Ironman: solo autosave + export/import .json (decisione #23).</p>' +
+      '</section>';
+  }
+
+  /* Export/Import + Nuova partita */
+  html += '<section class="save-section save-section--actions">' +
+    '<button class="btn" data-action="save-export" type="button">⬇ Esporta .json</button>' +
+    '<button class="btn" data-action="save-import" type="button">⬆ Importa .json</button>' +
+    '<button class="btn btn--danger" data-action="save-newgame" type="button">✦ Nuova partita</button>' +
+    '</section>';
+
+  body.innerHTML = html;
+  attachSaveModalHandlers(body);
+}
+
+function saveCardHtml(meta, perms) {
+  const ds = meta.ds || 'DS —';
+  const date = meta.ts ? new Date(meta.ts).toLocaleString() : '—';
+  const preset = meta.preset ? ' · ' + meta.preset : '';
+  const buttons = [];
+  if (perms.canLoad) buttons.push('<button class="btn btn--mini" data-action="save-load" data-idx="' + meta.idx + '" type="button">Carica</button>');
+  if (perms.canSave) buttons.push('<button class="btn btn--mini" data-action="save-overwrite" data-idx="' + meta.idx + '" type="button">Sovrascrivi</button>');
+  if (perms.canErase) buttons.push('<button class="btn btn--mini" data-action="save-erase" data-idx="' + meta.idx + '" type="button">Cancella</button>');
+  return '<div class="save-card' + (perms.isAuto ? ' save-card--auto' : '') + '">' +
+    '<div class="save-card__name">' + escapeHtml(meta.name) + '</div>' +
+    '<dl class="save-card__meta">' +
+      '<div><dt>Data Stellare</dt><dd>' + ds + '</dd></div>' +
+      '<div><dt>Seed</dt><dd><code>' + escapeHtml(meta.seed) + '</code></dd></div>' +
+      '<div><dt>Colonie</dt><dd>' + meta.colonies + '</dd></div>' +
+      '<div><dt>Modalità</dt><dd>' + escapeHtml(meta.mode) + preset + '</dd></div>' +
+      '<div><dt>Salvato</dt><dd>' + date + '</dd></div>' +
+    '</dl>' +
+    '<div class="save-card__actions">' + buttons.join('') + '</div>' +
+    '</div>';
+}
+
+function emptySlotHtml(idx) {
+  return '<div class="save-card save-card--empty">' +
+    '<div class="save-card__name">Slot ' + (idx + 1) + ' — vuoto</div>' +
+    '<div class="save-card__actions">' +
+      '<button class="btn btn--mini" data-action="save-new" data-idx="' + idx + '" type="button">Salva qui</button>' +
+    '</div>' +
+    '</div>';
+}
+
+function attachSaveModalHandlers(root) {
+  root.querySelectorAll('[data-action="save-load"]').forEach(function (b) {
+    b.addEventListener('click', function () { handleLoad(Number(b.dataset.idx)); });
+  });
+  root.querySelectorAll('[data-action="save-overwrite"]').forEach(function (b) {
+    b.addEventListener('click', function () { handleSave(Number(b.dataset.idx), true); });
+  });
+  root.querySelectorAll('[data-action="save-new"]').forEach(function (b) {
+    b.addEventListener('click', function () { handleSave(Number(b.dataset.idx), false); });
+  });
+  root.querySelectorAll('[data-action="save-erase"]').forEach(function (b) {
+    b.addEventListener('click', function () { handleErase(Number(b.dataset.idx)); });
+  });
+  const exp = root.querySelector('[data-action="save-export"]');
+  if (exp) exp.addEventListener('click', handleExport);
+  const imp = root.querySelector('[data-action="save-import"]');
+  if (imp) imp.addEventListener('click', handleImport);
+  const ng = root.querySelector('[data-action="save-newgame"]');
+  if (ng) ng.addEventListener('click', handleNewGame);
+}
+
+function handleSave(idx, overwrite) {
+  const g = ORION.game;
+  if (!g) return;
+  if (overwrite && !confirm('Sovrascrivere lo slot ' + (idx + 1) + ' con la partita corrente?')) return;
+  const name = prompt('Nome dello slot:', 'Slot ' + (idx + 1));
+  if (name === null) return;
+  ORION.save.saveSlot(idx, g, name.trim() || ('Slot ' + (idx + 1)));
+  showToast('Slot ' + (idx + 1) + ' salvato');
+  renderSaveModal();
+}
+
+function handleLoad(idx) {
+  /* idx === -1 → autosave */
+  const payload = (idx === -1) ? ORION.save.loadAutosave() : ORION.save.loadSlot(idx);
+  if (!payload) { alert('Slot vuoto o incompatibile.'); return; }
+  if (!confirm('Caricare questa partita? La partita corrente verrà sostituita (salva prima se non vuoi perderla).')) return;
+  loadPayloadAsGame(payload);
+}
+
+function handleErase(idx) {
+  if (!confirm('Cancellare definitivamente lo slot ' + (idx + 1) + '?')) return;
+  ORION.save.eraseSlot(idx);
+  showToast('Slot ' + (idx + 1) + ' cancellato');
+  renderSaveModal();
+}
+
+function handleExport() {
+  const name = ORION.save.exportJson(ORION.game);
+  if (name) showToast('Esportato: ' + name);
+}
+
+function handleImport() {
+  ORION.save.pickJsonFile().then(function (text) {
+    const r = ORION.save.parseImport(text);
+    if (!r.ok) { alert('Import fallito: ' + r.reason); return; }
+    const p = r.payload;
+    const ironman = ORION.save.isIronman(ORION.game);
+    const sameSeed = ORION.game && p.seed === ORION.game.seed;
+    let msg = 'Caricare la partita seed ' + p.seed +
+      ' (' + (currentDsOfPayload(p)) + ')?';
+    if (!sameSeed) msg += ' La galassia verrà rigenerata dal seed del file.';
+    msg += ' La partita corrente verrà sostituita.';
+    if (ironman) msg += '\n\nModalità Ironman attiva: il file verrà ricevuto come autosave.';
+    if (!confirm(msg)) return;
+    loadPayloadAsGame(p);
+  }).catch(function () { /* annullato dall'utente */ });
+}
+
+function currentDsOfPayload(p) {
+  if (!p || !ORION.time) return 'DS —';
+  const orb = p.startEpochOrbita || 0;
+  const i = p.timeImpulsi || 0;
+  return ORION.time.format(orb * 100 + i);
+}
+
+function handleNewGame() {
+  if (!confirm('Iniziare una nuova partita? La partita corrente verrà sostituita (salva prima se non vuoi perderla).')) return;
+  clearSavedGame();
+  newGame();
+  remountAfterLoad();
+  showToast('Nuova partita avviata');
+  closeSaveModal();
+}
+
+function loadPayloadAsGame(payload) {
+  /* M06: newGame ricostruisce la galassia dal seed del payload, poi
+     applica il delta (colonie/tempo/cronaca/mode). Coerente con
+     seed+delta (decisione #5). */
+  newGame(payload.seed, { payload: payload });
+  remountAfterLoad();
+  showToast('Partita caricata');
+  closeSaveModal();
+}
+
+function remountAfterLoad() {
+  /* Smonta viste correnti e rimonta la galassia: dopo un load, la mappa
+     punta alla galassia del nuovo seed. */
+  if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; }
+  if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
+  if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
+  const stage = document.querySelector('[data-view-stage]');
+  if (stage) renderGalaxyView(stage);
+  setNavActive('galaxy');
+  updateGlobalResourceHud();
+  setHudDate(ORION.time.currentDS(ORION.game));
+  updateTimeControlsHint();
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/* Toast non invasivo (decisione #24 / §21: "salva prima di azioni
+   irreversibili" — feedback discreto, niente popup). */
+function showToast(text) {
+  let host = document.querySelector('[data-bind="toast"]');
+  if (!host) {
+    host = document.createElement('div');
+    host.className = 'save-toast';
+    host.setAttribute('data-bind', 'toast');
+    document.body.appendChild(host);
+  }
+  host.textContent = text;
+  host.classList.add('is-visible');
+  clearTimeout(host._t);
+  host._t = setTimeout(function () { host.classList.remove('is-visible'); }, 1800);
+}
+
+/* ---------------------------------------------------------------------
    Avvio
    --------------------------------------------------------------------- */
 function boot() {
-  // Se in localStorage c'è un save compatibile, lo ripristiniamo (seed +
-  // delta colonie + Impulsi cumulati). "Nuova" rigenera tutto.
-  const seed = loadSavedSeed();
-  newGame(seed, { restore: !!seed });
+  /* M06: assorbe eventuale autosave M05 (chiavi legacy), poi continua
+     dall'autosave moderno se presente. "Nuova partita" è nel pannello
+     salvataggi. */
+  if (ORION.save && ORION.save.migrateLegacy) ORION.save.migrateLegacy();
+  const auto = ORION.save && ORION.save.loadAutosave ? ORION.save.loadAutosave() : null;
+  if (auto) {
+    newGame(auto.seed, { payload: auto });
+  } else {
+    newGame();
+  }
   initNavigation();
   initTimeControls();
+  initSaveControls();
   console.info('%cOrion Empires ' + ORION.version + ' — galassia pronta (seed ' + ORION.game.seed + ', ' + ORION.time.currentDS(ORION.game) + ').', 'color:#2fe6e0');
 }
 
