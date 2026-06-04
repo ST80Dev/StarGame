@@ -48,6 +48,61 @@
     return from + d;
   }
 
+  /* ------------------------------------------------------------------
+     Quaternion (decisione #20): rotazione libera 360° su tutti e 3 gli
+     assi senza gimbal lock. Sostituisce la coppia yaw/pitch.
+     ------------------------------------------------------------------ */
+  function Quat(w, x, y, z) { this.w = w; this.x = x; this.y = y; this.z = z; }
+  Quat.identity = function () { return new Quat(1, 0, 0, 0); };
+  Quat.fromAxisAngle = function (ax, ay, az, ang) {
+    const h = ang * 0.5, s = Math.sin(h);
+    return new Quat(Math.cos(h), ax * s, ay * s, az * s);
+  };
+  Quat.prototype.mul = function (o) {
+    return new Quat(
+      this.w * o.w - this.x * o.x - this.y * o.y - this.z * o.z,
+      this.w * o.x + this.x * o.w + this.y * o.z - this.z * o.y,
+      this.w * o.y - this.x * o.z + this.y * o.w + this.z * o.x,
+      this.w * o.z + this.x * o.y - this.y * o.x + this.z * o.w
+    );
+  };
+  Quat.prototype.normalize = function () {
+    const n = Math.sqrt(this.w * this.w + this.x * this.x + this.y * this.y + this.z * this.z);
+    if (n === 0) return Quat.identity();
+    return new Quat(this.w / n, this.x / n, this.y / n, this.z / n);
+  };
+  Quat.prototype.rotate = function (vx, vy, vz) {
+    const w = this.w, x = this.x, y = this.y, z = this.z;
+    const ww = w * w, xx = x * x, yy = y * y, zz = z * z;
+    const wx = w * x, wy = w * y, wz = w * z;
+    const xy = x * y, xz = x * z, yz = y * z;
+    return {
+      x: vx * (ww + xx - yy - zz) + 2 * vy * (xy - wz) + 2 * vz * (xz + wy),
+      y: 2 * vx * (xy + wz) + vy * (ww - xx + yy - zz) + 2 * vz * (yz - wx),
+      z: 2 * vx * (xz - wy) + 2 * vy * (yz + wx) + vz * (ww - xx - yy + zz)
+    };
+  };
+  /* Interpolazione lineare normalizzata: per piccoli angoli è
+     indistinguibile da slerp ed evita la complessità. */
+  Quat.lerp = function (a, b, t) {
+    let bw = b.w, bx = b.x, by = b.y, bz = b.z;
+    const dot = a.w * bw + a.x * bx + a.y * by + a.z * bz;
+    if (dot < 0) { bw = -bw; bx = -bx; by = -by; bz = -bz; }
+    return new Quat(
+      a.w + (bw - a.w) * t,
+      a.x + (bx - a.x) * t,
+      a.y + (by - a.y) * t,
+      a.z + (bz - a.z) * t
+    ).normalize();
+  };
+  Quat.prototype.distSq = function (o) {
+    let bw = o.w, bx = o.x, by = o.y, bz = o.z;
+    const dot = this.w * bw + this.x * bx + this.y * by + this.z * bz;
+    if (dot < 0) { bw = -bw; bx = -bx; by = -by; bz = -bz; }
+    const dw = this.w - bw, dx = this.x - bx, dy = this.y - by, dz = this.z - bz;
+    return dw * dw + dx * dx + dy * dy + dz * dz;
+  };
+
   /* Colori per gruppo (accenti del tema, ciclici). */
   const GROUP_COLORS = [
     '#2fe6e0', '#8a6cff', '#ff9d3c', '#d6457f',
@@ -68,9 +123,10 @@
     return t ? t.color : '#ffffff';
   }
 
-  /* Tilt fisso del disco galattico — sufficiente per dare profondità senza
-     compromettere la leggibilità dei nodi. */
+  /* Tilt iniziale del disco galattico — quaternion fisso, ~31° attorno
+     all'asse X (orizzontale schermo). L'utente poi è libero su 3 assi. */
   const DEFAULT_PITCH = 0.55;             // ~31°
+  function defaultOrient() { return Quat.fromAxisAngle(1, 0, 0, DEFAULT_PITCH); }
   /* Distanza camera-centro: regola l'intensità della prospettiva. */
   const VIEWER_D = 1.55;
 
@@ -90,9 +146,8 @@
       this.offsetY = 0;
       this.fitScale = 1; // scala base che fa entrare la galassia
 
-      // pseudo-3D
-      this.yaw   = 0;
-      this.pitch = DEFAULT_PITCH;
+      // pseudo-3D — rotazione libera 360° via quaternion (decisione #20)
+      this.orient = defaultOrient();
 
       // navigazione gerarchica
       this.activeGroupId = -1; // gruppo "entrato" esplicitamente (-1 = nessuno)
@@ -111,7 +166,8 @@
       this.dragMoved = false;
       this.lastPinchDist = 0;
       this.lastPinchAngle = 0;
-      this.rotateModifier = false;  // Shift premuto = drag ruota yaw
+      this.rotateModifier = false;  // Shift premuto = arcball (yaw+pitch)
+      this.rollModifier = false;    // Alt premuto = drag ruota roll
 
       // sfondo deterministico (nebulose + polvere + stelle), in spazio mondo 3D
       this.nebulae = [];
@@ -120,7 +176,8 @@
 
       // animazione camera
       this._anim = false;
-      this._tScale = 1; this._tox = 0; this._toy = 0; this._tyaw = 0;
+      this._tScale = 1; this._tox = 0; this._toy = 0;
+      this._tOrient = defaultOrient();
 
       this._onResize = this.resize.bind(this);
       this._onKeyDown = this._handleKeyDown.bind(this);
@@ -182,17 +239,18 @@
     _buildBackdrop() {
       const rng = root.ORION.rng.makeRng(this.galaxy.seed + ':backdrop');
       // nebulose: blob morbidi in spazio mondo, vicino al piano galattico
-      // Nebulose: meno numerose e meno intense per non saturare la mappa.
+      // Nebulose ridotte all'osso (richiesta utente "vista più pulita,
+      // meno alone nubuloso colorato"): 6 macchie sobrie, alpha bassa.
       this.nebulae = [];
-      const nNeb = 10;
+      const nNeb = 6;
       for (let i = 0; i < nNeb; i++) {
         this.nebulae.push({
-          x: rng.range(-0.1, 1.1),
-          y: rng.range(-0.1, 1.1),
-          z: rng.range(-0.10, 0.10),
-          r: rng.range(0.18, 0.42),
+          x: rng.range(-0.05, 1.05),
+          y: rng.range(-0.05, 1.05),
+          z: rng.range(-0.08, 0.08),
+          r: rng.range(0.16, 0.34),
           color: rng.pick(NEBULA_COLORS),
-          alpha: rng.range(0.04, 0.11)
+          alpha: rng.range(0.02, 0.055)
         });
       }
       // polvere stellare decorativa: distribuita nel disco con un po' di alone.
@@ -210,14 +268,14 @@
           warm: rng.chance(0.5)
         });
       }
-      // poche stelle "eroe" con bloom + spicchi di diffrazione (sul piano)
+      // Poche stelle "eroe" con bloom: 4 sole, contenute, per non saturare.
       this.brightStars = [];
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < 4; i++) {
         this.brightStars.push({
-          x: rng.range(0.04, 0.96),
-          y: rng.range(0.04, 0.96),
-          z: rng.range(-0.05, 0.05),
-          len: 16 + rng.float() * 22,
+          x: rng.range(0.06, 0.94),
+          y: rng.range(0.06, 0.94),
+          z: rng.range(-0.04, 0.04),
+          len: 14 + rng.float() * 18,
           warm: rng.chance(0.4)
         });
       }
@@ -250,35 +308,29 @@
       this.scale = this.fitScale;
       this.offsetX = (this.cssW - this.scale) / 2;
       this.offsetY = (this.cssH - this.scale) / 2;
-      this.yaw = 0;
+      this.orient = defaultOrient();
       this.requestRender();
     }
 
-    /* ---- Proiezione mondo 3D → schermo ----
-       Pipeline: world(x,y,z) → centro a (0.5,0.5,0) → rotazione yaw (Z) →
-       rotazione pitch (X) → prospettiva (foreshortening) → scala+offset. */
+    /* ---- Proiezione mondo 3D → schermo (quaternionica) ----
+       Pipeline: world(x,y,z) → centro a (0.5,0.5,0) → rotazione `orient`
+       (libera su 3 assi) → prospettiva → scala+offset. */
     project(wx, wy, wz) {
       const dx = wx - 0.5;
       const dy = wy - 0.5;
       const dz = wz || 0;
 
-      const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
-      const x1 = dx * cy - dy * sy;
-      const y1 = dx * sy + dy * cy;
-      const z1 = dz;
-
-      const sp = Math.sin(this.pitch), cp = Math.cos(this.pitch);
-      const x2 = x1;
-      const y2 = y1 * cp - z1 * sp;
-      const z2 = y1 * sp + z1 * cp;        // >0 = verso il viewer
-
-      const persp = VIEWER_D / Math.max(0.4, VIEWER_D - z2);
+      const r = this.orient.rotate(dx, dy, dz);
+      const persp = VIEWER_D / Math.max(0.4, VIEWER_D - r.z);
 
       const cx0 = this.offsetX + this.scale * 0.5;
       const cy0 = this.offsetY + this.scale * 0.5;
-      const sx_ = x2 * persp * this.scale + cx0;
-      const sy_ = y2 * persp * this.scale + cy0;
-      return { x: sx_, y: sy_, depth: z2, parallax: persp };
+      return {
+        x: r.x * persp * this.scale + cx0,
+        y: r.y * persp * this.scale + cy0,
+        depth: r.z,
+        parallax: persp
+      };
     }
 
     /* Inverso approssimato di project (solo per pan/zoom centrato sul puntatore):
@@ -371,11 +423,25 @@
 
     _handleKeyDown(e) {
       if (e.key === 'Shift') this.rotateModifier = true;
-      // Q/E ruotano lo yaw in steps (accessibilità tastiera)
-      if (e.key === 'q' || e.key === 'Q') { this.yaw -= 0.18; this.requestRender(); }
-      else if (e.key === 'e' || e.key === 'E') { this.yaw += 0.18; this.requestRender(); }
+      if (e.key === 'Alt') this.rollModifier = true;
+      // Q/E yaw (asse Y schermo) · R/F roll (asse Z vista) · T/G pitch (asse X)
+      let axis = null, ang = 0;
+      if (e.key === 'q' || e.key === 'Q') { axis = [0, 1, 0]; ang = -0.20; }
+      else if (e.key === 'e' || e.key === 'E') { axis = [0, 1, 0]; ang =  0.20; }
+      else if (e.key === 'r' || e.key === 'R') { axis = [0, 0, 1]; ang = -0.20; }
+      else if (e.key === 'f' || e.key === 'F') { axis = [0, 0, 1]; ang =  0.20; }
+      else if (e.key === 't' || e.key === 'T') { axis = [1, 0, 0]; ang = -0.20; }
+      else if (e.key === 'g' || e.key === 'G') { axis = [1, 0, 0]; ang =  0.20; }
+      if (axis) {
+        const dq = Quat.fromAxisAngle(axis[0], axis[1], axis[2], ang);
+        this.orient = dq.mul(this.orient).normalize();
+        this.requestRender();
+      }
     }
-    _handleKeyUp(e) { if (e.key === 'Shift') this.rotateModifier = false; }
+    _handleKeyUp(e) {
+      if (e.key === 'Shift') this.rotateModifier = false;
+      if (e.key === 'Alt') this.rollModifier = false;
+    }
 
     _localPos(e) {
       const rect = this.canvas.getBoundingClientRect();
@@ -416,17 +482,17 @@
       this.pointers.set(e.pointerId, p);
 
       if (this.pointers.size === 2) {
-        // 2 dita: pinch zooma; la rotazione delle due dita ruota lo yaw
+        // 2 dita: pinch zooma; la rotazione delle dita applica roll
+        // (rotazione attorno all'asse della vista), naturale su touch.
         const d = this._pinchDist();
         const a = this._pinchAngle();
         if (this.lastPinchDist > 0) {
           const center = this._pinchCenter();
           this._zoomAt(center.x, center.y, d / this.lastPinchDist);
           let da = a - this.lastPinchAngle;
-          // normalizza salti di ±π
           if (da > Math.PI) da -= Math.PI * 2;
           if (da < -Math.PI) da += Math.PI * 2;
-          this.yaw += da;
+          this._applyRoll(da);
         }
         this.lastPinchDist = d;
         this.lastPinchAngle = a;
@@ -438,12 +504,16 @@
       const dx = p.x - prev.x, dy = p.y - prev.y;
       if (Math.abs(dx) + Math.abs(dy) > 1) this.dragMoved = true;
 
-      if (this.rotateModifier) {
-        // Shift + drag = ruota yaw (orizzontale) e modula pitch (verticale).
-        // Sensibilità "generosa" così funziona bene anche grabbing al centro,
-        // dove il punto stesso si muove poco perché vicino all'asse di rotazione.
-        this.yaw += dx * 0.020;
-        this.pitch = clamp(this.pitch - dy * 0.010, 0.02, Math.PI / 2 - 0.02);
+      if (this.rollModifier) {
+        // Alt + drag orizzontale = roll (asse Z della vista)
+        this._applyRoll(dx * 0.012);
+      } else if (this.rotateModifier) {
+        // Shift + drag = arcball: rotazione attorno a un asse perpendicolare
+        // al movimento del puntatore, sul piano dello schermo.
+        // Drag orizzontale → asse Y schermo → ruota in "yaw" rispetto al
+        // disco corrente. Drag verticale → asse X schermo → "pitch".
+        // Funziona su tutti e 3 gli assi: drag diagonali = oblique.
+        this._applyArcball(dx, dy);
       } else {
         this.offsetX += dx;
         this.offsetY += dy;
@@ -535,17 +605,35 @@
       return Math.atan2(pts[1].y - pts[0].y, pts[1].x - pts[0].x);
     }
 
+    /* Applica un incremento di rotazione "arcball": l'asse è perpendicolare
+       al vettore di trascinamento sullo schermo (camera-frame), l'angolo è
+       proporzionale alla lunghezza del drag. Compone la rotazione DAVANTI
+       all'orient corrente (camera-frame). */
+    _applyArcball(dx, dy) {
+      const mag = Math.hypot(dx, dy);
+      if (mag < 0.5) return;
+      // axis ⊥ drag nel piano schermo: (-dy, dx, 0). Segno scelto perché
+      // drag orizzontale → ruota il disco "come un giradischi sotto al
+      // pollice" — la sensazione naturale.
+      const ax = -dy / mag, ay = dx / mag;
+      const angle = mag * 0.012;
+      const dq = Quat.fromAxisAngle(ax, ay, 0, angle);
+      this.orient = dq.mul(this.orient).normalize();
+    }
+
+    _applyRoll(angle) {
+      if (!angle) return;
+      const dq = Quat.fromAxisAngle(0, 0, 1, angle);
+      this.orient = dq.mul(this.orient).normalize();
+    }
+
     /* ---- Camera animata verso un riquadro-mondo (proiettato) ----
        Compone scale/offset per fittare un bbox in coordinate "ruotate" 2D
-       (x2,y2 dopo yaw+pitch, prima della prospettiva). Sufficiente per
+       (x,y dopo orient, prima della prospettiva). Sufficiente per
        inquadrature gradevoli senza un solver completo della prospettiva. */
     _rotatedXY(wx, wy, wz) {
-      const dx = wx - 0.5, dy = wy - 0.5, dz = wz || 0;
-      const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
-      const x1 = dx * cy - dy * sy;
-      const y1 = dx * sy + dy * cy;
-      const sp = Math.sin(this.pitch), cp = Math.cos(this.pitch);
-      return { x: x1, y: y1 * cp - dz * sp };
+      const r = this.orient.rotate(wx - 0.5, wy - 0.5, wz || 0);
+      return { x: r.x, y: r.y };
     }
 
     _cameraForRotatedBounds(points, fill, minS) {
@@ -564,9 +652,9 @@
       return { s: s, ox: ox, oy: oy };
     }
 
-    _animateTo(s, ox, oy, yaw) {
+    _animateTo(s, ox, oy, orient) {
       this._tScale = s; this._tox = ox; this._toy = oy;
-      this._tyaw = (yaw == null) ? this.yaw : shortestAngle(this.yaw, yaw);
+      this._tOrient = orient || this.orient;
       if (!this._anim) { this._anim = true; this._animTick(); }
     }
 
@@ -576,13 +664,13 @@
       this.scale = lerp(this.scale, this._tScale, k);
       this.offsetX = lerp(this.offsetX, this._tox, k);
       this.offsetY = lerp(this.offsetY, this._toy, k);
-      this.yaw = lerp(this.yaw, this._tyaw, k);
+      this.orient = Quat.lerp(this.orient, this._tOrient, k);
       const done = Math.abs(this.scale - this._tScale) < this._tScale * 0.002 &&
         Math.abs(this.offsetX - this._tox) < 0.5 && Math.abs(this.offsetY - this._toy) < 0.5 &&
-        Math.abs(this.yaw - this._tyaw) < 0.005;
+        this.orient.distSq(this._tOrient) < 0.00005;
       if (done) {
         this.scale = this._tScale; this.offsetX = this._tox; this.offsetY = this._toy;
-        this.yaw = this._tyaw; this._anim = false;
+        this.orient = this._tOrient; this._anim = false;
       }
       this.render();
       if (this._anim) requestAnimationFrame(this._animTick.bind(this));
@@ -592,12 +680,12 @@
     focusGalaxy() {
       this.activeGroupId = -1;
       this.state.selectedId = -1;
-      // ripristina yaw a 0 oltre a scala e offset
+      // ripristina orientation di default oltre a scala e offset
       this._animateTo(
         this.fitScale,
         (this.cssW - this.fitScale) / 2,
         (this.cssH - this.fitScale) / 2,
-        0
+        defaultOrient()
       );
       this._emitContext(true);
     }
@@ -692,11 +780,10 @@
       this._emitContext(false);
     }
 
-    /* Nebulose (additive): un blob per ognuna, con offset radiale guidato
-       dalla profondità (più lontane = leggermente più piccole/fioche). */
+    /* Nebulose sobrie: niente più compositing additivo (era responsabile
+       della saturazione cumulativa), solo gradient morbidi a bassa alpha. */
     _drawNebulae(ctx) {
       ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
       for (let i = 0; i < this.nebulae.length; i++) {
         const n = this.nebulae[i];
         const p = this.project(n.x, n.y, n.z);
@@ -705,7 +792,7 @@
         const fade = clamp(0.6 + p.depth * 1.6, 0.35, 1.1);
         const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rad);
         g.addColorStop(0, hexA(n.color, n.alpha * fade));
-        g.addColorStop(0.5, hexA(n.color, n.alpha * 0.35 * fade));
+        g.addColorStop(0.55, hexA(n.color, n.alpha * 0.25 * fade));
         g.addColorStop(1, hexA(n.color, 0));
         ctx.fillStyle = g;
         ctx.beginPath();
@@ -784,10 +871,16 @@
       ctx.restore();
     }
 
-    /* Regioni: inviluppo morbido (proiettato) + alone tenue + etichetta. */
+    /* Regioni come SACCHE 3D (decisione #21): l'hull del cluster non è
+       più un anello piatto sul piano galattico, ma un wireframe che
+       mostra l'estensione del gruppo anche in z. Tre "fette" — equatore
+       (hull pieno alla z media), tappo superiore e inferiore (hull
+       scalato a ~0.55 alla z massima/minima del cluster) — più alcuni
+       connettori verticali ai vertici dell'hull. Quando ruoti la
+       galassia su qualsiasi asse, le sacche restano coerenti come
+       volumi e mostrano da subito chi sta sopra e chi sotto. */
     _drawRegions(ctx, alpha) {
       const groups = this.galaxy.groups;
-      // ordina per profondità del centroide: lontani prima
       const order = groups.slice().sort((a, b) => {
         const pa = this.project(a.cx, a.cy, a.cz || 0);
         const pb = this.project(b.cx, b.cy, b.cz || 0);
@@ -801,52 +894,77 @@
         const isHome = g.id === this.galaxy.homeGroupId;
         const isHover = g.id === this.hoverGroup;
         const c = this.project(g.cx, g.cy, g.cz || 0);
-        const rad = Math.max(36, g.radius * this.scale * c.parallax * 1.25);
         const depthFade = clamp(0.55 + c.depth * 1.4, 0.4, 1.05);
 
-        // alone tenue
-        const glow = ctx.createRadialGradient(c.x, c.y, rad * 0.2, c.x, c.y, rad);
-        glow.addColorStop(0, hexA(col, 0.12 * alpha * depthFade));
-        glow.addColorStop(1, hexA(col, 0));
-        ctx.fillStyle = glow;
-        ctx.beginPath(); ctx.arc(c.x, c.y, rad, 0, Math.PI * 2); ctx.fill();
+        const zR = Math.max(Math.abs((g.maxZ || 0) - (g.cz || 0)),
+                            Math.abs((g.cz || 0) - (g.minZ || 0)), 0.03);
+        const baseAlpha = (isActive || isHover ? 0.60 : 0.32) * alpha * depthFade;
+        const capAlpha  = (isActive || isHover ? 0.36 : 0.18) * alpha * depthFade;
 
-        // contorno inviluppo (convex hull) — proiettato: ogni vertice usa
-        // la z media del cluster, così la "regione" si vede come una
-        // proiezione del cluster sul disco tilt-ato
         if (g.hull && g.hull.length >= 3) {
+          // equatore (z = cz, scala 1.0)
+          this._drawHullAt(ctx, g, g.cz || 0, 1.0, col, baseAlpha, isActive || isHover ? 1.6 : 1.1);
+          // tappi sopra/sotto (scala ridotta → forma "a lente")
+          this._drawHullAt(ctx, g, (g.cz || 0) + zR, 0.55, col, capAlpha, 0.9);
+          this._drawHullAt(ctx, g, (g.cz || 0) - zR, 0.55, col, capAlpha, 0.9);
+
+          // connettori verticali a ~5-7 vertici equispaziati dell'hull
+          const N = g.hull.length;
+          const stride = Math.max(1, Math.round(N / 6));
           ctx.save();
-          ctx.setLineDash([4, 5]);
-          ctx.lineWidth = isActive || isHover ? 1.6 : 1;
-          ctx.strokeStyle = hexA(col, (isActive || isHover ? 0.55 : 0.30) * alpha * depthFade);
-          ctx.beginPath();
-          for (let h = 0; h < g.hull.length; h++) {
-            const hp = this.project(g.hull[h].x, g.hull[h].y, g.cz || 0);
-            if (h === 0) ctx.moveTo(hp.x, hp.y); else ctx.lineTo(hp.x, hp.y);
+          ctx.lineWidth = 0.9;
+          ctx.strokeStyle = hexA(col, capAlpha);
+          for (let k = 0; k < N; k += stride) {
+            const v = g.hull[k];
+            const sx = g.cx + (v.x - g.cx);
+            const sy = g.cy + (v.y - g.cy);
+            const tx = g.cx + (v.x - g.cx) * 0.55;
+            const ty = g.cy + (v.y - g.cy) * 0.55;
+            const pTop = this.project(tx, ty, (g.cz || 0) + zR);
+            const pMid = this.project(sx, sy, g.cz || 0);
+            const pBot = this.project(tx, ty, (g.cz || 0) - zR);
+            ctx.beginPath();
+            ctx.moveTo(pTop.x, pTop.y); ctx.lineTo(pMid.x, pMid.y); ctx.lineTo(pBot.x, pBot.y);
+            ctx.stroke();
           }
-          ctx.closePath(); ctx.stroke();
           ctx.restore();
         }
 
-        // etichetta regione con backdrop sottile per restare leggibile
-        // sopra la polvere/nebulose (fix utente).
+        // etichetta regione con backdrop scuro per restare leggibile
+        // sopra polvere/nebulose. Sempre frontale (proietta al centroide 3D).
         const labelText = (isHome ? '★ ' : '') + g.name.toUpperCase();
         ctx.font = '600 13px "JetBrains Mono", ui-monospace, monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         const m = ctx.measureText(labelText);
         const bgW = m.width + 18, bgH = 32;
-        ctx.fillStyle = 'rgba(8,11,26,' + (0.55 * alpha) + ')';
+        ctx.fillStyle = 'rgba(8,11,26,' + (0.6 * alpha) + ')';
         ctx.fillRect(c.x - bgW / 2, c.y - bgH / 2, bgW, bgH);
-        ctx.shadowColor = 'rgba(0,0,0,0.85)';
-        ctx.shadowBlur = 3;
-        ctx.fillStyle = hexA(isActive || isHover ? '#ffffff' : col, (isActive || isHover ? 1 : 0.85) * alpha * depthFade);
+        ctx.fillStyle = hexA(isActive || isHover ? '#ffffff' : col, (isActive || isHover ? 1 : 0.9) * alpha * depthFade);
         ctx.fillText(labelText, c.x, c.y - 4);
-        ctx.shadowBlur = 0;
         ctx.font = '10px "JetBrains Mono", ui-monospace, monospace';
         ctx.fillStyle = hexA('#cfe0ff', 0.85 * alpha * depthFade);
         ctx.fillText(g.members.length + ' sistemi', c.x, c.y + 10);
       }
+    }
+
+    /* Disegna l'hull del gruppo a una specifica z, scalandolo da `g.cx, g.cy`
+       per ottenere la "fetta" desiderata (1.0 = equatore, 0.55 = tappi). */
+    _drawHullAt(ctx, g, z, scale, col, alpha, width) {
+      ctx.save();
+      ctx.setLineDash([4, 5]);
+      ctx.lineWidth = width || 1;
+      ctx.strokeStyle = hexA(col, alpha);
+      ctx.beginPath();
+      for (let h = 0; h < g.hull.length; h++) {
+        const v = g.hull[h];
+        const sx = g.cx + (v.x - g.cx) * scale;
+        const sy = g.cy + (v.y - g.cy) * scale;
+        const p = this.project(sx, sy, z);
+        if (h === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+      }
+      ctx.closePath(); ctx.stroke();
+      ctx.restore();
     }
 
     _drawEdges(ctx, reveal) {

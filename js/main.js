@@ -231,7 +231,7 @@ function renderGalaxyView(stage) {
           '<button class="btn btn--mini" data-action="galaxy-new" type="button" title="Genera una nuova galassia">✦ Nuova</button>' +
         '</div>' +
       '</div>' +
-      '<div class="galaxy-hint">Trascina · zoom rotella/pinch · <kbd>Shift</kbd>+trascina o pinch a 2 dita per ruotare il disco · click su una regione per entrare</div>' +
+      '<div class="galaxy-hint">Trascina · zoom rotella/pinch · <kbd>Shift</kbd>+trascina = ruota libera · <kbd>Alt</kbd>+trascina = roll · pinch a 2 dita ruota su touch</div>' +
     '</div>';
 
   const holder = stage.querySelector('.galaxy-holder');
@@ -1121,7 +1121,7 @@ function setGalaxyHint(mode) {
   else if (mode === 'system')
     el.textContent = 'Trascina · zoom rotella/pinch · click su un corpo per i dati · doppio click nel vuoto per uscire';
   else
-    el.textContent = 'Trascina · zoom rotella/pinch · Shift+trascina o pinch a 2 dita per ruotare · click su una regione per entrare';
+    el.textContent = 'Trascina · zoom rotella/pinch · Shift+trascina = ruota libera · Alt+trascina = roll · pinch a 2 dita ruota su touch';
 }
 
 /* Colori per UI (riusano la stessa logica della mappa). */
