@@ -1465,8 +1465,8 @@ button { font-family: inherit; }
 .save-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
+  gap: 12px;
+  padding: 16px;
   border: 1px solid var(--c-border, rgba(255,255,255,0.15));
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.02);
@@ -1474,22 +1474,36 @@ button { font-family: inherit; }
 .save-card--auto { border-color: rgba(47, 230, 224, 0.45); background: rgba(47, 230, 224, 0.05); }
 .save-card--empty { background: rgba(255, 255, 255, 0.01); border-style: dashed; opacity: 0.85; }
 .save-card__name {
-  font-family: var(--font-data);
-  font-size: 0.85rem;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
   color: var(--c-text);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
 }
 .save-card__meta {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4px 12px;
+  gap: 8px 16px;
   margin: 0;
-  font-size: 0.72rem;
+  font-size: 0.86rem;
 }
-.save-card__meta div { display: flex; flex-direction: column; }
-.save-card__meta dt { color: var(--c-text-faint); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em; }
-.save-card__meta dd { margin: 0; color: var(--c-text-soft); }
-.save-card__meta code { font-family: var(--font-data); font-size: 0.7rem; color: var(--c-accent); }
+.save-card__meta div { display: flex; flex-direction: column; gap: 2px; }
+.save-card__meta dt {
+  color: var(--c-text-soft);
+  font-family: var(--font-display);
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.save-card__meta dd {
+  margin: 0;
+  color: var(--c-text);
+  font-family: var(--font-data);
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+.save-card__meta code { font-family: var(--font-data); font-size: 0.86rem; font-weight: 700; color: var(--c-accent); }
 .save-card__actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 
 .save-toast {
@@ -1908,11 +1922,13 @@ select.main-menu__input { cursor: pointer; }
 }
 .save-card--candidate .save-card__name {
   color: var(--c-accent);
+  text-shadow: 0 0 10px rgba(47, 230, 224, 0.25);
 }
 .main-menu__sub-inline {
   color: var(--c-text-soft);
-  font-size: 0.72rem;
   font-family: var(--font-data);
+  font-size: 0.85rem;
+  font-weight: 500;
   letter-spacing: 0.04em;
 }
 
@@ -1920,27 +1936,28 @@ select.main-menu__input { cursor: pointer; }
 .main-menu__pot-bars {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4px 10px;
-  margin-top: 4px;
+  gap: 8px 14px;
+  margin-top: 6px;
 }
 .main-menu__pot {
   display: grid;
-  grid-template-columns: 36px 1fr 28px;
+  grid-template-columns: 44px 1fr 32px;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 .main-menu__pot-label {
-  font-size: 0.65rem;
-  letter-spacing: 0.06em;
+  font-family: var(--font-display);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--c-text-faint);
-  font-family: var(--font-data);
+  color: var(--c-text-soft);
 }
 .main-menu__pot-track {
   display: block;
-  height: 5px;
+  height: 8px;
   background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--c-border, rgba(255,255,255,0.12));
+  border: 1px solid var(--c-border, rgba(255,255,255,0.18));
   border-radius: 3px;
   overflow: hidden;
 }
@@ -1950,15 +1967,18 @@ select.main-menu__input { cursor: pointer; }
   background: linear-gradient(90deg, rgba(47,230,224,0.55), var(--c-accent, #2fe6e0));
 }
 .main-menu__pot-val {
-  font-size: 0.7rem;
   font-family: var(--font-data);
+  font-size: 0.86rem;
+  font-weight: 700;
   text-align: right;
-  color: var(--c-text-soft);
+  color: var(--c-text);
+  font-variant-numeric: tabular-nums;
 }
 .main-menu__adv {
   margin: 0;
-  font-size: 0.72rem;
-  color: rgba(186, 142, 255, 0.95);
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: rgba(199, 173, 255, 1);
 }
 
 /* =====================================================================
