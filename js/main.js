@@ -424,6 +424,14 @@ function findGroup(id) {
 
 function row(k, v) { return '<div class="kv"><dt>' + k + '</dt><dd>' + v + '</dd></div>'; }
 
+/* Sostantivo del corpo per etichette ("Ostilità pianeta/luna/oggetto"). */
+function hostilityNoun(planet) {
+  if (!planet) return 'corpo';
+  if (planet.cat === 'moon') return 'luna';
+  if (planet.cat === 'belt') return 'oggetto';
+  return 'pianeta';
+}
+
 /* Popolazione (§9): il motore lavora in unità intere, ma a schermo le
    traduciamo in PERSONE plausibili via la curva per-pianeta di planet.js
    (ORION.planet.peopleAt / popCeiling / formatPeople). Solo presentazione:
@@ -1120,6 +1128,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
           row('Colonizzato dal', colony.colonizedDS || '—') +
           row('Popolazione', popRangePeople(colony, planet)) +
           row('Slot utilizzati', out.used + ' / ' + planet.slots) +
+          row('Ostilità ' + hostilityNoun(planet), planet.hostility) +
         '</dl>' +
         '<p class="sysinfo__sub">Riepilogo produzione (/Impulso)</p>' +
         rateGrid(out.rates, out.upkeep) +
@@ -1180,7 +1189,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
         row('Acqua',    Math.round(cost.water * costMul)) +
         row('Cibo',     Math.round(cost.food  * costMul)) +
         row('Impulsi',  Math.round(cost.impulsi)) +
-        row('Ostilità', hostility) +
+        row('Ostilità ' + hostilityNoun(planet), hostility) +
       '</dl>' +
       (costMul > 1 ? '<p class="panel__note">×' + costMul + ' perché la colonia primaria è ancora produttiva.</p>' : '') +
       (homeInTrouble ? '<p class="panel__note">⚠ Crisi sulla colonia primaria: costo di migrazione ridotto.</p>' : '') +
@@ -1463,14 +1472,28 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
   const scar = colony._scar;
   const canGrow = total < cap && colony.stock.food > 0 && colony.stock.water > 0
     && (!scar || (scar.food.state !== 'crit' && scar.water.state !== 'crit'));
+  // Morale: calcolato sempre (anche se la crescita è bloccata) per dare
+  // visibilità della leva §9.3. Breakdown dei contributi mostrato sotto.
+  const moraleParts = [];
+  let morale = 1.0;
+  moraleParts.push('base 1.00');
+  if (colony.isHomeBase) {
+    morale += CFG.POP_MORALE_HOMEBASE;
+    moraleParts.push('+' + CFG.POP_MORALE_HOMEBASE.toFixed(2) + ' base');
+  }
+  const habit = (colony.structures['centro-abitativo'] && colony.structures['centro-abitativo'].level) || 0;
+  if (habit > 0) {
+    const habitBonus = Math.min(CFG.POP_MORALE_MAX - 1.0, habit * CFG.POP_MORALE_HABITATION);
+    morale += habitBonus;
+    moraleParts.push('+' + habitBonus.toFixed(2) + ' centri abitativi ×' + habit);
+  }
+  if (morale > CFG.POP_MORALE_MAX) morale = CFG.POP_MORALE_MAX;
+  if (scar && (scar.food.state === 'low' || scar.water.state === 'low')) {
+    morale *= 0.6;
+    moraleParts.push('×0.6 carenza cibo/acqua');
+  }
   let growthEst = 0;
   if (canGrow) {
-    let morale = 1.0;
-    if (colony.isHomeBase) morale += CFG.POP_MORALE_HOMEBASE;
-    const habit = (colony.structures['centro-abitativo'] && colony.structures['centro-abitativo'].level) || 0;
-    morale += Math.min(CFG.POP_MORALE_MAX - 1.0, habit * CFG.POP_MORALE_HABITATION);
-    if (morale > CFG.POP_MORALE_MAX) morale = CFG.POP_MORALE_MAX;
-    if (scar && (scar.food.state === 'low' || scar.water.state === 'low')) morale *= 0.6;
     growthEst = CFG.POP_GROWTH_BASE * morale;
     if (colony.structures['ospedale']) growthEst *= (1 + CFG.POP_GROWTH_HOSPITAL);
   }
@@ -1504,8 +1527,10 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
     '<div class="sysinfo">' +
       '<dl class="sysinfo__list">' +
         row('Popolazione', popRangePeople(colony, planet)) +
+        row('Morale', morale.toFixed(2) + ' / ' + CFG.POP_MORALE_MAX.toFixed(2)) +
         row('Crescita', '<span class="rate ' + (canGrow ? 'rate--pos' : 'rate--neg') + '">' + growthStr + '</span>') +
       '</dl>' +
+      '<p class="panel__note">Morale: ' + moraleParts.join(' · ') + '. Moltiplica la crescita pop §9.3.</p>' +
       '<p class="sysinfo__sub">Classi funzionali</p>' +
       bars +
       targetHtml +
@@ -2574,7 +2599,7 @@ function homeCandidateCardHtml(c) {
       '<div><dt>Regione</dt><dd>' + escapeHtml(c.groupName) + '</dd></div>' +
       '<div><dt>Sistema</dt><dd>' + escapeHtml(c.system.name) + ' · ' + escapeHtml(c.system.starLabel) + '</dd></div>' +
       '<div><dt>Pericolo</dt><dd>' + escapeHtml(c.system.dangerTier) + ' (' + c.system.danger + ')</dd></div>' +
-      '<div><dt>Ostilità</dt><dd>' + c.planet.hostility + '</dd></div>' +
+      '<div><dt>Ostilità ' + hostilityNoun(c.planet) + '</dt><dd>' + c.planet.hostility + '</dd></div>' +
       '<div><dt>Pop. max</dt><dd>' + popMaxPeople(c.planet) + '</dd></div>' +
       '<div><dt>Slot</dt><dd>' + c.planet.slots + '</dd></div>' +
     '</dl>' +
