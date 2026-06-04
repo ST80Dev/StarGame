@@ -450,29 +450,41 @@ button { font-family: inherit; }
   letter-spacing: 0.06em;
 }
 .sysinfo__fog { font-size: 0.8rem; color: var(--c-text-faint); line-height: 1.6; }
+/* Coppie "etichetta — valore" come mini-card che fluiscono e vanno a capo,
+   ciascuna larga appena quel che serve (niente più righe stese al 100%). */
 .sysinfo__list {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 8px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   margin: 0;
   font-size: 0.78rem;
 }
+.sysinfo__list .kv {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 100%;
+  padding: 5px 9px;
+  background: rgba(8, 12, 30, 0.55);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+}
 .sysinfo__list dt {
   color: var(--c-text-faint);
-  font-size: 0.68rem;
+  font-size: 0.58rem;
   letter-spacing: 0.10em;
   text-transform: uppercase;
-  align-self: center;
+  white-space: nowrap;
 }
 .sysinfo__list dd {
   margin: 0;
   color: var(--c-text);
-  text-align: right;
   font-family: var(--font-data);
   font-weight: 600;
-  font-size: 0.86rem;
+  font-size: 0.88rem;
   letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 .sysinfo__list dd code {
   font-family: var(--font-data);

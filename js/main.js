@@ -414,7 +414,7 @@ function findGroup(id) {
   return null;
 }
 
-function row(k, v) { return '<dt>' + k + '</dt><dd>' + v + '</dd>'; }
+function row(k, v) { return '<div class="kv"><dt>' + k + '</dt><dd>' + v + '</dd></div>'; }
 
 /* ---------------------------------------------------------------------
    Decisione #26 — Tag di appartenenza (sigla regione, nome sistema)
