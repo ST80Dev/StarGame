@@ -331,18 +331,11 @@ function renderGalaxyView(stage) {
       '<div class="system-holder" data-system-holder hidden></div>' +
       '<div class="planet-holder" data-planet-holder hidden></div>' +
       '<nav class="galaxy-breadcrumb" data-breadcrumb aria-label="Percorso di navigazione"></nav>' +
-      '<div class="galaxy-overlay">' +
-        '<div class="galaxy-overlay__row">' +
-          '<span class="galaxy-overlay__label">SEED</span>' +
-          '<code class="galaxy-overlay__seed" data-bind="seed">' + g.seed + '</code>' +
-        '</div>' +
-        '<div class="galaxy-overlay__row">' +
-          '<span class="galaxy-overlay__meta">' + g.galaxy.count + ' sistemi · ' + g.galaxy.groups.length + ' gruppi</span>' +
-        '</div>' +
-        '<div class="galaxy-overlay__actions">' +
-          '<button class="btn btn--mini" data-action="galaxy-reset" type="button" title="Torna alla vista galassia">⤢ Galassia</button>' +
-        '</div>' +
-      '</div>' +
+      '<button class="seed-chip" data-action="copy-seed" type="button" ' +
+        'title="Copia il seed negli appunti">' +
+        '<span class="seed-chip__label">SEED</span>' +
+        '<code class="seed-chip__value" data-bind="seed">' + g.seed + '</code>' +
+      '</button>' +
       '<div class="galaxy-hint">Trascina · zoom rotella/pinch · <kbd>Shift</kbd>+trascina = ruota libera · <kbd>Alt</kbd>+trascina = roll · pinch a 2 dita ruota su touch</div>' +
     '</div>';
 
@@ -356,10 +349,16 @@ function renderGalaxyView(stage) {
   // contesto iniziale (galassia)
   onMapContext({ level: 'galaxy', groupId: -1, systemId: -1 });
 
-  const resetBtn = stage.querySelector('[data-action="galaxy-reset"]');
-  if (resetBtn) resetBtn.addEventListener('click', () => {
-    if (ORION.openSystemId >= 0) closeSystem();
-    ORION.map.focusGalaxy();
+  const seedChip = stage.querySelector('[data-action="copy-seed"]');
+  if (seedChip) seedChip.addEventListener('click', () => {
+    const seed = ORION.game && ORION.game.seed;
+    if (!seed) return;
+    const done = () => showToast('Seed ' + seed + ' copiato');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(seed).then(done, () => showToast('Seed: ' + seed));
+    } else {
+      showToast('Seed: ' + seed);
+    }
   });
 }
 
