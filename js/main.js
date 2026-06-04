@@ -1280,18 +1280,29 @@ function renderPlanetStruttureTab(host, planet, colony) {
       const check = ORION.planet.canBuild(colony, planet, def.id);
       const cost = def.cost || {};
       const costStr = Object.keys(cost).map(function (k) { return resGlyph(k) + cost[k]; }).join(' · ');
-      html += '<li class="struct-item' + (check.ok ? '' : ' is-locked') + '" title="' + def.desc + '">' +
+      let statusCell;
+      let extraClass = check.ok ? '' : ' is-locked';
+      if (check.ok) {
+        statusCell = '<button class="btn btn--mini" data-build="' + def.id + '" type="button">Costruisci</button>';
+      } else if (check.code === 'building') {
+        const qEntry = colony.queue.find(function (q) { return q.id === def.id; });
+        const total = def.time || 1;
+        const remain = qEntry ? Math.max(0, qEntry.duration | 0) : total;
+        statusCell = '<span class="struct-item__locked is-building" title="In costruzione (' + remain + ' / ' + total + ' I)">▶ In costruzione · ' + remain + '/' + total + ' I</span>';
+        extraClass += ' is-building';
+      } else if (check.code === 'busy') {
+        statusCell = '<span class="struct-item__locked is-busy" title="' + check.reason + '">⏳ Occupato</span>';
+      } else {
+        statusCell = '<span class="struct-item__locked" title="' + check.reason + '">◌</span>';
+      }
+      html += '<li class="struct-item' + extraClass + '" title="' + def.desc + '">' +
         '<span class="struct-item__glyph">' + def.glyph + '</span>' +
         '<div class="struct-item__main">' +
           '<div class="struct-item__name">' + def.name + ' <span class="struct-item__cat">' + def.time + ' I</span></div>' +
           '<div class="struct-item__cost">' + costStr + '</div>' +
         '</div>' +
         '<button class="btn btn--mini struct-item__info" data-info="' + def.id + '" type="button" title="Cosa fa, bonus/malus, concatenazioni" aria-label="Informazioni su ' + def.name + '">ⓘ</button>' +
-        (check.ok
-          ? '<button class="btn btn--mini" data-build="' + def.id + '" type="button">Costruisci</button>'
-          : check.code === 'busy'
-            ? '<span class="struct-item__locked is-busy" title="' + check.reason + '">⏳ Occupato</span>'
-            : '<span class="struct-item__locked" title="' + check.reason + '">◌</span>') +
+        statusCell +
       '</li>';
     });
     html += '</ul></details>';
