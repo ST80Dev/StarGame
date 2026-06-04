@@ -1562,3 +1562,76 @@ select.main-menu__input { cursor: pointer; }
   letter-spacing: 0.06em;
   color: var(--c-text-faint);
 }
+
+/* =====================================================================
+   M06.5 — Step "Scegli colonia originaria" (decisione #26 / GDD §6.2.bis)
+   ===================================================================== */
+.main-menu__pick {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 920px;
+  width: 100%;
+}
+.main-menu__pick .save-grid {
+  /* card un po' più larghe rispetto agli slot save per accogliere le barre */
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.save-card--candidate {
+  border-color: rgba(47, 230, 224, 0.30);
+  background: rgba(47, 230, 224, 0.035);
+}
+.save-card--candidate .save-card__name {
+  color: var(--c-accent);
+}
+.main-menu__sub-inline {
+  color: var(--c-text-soft);
+  font-size: 0.72rem;
+  font-family: var(--font-data);
+  letter-spacing: 0.04em;
+}
+
+/* Barre dei potenziali §7.1 nelle card candidato */
+.main-menu__pot-bars {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px;
+  margin-top: 4px;
+}
+.main-menu__pot {
+  display: grid;
+  grid-template-columns: 36px 1fr 28px;
+  align-items: center;
+  gap: 6px;
+}
+.main-menu__pot-label {
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-text-faint);
+  font-family: var(--font-data);
+}
+.main-menu__pot-track {
+  display: block;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--c-border, rgba(255,255,255,0.12));
+  border-radius: 3px;
+  overflow: hidden;
+}
+.main-menu__pot-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(47,230,224,0.55), var(--c-accent, #2fe6e0));
+}
+.main-menu__pot-val {
+  font-size: 0.7rem;
+  font-family: var(--font-data);
+  text-align: right;
+  color: var(--c-text-soft);
+}
+.main-menu__adv {
+  margin: 0;
+  font-size: 0.72rem;
+  color: rgba(186, 142, 255, 0.95);
+}

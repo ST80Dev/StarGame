@@ -70,8 +70,17 @@ function newGame(seed, opts) {
   /* Se ci viene passato un payload (load slot / import .json), il seed
      viene da lì — coerente con seed+delta (decisione #5/#24). */
   if (opts.payload && opts.payload.seed) seed = opts.payload.seed;
+  /* M06.5: payload v4 contiene esplicitamente la scelta della colonia
+     originaria (decisione #26). Se presente, sovrascrive opts.homeWorld. */
+  if (opts.payload && opts.payload.homeWorld) opts.homeWorld = opts.payload.homeWorld;
   seed = seed || ORION.rng.newSeed();
   const galaxy = ORION.galaxy.generate(seed);
+  /* M06.5: se il giocatore ha scelto un home diverso dal default
+     generato (decisione #26), ricalibra prima di createState così la
+     nebbia di guerra rispetta la nuova origine. */
+  if (opts.homeWorld && Number.isInteger(opts.homeWorld.systemId)) {
+    ORION.galaxy.recomputeDanger(galaxy, opts.homeWorld.systemId);
+  }
   const state = ORION.galaxy.createState(galaxy);
 
   // Epoca d'inizio randomizzata DS 800.00–3000.00 (decisione #4), derivata
@@ -100,12 +109,20 @@ function newGame(seed, opts) {
     eventSchedule: [],
     /* M06: cronaca persistita (decisione #24, cap a ORION.save.CHRONICLE_CAP).
        Più recente in TESTA all'array, identico al DOM. */
-    chronicle: []
+    chronicle: [],
+    /* M06.5: scelta della colonia originaria (decisione #26). Salvata
+       esplicitamente come delta per non doverla rideterminare al runtime
+       (vincolo seed+delta). Se null, fallback al homeWorld scelto da
+       system.js — retro-compat con save schema 3. */
+    homeWorld: (opts.homeWorld && Number.isInteger(opts.homeWorld.systemId))
+      ? { systemId: opts.homeWorld.systemId, bodyKey: opts.homeWorld.bodyKey }
+      : null
   };
   // startDS = Data Stellare INIZIALE (epoca .00), fissa per la partita.
   ORION.game.startDS = ORION.time.format(startOrbita * 100);
 
-  // M04: colonizza il pianeta natale (homeWorld del sistema d'origine).
+  // M04/M06.5: colonizza il pianeta natale (scelta esplicita se passata
+  // dal menu, altrimenti homeWorld flaggato da system.js).
   colonizeHomePlanet(ORION.game, ORION.game.startDS);
 
   // M06: se c'è un payload (autosave/slot/import), ripristina i delta
@@ -135,13 +152,24 @@ function newGame(seed, opts) {
   return ORION.game;
 }
 
-/* Genera struttura+colonia per il mondo natale e popola l'HUD risorse. */
+/* Genera struttura+colonia per il mondo natale e popola l'HUD risorse.
+   M06.5: se `game.homeWorld` è stato impostato dalla scelta menu
+   (decisione #26), usa il bodyKey esplicito (può differire dall'
+   `homeWorld` flaggato da system.js, perché il candidato è stato pescato
+   con scoring leggermente diverso). */
 function colonizeHomePlanet(game, startDS) {
   const galaxy = game.galaxy;
   const homeSys = ORION.system.generate(galaxy, galaxy.homeId);
   let homeBody = null;
-  for (let i = 0; i < homeSys.bodies.length; i++) {
-    if (homeSys.bodies[i].homeWorld) { homeBody = homeSys.bodies[i]; break; }
+  /* Preferenza: bodyKey esplicito dal menu (M06.5) */
+  if (game.homeWorld && game.homeWorld.bodyKey) {
+    homeBody = ORION.system.findBody(homeSys, game.homeWorld.bodyKey);
+  }
+  /* Fallback: bandiera homeWorld di system.js (retro-compat) */
+  if (!homeBody) {
+    for (let i = 0; i < homeSys.bodies.length; i++) {
+      if (homeSys.bodies[i].homeWorld) { homeBody = homeSys.bodies[i]; break; }
+    }
   }
   if (!homeBody) homeBody = homeSys.bodies[Math.floor(homeSys.bodies.length / 2)];
   const planet = ORION.planet.generate(galaxy, homeSys, homeBody.key);
@@ -1727,8 +1755,9 @@ function hideMainMenu() {
 function renderMainMenu() {
   const body = document.querySelector('[data-bind="main-menu-body"]');
   if (!body) return;
-  if (ORION.menuView === 'new')  return renderMainMenuNew(body);
-  if (ORION.menuView === 'info') return renderMainMenuInfo(body);
+  if (ORION.menuView === 'new')      return renderMainMenuNew(body);
+  if (ORION.menuView === 'home-pick') return renderMainMenuHomePick(body);
+  if (ORION.menuView === 'info')     return renderMainMenuInfo(body);
   return renderMainMenuHome(body);
 }
 
@@ -1865,27 +1894,129 @@ function renderMainMenuNew(body) {
 }
 
 function startNewGameFromMenu() {
+  /* Conferma autosave PRIMA dello step "scegli colonia" — la scelta
+     dell'origine è già "azione irreversibile" che porterà a partita. */
+  const auto = ORION.save && ORION.save.loadAutosave ? ORION.save.loadAutosave() : null;
+  if (auto && !confirm('Iniziare una nuova partita? L\'autosave corrente verrà sostituito (gli slot manuali restano).')) return;
+  /* M06.5 (decisione #26): non avvii subito la partita — passi allo
+     step "scegli colonia" che genera la galassia in anteprima e mostra
+     i candidati. La partita parte solo a scelta confermata. */
+  showMainMenu('home-pick');
+}
+
+/* M06.5 — Step "Scegli colonia originaria" (decisione #26 / GDD §6.2.bis).
+   Genera la galassia in anteprima dal seed cristallizzato, pesca i
+   candidati (uno per gruppo, max 6), mostra la griglia di card.
+   Niente Canvas: le card sono puramente testuali (riusa lo stile delle
+   save-card, decisione #24). */
+function renderMainMenuHomePick(body) {
+  /* Determinismo dal seed: se il seed o le opzioni rilevanti non sono
+     cambiati, riusiamo la galassia di anteprima per evitare la
+     rigenerazione (costa qualche ms). */
+  const seed = ORION.menuForm.seed || ORION.rng.newSeed();
+  ORION.menuForm.seed = seed;
+  if (!ORION.menuPreview || ORION.menuPreview.seed !== seed) {
+    const previewGalaxy = ORION.galaxy.generate(seed);
+    const candidates = ORION.galaxy.pickHomeCandidates(previewGalaxy, 6);
+    ORION.menuPreview = { seed: seed, galaxy: previewGalaxy, candidates: candidates };
+  }
+  const candidates = ORION.menuPreview.candidates;
+
+  if (!candidates.length) {
+    body.innerHTML = '<div class="main-menu__info">' +
+      '<h2 class="main-menu__form-title">Nessun candidato trovato</h2>' +
+      '<p>La galassia di questo seed non offre corpi abitabili sufficienti. Riprova con un seed diverso.</p>' +
+      '<div class="main-menu__form-actions">' +
+        '<button type="button" class="btn btn--mini" data-action="menu-back-new">← Indietro</button>' +
+      '</div></div>';
+    body.querySelector('[data-action="menu-back-new"]').addEventListener('click', function () { showMainMenu('new'); });
+    return;
+  }
+
+  const cards = candidates.map(function (c) { return homeCandidateCardHtml(c); }).join('');
+  body.innerHTML =
+    '<div class="main-menu__pick">' +
+      '<h2 class="main-menu__form-title">Scegli la colonia originaria</h2>' +
+      '<p class="main-menu__field-hint">' +
+        candidates.length + ' candidati (uno per regione · seed <code>' + escapeHtml(seed) + '</code>). ' +
+        'La scelta cristallizza il sistema d\'origine: il pericolo §5.3 si ricalibra da lì.' +
+      '</p>' +
+      '<div class="save-grid">' + cards + '</div>' +
+      '<div class="main-menu__form-actions">' +
+        '<button type="button" class="btn btn--mini" data-action="menu-back-new">← Indietro</button>' +
+        '<button type="button" class="btn btn--mini" data-action="menu-pick-random">🎲 Scegli per me</button>' +
+      '</div>' +
+    '</div>';
+
+  body.querySelectorAll('[data-action="pick-home"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const idx = parseInt(b.dataset.idx, 10);
+      confirmHomeAndStart(candidates[idx]);
+    });
+  });
+  body.querySelector('[data-action="menu-back-new"]').addEventListener('click', function () { showMainMenu('new'); });
+  body.querySelector('[data-action="menu-pick-random"]').addEventListener('click', function () {
+    const rng = ORION.rng.makeRng(seed + ':pick');
+    confirmHomeAndStart(candidates[rng.int(0, candidates.length - 1)]);
+  });
+}
+
+function homeCandidateCardHtml(c) {
+  const typeLabel = (ORION.system.BODY_TYPES[c.planet.type] || {}).label || c.planet.type;
+  const p = c.planet.potentials;
+  const advLine = c.planet.advancedCount > 0
+    ? '<dd class="main-menu__adv">⚛ ' + c.planet.advancedCount + ' avanzate (da scansionare)</dd>'
+    : '<dd class="main-menu__adv">⚛ nessuna avanzata</dd>';
+  return '<div class="save-card save-card--candidate">' +
+    '<div class="save-card__name">' + escapeHtml(c.planet.name) + ' <span class="main-menu__sub-inline">· ' + escapeHtml(typeLabel) + '</span></div>' +
+    '<dl class="save-card__meta">' +
+      '<div><dt>Regione</dt><dd>' + escapeHtml(c.groupName) + '</dd></div>' +
+      '<div><dt>Sistema</dt><dd>' + escapeHtml(c.system.name) + ' · ' + escapeHtml(c.system.starLabel) + '</dd></div>' +
+      '<div><dt>Pericolo</dt><dd>' + escapeHtml(c.system.dangerTier) + ' (' + c.system.danger + ')</dd></div>' +
+      '<div><dt>Ostilità</dt><dd>' + c.planet.hostility + '</dd></div>' +
+      '<div><dt>Pop. max</dt><dd>' + c.planet.popCap + '</dd></div>' +
+      '<div><dt>Slot</dt><dd>' + c.planet.slots + '</dd></div>' +
+    '</dl>' +
+    '<div class="main-menu__pot-bars">' +
+      potBar('Met', p.met) + potBar('En', p.en) + potBar('Cibo', p.food) + potBar('Acqua', p.water) +
+    '</div>' +
+    '<dl class="save-card__meta">' + advLine + '</dl>' +
+    '<div class="save-card__actions">' +
+      '<button type="button" class="btn btn--mini btn--primary" data-action="pick-home" data-idx="' +
+        // Trovo l'indice cercandolo nell'array dei candidati
+        ORION.menuPreview.candidates.indexOf(c) + '">Inizia qui</button>' +
+    '</div></div>';
+}
+
+function potBar(label, val) {
+  const v = Math.max(0, Math.min(100, val));
+  return '<div class="main-menu__pot">' +
+    '<span class="main-menu__pot-label">' + label + '</span>' +
+    '<span class="main-menu__pot-track"><span class="main-menu__pot-fill" style="width:' + v + '%"></span></span>' +
+    '<span class="main-menu__pot-val">' + v + '</span>' +
+  '</div>';
+}
+
+function confirmHomeAndStart(candidate) {
   const PRESETS = (ORION.victory && ORION.victory.PRESETS) || {};
   const presetId = ORION.menuForm.preset || 'classic';
   const presetMods = Object.assign({}, PRESETS[presetId] || PRESETS.classic || {});
-  /* Override ironman se l'utente l'ha scelto su un preset non-ironman. */
   if (ORION.menuForm.ironman) presetMods.ironman = true;
   const mode = {
     startedAs: 'sandbox',
     preset: presetId,
     modifiers: presetMods
   };
-  /* Se c'è un autosave esistente, chiedi conferma prima di sostituirlo
-     (§21 "salva prima delle azioni irreversibili"). Gli slot manuali
-     restano comunque intatti. */
-  const auto = ORION.save && ORION.save.loadAutosave ? ORION.save.loadAutosave() : null;
-  if (auto && !confirm('Iniziare una nuova partita? L\'autosave corrente verrà sostituito (gli slot manuali restano).')) return;
   clearSavedGame();
-  newGame(ORION.menuForm.seed, { mode: mode });
-  /* Reset del form per la prossima apertura */
+  newGame(ORION.menuForm.seed, {
+    mode: mode,
+    homeWorld: { systemId: candidate.systemId, bodyKey: candidate.bodyKey }
+  });
+  /* Reset preview + form per la prossima apertura */
+  ORION.menuPreview = null;
   ORION.menuForm = { seed: null, preset: presetId, ironman: !!presetMods.ironman };
   enterGame();
-  showToast('Partita avviata · seed ' + ORION.game.seed);
+  showToast('Colonia su ' + candidate.planet.name + ' · seed ' + ORION.game.seed);
 }
 
 /* --- Info / Crediti --- */
