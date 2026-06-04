@@ -1159,8 +1159,10 @@ button { font-family: inherit; }
   white-space: nowrap;
   text-transform: none;
   font-family: var(--font-data);
-  min-width: 130px;
-  justify-content: flex-start;
+  /* Larghezza fissa: il label varia ("0.5× · 60s/Ι" → "32× · 938ms/Ι")
+     e altrimenti il bottone si stringe/allarga al cambio velocità. */
+  width: 160px;
+  justify-content: center;
   background: rgba(47, 230, 224, 0.06);
   border-color: var(--c-accent-dim);
 }
