@@ -30,10 +30,11 @@
 (function (root) {
   const ORION = root.ORION = root.ORION || {};
 
-  /* Schema 3: v2 + chronicle[] persistita. M06 introduce le sub-migrazioni
-     componibili: ogni modulo futuro che cambia il payload bumpa lo schema
-     e aggiunge la propria sub-migrazione qui sotto (`MIGRATIONS`). */
-  const SCHEMA_VERSION = 3;
+  /* Schema 4: v3 + tutorial state persistito (decisione #27 / M06.5).
+     M06 introduce le sub-migrazioni componibili: ogni modulo futuro che
+     cambia il payload bumpa lo schema e aggiunge la propria sub-migrazione
+     qui sotto (`migrate`). */
+  const SCHEMA_VERSION = 4;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -82,7 +83,8 @@
       mode: game.mode,
       victoryTracks: game.victoryTracks,
       eventSchedule: game.eventSchedule || [],
-      chronicle: capChronicle(game.chronicle)
+      chronicle: capChronicle(game.chronicle),
+      tutorial: game.tutorial || { enabled: false, seenLessons: [] }
     };
   }
 
@@ -107,6 +109,18 @@
     if ((payload.schema || 2) < 3) {
       if (!Array.isArray(payload.chronicle)) payload.chronicle = [];
       payload.schema = 3;
+    }
+    /* v3 → v4 (M06.5, decisione #27): aggiungi stato tutorial.
+       Per i save legacy il tutorial parte disabilitato (l'utente conosce
+       già il gioco) ma le lezioni restano riapribili dalla "?". */
+    if ((payload.schema || 3) < 4) {
+      if (!payload.tutorial || typeof payload.tutorial !== 'object') {
+        payload.tutorial = { enabled: false, seenLessons: [] };
+      }
+      if (!Array.isArray(payload.tutorial.seenLessons)) {
+        payload.tutorial.seenLessons = [];
+      }
+      payload.schema = 4;
     }
     return payload;
   }

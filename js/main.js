@@ -13,7 +13,7 @@
 
 const ORION = window.ORION || (window.ORION = {});
 
-ORION.version = '0.6.0-M06';
+ORION.version = '0.6.5-M06.5';
 
 /* Etichette provvisorie del viewport per le viste non ancora implementate. */
 ORION.viewLabels = {
@@ -79,6 +79,12 @@ function newGame(seed, opts) {
   const erng = ORION.rng.makeRng(seed + ':epoch');
   const startOrbita = erng.int(800, 3000);
 
+  /* Tutorial (M06.5, decisione #27). Il flag arriva da:
+       - opts.tutorialEnabled (form "Nuova partita" del main menu)
+       - opts.payload.tutorial (load slot / autosave / import .json)
+     Se manca, default OFF. */
+  const tutorialEnabled = !!opts.tutorialEnabled;
+
   ORION.game = {
     galaxy: galaxy, state: state, seed: seed,
     startEpochOrbita: startOrbita,
@@ -100,7 +106,9 @@ function newGame(seed, opts) {
     eventSchedule: [],
     /* M06: cronaca persistita (decisione #24, cap a ORION.save.CHRONICLE_CAP).
        Più recente in TESTA all'array, identico al DOM. */
-    chronicle: []
+    chronicle: [],
+    /* M06.5: stato tutorial (decisione #27). Persistito nel save (schema 4). */
+    tutorial: { enabled: tutorialEnabled, seenLessons: [] }
   };
   // startDS = Data Stellare INIZIALE (epoca .00), fissa per la partita.
   ORION.game.startDS = ORION.time.format(startOrbita * 100);
@@ -120,6 +128,17 @@ function newGame(seed, opts) {
     if (saved.victoryTracks) ORION.game.victoryTracks = saved.victoryTracks;
     if (saved.eventSchedule) ORION.game.eventSchedule = saved.eventSchedule;
     if (Array.isArray(saved.chronicle)) ORION.game.chronicle = saved.chronicle.slice();
+    /* Tutorial: rispetta lo stato del payload se presente. */
+    if (saved.tutorial && typeof saved.tutorial === 'object') {
+      ORION.game.tutorial = {
+        enabled: !!saved.tutorial.enabled,
+        seenLessons: Array.isArray(saved.tutorial.seenLessons) ? saved.tutorial.seenLessons.slice() : []
+      };
+    }
+  }
+  /* Normalizza in ogni caso (idempotente) e mostra/nasconde la "?" in HUD. */
+  if (ORION.tutorial && ORION.tutorial.initOnGame) {
+    ORION.tutorial.initOnGame(ORION.game, tutorialEnabled);
   }
 
   setHudDate(ORION.time.currentDS(ORION.game));
@@ -311,6 +330,8 @@ function onMapContext(ctx) {
   // Quando la vista interna del sistema è aperta, è lei a gestire
   // breadcrumb e pannello: ignora il contesto della mappa galassia.
   if (ORION.openSystemId >= 0) return;
+  /* M06.5: tutorial — entrata nel livello "gruppo" (zoom o click su regione). */
+  if (ORION.tutorial && ctx.level === 'group') ORION.tutorial.fire('galaxy');
   renderBreadcrumb(ctx);
   const panel = document.querySelector('.panel--right');
   if (!panel) return;
@@ -536,6 +557,9 @@ function openSystem(id) {
   setNavActive('system');
   setGalaxyHint('system');
   updateSystemUI(system, null);
+
+  /* M06.5: tutorial — prima apertura di un sistema. */
+  if (ORION.tutorial) ORION.tutorial.fire('system');
 }
 
 function closeSystem() {
@@ -757,6 +781,9 @@ function openPlanet(sysId, bodyKey) {
   updatePlanetUI();
 
   pushChronicle(ORION.time.currentDS(g) + ' — Apertura scheda planetaria di <strong>' + body.name + '</strong>.', 'planet');
+
+  /* M06.5: tutorial — prima apertura di un pianeta. */
+  if (ORION.tutorial) ORION.tutorial.fire('planet');
 }
 
 function closePlanet() {
@@ -852,6 +879,15 @@ function renderPlanetPanel(title, content) {
   else if (activeTab === 'risorse') renderPlanetRisorseTab(host, planet, colony);
   else if (activeTab === 'strutture') renderPlanetStruttureTab(host, planet, colony);
   else if (activeTab === 'popolazione') renderPlanetPopolazioneTab(host, planet, colony);
+
+  /* M06.5: tutorial — schede per tab pianeta. Risorse copre l'idea delle
+     avanzate mascherate (§7.2); Strutture copre slot/coda/durata. */
+  if (ORION.tutorial) {
+    if (activeTab === 'strutture') ORION.tutorial.fire('build');
+    else if (activeTab === 'risorse' && planet.advanced && planet.advanced.length > 0) {
+      ORION.tutorial.fire('advanced');
+    }
+  }
 }
 
 /* --- Tab Colonia / Colonizzazione --- */
@@ -1264,6 +1300,8 @@ function initTimeControls() {
 function runAdvance(impulsi) {
   const g = ORION.game;
   if (!g) return;
+  /* M06.5: tutorial — primo avanzamento del tempo. */
+  if (ORION.tutorial) ORION.tutorial.fire('advance');
   const before = g.timeImpulsi || 0;
   const res = (impulsi == null) ? ORION.time.advanceToNextEvent() : ORION.time.advance(impulsi);
   const after = g.timeImpulsi || 0;
@@ -1297,6 +1335,8 @@ function chronicleEvent(ev) {
     const RES = { met: 'metalli', en: 'energia', food: 'cibo', water: 'acqua' };
     const sev = ev.sev === 'crit' ? 'critica' : 'in allerta';
     pushChronicle(ds + ' — ' + pname + ': carenza ' + sev + ' di <strong>' + RES[ev.res] + '</strong>.', 'system');
+    /* M06.5: tutorial — prima volta che vediamo una carenza (low o crit). */
+    if (ORION.tutorial) ORION.tutorial.fire('scarcity');
   } else if (ev.kind === 'scarcity-recover') {
     const RES = { met: 'metalli', en: 'energia', food: 'cibo', water: 'acqua' };
     pushChronicle(ds + ' — ' + pname + ': situazione <strong>' + RES[ev.res] + '</strong> rientrata.', 'system');
@@ -1466,6 +1506,8 @@ function openSaveModal() {
   if (!modal) return;
   modal.removeAttribute('hidden');
   renderSaveModal();
+  /* M06.5: tutorial — prima apertura del pannello salvataggi. */
+  if (ORION.tutorial) ORION.tutorial.fire('save');
 }
 function closeSaveModal() {
   const modal = document.querySelector('[data-bind="save-modal"]');
@@ -1667,6 +1709,10 @@ function enterGame() {
   updateGlobalResourceHud();
   setHudDate(ORION.time.currentDS(ORION.game));
   updateTimeControlsHint();
+  /* M06.5: tutorial — la "?" diventa attiva solo dentro partita. */
+  updateTutorialButton();
+  /* Welcome: prima trigger della partita (solo se tutorial attivo e non già vista). */
+  if (ORION.tutorial) ORION.tutorial.fire('welcome');
 }
 
 function escapeHtml(s) {
@@ -1699,7 +1745,7 @@ function showToast(text) {
    ===================================================================== */
 
 /* Stato locale del form "Nuova partita" — vive solo nel menu. */
-ORION.menuForm = { seed: null, preset: 'classic', ironman: false };
+ORION.menuForm = { seed: null, preset: 'classic', ironman: false, tutorial: true };
 /* Vista corrente del menu: 'home' | 'new' | 'info' */
 ORION.menuView = 'home';
 
@@ -1828,6 +1874,10 @@ function renderMainMenuNew(body) {
         '<span>Ironman <span class="main-menu__field-hint">— niente slot manuali, solo autosave + export/import .json' +
           (presetForcesIronman ? ' (imposto dal preset Incubo)' : '') + '</span></span>' +
       '</label>' +
+      '<label class="main-menu__field main-menu__field--row">' +
+        '<input type="checkbox" data-bind="menu-tutorial"' + (ORION.menuForm.tutorial ? ' checked' : '') + '>' +
+        '<span>Tutorial iniziale <span class="main-menu__field-hint">— schede brevi e contestuali sui concetti chiave (non un walkthrough). Riapribile col bottone <kbd>?</kbd> in alto.</span></span>' +
+      '</label>' +
       '<div class="main-menu__form-actions">' +
         '<button type="button" class="btn btn--mini" data-action="menu-cancel">← Indietro</button>' +
         '<button type="submit" class="btn btn--primary" data-action="menu-start">✦ Inizia partita</button>' +
@@ -1856,6 +1906,10 @@ function renderMainMenuNew(body) {
   if (ironChk) ironChk.addEventListener('change', function () {
     ORION.menuForm.ironman = !!ironChk.checked;
   });
+  const tutChk = form.querySelector('[data-bind="menu-tutorial"]');
+  if (tutChk) tutChk.addEventListener('change', function () {
+    ORION.menuForm.tutorial = !!tutChk.checked;
+  });
   cancel.addEventListener('click', function () { showMainMenu('home'); });
   form.addEventListener('submit', function (e) {
     e.preventDefault();
@@ -1881,9 +1935,9 @@ function startNewGameFromMenu() {
   const auto = ORION.save && ORION.save.loadAutosave ? ORION.save.loadAutosave() : null;
   if (auto && !confirm('Iniziare una nuova partita? L\'autosave corrente verrà sostituito (gli slot manuali restano).')) return;
   clearSavedGame();
-  newGame(ORION.menuForm.seed, { mode: mode });
+  newGame(ORION.menuForm.seed, { mode: mode, tutorialEnabled: !!ORION.menuForm.tutorial });
   /* Reset del form per la prossima apertura */
-  ORION.menuForm = { seed: null, preset: presetId, ironman: !!presetMods.ironman };
+  ORION.menuForm = { seed: null, preset: presetId, ironman: !!presetMods.ironman, tutorial: !!ORION.menuForm.tutorial };
   enterGame();
   showToast('Partita avviata · seed ' + ORION.game.seed);
 }
@@ -1915,9 +1969,28 @@ function boot() {
   initNavigation();
   initTimeControls();
   initSaveControls();
+  initTutorialControls();
   initMainMenu();
   showMainMenu('home');
   console.info('%cOrion Empires ' + ORION.version + ' — main menu pronto.', 'color:#2fe6e0');
+}
+
+/* M06.5: bottone "?" in HUD — apre l'indice di tutte le lezioni
+   (decisione #27, manuale leggero). Nascosto finché non c'è partita. */
+function initTutorialControls() {
+  const btn = document.querySelector('[data-action="open-tutorial"]');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    if (!ORION.game || !ORION.tutorial) return;
+    ORION.tutorial.openIndex();
+  });
+  updateTutorialButton();
+}
+function updateTutorialButton() {
+  const btn = document.querySelector('[data-action="open-tutorial"]');
+  if (!btn) return;
+  if (ORION.game) btn.style.display = '';
+  else btn.style.display = 'none';
 }
 
 document.addEventListener('DOMContentLoaded', boot);
