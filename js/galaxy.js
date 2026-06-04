@@ -57,58 +57,145 @@
     return dx * dx + dy * dy;
   }
 
+  function clampv(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
   /* ------------------------------------------------------------------
      Layout procedurale con clustering (§5.1)
-     Centri-cluster sparsi; ogni sistema posizionato attorno a un centro
-     con dispersione gaussiana, con distanza minima per evitare overlap.
+
+     Obiettivi (richiesta utente):
+     - galassie con FORMA VARIABILE (per lo più verso il quasi-sferico,
+       ma anche ellittiche o irregolari), non sempre appiattite;
+     - gruppi stellari POCO SOVRAPPOSTI, così da poterli nominare come
+       regioni distinte.
+
+     Strategia:
+     1) inviluppo galattico per-seed (disco con aspetto/rotazione
+        randomizzati, bias verso il circolare);
+     2) centri-cluster con DISTANZA MINIMA reciproca (separazione);
+     3) forma per cluster variabile: raggio diverso, aspetto con bias
+        sferico, rotazione, 1–3 sotto-ammassi (contorni non regolari);
+     4) appartenenza di VORONOI: ogni sistema appartiene al centro più
+        vicino → i territori dei gruppi non si intersecano.
      ------------------------------------------------------------------ */
   function layoutSystems(rng, count) {
     const margin = 0.06;
-    const span = 1 - margin * 2;
-    const minDist = 0.85 / Math.sqrt(count); // separazione media tra nodi
+    const minDist = 0.5 / Math.sqrt(count); // separazione tra nodi (vista zoom)
     const minDist2 = minDist * minDist;
 
-    // numero di cluster proporzionale alla dimensione
     const clusterCount = rng.int(4, 7);
-    const clusters = [];
-    for (let i = 0; i < clusterCount; i++) {
-      clusters.push({
-        x: margin + rng.range(0.12, 0.88) * span,
-        y: margin + rng.range(0.12, 0.88) * span,
-        spread: rng.range(0.10, 0.20)
-      });
+
+    // 1) inviluppo galattico: disco centrato, aspetto perlopiù ~1 (sferico)
+    const Rg = rng.range(0.32, 0.44);
+    const galAspect = 1 + Math.pow(rng.float(), 2) * 0.5;
+    const galAngle = rng.float() * Math.PI;
+    function sampleEnvelope() {
+      const rr = Math.sqrt(rng.float());              // disco uniforme
+      const a = rng.float() * Math.PI * 2;
+      const px = Math.cos(a) * rr * Rg;
+      const py = Math.sin(a) * rr * (Rg / galAspect);
+      return {
+        x: 0.5 + px * Math.cos(galAngle) - py * Math.sin(galAngle),
+        y: 0.5 + px * Math.sin(galAngle) + py * Math.cos(galAngle)
+      };
     }
 
-    const positions = [];
+    // 2) centri-cluster con distanza minima reciproca
+    const centers = [];
+    let minCenterDist = (Rg * 1.6) / Math.sqrt(clusterCount);
     let guard = 0;
-    const guardMax = count * 200;
-
-    while (positions.length < count && guard < guardMax) {
+    while (centers.length < clusterCount && guard < 5000) {
       guard++;
-      const c = clusters[positions.length % clusterCount];
-      const x = c.x + rng.gauss() * c.spread;
-      const y = c.y + rng.gauss() * c.spread;
-
-      // dentro i confini con margine
-      if (x < margin || x > 1 - margin || y < margin || y > 1 - margin) continue;
-
-      // rispetta la distanza minima dagli altri
-      const p = { x: x, y: y, cluster: positions.length % clusterCount };
+      const p = sampleEnvelope();
+      if (p.x < margin || p.x > 1 - margin || p.y < margin || p.y > 1 - margin) continue;
       let ok = true;
-      for (let j = 0; j < positions.length; j++) {
-        if (dist2(positions[j], p) < minDist2) { ok = false; break; }
+      for (let j = 0; j < centers.length; j++) {
+        if (dist2(centers[j], p) < minCenterDist * minCenterDist) { ok = false; break; }
       }
-      if (ok) positions.push(p);
+      if (ok) centers.push({ x: p.x, y: p.y });
+      if (guard % 800 === 0) minCenterDist *= 0.85; // allenta se fatica
+    }
+    while (centers.length < clusterCount) {
+      const p = sampleEnvelope();
+      centers.push({ x: clampv(p.x, margin, 1 - margin), y: clampv(p.y, margin, 1 - margin) });
     }
 
-    // se il vincolo di distanza ha lasciato buchi, riempi senza vincolo
-    while (positions.length < count) {
-      const c = clusters[positions.length % clusterCount];
-      positions.push({
-        x: Math.min(1 - margin, Math.max(margin, c.x + rng.gauss() * c.spread)),
-        y: Math.min(1 - margin, Math.max(margin, c.y + rng.gauss() * c.spread)),
-        cluster: positions.length % clusterCount
+    // distanza dal vicino più prossimo (per contenere i raggi)
+    centers.forEach(function (c, i) {
+      let nn = Infinity;
+      centers.forEach(function (d, j) {
+        if (i !== j) { const dd = Math.sqrt(dist2(c, d)); if (dd < nn) nn = dd; }
       });
+      c.nn = isFinite(nn) ? nn : 0.4;
+    });
+
+    // 3) forma per cluster: raggio, aspetto (bias sferico), rotazione, sotto-ammassi
+    centers.forEach(function (c) {
+      c.r = Math.min(rng.range(0.09, 0.17), 0.7 * c.nn);
+      c.aspect = 1 + Math.pow(rng.float(), 2) * 0.85; // perlopiù ~1
+      c.angle = rng.float() * Math.PI;
+      const nSub = rng.int(1, 3);
+      c.subs = [{ dx: 0, dy: 0, w: 1 }];
+      for (let s = 1; s < nSub; s++) {
+        const a = rng.float() * Math.PI * 2;
+        const rad = rng.range(0.3, 0.7) * c.r;
+        c.subs.push({ dx: Math.cos(a) * rad, dy: Math.sin(a) * rad, w: rng.range(0.4, 0.9) });
+      }
+      c.subW = c.subs.reduce(function (s, x) { return s + x.w; }, 0);
+    });
+
+    // quote per cluster proporzionali all'area
+    const totalArea = centers.reduce(function (s, c) { return s + c.r * c.r; }, 0) || 1;
+    const quota = centers.map(function (c) {
+      return Math.max(3, Math.round(count * (c.r * c.r) / totalArea));
+    });
+    // aggiusta la somma a `count`
+    let qsum = quota.reduce(function (s, q) { return s + q; }, 0);
+    let qi = 0;
+    while (qsum > count) { if (quota[qi % quota.length] > 3) { quota[qi % quota.length]--; qsum--; } qi++; }
+    while (qsum < count) { quota[qi % quota.length]++; qsum++; qi++; }
+
+    function nearestCenter(x, y) {
+      let bi = 0, bd = Infinity;
+      for (let i = 0; i < centers.length; i++) {
+        const d = (centers[i].x - x) * (centers[i].x - x) + (centers[i].y - y) * (centers[i].y - y);
+        if (d < bd) { bd = d; bi = i; }
+      }
+      return bi;
+    }
+
+    // 4) campiona i membri (Voronoi + distanza minima tra nodi)
+    const positions = [];
+    for (let ci = 0; ci < centers.length; ci++) {
+      const c = centers[ci];
+      let placed = 0, g2 = 0;
+      const need = quota[ci];
+      while (placed < need && g2 < need * 200) {
+        g2++;
+        let rsel = rng.float() * c.subW, sub = c.subs[0];
+        for (let s = 0; s < c.subs.length; s++) { rsel -= c.subs[s].w; if (rsel <= 0) { sub = c.subs[s]; break; } }
+        const lx = rng.gauss() * c.r * 0.55;
+        const ly = rng.gauss() * (c.r / c.aspect) * 0.55;
+        const x = c.x + sub.dx + (lx * Math.cos(c.angle) - ly * Math.sin(c.angle));
+        const y = c.y + sub.dy + (lx * Math.sin(c.angle) + ly * Math.cos(c.angle));
+        if (x < margin || x > 1 - margin || y < margin || y > 1 - margin) continue;
+        if (nearestCenter(x, y) !== ci) continue; // territori non sovrapposti
+        let ok = true;
+        for (let j = 0; j < positions.length; j++) {
+          if (dist2(positions[j], { x: x, y: y }) < minDist2) { ok = false; break; }
+        }
+        if (!ok) continue;
+        positions.push({ x: x, y: y, cluster: ci });
+        placed++;
+      }
+      // fallback: completa la quota vicino al centro
+      while (placed < need) {
+        positions.push({
+          x: clampv(c.x + rng.gauss() * c.r * 0.4, margin, 1 - margin),
+          y: clampv(c.y + rng.gauss() * c.r * 0.4, margin, 1 - margin),
+          cluster: ci
+        });
+        placed++;
+      }
     }
 
     return positions;

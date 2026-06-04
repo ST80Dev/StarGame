@@ -615,16 +615,17 @@
         const isHome = g.id === this.galaxy.homeGroupId;
         const isHover = g.id === this.hoverGroup;
         const c = this.worldToScreen(g.cx, g.cy);
-        const rad = Math.max(36, g.radius * this.scale * 1.25);
+        const rad = Math.max(34, g.radius * this.scale * 1.05);
 
-        // alone tenue
+        // alone tenue (contenuto, per non sconfinare nelle regioni vicine)
         const glow = ctx.createRadialGradient(c.x, c.y, rad * 0.2, c.x, c.y, rad);
-        glow.addColorStop(0, hexA(col, 0.12 * alpha));
+        glow.addColorStop(0, hexA(col, 0.11 * alpha));
         glow.addColorStop(1, hexA(col, 0));
         ctx.fillStyle = glow;
         ctx.beginPath(); ctx.arc(c.x, c.y, rad, 0, Math.PI * 2); ctx.fill();
 
-        // contorno inviluppo (convex hull) — punteggiato
+        // contorno inviluppo (convex hull) — punteggiato, con un piccolo
+        // INSET verso il centroide così le regioni restano visibilmente staccate
         if (g.hull && g.hull.length >= 3) {
           ctx.save();
           ctx.setLineDash([4, 5]);
@@ -632,7 +633,9 @@
           ctx.strokeStyle = hexA(col, (isActive || isHover ? 0.5 : 0.28) * alpha);
           ctx.beginPath();
           for (let h = 0; h < g.hull.length; h++) {
-            const hp = this.worldToScreen(g.hull[h].x, g.hull[h].y);
+            const ix = g.cx + (g.hull[h].x - g.cx) * 0.88;
+            const iy = g.cy + (g.hull[h].y - g.cy) * 0.88;
+            const hp = this.worldToScreen(ix, iy);
             if (h === 0) ctx.moveTo(hp.x, hp.y); else ctx.lineTo(hp.x, hp.y);
           }
           ctx.closePath(); ctx.stroke();
