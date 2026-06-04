@@ -214,7 +214,7 @@
         'la risorsa rara da sfruttare.</p>'
     },
     {
-      id: 'struct:cantiere-navale', tag: 'M04 · ⬢', title: 'Hangar stellare',
+      id: 'struct:cantiere-navale', tag: 'M04 · ▱', title: 'Hangar di costruzione',
       body:
         '<p><strong>Gancio M08+:</strong> serve a costruire astronavi, grandi astronavi e stazioni. Oggi non produce nulla di visibile, ' +
         'ma <strong>occupa 2 slot</strong> (struttura grossa) e ha upkeep alto (4 en + 1 met/I).</p>' +
@@ -227,7 +227,7 @@
       body:
         '<p><strong>Gancio M14:</strong> forma quadri militari, ufficiali e veterani (figure speciali). Oggi nessun effetto visibile. ' +
         'Upkeep moderato (2 en + 1 food/I).</p>' +
-        '<p><strong>Sinergia futura:</strong> con l\'<em>Hangar stellare</em> alimenta una colonia a vocazione militare. ' +
+        '<p><strong>Sinergia futura:</strong> con l\'<em>Hangar di costruzione</em> alimenta una colonia a vocazione militare. ' +
         'In partite a vocazione <em>Tiranno</em> (#23) sarà struttura-chiave.</p>'
     },
     {

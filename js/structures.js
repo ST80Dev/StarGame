@@ -133,7 +133,7 @@
 
     // ===== Militari (2) =====
     {
-      id: 'cantiere-navale', name: 'Hangar stellare', cat: 'militare', glyph: '⬢',
+      id: 'cantiere-navale', name: 'Hangar di costruzione', cat: 'militare', glyph: '▱',
       desc: 'Necessario per costruire astronavi. Funzione attiva nei moduli flotta (M08+).',
       cost: { met: 120, en: 40 }, time: 50,
       upkeep: { en: 4, met: 1 },

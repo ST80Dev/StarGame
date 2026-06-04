@@ -161,7 +161,7 @@ Su feedback utente (i gruppi 2D si sovrapponevano, distanze poco leggibili) la m
 - **Confine con M06:** lo stato della colonia è già un **delta serializzabile** con `schemaVersion: 1`. Niente da rifare.
 - **Confine con M07:** la nebbia di guerra dei sistemi rimane invariata. La vista pianeta si apre solo per corpi del proprio sistema d'origine o di sistemi esplorati (l'hook esiste nel pannello *Corpo*: senza esplorazione il pannello stesso non mostra il pulsante).
 - **Confine con M13:** i prerequisiti tech delle strutture esistono solo come marker `requires: ['tech:<id>']`, attualmente bloccano la costruzione (l'unica struttura realmente "tech-gated" in M04 è l'impianto esotico, gancio §7.2). Quando M13 attiverà i tech veri, l'impianto si sbloccherà di conseguenza.
-- **Confine con M08/M14/M15/M16:** hangar stellare (id stabile `cantiere-navale` per save compat) e accademia militare sono **ganci** — le funzioni vere arrivano con i rispettivi moduli; in M04 si costruiscono e occupano slot (e contano nelle classi), ma non producono astronavi/figure.
+- **Confine con M08/M14/M15/M16:** hangar di costruzione (id stabile `cantiere-navale` per save compat) e accademia militare sono **ganci** — le funzioni vere arrivano con i rispettivi moduli; in M04 si costruiscono e occupano slot (e contano nelle classi), ma non producono astronavi/figure.
 
 **Limiti per M04 (semplificazioni note):**
 - Per le **cinture asteroidali** non si apre la vista pianeta (le si rappresenta nel sistema; il loro contributo arriverà come "stazione di estrazione orbitale" più avanti).
