@@ -420,6 +420,12 @@
     // già costruita (M04: niente upgrade-in-coda multiplo; max una istanza
     // per id, gli upgrade si fanno tramite livelli — gestione M05)
     if (colony.structures[structId]) return { ok: false, reason: 'Già costruita (upgrade in M05)' };
+    // in costruzione: voce attualmente nella coda del cantiere
+    for (let qi = 0; qi < colony.queue.length; qi++) {
+      if (colony.queue[qi].id === structId) {
+        return { ok: false, reason: 'In costruzione', code: 'building' };
+      }
+    }
     // slot disponibili
     const used = Object.keys(colony.structures).reduce(function (a, id) {
       const d = root.ORION.structures.get(id);
