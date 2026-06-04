@@ -288,7 +288,7 @@ button { font-family: inherit; }
   text-shadow: 0 0 8px rgba(47, 230, 224, 0.25);
 }
 .panel__content { padding: 12px 14px; overflow-y: auto; flex: 1; }
-.panel__note { margin-top: 14px; font-size: 0.78rem; color: var(--c-text-soft); line-height: 1.55; }
+.panel__note { margin-top: 14px; font-size: 0.84rem; color: var(--c-text-soft); line-height: 1.55; }
 
 /* --- Lista di navigazione --- */
 .nav-list { display: flex; flex-direction: column; gap: 4px; }
@@ -456,10 +456,17 @@ button { font-family: inherit; }
    Pannello destro — dettagli sistema selezionato (M02)
    ===================================================================== */
 .sysinfo__home {
-  margin: 0 0 10px;
-  font-size: 0.72rem;
+  margin: 0 0 12px;
+  padding: 6px 10px;
+  font-family: var(--font-display);
+  font-size: 0.84rem;
+  font-weight: 600;
   color: var(--c-accent);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
+  background: rgba(47, 230, 224, 0.08);
+  border-left: 3px solid var(--c-accent);
+  border-radius: var(--radius-sm);
+  text-shadow: 0 0 8px rgba(47, 230, 224, 0.25);
 }
 .sysinfo__fog { font-size: 0.8rem; color: var(--c-text-faint); line-height: 1.6; }
 /* Coppie "etichetta — valore" come mini-card che fluiscono e vanno a capo,
@@ -482,9 +489,11 @@ button { font-family: inherit; }
   border-radius: var(--radius-sm);
 }
 .sysinfo__list dt {
-  color: var(--c-text-faint);
-  font-size: 0.58rem;
-  letter-spacing: 0.10em;
+  color: var(--c-text-soft);
+  font-family: var(--font-display);
+  font-size: 0.70rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -492,8 +501,8 @@ button { font-family: inherit; }
   margin: 0;
   color: var(--c-text);
   font-family: var(--font-data);
-  font-weight: 600;
-  font-size: 0.88rem;
+  font-weight: 700;
+  font-size: 0.95rem;
   letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
@@ -558,9 +567,9 @@ button { font-family: inherit; }
 .sysinfo__sub {
   margin: 18px 0 10px;
   font-family: var(--font-display);
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 700;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.20em;
   text-transform: uppercase;
   color: var(--c-accent);
   padding-bottom: 6px;
@@ -616,12 +625,13 @@ button { font-family: inherit; }
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 8px;
+  padding: 7px 10px;
   font-family: var(--font-data);
-  font-size: 0.76rem;
+  font-size: 0.84rem;
+  font-weight: 600;
   text-align: left;
-  color: var(--c-text-soft);
-  background: transparent;
+  color: var(--c-text);
+  background: rgba(8, 12, 30, 0.35);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -695,8 +705,9 @@ button { font-family: inherit; }
 .body-chip__moons {
   margin-left: auto;
   padding-left: 6px;
-  font-size: 0.72rem;
-  color: var(--c-text-faint);
+  font-size: 0.80rem;
+  font-weight: 600;
+  color: var(--c-text-soft);
   flex: 0 0 auto;
   letter-spacing: 0.02em;
 }
@@ -704,11 +715,11 @@ button { font-family: inherit; }
 /* Stato colonia sui chip dei corpi celesti */
 .body-chip__badge {
   margin-left: 6px;
-  padding: 1px 6px;
+  padding: 2px 8px;
   font-family: var(--font-display);
-  font-size: 0.62rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   border-radius: 999px;
   border: 1px solid currentColor;
   flex: 0 0 auto;
@@ -1095,31 +1106,51 @@ button { font-family: inherit; }
 }
 .time-control__unit strong { color: var(--c-accent); font-weight: 600; }
 
-/* Versione inline nell'header: compatta orizzontale accanto a DATA */
+/* Versione inline nell'header — decisione #31 (auto-advance):
+   5 controlli compatti [−][▶ velocità][+][⏵Ι][⏭ Evento]. */
 .time-control--inline {
   flex-direction: row;
   align-items: center;
   gap: 6px;
-  padding: 4px 6px;
+  padding: 5px 8px;
   background: rgba(8, 12, 30, 0.65);
   border: 1px solid var(--c-border);
   box-shadow: none;
   backdrop-filter: none;
 }
 .time-control--inline::before { display: none; }
-.time-control--inline .time-steps {
-  grid-template-columns: repeat(4, auto);
-  gap: 4px;
+.time-control--inline .btn--mini {
+  padding: 6px 8px;
+  font-size: 0.95rem;
+  min-width: 30px;
+  font-family: var(--font-data);
+  letter-spacing: 0;
+  text-transform: none;
 }
-.time-control--inline .btn--step {
-  padding: 5px 8px;
-  font-size: 0.82rem;
-  min-width: 32px;
+.time-control--inline .btn--play {
+  padding: 6px 10px;
+  font-size: 0.74rem;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  text-transform: none;
+  font-family: var(--font-data);
+  min-width: 130px;
+  justify-content: flex-start;
+  background: rgba(47, 230, 224, 0.06);
+  border-color: var(--c-accent-dim);
+}
+.time-control--inline .btn--play:hover:not(:disabled) {
+  background: rgba(47, 230, 224, 0.18);
+  border-color: var(--c-accent);
+}
+.time-control--inline .btn--play .btn__glyph {
+  font-size: 1rem;
+  color: var(--c-accent);
 }
 .time-control--inline .btn--next-event {
-  padding: 7px 10px;
+  padding: 6px 10px;
   font-size: 0.72rem;
-  letter-spacing: 0.10em;
+  letter-spacing: 0.08em;
   white-space: nowrap;
 }
 .time-control--inline .btn__glyph { font-size: 0.85rem; }
@@ -1349,8 +1380,10 @@ button { font-family: inherit; }
 .scar-tag {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
-  font-size: 0.72rem;
+  padding: 3px 10px;
+  font-family: var(--font-data);
+  font-size: 0.80rem;
+  font-weight: 600;
   letter-spacing: 0.06em;
   border-radius: 999px;
   border: 1px solid currentColor;
@@ -1360,8 +1393,8 @@ button { font-family: inherit; }
 
 /* Progress bar generica per code (costruzione, scansione, colonizzazione) */
 .progress-bar {
-  height: 6px;
-  margin-top: 8px;
+  height: 9px;
+  margin-top: 10px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--c-border, rgba(255,255,255,0.15));
   border-radius: 3px;
@@ -1475,8 +1508,8 @@ button { font-family: inherit; }
 .save-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
+  gap: 12px;
+  padding: 16px;
   border: 1px solid var(--c-border, rgba(255,255,255,0.15));
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.02);
@@ -1484,22 +1517,36 @@ button { font-family: inherit; }
 .save-card--auto { border-color: rgba(47, 230, 224, 0.45); background: rgba(47, 230, 224, 0.05); }
 .save-card--empty { background: rgba(255, 255, 255, 0.01); border-style: dashed; opacity: 0.85; }
 .save-card__name {
-  font-family: var(--font-data);
-  font-size: 0.85rem;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
   color: var(--c-text);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
 }
 .save-card__meta {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4px 12px;
+  gap: 8px 16px;
   margin: 0;
-  font-size: 0.72rem;
+  font-size: 0.86rem;
 }
-.save-card__meta div { display: flex; flex-direction: column; }
-.save-card__meta dt { color: var(--c-text-faint); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em; }
-.save-card__meta dd { margin: 0; color: var(--c-text-soft); }
-.save-card__meta code { font-family: var(--font-data); font-size: 0.7rem; color: var(--c-accent); }
+.save-card__meta div { display: flex; flex-direction: column; gap: 2px; }
+.save-card__meta dt {
+  color: var(--c-text-soft);
+  font-family: var(--font-display);
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.save-card__meta dd {
+  margin: 0;
+  color: var(--c-text);
+  font-family: var(--font-data);
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+.save-card__meta code { font-family: var(--font-data); font-size: 0.86rem; font-weight: 700; color: var(--c-accent); }
 .save-card__actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 
 .save-toast {
@@ -1660,15 +1707,17 @@ button { font-family: inherit; }
   gap: 8px;
 }
 .main-menu__field-label {
-  font-family: var(--font-data);
-  font-size: 0.72rem;
-  letter-spacing: 0.10em;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--c-text-soft);
+  color: var(--c-accent);
 }
 .main-menu__field-hint {
-  font-size: 0.7rem;
-  color: var(--c-text-faint);
+  font-size: 0.80rem;
+  line-height: 1.45;
+  color: var(--c-text-soft);
   font-style: italic;
 }
 .main-menu__field-row {
@@ -1918,11 +1967,13 @@ select.main-menu__input { cursor: pointer; }
 }
 .save-card--candidate .save-card__name {
   color: var(--c-accent);
+  text-shadow: 0 0 10px rgba(47, 230, 224, 0.25);
 }
 .main-menu__sub-inline {
   color: var(--c-text-soft);
-  font-size: 0.72rem;
   font-family: var(--font-data);
+  font-size: 0.85rem;
+  font-weight: 500;
   letter-spacing: 0.04em;
 }
 
@@ -1930,27 +1981,28 @@ select.main-menu__input { cursor: pointer; }
 .main-menu__pot-bars {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4px 10px;
-  margin-top: 4px;
+  gap: 8px 14px;
+  margin-top: 6px;
 }
 .main-menu__pot {
   display: grid;
-  grid-template-columns: 36px 1fr 28px;
+  grid-template-columns: 44px 1fr 32px;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 .main-menu__pot-label {
-  font-size: 0.65rem;
-  letter-spacing: 0.06em;
+  font-family: var(--font-display);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--c-text-faint);
-  font-family: var(--font-data);
+  color: var(--c-text-soft);
 }
 .main-menu__pot-track {
   display: block;
-  height: 5px;
+  height: 8px;
   background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--c-border, rgba(255,255,255,0.12));
+  border: 1px solid var(--c-border, rgba(255,255,255,0.18));
   border-radius: 3px;
   overflow: hidden;
 }
@@ -1960,39 +2012,129 @@ select.main-menu__input { cursor: pointer; }
   background: linear-gradient(90deg, rgba(47,230,224,0.55), var(--c-accent, #2fe6e0));
 }
 .main-menu__pot-val {
-  font-size: 0.7rem;
   font-family: var(--font-data);
+  font-size: 0.86rem;
+  font-weight: 700;
   text-align: right;
-  color: var(--c-text-soft);
+  color: var(--c-text);
+  font-variant-numeric: tabular-nums;
 }
 .main-menu__adv {
   margin: 0;
-  font-size: 0.72rem;
-  color: rgba(186, 142, 255, 0.95);
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: rgba(199, 173, 255, 1);
 }
 
 /* =====================================================================
    M06.5 — Banner fase Insediamento (decisione #27 / GDD §6.2.bis)
    ===================================================================== */
 .settle-banner {
-  padding: 10px 12px;
-  margin-bottom: 12px;
-  border: 1px solid rgba(255, 176, 0, 0.45);
-  background: rgba(255, 176, 0, 0.08);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  border: 1.5px solid rgba(255, 176, 0, 0.55);
+  background: rgba(255, 176, 0, 0.10);
+  border-left: 4px solid #ffb000;
   border-radius: 5px;
+  box-shadow: inset 0 0 18px rgba(255, 176, 0, 0.06);
 }
 .settle-banner__title {
-  margin: 0 0 4px;
-  font-family: var(--font-data);
-  font-size: 0.86rem;
-  letter-spacing: 0.05em;
-  color: #ffb000;
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #ffd070;
+  text-shadow: 0 0 10px rgba(255, 176, 0, 0.35);
 }
 .settle-banner__hint {
-  margin: 0 0 6px;
-  font-size: 0.72rem;
-  color: var(--c-text-soft);
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1.45;
+  color: #f0d8a8;
 }
 .settle-banner .progress-bar__fill {
   background: linear-gradient(90deg, rgba(255,176,0,0.95), rgba(255,176,0,0.55));
+}
+
+/* =====================================================================
+   Decisione #31 — Overlay di auto-pausa (eventi notevoli)
+   Niente modale invasiva: una card flottante in alto a destra con
+   l'elenco compatto degli eventi + bottoni "Riprendi" / "Chiudi" +
+   checkbox "non pausare più su questo tipo". Si chiude con Esc o
+   cliccando "Riprendi".
+   ===================================================================== */
+.event-overlay {
+  position: fixed;
+  top: 80px;
+  right: 18px;
+  z-index: 250;
+  max-width: 340px;
+  pointer-events: none;
+}
+.event-overlay[hidden] { display: none; }
+.event-overlay__panel {
+  pointer-events: auto;
+  padding: 12px 14px;
+  background: var(--c-panel);
+  border: 2px solid var(--c-accent-dim);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel), 0 0 18px rgba(47, 230, 224, 0.20);
+  backdrop-filter: blur(6px);
+}
+.event-overlay__title {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-accent);
+}
+.event-overlay__list {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.event-overlay__item {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--c-border-soft);
+}
+.event-overlay__item:last-child { border-bottom: none; }
+.event-overlay__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+.event-overlay__kind {
+  font-family: var(--font-display);
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-text);
+}
+.event-overlay__count {
+  font-family: var(--font-data);
+  font-size: 0.72rem;
+  color: var(--c-text-faint);
+}
+.event-overlay__pref {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: var(--c-text-soft);
+  cursor: pointer;
+}
+.event-overlay__pref input {
+  vertical-align: middle;
+  margin-right: 4px;
+  accent-color: var(--c-accent);
+}
+.event-overlay__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }

@@ -10,8 +10,12 @@
      - advance(impulsi)            avanza N Impulsi, processa code/produzione
      - advanceToNextEvent()        salta al prossimo evento notevole
      - tick(game)                  un singolo Impulso (esposto per test)
-     - format(absImpulsi)          formatta in "DS <orbita>.<impulsi>"
-     - currentDS(game)             Data Stellare corrente del game
+     - format(absImpulsi, mode)    formatta nel "Calendario del Faro" (#30):
+                                     mode 'full'     → "Ω1·Φ87·Κ6·Ι47"
+                                     mode 'compact'  → "1·87·6·47" (default)
+                                     mode 'duration' → "2Κ·20Ι" (omette zeri di testa)
+     - currentDS(game)             Data Stellare corrente del game (compatta)
+     - currentDSFull(game)         versione estesa con sigle greche
 
    Determinismo / idempotenza:
      - Nessun RNG dipendente da Math.random nel loop. Se servisse stocastica
@@ -83,18 +87,70 @@
     'impianto-esotico':  { scienziati: 2, tecnici: 1 }
   };
 
-  /* --- Helpers --- */
-  function format(absImp) {
-    const orb = Math.floor(absImp / 100);
-    const rem = absImp - orb * 100;
-    const s = rem < 10 ? '0' + rem : '' + rem;
-    return 'DS ' + orb + '.' + s;
+  /* --- Helpers ---
+     CALENDARIO DEL FARO (decisione #30 — sostituisce "DS <orb>.<imp>" di M05).
+     Quattro unità ancorate alla pulsar di Orion:
+       Ι (iota)  = Impulso (battito)     — atomica
+       Κ (kappa) = Ciclo di nutazione    = 50 Ι
+       Φ (phi)   = Fase di precessione   = 20 Κ = 1000 Ι
+       Ω (omega) = Eone (grande risonanza) = 100 Φ = 100 000 Ι
+     I rapporti irregolari (50:20:100) sono *intenzionalmente* non potenze
+     di 10: l'occhio non collassa più i campi a un decimale e ogni unità
+     "conta" davvero (vedi discussione di sessione → CLAUDE.md decisione #30).
+
+     Retro-compatibilità con il delta serializzato (schema 4): manteniamo
+     il campo `startEpochOrbita` come SEME NUMERICO dell'epoca d'inizio
+     — vecchia semantica "Orbita = 100 I": startEpochOrbita * 100 = absI(0).
+     Niente bump di schema, save esistenti restano compatibili. */
+  const I_PER_K = 50;
+  const K_PER_PHI = 20;
+  const PHI_PER_OMEGA = 100;
+  const I_PER_PHI = I_PER_K * K_PER_PHI;          // 1000
+  const I_PER_OMEGA = I_PER_PHI * PHI_PER_OMEGA;  // 100 000
+
+  function splitFaro(absI) {
+    absI = Math.max(0, Math.floor(absI || 0));
+    const omega = Math.floor(absI / I_PER_OMEGA); absI -= omega * I_PER_OMEGA;
+    const phi   = Math.floor(absI / I_PER_PHI);   absI -= phi * I_PER_PHI;
+    const kappa = Math.floor(absI / I_PER_K);     absI -= kappa * I_PER_K;
+    return { O: omega, F: phi, K: kappa, I: absI };
+  }
+
+  /* Formato configurabile: 'full' / 'compact' (default) / 'duration'. */
+  function format(absImp, mode) {
+    const p = splitFaro(absImp);
+    mode = mode || 'compact';
+    if (mode === 'full') {
+      return 'Ω' + p.O + '·Φ' + p.F + '·Κ' + p.K + '·Ι' + p.I;
+    }
+    if (mode === 'duration') {
+      /* Per le durate: omettiamo gli zeri di testa, mostriamo solo i campi
+         significativi. Sempre almeno Ι (anche se 0). Esempi:
+            14   → "14Ι"
+            60   → "1Κ·10Ι"
+            120  → "2Κ·20Ι"
+            1200 → "1Φ·4Κ"  (Ι=0 omesso se ci sono unità superiori non-zero)
+            100000 → "1Ω"   (tutto il resto a zero) */
+      const parts = [];
+      if (p.O) parts.push('Ω' + p.O);
+      if (p.F) parts.push('Φ' + p.F);
+      if (p.K) parts.push('Κ' + p.K);
+      if (p.I || parts.length === 0) parts.push('Ι' + p.I);
+      return parts.join('·');
+    }
+    /* compact: "1·87·6·47" — sigla in testa per disambiguare. */
+    return p.O + '·' + p.F + '·' + p.K + '·' + p.I;
   }
 
   function currentDS(game) {
-    if (!game) return 'DS —';
+    if (!game) return '—';
     const base = (game.startEpochOrbita || 0) * 100;
-    return format(base + (game.timeImpulsi || 0));
+    return format(base + (game.timeImpulsi || 0), 'compact');
+  }
+  function currentDSFull(game) {
+    if (!game) return '—';
+    const base = (game.startEpochOrbita || 0) * 100;
+    return format(base + (game.timeImpulsi || 0), 'full');
   }
 
   /* Stato di scarsità di default (idempotente, creato lazy). */
@@ -579,6 +635,9 @@
     CLASS_BIAS: CLASS_BIAS,
     format: format,
     currentDS: currentDS,
+    currentDSFull: currentDSFull,
+    splitFaro: splitFaro,
+    I_PER_K: I_PER_K, I_PER_PHI: I_PER_PHI, I_PER_OMEGA: I_PER_OMEGA,
     tick: tick,
     advance: advance,
     advanceToNextEvent: advanceToNextEvent,

@@ -83,9 +83,9 @@
           <span class="index__label">REP</span>
           <span class="index__value" data-bind="reputazione">—</span>
         </div>
-        <div class="index index--date" title="Data Stellare — Tempo Standard Galattico (unità: Impulso)">
+        <div class="index index--date" title="Data Stellare — Calendario del Faro (Ω·Φ·Κ·Ι)">
           <span class="index__label">DATA</span>
-          <span class="index__value" data-bind="data-stellare">DS&nbsp;—</span>
+          <span class="index__value" data-bind="data-stellare">—</span>
         </div>
         <button class="btn btn--tutorial" data-action="open-tutorial" type="button" title="Tutorial — indice schede">
           <span aria-hidden="true">?</span>
@@ -95,19 +95,14 @@
         </button>
       </div>
 
-      <div class="time-control time-control--inline" aria-label="Controllo del tempo">
-        <div class="time-steps" role="group" aria-label="Salti temporali (Impulsi)">
-          <button class="btn btn--step" data-action="advance" data-impulsi="1" type="button">+1</button>
-          <button class="btn btn--step" data-action="advance" data-impulsi="2" type="button">+2</button>
-          <button class="btn btn--step" data-action="advance" data-impulsi="5" type="button">+5</button>
-          <button class="btn btn--step" data-action="advance" data-impulsi="10" type="button">+10</button>
-        </div>
-        <button class="btn btn--primary btn--next-event" data-action="advance-to-event" type="button" title="Avanza fino al prossimo evento (TSG)">
-          <span class="btn__glyph" aria-hidden="true">⏭</span>
-          <span class="btn__label">Next</span>
-        </button>
-      </div>
+      <!-- Decisione #31: auto-advance pausabile. I 5 controlli sono renderizzati
+           da renderTimeControls() in main.js; questo è solo l'host. -->
+      <div class="time-control time-control--inline" aria-label="Controllo del tempo"
+           data-bind="time-controls"></div>
     </header>
+
+    <!-- ---- Overlay di auto-pausa (decisione #31) ---- -->
+    <div class="event-overlay" data-bind="event-overlay" aria-live="polite" hidden></div>
 
     <!-- ---- Modale Salva/Carica/Esporta (M06) ---- -->
     <div class="save-modal" data-bind="save-modal" role="dialog" aria-modal="true" aria-label="Salvataggi" hidden>

@@ -94,14 +94,22 @@
     {
       id: 'advance',
       tag: 'M05',
-      title: 'Tempo Standard Galattico',
+      title: 'Calendario del Faro · scorrere del tempo',
       body:
-        '<p>Unità: <strong>Impulso (I)</strong> · 10 I = 1 Arco · 100 I = 1 Orbita · 1000 I = 1 Èra. La Data Stellare in alto ' +
-        'mostra <code>DS &lt;orbita&gt;.&lt;impulsi&gt;</code>.</p>' +
-        '<p>Avanzare fa maturare costruzioni, produzione, popolazione e scansioni. <strong>"Prossimo evento"</strong> ' +
-        'salta direttamente al prossimo cambio di stato significativo (fine costruzione, arrivo colonia, scansione completata…).</p>' +
-        '<p>Il sistema è <strong>recovery-friendly</strong>: nessuna scelta del momento è perennemente punitiva, ' +
-        'tutte le situazioni difficili si recuperano col tempo.</p>'
+        '<p>Il tempo è ancorato a una pulsar (il <em>Faro di Orion</em>) e si misura su 4 unità:</p>' +
+        '<ul>' +
+          '<li><strong>Ι</strong> (iota) — Impulso, il battito atomico</li>' +
+          '<li><strong>Κ</strong> (kappa) — Ciclo, 50 Ι</li>' +
+          '<li><strong>Φ</strong> (phi) — Fase, 20 Κ = 1000 Ι</li>' +
+          '<li><strong>Ω</strong> (omega) — Eone, 100 Φ = 100 000 Ι</li>' +
+        '</ul>' +
+        '<p>La Data Stellare in alto è in formato compatto <code>Ω·Φ·Κ·Ι</code> (es. <code>1·87·6·47</code>). ' +
+        'Le durate omettono gli zeri di testa (es. una colonizzazione di 120 Ι = <code>2Κ·20Ι</code>).</p>' +
+        '<p>Il tempo scorre <strong>automaticamente</strong> con <strong>▶</strong> nella barra in alto. ' +
+        'Cambia velocità con <kbd>+</kbd>/<kbd>−</kbd> (7 livelli, default 1× = 30s reali per Ι), ' +
+        'pausa con <kbd>Spazio</kbd>, singolo Ι con <kbd>→</kbd>, salta al prossimo evento con <kbd>E</kbd>. ' +
+        'Su ogni evento notevole il tempo <strong>si auto-pausa</strong>: puoi disattivare la pausa per categoria nel popup.</p>' +
+        '<p>Il sistema è <strong>recovery-friendly</strong>: nessuna scelta del momento è perennemente punitiva.</p>'
     },
     {
       id: 'scarcity',
