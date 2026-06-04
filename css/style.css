@@ -1045,6 +1045,33 @@ button { font-family: inherit; }
   filter: saturate(0.7);
   background: color-mix(in srgb, var(--c-accent) 5%, transparent);
 }
+.struct-item__locked.is-demolish {
+  color: var(--c-bad);
+  border: 1px solid color-mix(in srgb, var(--c-bad) 55%, transparent);
+  background: color-mix(in srgb, var(--c-bad) 10%, transparent);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-family: var(--font-data);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.struct-item.is-queue.is-demolish {
+  background: color-mix(in srgb, var(--c-bad) 6%, transparent);
+}
+.struct-item.is-queue.is-demolish .progress-bar__fill {
+  background: var(--c-bad);
+}
+.struct-item__demolish {
+  padding: 2px 8px;
+  font-family: var(--font-data);
+  font-size: 0.85rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--c-bad);
+  opacity: 0.7;
+}
+.struct-item__demolish:hover { opacity: 1; }
 .struct-item__cancel {
   padding: 2px 8px;
   font-family: var(--font-data);

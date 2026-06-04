@@ -204,21 +204,54 @@
       const dec = (settling && i === 0) ? 1.5 : 1;
       q.duration = (q.duration || 0) - dec;
       if (q.duration <= 0) {
-        // Completa la struttura (oppure upgrade futuro M13)
         const def = root.ORION.structures.get(q.id);
         if (!def) continue;
-        colony.structures[q.id] = colony.structures[q.id] || { level: 0, hp: 100 };
-        colony.structures[q.id].level = (colony.structures[q.id].level || 0) + 1;
-        // Osservatorio: avvia la finestra di osservazione (M05)
-        if (q.id === 'osservatorio' && !colony.scanned.active) {
-          colony.scanned.progress = 0;
+        if (q.target === 'demolish') {
+          /* Smantellamento completato (decisione recovery-friendly):
+             - rimuove la struttura,
+             - rimborsa il 50% del costo originale (70% sulla natale: il
+               cantiere principale ha infrastruttura di smontaggio migliore),
+             - applica un malus morale -0.10 con decadimento lineare su
+               30 Ι (gestito in processPopulation). Mai fail-state.
+             Se l'osservatorio smontato era l'origine della scansione,
+             interrompe la scansione in corso (riavviabile ricostruendo). */
+          delete colony.structures[q.id];
+          const refundRate = colony.isHomeBase ? 0.7 : 0.5;
+          if (def.cost) {
+            Object.keys(def.cost).forEach(function (k) {
+              colony.stock[k] = (colony.stock[k] || 0) + Math.floor(def.cost[k] * refundRate);
+            });
+          }
+          colony.moraleMalus = {
+            amount: 0.10,
+            startedAt: game.timeImpulsi,
+            expiresAt: game.timeImpulsi + 30
+          };
+          if (q.id === 'osservatorio' && !colony.scanned.active) {
+            colony.scanned.progress = 0;
+          }
+          events.push({
+            kind: 'demolish-done',
+            colony: colony, planet: planet,
+            structId: q.id, structName: def.name,
+            refundRate: refundRate,
+            impulso: game.timeImpulsi
+          });
+        } else {
+          // Completa la struttura (oppure upgrade futuro M13)
+          colony.structures[q.id] = colony.structures[q.id] || { level: 0, hp: 100 };
+          colony.structures[q.id].level = (colony.structures[q.id].level || 0) + 1;
+          // Osservatorio: avvia la finestra di osservazione (M05)
+          if (q.id === 'osservatorio' && !colony.scanned.active) {
+            colony.scanned.progress = 0;
+          }
+          events.push({
+            kind: 'build-done',
+            colony: colony, planet: planet,
+            structId: q.id, structName: def.name,
+            impulso: game.timeImpulsi
+          });
         }
-        events.push({
-          kind: 'build-done',
-          colony: colony, planet: planet,
-          structId: q.id, structName: def.name,
-          impulso: game.timeImpulsi
-        });
       } else {
         stillQueued.push(q);
       }
@@ -385,6 +418,18 @@
       const habit = (colony.structures['centro-abitativo'] && colony.structures['centro-abitativo'].level) || 0;
       morale += Math.min(CFG.POP_MORALE_MAX - 1.0, habit * CFG.POP_MORALE_HABITATION);
       if (morale > CFG.POP_MORALE_MAX) morale = CFG.POP_MORALE_MAX;
+      // malus temporaneo da smantellamento: decadimento lineare su 30 Ι
+      if (colony.moraleMalus) {
+        const mm = colony.moraleMalus;
+        if (game.timeImpulsi >= mm.expiresAt) {
+          colony.moraleMalus = null;
+        } else {
+          const span = mm.expiresAt - mm.startedAt;
+          const left = mm.expiresAt - game.timeImpulsi;
+          morale -= mm.amount * (left / span);
+          if (morale < 0.2) morale = 0.2;
+        }
+      }
       // penalità "allerta" su cibo/acqua
       if (scar.food.state === 'low' || scar.water.state === 'low') morale *= 0.6;
 
