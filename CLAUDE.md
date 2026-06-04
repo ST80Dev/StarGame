@@ -24,7 +24,7 @@ Legenda: ✅ completato · 🚧 in corso · ⬜ non iniziato · ⏸️ in attesa
 |-----|--------------------------------|:----:|------|
 | M01 | Struttura base (shell, tema, layout) | ✅ | Confermato. Shell, tema, layout, TSG. |
 | M02 | Galassia (gen. procedurale, mappa Canvas) | ⏸️ | Implementato — in attesa di conferma utente. Gen. procedurale (seed+delta), nomi §5.2, mappa a nodi su Canvas responsivo + Pointer Events. |
-| M03 | Sistema stellare               | ⬜ | |
+| M03 | Sistema stellare               | ⏸️ | Implementato — in attesa di conferma utente. Vista interna su Canvas: stella/e (incl. binarie §6.1), 4–7 corpi §6.1 come dischi procedurali, anomalie, sidebar/breadcrumb contestuali. Deterministico dal seed. |
 | M04 | Pianeta base                   | ⬜ | |
 | M05 | Tempo e avanzamento (TSG, game loop) | ⬜ | |
 | M06 | Salvataggio (localStorage + export/import .json) | ⬜ | seed+delta, schemaVersion, log limitato |
@@ -92,6 +92,22 @@ Architettura a moduli vanilla (namespace globale `ORION`, niente bundler), caric
 
 ---
 
+## M03 — Sistema stellare · cosa è stato fatto
+
+**Obiettivo (GDD §6):** vista interna del sistema, agganciata al livello *Sistema* della navigazione gerarchica di M02 (§5.5).
+
+- **`js/system.js` — generazione dell'interno.** `generate(galaxy, systemId)` produce la **struttura immutabile** dell'interno, **derivata dal seed** (`<seed>:sys:<id>`): non va salvata, si rigenera identica (seed+delta, decisione #5 — verificato deterministico su 510 sistemi). Contiene:
+  - **stella/e** ricavate dal tipo già scelto in M02 (coerenza col colore del nodo); le **binarie** (§6.1) sono due componenti attorno al baricentro, pianeti circumbinari;
+  - **4–7 corpi celesti** (§6.1) in orbite spaziate, con tipo influenzato dalla fascia orbitale (interno caldo → vulcanico/desertico, fascia abitabile → terrestre/oceanico/forestale, esterno freddo → ghiacciato/gassoso; **cinture asteroidali** nei vuoti); **lune** come corpi-figli (sempre sui gassosi, talvolta sui rocciosi grandi);
+  - tabella **tipi-corpo §6.3** con vantaggi/svantaggi e palette di resa; **anomalie §6.1** opzionali (0–2: campo di detriti / nebulosa locale / reliquie antiche);
+  - il **sistema d'origine** garantisce un mondo ospitale (`homeWorld`).
+- **`js/system-view.js` — vista su Canvas.** Classe `SystemView` (stessa impostazione di `GalaxyMap`): **Canvas responsivo** (ResizeObserver + `devicePixelRatio`, render **on-demand**) e **input unificato** via **Pointer Events** (pan, zoom rotella/pinch, tap per selezionare, hover, doppio click per inquadrare un corpo o uscire). Resa **NASA/Visions** (decisione #8): stella/e con core+corona+spicchi di diffrazione, **orbite sottili**, pianeti come **dischi procedurali** (bande dei gassosi, mottling roccioso, calotte di ghiaccio, crepe di lava, crateri lunari) con **bordo atmosfera** sul limbo illuminato e **terminatore** (emisfero notturno) — niente alone uniforme. Cinture come anello di detriti, anomalie come campi (nebulosa/detriti) + glifo.
+- **`js/main.js` — integrazione.** Il Sistema è un **layer** sopra la mappa galassia (che resta viva sotto, preservando lo zoom): `openSystem/closeSystem`. **Breadcrumb** estesa `Galassia › Gruppo › Sistema › Pianeta` e **sidebar contestuale**: pannello *Sistema* (stella/e, n° corpi, pericolo, elenco corpi + anomalie) e, al click su un corpo, pannello *Corpo* con i dati base §6.3. Ingressi: doppio click sul nodo della mappa, pulsante **Apri sistema** nel pannello M02, voce di navigazione *Sistema*.
+
+**Note di scope:** la **scheda pianeta allargata** (risorse, popolazione, edifici, colonizzazione) è **M04** — qui ci si ferma alla **selezione del corpo e ai dati base** §6.3, con rimando esplicito a M04. La **nebbia di guerra** §5.1 è rispettata (scelta utente, vedi decisione #11): solo i sistemi **ESPLORATI** mostrano i corpi con dettagli; i **RILEVATI** mostrano stella+orbite e corpi come sagome "da scansionare"; gli **UNKNOWN** sono bloccati (rimando a M07). La scoperta vera (muovere flotte) resta **M07**.
+
+---
+
 ## Decisioni prese
 
 1. **Font senza CDN.** Il GDD suggerisce *Orbitron* da Google Fonts (§3), ma vieta anche dipendenze/CDN esterni (§2). Per rispettare il vincolo più stringente si usa uno **stack di font** (`--font-display`) che impiega Orbitron se installato localmente, con fallback di sistema. In futuro si potrà includere il font come file locale (`/fonts`) senza chiamate esterne.
@@ -114,6 +130,9 @@ Architettura a moduli vanilla (namespace globale `ORION`, niente bundler), caric
 7. **Nomi reali oltre il pool: designazione di catalogo (M02).** Il GDD §5.2 chiede **40% nomi reali**, ma il pool fisso è di soli **20** nomi: con galassie fino a 120 sistemi la quota del 40% (fino a 48) supera il pool. I nomi reali eccedenti ricevono quindi una **designazione romana** (`Rigel II`, `Vega III`, …), convenzione comune nei 4X (MoO, Stellaris). Così la regola 40/60 è rispettata senza inventare false stelle reali. Gli inventati restano interamente procedurali (3 stili §5.2), quindi illimitati.
 8. **Direzione artistica: "NASA retro / Visions" + resa mappa realistica (M02).** Scelta dell'utente fra tre mood retrò (paperback 70s · NASA/Visions · cassette/CRT) tramite mockup renderizzati. Vince **NASA/Visions** (blu notte, accenti ambra/ciano/magenta/viola, sans pulito) — già vicino al tema esistente. Sulla mappa **si abbandona l'alone uniforme** attorno a ogni nodo (effetto "a bolle"): il colore viene da **nebulose + polvere stellare** procedurali, con **bloom/spicchi di diffrazione** solo su poche stelle brillanti; i sistemi-gioco sono **marker netti** con anello sottile per il pericolo. Visual pass su M02; il pianeta procedurale (sfera con bande/atmosfera/terminatore) e la scheda pianeta allargata arrivano con M03/M04.
 9. **Navigazione gerarchica a zoom con gruppi stellari (M02, GDD §5.5).** Mappa **scalabile** a livelli **Galassia → Gruppo → Sistema → Pianeta**, con la **sidebar contestuale** ai livelli (in M02: Galassia e Gruppo completi; Sistema/Pianeta come scala di navigazione che rimanda a M03/M04) e **breadcrumb** per risalire. I "gruppi stellari" riusano i **cluster** già generati; nomi-regione in schema **misto** (descrittore evocativo + riferimento reale se nel gruppo c'è una stella reale famosa, es. "Velo di Vega"; altrimenti nome evocativo). Il passaggio di livello è guidato sia dal **click** (camera animata) sia dallo **zoom** (reveal continuo regioni↔stelle). Nessun costo di salvataggio: gruppi e nomi sono deterministici dal seed.
+10. **Orbite statiche, render on-demand (M03).** Scelta dell'utente: nella vista interna i corpi restano in **posizioni fisse deterministiche dal seed** e il rendering è **on-demand** (nessun loop continuo) — coerente con l'impostazione di M02. L'eventuale rotazione orbitale animata è rimandata (candidato polish/M05 quando ci sarà il game loop). Vantaggio: zero costo CPU a riposo e nessun rischio di stato non deterministico.
+11. **Nebbia di guerra dell'interno fedele a §5.1 (M03).** Scelta dell'utente: l'interno si rivela in base al livello di scoperta — **ESPLORATO** = corpi con dettagli completi (tipi §6.3, lune, anomalie); **RILEVATO** = stella + orbite con i corpi come sagome "da scansionare" (dettagli rimandati a **M07**); **UNKNOWN** = schermo bloccato. All'avvio il sistema d'origine è completo e i vicini mostrano il layout. La scoperta vera (muovere flotte) resta M07.
+12. **Stella dell'interno coerente con M02 + designazione dei corpi (M03).** Il tipo di stella della vista interna **deriva** da quello già scelto in M02 (`galaxy.systems[id].star`), così il colore del nodo e l'interno coincidono. I corpi celesti ricevono una **designazione romana** sul nome del sistema (`Vega I`, `Vega II`…) e le lune un suffisso di lettera (`Vega II a`), convenzione 4X analoga a quella dei nomi-catalogo di M02 (decisione #7). Tutto deterministico (nessun costo di salvataggio).
 
 ---
 
@@ -129,15 +148,17 @@ Architettura a moduli vanilla (namespace globale `ORION`, niente bundler), caric
 
 ```
 stargame/
-├── index.html          ✅ shell UI + caricamento moduli M02
+├── index.html          ✅ shell UI + caricamento moduli M02/M03
 ├── css/
-│   └── style.css        ✅ tema scuro spaziale + mappa/galassia (M02)
+│   └── style.css        ✅ tema scuro spaziale + mappa/galassia (M02) + vista sistema (M03)
 ├── js/
 │   ├── rng.js           ✅ PRNG deterministico (M02 — seed+delta)
 │   ├── names.js         ✅ nomi sistemi §5.2 (M02)
 │   ├── galaxy.js        ✅ generazione galassia + stato/delta (M02)
 │   ├── galaxy-map.js    ✅ mappa a nodi su Canvas (M02)
-│   └── main.js          ✅ bootstrap + integrazione M02
+│   ├── system.js        ✅ generazione interno del sistema §6 (M03 — derivato dal seed)
+│   ├── system-view.js   ✅ vista interna del sistema su Canvas (M03)
+│   └── main.js          ✅ bootstrap + integrazione M02/M03
 ├── CLAUDE.md            ✅ questo file
 ├── README.md            ✅
 └── ORION_EMPIRES_GDD.md ✅ documento di design (fonte di verità)
@@ -148,4 +169,4 @@ verranno aggiunti nei moduli corrispondenti.
 
 ---
 
-_Ultimo aggiornamento: 2026-06-04 — M02 visual pass + navigazione gerarchica: direzione "NASA/Visions" con mappa realistica (nebulose + polvere + spicchi di diffrazione, niente alone uniforme), **gruppi stellari** navigabili (Galassia → Gruppo → Sistema/Pianeta) con breadcrumb e sidebar contestuale, reveal continuo guidato dallo zoom + camera animata. GDD §5.5 aggiunto. Decisioni #8 e #9 aggiunte. Resta ⏸️ in attesa di conferma utente._
+_Ultimo aggiornamento: 2026-06-04 — M03 Sistema stellare: vista interna su Canvas (`system.js` + `system-view.js`) agganciata al livello *Sistema* della navigazione gerarchica. Stella/e (incl. binarie §6.1), 4–7 corpi §6.1 come **dischi procedurali** (bande/atmosfera/terminatore, niente alone uniforme), lune, cinture e anomalie — tutto **deterministico dal seed** (seed+delta, nessun costo di salvataggio). Breadcrumb `Galassia › Gruppo › Sistema › Pianeta` e sidebar contestuale (sistema → corpo, dati base §6.3, rimando a M04). Scelte utente: orbite **statiche** (decisione #10) e nebbia di guerra **fedele a §5.1** (decisione #11); aggiunta anche #12. Resta ⏸️ in attesa di conferma utente._

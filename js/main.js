@@ -13,12 +13,11 @@
 
 const ORION = window.ORION || (window.ORION = {});
 
-ORION.version = '0.2.0-M02';
+ORION.version = '0.3.0-M03';
 
 /* Etichette provvisorie del viewport per le viste non ancora implementate. */
 ORION.viewLabels = {
-  system:    { caption: 'VISTA SISTEMA',    hint: 'La vista del sistema stellare arriverà nel modulo M03.' },
-  planet:    { caption: 'VISTA PIANETA',    hint: 'La gestione del pianeta arriverà nel modulo M04.' },
+  planet:    { caption: 'VISTA PIANETA',    hint: 'La gestione del pianeta (scheda allargata, risorse, popolazione) arriverà nel modulo M04. Per ora seleziona un corpo nella vista Sistema per i dati base.' },
   fleet:     { caption: 'VISTA FLOTTA',     hint: 'La gestione della flotta arriverà nel modulo M08.' },
   research:  { caption: 'VISTA RICERCA',    hint: "L'albero tecnologico arriverà nel modulo M13." },
   diplomacy: { caption: 'VISTA DIPLOMAZIA', hint: 'La diplomazia arriverà nel modulo M11.' }
@@ -27,6 +26,11 @@ ORION.viewLabels = {
 /* Stato di partita corrente (in memoria). Il salvataggio è M06. */
 ORION.game = null;
 ORION.map = null;
+
+/* Vista interna del sistema (M03): istanza attiva + id del sistema aperto. */
+ORION.systemView = null;
+ORION.openSystemId = -1;
+ORION.currentSystem = null;
 
 /* ---------------------------------------------------------------------
    Generazione/avvio di una partita (galassia)
@@ -70,14 +74,25 @@ function initNavigation() {
 
 function renderView(stage, view) {
   if (!stage) return;
-  // smonta la mappa se attiva
-  if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
 
-  if (view === 'galaxy') {
-    renderGalaxyView(stage);
-  } else {
-    renderViewPlaceholder(stage, view);
+  // Galassia e Sistema condividono lo stage: il Sistema (M03) è un layer
+  // sopra la mappa galassia (che resta viva sotto, preservando lo zoom).
+  if (view === 'galaxy' || view === 'system') {
+    if (!ORION.map) renderGalaxyView(stage);
+    if (view === 'system') {
+      const g = ORION.game;
+      const sid = (g && g.state.selectedId >= 0) ? g.state.selectedId : g.galaxy.homeId;
+      openSystem(sid);
+    } else if (ORION.openSystemId >= 0) {
+      closeSystem();
+    }
+    return;
   }
+
+  // Altre viste: smonta sistema e mappa, mostra il placeholder.
+  if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
+  if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
+  renderViewPlaceholder(stage, view);
 }
 
 function renderViewPlaceholder(stage, view) {
@@ -94,6 +109,9 @@ function renderViewPlaceholder(stage, view) {
    Vista Galassia: overlay (seed/comandi) + Canvas
    --------------------------------------------------------------------- */
 function renderGalaxyView(stage) {
+  if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; }
+  ORION.openSystemId = -1;
+  ORION.currentSystem = null;
   if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
   if (!ORION.game) newGame();
   const g = ORION.game;
@@ -101,6 +119,7 @@ function renderGalaxyView(stage) {
   stage.innerHTML =
     '<div class="galaxy-root">' +
       '<div class="galaxy-holder"></div>' +
+      '<div class="system-holder" data-system-holder hidden></div>' +
       '<nav class="galaxy-breadcrumb" data-breadcrumb aria-label="Percorso di navigazione"></nav>' +
       '<div class="galaxy-overlay">' +
         '<div class="galaxy-overlay__row">' +
@@ -121,15 +140,19 @@ function renderGalaxyView(stage) {
   const holder = stage.querySelector('.galaxy-holder');
   ORION.map = new ORION.GalaxyMap().mount(holder, g.galaxy, g.state, {
     onContext: onMapContext,
-    onActivateSystem: (id) => ORION.map.focusSystem(id)
+    onActivateSystem: (id) => openSystem(id)   // doppio click → vista interna (M03)
   });
 
+  setNavActive('galaxy');
   // contesto iniziale (galassia)
   onMapContext({ level: 'galaxy', groupId: -1, systemId: -1 });
 
   const resetBtn = stage.querySelector('[data-action="galaxy-reset"]');
   const newBtn = stage.querySelector('[data-action="galaxy-new"]');
-  if (resetBtn) resetBtn.addEventListener('click', () => ORION.map.focusGalaxy());
+  if (resetBtn) resetBtn.addEventListener('click', () => {
+    if (ORION.openSystemId >= 0) closeSystem();
+    ORION.map.focusGalaxy();
+  });
   if (newBtn) newBtn.addEventListener('click', () => {
     newGame();
     renderGalaxyView(stage);
@@ -141,6 +164,9 @@ function renderGalaxyView(stage) {
    con la scala selezionata (Galassia / Gruppo / Sistema).
    --------------------------------------------------------------------- */
 function onMapContext(ctx) {
+  // Quando la vista interna del sistema è aperta, è lei a gestire
+  // breadcrumb e pannello: ignora il contesto della mappa galassia.
+  if (ORION.openSystemId >= 0) return;
   renderBreadcrumb(ctx);
   const panel = document.querySelector('.panel--right');
   if (!panel) return;
@@ -319,8 +345,226 @@ function renderSystemPanel(title, content, id) {
         row('Pericolo',
           '<span class="danger-badge ' + tierClass + '">' + sys.danger + ' · ' + sys.dangerTier + '</span>') +
       '</dl>' +
-      '<p class="panel__note">L\'interno del sistema (stella/e, corpi celesti, anomalie) arriverà nel modulo M03.</p>' +
+      '<button class="btn btn--mini btn--enter" data-action="enter-system" type="button">◉ Apri sistema ▸</button>' +
+      '<p class="panel__note">Vista interna: stella/e, corpi celesti in orbita e anomalie (M03). Doppio click sul nodo per entrare.</p>' +
     '</div>';
+
+  const enter = content.querySelector('[data-action="enter-system"]');
+  if (enter) enter.addEventListener('click', () => openSystem(id));
+}
+
+/* =====================================================================
+   M03 — Vista interna del sistema stellare
+   Il SystemView è un layer sopra la mappa galassia (dentro .galaxy-root);
+   breadcrumb e pannello destro diventano coerenti col livello Sistema.
+   --------------------------------------------------------------------- */
+function openSystem(id) {
+  const g = ORION.game;
+  if (!g) return;
+  const root = document.querySelector('.galaxy-root');
+  if (!root) return;
+
+  const disc = g.state.discovery[id];
+  const system = ORION.system.generate(g.galaxy, id);
+
+  g.state.selectedId = id;
+  ORION.openSystemId = id;
+  ORION.currentSystem = system;
+
+  const sysHolder = root.querySelector('[data-system-holder]');
+  const galHolder = root.querySelector('.galaxy-holder');
+  if (galHolder) galHolder.style.visibility = 'hidden';
+  if (sysHolder) sysHolder.hidden = false;
+
+  if (ORION.systemView) ORION.systemView.destroy();
+  ORION.systemView = new ORION.SystemView().mount(sysHolder, system, {
+    discovery: disc,
+    onSelectBody: (key) => updateSystemUI(system, key),
+    onExit: () => {
+      const cluster = g.galaxy.systems[id].cluster;
+      closeSystem();
+      if (ORION.map) ORION.map.focusGroup(cluster);
+    }
+  });
+
+  setNavActive('system');
+  setGalaxyHint('system');
+  updateSystemUI(system, null);
+}
+
+function closeSystem() {
+  if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; }
+  ORION.openSystemId = -1;
+  ORION.currentSystem = null;
+  const root = document.querySelector('.galaxy-root');
+  if (root) {
+    const sysHolder = root.querySelector('[data-system-holder]');
+    const galHolder = root.querySelector('.galaxy-holder');
+    if (sysHolder) sysHolder.hidden = true;
+    if (galHolder) galHolder.style.visibility = '';
+  }
+  setNavActive('galaxy');
+  setGalaxyHint('galaxy');
+}
+
+function updateSystemUI(system, bodyKey) {
+  renderSystemBreadcrumb(system, bodyKey);
+  const panel = document.querySelector('.panel--right');
+  if (!panel) return;
+  const title = panel.querySelector('.panel__title');
+  const content = panel.querySelector('.panel__content');
+  if (!title || !content) return;
+  const disc = ORION.game.state.discovery[system.id];
+  if (bodyKey) {
+    const body = ORION.system.findBody(system, bodyKey);
+    if (body) { renderBodyPanel(title, content, system, body); return; }
+  }
+  renderSystemInteriorPanel(title, content, system, disc);
+}
+
+/* Breadcrumb: Galassia › Gruppo › Sistema › [Corpo] */
+function renderSystemBreadcrumb(system, bodyKey) {
+  const el = document.querySelector('[data-breadcrumb]');
+  if (!el) return;
+  const g = ORION.game;
+  const grp = findGroup(g.galaxy.systems[system.id].cluster);
+  const known = g.state.discovery[system.id] >= ORION.galaxy.DISCOVERY.DETECTED;
+  const crumbs = ['<button class="crumb" data-crumb="galaxy" type="button">Galassia</button>'];
+  if (grp) crumbs.push('<span class="crumb__sep">›</span>' +
+    '<button class="crumb" data-crumb="group" data-id="' + grp.id + '" type="button">' + grp.name + '</button>');
+  crumbs.push('<span class="crumb__sep">›</span>' +
+    '<button class="crumb' + (bodyKey ? '' : ' is-current') + '" data-crumb="system" type="button">' +
+    (known ? system.name : 'Sistema ignoto') + '</button>');
+  if (bodyKey) {
+    const body = ORION.system.findBody(system, bodyKey);
+    crumbs.push('<span class="crumb__sep">›</span>' +
+      '<span class="crumb is-current">' + (body ? body.name : '—') + '</span>');
+  }
+  el.innerHTML = crumbs.join('');
+
+  el.querySelectorAll('[data-crumb]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const kind = btn.dataset.crumb;
+      if (kind === 'galaxy') { closeSystem(); if (ORION.map) ORION.map.focusGalaxy(); }
+      else if (kind === 'group') { const cl = Number(btn.dataset.id); closeSystem(); if (ORION.map) ORION.map.focusGroup(cl); }
+      else if (kind === 'system') { if (ORION.systemView) ORION.systemView.selectBody(null); }
+    });
+  });
+}
+
+/* --- Pannello: livello Sistema (interno) --- */
+function renderSystemInteriorPanel(title, content, system, disc) {
+  const DISCOVERY = ORION.galaxy.DISCOVERY;
+  const known = disc >= DISCOVERY.DETECTED;
+  title.textContent = known ? system.name : 'Sistema sconosciuto';
+
+  if (!known) {
+    content.innerHTML =
+      '<div class="sysinfo"><p class="sysinfo__fog">Posizione rilevata, interno ignoto.<br>' +
+        'Richiede esplorazione (modulo M07).</p></div>';
+    return;
+  }
+
+  const explored = disc >= DISCOVERY.EXPLORED;
+  const bodyCount = system.bodies.length;
+  const tierClass = 'tier--' + system.dangerTier;
+  const selKey = ORION.systemView ? ORION.systemView.selectedKey : null;
+
+  let detail = '';
+  if (explored) {
+    const chips = system.bodies.map((b) => {
+      const def = ORION.system.BODY_TYPES[b.type];
+      const moonNote = b.moons && b.moons.length ? '<span class="body-chip__moons">☾' + b.moons.length + '</span>' : '';
+      return '<button class="sys-chip' + (b.key === selKey ? ' is-sel' : '') + '" data-body="' + b.key + '" type="button" title="' + def.label + '">' +
+        '<span class="sys-chip__dot" style="--sc:' + bodyDotColor(b) + '"></span>' +
+        '<span class="body-chip__name">' + b.name + '</span> · ' + def.label + (b.homeWorld ? ' ★' : '') + moonNote +
+        '</button>';
+    }).join('');
+    detail = '<p class="sysinfo__sub">Corpi celesti</p><div class="sys-list">' + chips + '</div>';
+    if (system.anomalies.length) {
+      detail += '<p class="sysinfo__sub">Anomalie</p><ul class="anomaly-list">' +
+        system.anomalies.map((a) => '<li class="anomaly-item anomaly--' + a.kind + '" title="' + a.desc + '">' + a.label + '</li>').join('') +
+        '</ul>';
+    }
+  } else {
+    detail = '<p class="panel__note">Sistema rilevato ma non scansionato: <strong>' + bodyCount +
+      '</strong> corpi celesti individuati. Dettagli, tipi e anomalie richiedono l\'esplorazione (modulo M07).</p>';
+  }
+
+  content.innerHTML =
+    '<div class="sysinfo">' +
+      (system.isHome ? '<p class="sysinfo__home">★ Sistema di partenza</p>' : '') +
+      '<dl class="sysinfo__list">' +
+        row('Stella', system.stars.label) +
+        row('Corpi', explored ? String(bodyCount) : bodyCount + ' (rilevati)') +
+        row('Stato', explored ? 'Esplorato' : 'Rilevato') +
+        row('Pericolo', '<span class="danger-badge ' + tierClass + '">' + system.danger + ' · ' + system.dangerTier + '</span>') +
+      '</dl>' +
+      detail +
+      '<p class="panel__note">Clicca un corpo per i dati base · doppio click per inquadrarlo. Colonizzazione e gestione: modulo M04.</p>' +
+    '</div>';
+
+  content.querySelectorAll('[data-body]').forEach((btn) => {
+    btn.addEventListener('click', () => { if (ORION.systemView) ORION.systemView.selectBody(btn.dataset.body); });
+  });
+}
+
+/* --- Pannello: livello Corpo celeste (dati base §6.3, rimando a M04) --- */
+function renderBodyPanel(title, content, system, body) {
+  const def = ORION.system.BODY_TYPES[body.type];
+  const catLabel = { rocky: 'Pianeta', gas: 'Gigante gassoso', moon: 'Luna', belt: 'Cintura asteroidale' }[def.cat] || '—';
+  title.textContent = body.name;
+
+  let extra = '';
+  if (body.parentKey) {
+    const parent = ORION.system.findBody(system, body.parentKey);
+    extra += row('Satellite di', parent ? parent.name : '—');
+  } else if (def.cat !== 'belt') {
+    extra += row('Orbita', '#' + ((body.index != null ? body.index : 0) + 1));
+  }
+  if (def.cat !== 'belt' && def.cat !== 'moon' && body.moons && body.moons.length) {
+    extra += row('Lune', String(body.moons.length));
+  }
+
+  content.innerHTML =
+    '<div class="sysinfo">' +
+      (body.homeWorld ? '<p class="sysinfo__home">★ Mondo natale candidato</p>' : '') +
+      '<dl class="sysinfo__list">' +
+        row('Tipo', def.label) +
+        row('Classe', catLabel) +
+        row('Abitabile', def.habitable ? 'Sì' : 'No') +
+        extra +
+      '</dl>' +
+      '<p class="sysinfo__sub">Caratteristiche (§6.3)</p>' +
+      '<dl class="sysinfo__list">' +
+        row('Vantaggi', def.vantaggi) +
+        row('Svantaggi', def.svantaggi) +
+      '</dl>' +
+      '<p class="panel__note">Risorse, popolazione e colonizzazione: modulo M04.</p>' +
+    '</div>';
+}
+
+/* Colore del pallino di un corpo per le chip della sidebar. */
+function bodyDotColor(b) {
+  const pal = ORION.system.BODY_TYPES[b.type].palette;
+  if (pal.bands) return ORION.system.GAS_VARIANTS[b.variant || 0].base;
+  return pal.land || pal.rock || '#9aa6cc';
+}
+
+/* Sincronizza l'evidenziazione della navigazione sinistra. */
+function setNavActive(view) {
+  document.querySelectorAll('.nav-item').forEach((i) => {
+    i.classList.toggle('is-active', i.dataset.view === view);
+  });
+}
+
+/* Suggerimento contestuale in fondo alla mappa. */
+function setGalaxyHint(mode) {
+  const el = document.querySelector('.galaxy-hint');
+  if (!el) return;
+  el.textContent = mode === 'system'
+    ? 'Trascina · zoom rotella/pinch · click su un corpo per i dati · doppio click nel vuoto per uscire'
+    : 'Trascina · zoom rotella/pinch · click su una regione per entrare · click su un sistema per i dettagli';
 }
 
 /* Colori per UI (riusano la stessa logica della mappa). */

@@ -528,6 +528,52 @@ button { font-family: inherit; }
 .crumb__sep { color: var(--c-text-faint); font-size: 0.74rem; }
 
 /* =====================================================================
+   M03 — Vista interna del sistema stellare
+   ===================================================================== */
+.system-holder { position: absolute; inset: 0; z-index: 1; }
+.system-holder[hidden] { display: none; }
+.system-canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.system-canvas:active { cursor: grabbing; }
+
+/* Pulsante "Apri sistema" nel pannello destro */
+.btn--enter {
+  margin-top: 12px;
+  width: 100%;
+  justify-content: center;
+}
+
+/* Chip dei corpi celesti (riusa .sys-chip; nome troncabile + lune) */
+.body-chip__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 9.5em;
+}
+.body-chip__moons {
+  margin-left: auto;
+  padding-left: 6px;
+  font-size: 0.68rem;
+  color: var(--c-text-faint);
+  flex: 0 0 auto;
+}
+
+/* Elenco anomalie del sistema (§6.1) */
+.anomaly-list { display: flex; flex-direction: column; gap: 4px; }
+.anomaly-item {
+  padding: 5px 9px;
+  font-family: var(--font-data);
+  font-size: 0.74rem;
+  color: var(--c-text-soft);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--c-border-soft);
+  border-left: 3px solid var(--c-text-faint);
+  border-radius: var(--radius-sm);
+}
+.anomaly--reliquie { border-left-color: var(--c-warn); }
+.anomaly--nebulosa { border-left-color: var(--c-violet); }
+.anomaly--detriti  { border-left-color: var(--c-text-soft); }
+
+/* =====================================================================
    HUD inferiore: cronaca + controllo del tempo
    ===================================================================== */
 .hud-bottom {
