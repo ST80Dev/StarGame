@@ -844,6 +844,42 @@ button { font-family: inherit; }
 .planet-tab:disabled { opacity: 0.4; cursor: not-allowed; }
 .planet-tab-content { display: block; }
 
+/* Alert sulle linguette non attive: pulsa una piccola pastiglia colorata
+   in alto a destra (info=ciano, warn=ambra, bad=rosso). Le linguette
+   attive non lampeggiano: la scheda sotto già mostra lo stato. */
+.planet-tab { position: relative; }
+.planet-tab.has-alert::after {
+  content: '';
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--c-warn);
+  box-shadow: 0 0 6px var(--c-warn);
+  animation: tab-alert-pulse 1.6s ease-in-out infinite;
+}
+.planet-tab.has-alert--info {
+  border-color: color-mix(in srgb, var(--c-accent) 60%, var(--c-border-soft));
+}
+.planet-tab.has-alert--info::after {
+  background: var(--c-accent);
+  box-shadow: 0 0 6px var(--c-accent);
+}
+.planet-tab.has-alert--warn {
+  border-color: color-mix(in srgb, var(--c-warn) 60%, var(--c-border-soft));
+}
+.planet-tab.has-alert--bad {
+  border-color: color-mix(in srgb, var(--c-bad) 65%, var(--c-border-soft));
+}
+.planet-tab.has-alert--bad::after {
+  background: var(--c-bad);
+  box-shadow: 0 0 7px var(--c-bad);
+}
+@keyframes tab-alert-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.78); }
+}
+
 /* Barre dei potenziali risorse (§7.1) */
 .pot-list, .class-list, .adv-list {
   display: flex;

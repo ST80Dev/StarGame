@@ -970,6 +970,45 @@ function renderPlanetBreadcrumb() {
 }
 
 /* --- Pannello: scheda pianeta con tab --- */
+/* Stato di alert per ogni linguetta del pianeta (ambra/rosso). Usato
+   per evidenziare attività in corso sulle schede non attive. */
+function planetTabAlerts(colony) {
+  const a = {};
+  // strutture: coda di cantiere o osservatorio in scansione
+  if (colony.queue && colony.queue.length) {
+    a.strutture = colony.queue[0].target === 'demolish' ? 'bad' : 'info';
+  } else if (colony.structures && colony.structures['osservatorio'] && colony.scanned && !colony.scanned.active) {
+    a.strutture = 'info';
+  }
+  // risorse: scarsità low/crit
+  if (colony.scarcity) {
+    ['met','en','food','water'].forEach(function (k) {
+      const s = colony.scarcity[k] && colony.scarcity[k].state;
+      if (s === 'crit') a.risorse = 'bad';
+      else if (s === 'low' && a.risorse !== 'bad') a.risorse = 'warn';
+    });
+  }
+  // popolazione: malus morale temporaneo
+  if (colony.moraleMalus) a.popolazione = 'warn';
+  // colonia: insediamento o colonizzazione in corso
+  if (colony.colonizing || colony.phase === 'settling') a.colonia = 'info';
+  return a;
+}
+
+function alertTitle(tab, colony, level) {
+  if (tab === 'strutture' && colony.queue && colony.queue.length) {
+    const q = colony.queue[0];
+    const def = ORION.structures.get(q.id);
+    const verb = q.target === 'demolish' ? 'Smantellamento' : 'Costruzione';
+    return verb + ' di ' + (def ? def.name : q.id) + ' (' + (q.duration | 0) + ' Ι)';
+  }
+  if (tab === 'strutture') return 'Osservatorio in scansione';
+  if (tab === 'risorse') return level === 'bad' ? 'Scarsità critica' : 'Scarsità in allerta';
+  if (tab === 'popolazione') return 'Morale in calo';
+  if (tab === 'colonia') return colony.phase === 'settling' ? 'Insediamento in corso' : 'Colonizzazione in corso';
+  return '';
+}
+
 function renderPlanetPanel(title, content) {
   const planet = ORION.currentPlanet;
   const colony = ORION.game.colonies[ORION.openPlanetKey];
@@ -980,6 +1019,7 @@ function renderPlanetPanel(title, content) {
   const tabs = ['colonia', 'risorse', 'strutture', 'popolazione'];
   if (!colony.colonized) ORION.planetTab = 'colonia';
   const activeTab = ORION.planetTab;
+  const alerts = planetTabAlerts(colony);
 
   const head =
     '<div class="planet-head">' +
@@ -988,18 +1028,21 @@ function renderPlanetPanel(title, content) {
     '<nav class="planet-tabs" role="tablist">' +
       tabs.map(function (t) {
         const meta = {
-          colonia:     { icon: '◉', label: 'Colonia',  full: 'Colonia' },
-          risorse:     { icon: '◈', label: 'Risorse',  full: 'Risorse' },
-          strutture:   { icon: '▣', label: 'Strutt.',  full: 'Strutture' },
-          popolazione: { icon: '☻', label: 'Pop.',     full: 'Popolazione' }
+          colonia:     { icon: '⚑', label: 'Colonia',  full: 'Colonia' },
+          risorse:     { icon: '⛁', label: 'Risorse',  full: 'Risorse' },
+          strutture:   { icon: '⌂', label: 'Strutt.',  full: 'Strutture' },
+          popolazione: { icon: '♟', label: 'Pop.',     full: 'Popolazione' }
         }[t];
         const disabled = (!colony.colonized && t !== 'colonia');
         const isActive = (t === activeTab);
+        const alert = alerts[t];
+        const alertCls = (alert && !isActive) ? ' has-alert has-alert--' + alert : '';
+        const titleFull = meta.full + (alert ? ' · ' + alertTitle(t, colony, alert) : '');
         const inner = isActive
           ? '<span class="planet-tab__icon">' + meta.icon + '</span><span class="planet-tab__label">' + meta.label + '</span>'
           : '<span class="planet-tab__icon">' + meta.icon + '</span>';
-        return '<button class="planet-tab' + (isActive ? ' is-active' : '') + '" data-tab="' + t + '" type="button"' +
-          ' title="' + meta.full + '" aria-label="' + meta.full + '"' +
+        return '<button class="planet-tab' + (isActive ? ' is-active' : '') + alertCls + '" data-tab="' + t + '" type="button"' +
+          ' title="' + titleFull + '" aria-label="' + titleFull + '"' +
           (disabled ? ' disabled' : '') + '>' + inner + '</button>';
       }).join('') +
     '</nav>' +
