@@ -781,7 +781,7 @@ function renderSystemInteriorPanel(title, content, system, disc) {
         row('Pericolo', '<span class="danger-badge ' + tierClass + '">' + system.danger + ' · ' + system.dangerTier + '</span>') +
       '</dl>' +
       detail +
-      '<p class="panel__note">Clicca un corpo per i dati base · doppio click per inquadrarlo. Colonizzazione e gestione: modulo M04.</p>' +
+      '<p class="panel__note">Clicca un oggetto per i dati base · doppio click per inquadrarlo. Colonizzazione e gestione: modulo M04.</p>' +
     '</div>';
 
   content.querySelectorAll('[data-body]').forEach((btn) => {
@@ -1552,7 +1552,7 @@ function setGalaxyHint(mode) {
   if (mode === 'planet')
     el.textContent = 'Trascina · zoom rotella/pinch · click sulle lune per aprirle · doppio click nel vuoto per uscire';
   else if (mode === 'system')
-    el.textContent = 'Trascina · zoom rotella/pinch · click su un corpo per i dati · doppio click nel vuoto per uscire';
+    el.textContent = 'Trascina · zoom rotella/pinch · click su un oggetto per i dati · doppio click nel vuoto per uscire';
   else
     el.textContent = 'Trascina · zoom rotella/pinch · Shift+trascina = ruota libera · Alt+trascina = roll · pinch a 2 dita ruota su touch';
 }
