@@ -65,6 +65,19 @@
           <span class="index__value" data-bind="data-stellare">DS&nbsp;—</span>
         </div>
       </div>
+
+      <div class="time-control time-control--inline" aria-label="Controllo del tempo">
+        <div class="time-steps" role="group" aria-label="Salti temporali (Impulsi)">
+          <button class="btn btn--step" data-action="advance" data-impulsi="1" type="button">+1</button>
+          <button class="btn btn--step" data-action="advance" data-impulsi="2" type="button">+2</button>
+          <button class="btn btn--step" data-action="advance" data-impulsi="5" type="button">+5</button>
+          <button class="btn btn--step" data-action="advance" data-impulsi="10" type="button">+10</button>
+        </div>
+        <button class="btn btn--primary btn--next-event" data-action="advance-to-event" type="button" title="Avanza fino al prossimo evento (TSG)">
+          <span class="btn__glyph" aria-hidden="true">⏭</span>
+          <span class="btn__label">Prossimo evento</span>
+        </button>
+      </div>
     </header>
 
     <!-- ---- Corpo principale a tre colonne ---- -->
@@ -135,7 +148,7 @@
       </aside>
     </main>
 
-    <!-- ---- HUD inferiore: cronaca galattica + controllo del tempo ---- -->
+    <!-- ---- HUD inferiore: cronaca galattica (time control è ora nell'header) ---- -->
     <footer class="hud-bottom" role="contentinfo">
       <section class="chronicle" aria-label="Cronaca galattica">
         <div class="panel__header panel__header--inline">
@@ -147,21 +160,6 @@
           </li>
         </ul>
       </section>
-
-      <div class="time-control">
-        <span class="time-control__title">Avanza nel tempo</span>
-        <div class="time-steps" role="group" aria-label="Salti temporali (Impulsi)">
-          <button class="btn btn--step" data-action="advance" data-impulsi="1" type="button">+1</button>
-          <button class="btn btn--step" data-action="advance" data-impulsi="2" type="button">+2</button>
-          <button class="btn btn--step" data-action="advance" data-impulsi="5" type="button">+5</button>
-          <button class="btn btn--step" data-action="advance" data-impulsi="10" type="button">+10</button>
-        </div>
-        <button class="btn btn--primary" data-action="advance-to-event" type="button">
-          <span class="btn__glyph" aria-hidden="true">⏭</span>
-          Prossimo evento
-        </button>
-        <span class="time-control__unit">unità: <strong>Impulso</strong> · TSG</span>
-      </div>
     </footer>
   </div>
 

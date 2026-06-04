@@ -867,7 +867,7 @@ function renderPlanetPanel(title, content) {
     '</div>' +
     '<nav class="planet-tabs" role="tablist">' +
       tabs.map(function (t) {
-        const label = { colonia: 'Colonia', risorse: 'Risorse', strutture: 'Strutture', popolazione: 'Popolazione' }[t];
+        const label = { colonia: 'Colonia', risorse: 'Risorse', strutture: 'Strutture', popolazione: 'Popol.' }[t];
         const disabled = (!colony.colonized && t !== 'colonia');
         return '<button class="planet-tab' + (t === activeTab ? ' is-active' : '') + '" data-tab="' + t + '" type="button"' +
           (disabled ? ' disabled' : '') + '>' + label + '</button>';
@@ -1354,7 +1354,8 @@ function updateTimeControlsHint() {
   const glyph = btn.querySelector('.btn__glyph');
   // ricostruzione minima per non rompere il markup pre-esistente
   btn.innerHTML = (glyph ? '<span class="btn__glyph" aria-hidden="true">⏭</span>' : '') +
-    'Prossimo evento <span class="time-control__delta">+' + n + ' I</span>';
+    '<span class="btn__label">Prossimo evento</span>' +
+    '<span class="time-control__delta">+' + n + ' I</span>';
 }
 
 /* Pulse rapida sui valori HUD per segnalare l'aggiornamento. */
