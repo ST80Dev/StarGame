@@ -613,6 +613,8 @@ button { font-family: inherit; }
   color: var(--c-accent);
 }
 .chronicle__entry--system { color: var(--c-text-faint); font-style: italic; }
+.chronicle__entry--explore { color: var(--c-text); }
+.chronicle__entry--explore::before { color: var(--c-accent-warm); }
 
 /* --- Controllo del tempo (Tempo Standard Galattico) --- */
 .time-control {

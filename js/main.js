@@ -31,6 +31,8 @@ ORION.map = null;
 ORION.systemView = null;
 ORION.openSystemId = -1;
 ORION.currentSystem = null;
+/* Ultimo sistema annotato in cronaca (evita doppioni consecutivi). */
+ORION.lastChronicleId = -1;
 
 /* ---------------------------------------------------------------------
    Generazione/avvio di una partita (galassia)
@@ -371,6 +373,8 @@ function openSystem(id) {
   ORION.openSystemId = id;
   ORION.currentSystem = system;
 
+  chronicleSystemEntry(system, disc);
+
   const sysHolder = root.querySelector('[data-system-holder]');
   const galHolder = root.querySelector('.galaxy-holder');
   if (galHolder) galHolder.style.visibility = 'hidden';
@@ -585,7 +589,12 @@ function setHudDate(ds) {
   if (el) el.textContent = ds;
 }
 
+/* Log limitato agli ultimi N (decisione #5): unica fonte di crescita
+   illimitata della cronaca, quindi capata. Più recente in cima. */
+const MAX_CHRONICLE = 40;
+
 function resetChronicle(galaxy, startDS) {
+  ORION.lastChronicleId = -1;
   const log = document.querySelector('[data-bind="chronicle"]');
   if (!log) return;
   const home = galaxy.systems[galaxy.homeId];
@@ -594,6 +603,41 @@ function resetChronicle(galaxy, startDS) {
       startDS + ' — Galassia generata: ' + galaxy.count + ' sistemi. ' +
       'Origine nel sistema <strong>' + home.name + '</strong>.' +
     '</li>';
+}
+
+function pushChronicle(html, modifier) {
+  const log = document.querySelector('[data-bind="chronicle"]');
+  if (!log) return;
+  const li = document.createElement('li');
+  li.className = 'chronicle__entry' + (modifier ? ' chronicle__entry--' + modifier : '');
+  li.innerHTML = html;
+  log.insertBefore(li, log.firstChild);
+  while (log.children.length > MAX_CHRONICLE) log.removeChild(log.lastChild);
+}
+
+/* Annota in cronaca l'ingresso in un sistema, coerente con la nebbia di
+   guerra §5.1. Il game loop temporale è M05: per ora usa la Data Stellare
+   d'inizio. Evita doppioni consecutivi sullo stesso sistema. */
+function chronicleSystemEntry(system, disc) {
+  if (ORION.lastChronicleId === system.id) return;
+  ORION.lastChronicleId = system.id;
+  const DISCOVERY = ORION.galaxy.DISCOVERY;
+  const ds = (ORION.game && ORION.game.startDS) ? ORION.game.startDS : 'DS —';
+  const n = system.bodies.length;
+  let text, mod;
+  if (disc >= DISCOVERY.EXPLORED) {
+    text = ds + ' — Ingresso nel sistema <strong>' + system.name + '</strong> · ' +
+      system.stars.label + ' · ' + n + ' corpi celesti.';
+    mod = 'explore';
+  } else if (disc >= DISCOVERY.DETECTED) {
+    text = ds + ' — Avvicinamento a <strong>' + system.name + '</strong> · sensori a lungo raggio: ' +
+      n + ' corpi rilevati, interno da scansionare.';
+    mod = 'system';
+  } else {
+    text = ds + ' — Rotta verso un sistema ignoto · richiede esplorazione (M07).';
+    mod = 'system';
+  }
+  pushChronicle(text, mod);
 }
 
 /* ---------------------------------------------------------------------
