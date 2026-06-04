@@ -30,10 +30,12 @@
 (function (root) {
   const ORION = root.ORION = root.ORION || {};
 
-  /* Schema 3: v2 + chronicle[] persistita. M06 introduce le sub-migrazioni
-     componibili: ogni modulo futuro che cambia il payload bumpa lo schema
-     e aggiunge la propria sub-migrazione qui sotto (`MIGRATIONS`). */
-  const SCHEMA_VERSION = 3;
+  /* Schema 4 (M06.5 / decisione #26): v3 + scelta colonia originaria
+     (`homeWorld`) + fase Insediamento sulle colonie (`phase`,
+     `settlingStart`, `settlingDuration`).
+     Sub-migrazioni componibili: v1→v2 (victory), v2→v3 (chronicle),
+     v3→v4 (homeWorld:null + colonia operational, retro-compat). */
+  const SCHEMA_VERSION = 4;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -82,7 +84,10 @@
       mode: game.mode,
       victoryTracks: game.victoryTracks,
       eventSchedule: game.eventSchedule || [],
-      chronicle: capChronicle(game.chronicle)
+      chronicle: capChronicle(game.chronicle),
+      /* M06.5 (decisione #26): scelta colonia originaria, salvata
+         esplicitamente per non doverla rideterminare al runtime. */
+      homeWorld: game.homeWorld || null
     };
   }
 
@@ -107,6 +112,23 @@
     if ((payload.schema || 2) < 3) {
       if (!Array.isArray(payload.chronicle)) payload.chronicle = [];
       payload.schema = 3;
+    }
+    /* v3 → v4 (M06.5 / decisione #26): aggiungi homeWorld:null e marca
+       ogni colonia esistente come 'operational'. NIENTE Insediamento
+       retroattivo per i save vecchi (sarebbe punitivo: chi ha già
+       giocato deve restare operativo). */
+    if ((payload.schema || 3) < 4) {
+      if (!payload.homeWorld) payload.homeWorld = null;
+      if (payload.colonies && typeof payload.colonies === 'object') {
+        Object.keys(payload.colonies).forEach(function (k) {
+          const c = payload.colonies[k];
+          if (!c) return;
+          if (!c.phase) c.phase = 'operational';
+          if (c.settlingStart === undefined) c.settlingStart = null;
+          if (c.settlingDuration === undefined) c.settlingDuration = 60;
+        });
+      }
+      payload.schema = 4;
     }
     return payload;
   }
