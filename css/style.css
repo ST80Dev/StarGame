@@ -792,21 +792,31 @@ button { font-family: inherit; }
   color: var(--c-text-soft);
 }
 .planet-tabs {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  display: flex;
+  flex-wrap: nowrap;
   gap: 5px;
   margin-bottom: 12px;
   border-bottom: 2px solid var(--c-border);
-  padding-bottom: 8px;
+  padding: 6px 0 8px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--c-bg, rgba(8, 12, 30, 0.92));
+  backdrop-filter: blur(6px);
 }
 .planet-tab {
   position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   font-family: var(--font-display);
   font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding: 10px 6px;
+  padding: 8px 10px;
   color: var(--c-text);
   background: rgba(8, 12, 30, 0.55);
   border: 1.5px solid var(--c-border-soft);
@@ -814,6 +824,11 @@ button { font-family: inherit; }
   cursor: pointer;
   transition: var(--transition);
 }
+.planet-tab.is-active {
+  flex: 1 1 auto;
+}
+.planet-tab__icon { font-size: 1rem; line-height: 1; }
+.planet-tab__label { white-space: nowrap; }
 .planet-tab:hover:not(:disabled) {
   color: #fff;
   border-color: var(--c-accent);

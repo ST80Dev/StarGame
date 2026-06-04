@@ -987,10 +987,20 @@ function renderPlanetPanel(title, content) {
     '</div>' +
     '<nav class="planet-tabs" role="tablist">' +
       tabs.map(function (t) {
-        const label = { colonia: 'Colonia', risorse: 'Risorse', strutture: 'Strutture', popolazione: 'Popol.' }[t];
+        const meta = {
+          colonia:     { icon: '◉', label: 'Colonia',  full: 'Colonia' },
+          risorse:     { icon: '◈', label: 'Risorse',  full: 'Risorse' },
+          strutture:   { icon: '▣', label: 'Strutt.',  full: 'Strutture' },
+          popolazione: { icon: '☻', label: 'Pop.',     full: 'Popolazione' }
+        }[t];
         const disabled = (!colony.colonized && t !== 'colonia');
-        return '<button class="planet-tab' + (t === activeTab ? ' is-active' : '') + '" data-tab="' + t + '" type="button"' +
-          (disabled ? ' disabled' : '') + '>' + label + '</button>';
+        const isActive = (t === activeTab);
+        const inner = isActive
+          ? '<span class="planet-tab__icon">' + meta.icon + '</span><span class="planet-tab__label">' + meta.label + '</span>'
+          : '<span class="planet-tab__icon">' + meta.icon + '</span>';
+        return '<button class="planet-tab' + (isActive ? ' is-active' : '') + '" data-tab="' + t + '" type="button"' +
+          ' title="' + meta.full + '" aria-label="' + meta.full + '"' +
+          (disabled ? ' disabled' : '') + '>' + inner + '</button>';
       }).join('') +
     '</nav>' +
     '<div class="planet-tab-content" data-planet-tab-content></div>';
