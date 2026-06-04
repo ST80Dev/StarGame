@@ -51,7 +51,9 @@ ORION.lastChronicleId = -1;
    "Nuova" rigenera. */
 const SEED_KEY = 'orion.seed';
 const GAME_KEY = 'orion.game';
-const GAME_SCHEMA = 1;
+/* Schema 2 (decisione #23): aggiunge mode + victoryTracks ai save M05.
+   La migrazione da v1 vive in ORION.victory.migrate. */
+const GAME_SCHEMA = 2;
 
 function loadSavedSeed() {
   try { return window.localStorage.getItem(SEED_KEY) || null; }
@@ -67,8 +69,13 @@ function loadSavedGame() {
   try {
     const raw = window.localStorage.getItem(GAME_KEY);
     if (!raw) return null;
-    const data = JSON.parse(raw);
-    if (!data || data.schema !== GAME_SCHEMA) return null;
+    let data = JSON.parse(raw);
+    if (!data) return null;
+    // Migrazione v1 → v2 (mode + victoryTracks) — decisione #23.
+    if (ORION.victory && data.schema < GAME_SCHEMA) {
+      data = ORION.victory.migrate(data);
+    }
+    if (data.schema !== GAME_SCHEMA) return null;
     return data;
   } catch (e) { return null; }
 }
@@ -81,13 +88,26 @@ function persistGame(game) {
       startEpochOrbita: game.startEpochOrbita,
       timeImpulsi: game.timeImpulsi || 0,
       homePlanetKey: game.homePlanetKey,
-      colonies: game.colonies
+      colonies: game.colonies,
+      mode: game.mode,
+      victoryTracks: game.victoryTracks,
+      eventSchedule: game.eventSchedule || []
     };
     window.localStorage.setItem(GAME_KEY, JSON.stringify(payload));
   } catch (e) {}
 }
 function clearSavedGame() {
   try { window.localStorage.removeItem(GAME_KEY); } catch (e) {}
+}
+
+/* Deep copy difensiva di un oggetto mode (decisione #23). */
+function cloneMode(m) {
+  if (!m) return null;
+  return {
+    startedAs: m.startedAs || 'sandbox',
+    preset: m.preset || 'classic',
+    modifiers: Object.assign({}, m.modifiers || {})
+  };
 }
 
 function newGame(seed, opts) {
@@ -109,7 +129,18 @@ function newGame(seed, opts) {
     /* M04: stato colonie. Chiave "<sysId>:<bodyKey>" → ColonyState (delta,
        serializzabile per M06). La struttura immutabile del pianeta è
        rigenerata dal seed (decisione #5). */
-    colonies: {}
+    colonies: {},
+    /* M05/decisione #23 — infrastruttura multi-pista. La UI di scelta
+       modalità arriva in M20; per ora ogni partita parte sandbox/classic
+       coi modificatori di default. Tutte le piste sono comunque attive
+       in parallelo: il tracker dei punteggi si aggiorna a ogni
+       VICTORY_CHECK_EVERY_I (vedi time.js). */
+    mode: (opts.mode && cloneMode(opts.mode)) ||
+          (ORION.victory ? ORION.victory.defaultMode() : { startedAs: 'sandbox', preset: 'classic', modifiers: {} }),
+    victoryTracks: ORION.victory ? ORION.victory.defaultTracks() : {},
+    /* Scheduler eventi (gancio M17). In M05 vuoto; il Sopravvissuto
+       (decisione #23) inietterà una crisi ancorata a DS 0. */
+    eventSchedule: []
   };
   // startDS = Data Stellare INIZIALE (epoca .00), fissa per la partita.
   ORION.game.startDS = ORION.time.format(startOrbita * 100);
@@ -126,6 +157,10 @@ function newGame(seed, opts) {
       ORION.game.timeImpulsi = saved.timeImpulsi || 0;
       ORION.game.colonies = saved.colonies || ORION.game.colonies;
       ORION.game.homePlanetKey = saved.homePlanetKey || ORION.game.homePlanetKey;
+      // Multi-pista (decisione #23): ripristina mode/tracks/scheduler se presenti.
+      if (saved.mode) ORION.game.mode = saved.mode;
+      if (saved.victoryTracks) ORION.game.victoryTracks = saved.victoryTracks;
+      if (saved.eventSchedule) ORION.game.eventSchedule = saved.eventSchedule;
     }
   }
 
@@ -1304,6 +1339,9 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — ' + pname + ': situazione <strong>' + RES[ev.res] + '</strong> rientrata.', 'system');
   } else if (ev.kind === 'pop-loss') {
     pushChronicle(ds + ' — ' + pname + ': la popolazione cala per la carestia prolungata.', 'system');
+  } else if (ev.kind === 'victory') {
+    const label = (ORION.victory && ORION.victory.TRACK_LABELS[ev.track]) || ev.track;
+    pushChronicle(ds + ' — <strong>Pista chiusa</strong>: ' + label + ' (M20 attiverà la schermata di vittoria).', 'explore');
   }
 }
 

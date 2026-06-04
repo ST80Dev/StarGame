@@ -56,7 +56,12 @@
 
     /* "Prossimo evento" */
     NEXT_EVENT_FALLBACK: 10,    // I se non c'è nessun evento pianificato
-    NEXT_EVENT_HARD_CAP: 500    // safety
+    NEXT_EVENT_HARD_CAP: 500,   // safety
+
+    /* Multi-pista vittoria (decisione #23): il victoryCheck è costoso →
+       lo chiamiamo ogni N Impulsi, non a ogni tick. L'hook esiste anche
+       senza M20 così il loop non va rifattorizzato dopo. */
+    VICTORY_CHECK_EVERY_I: 5
   };
 
   /* Vettori di bias di classe per struttura (M05): le costruzioni
@@ -430,17 +435,46 @@
     }
   }
 
+  /* Multi-pista (decisione #23): chiama victory.check ogni N Impulsi,
+     emette evento "victory" alla prima pista chiusa. */
+  function maybeCheckVictory(game, events) {
+    if (!root.ORION.victory) return false;
+    if ((game.timeImpulsi % CFG.VICTORY_CHECK_EVERY_I) !== 0) return false;
+    const results = root.ORION.victory.check(game);
+    let won = null;
+    for (let i = 0; i < results.length; i++) {
+      if (results[i].won) { won = results[i]; break; }
+    }
+    if (won) {
+      events.push({
+        kind: 'victory',
+        track: won.track,
+        score: won.score,
+        impulso: game.timeImpulsi
+      });
+      return true;
+    }
+    return false;
+  }
+
   /* Avanza N Impulsi raccogliendo gli eventi notevoli. Lo "snap" visuale
-     a fine batch è gestito dal chiamante (main.js → refreshHud). */
+     a fine batch è gestito dal chiamante (main.js → refreshHud).
+     Decisione #23: applica `mode.modifiers.tsgSpeed` (×1/×2/×4): in M05
+     ne moltiplichiamo solo il count di Impulsi processati (semantica
+     "il tempo scorre più veloce a parità di click"). M20 rifinirà se
+     servirà una semantica diversa (es. scalare i rates a parità di tick). */
   function advance(impulsi) {
     const game = ORION.game;
     if (!game) return { events: [], impulsi: 0 };
     impulsi = Math.max(0, Math.floor(impulsi || 0));
+    const speed = (game.mode && game.mode.modifiers && game.mode.modifiers.tsgSpeed) || 1;
+    const effective = impulsi * Math.max(1, speed | 0);
     const events = [];
-    for (let i = 0; i < impulsi; i++) {
+    for (let i = 0; i < effective; i++) {
       tick(game, events);
+      if (maybeCheckVictory(game, events)) break;   // stop alla prima pista chiusa
     }
-    return { events: events, impulsi: impulsi };
+    return { events: events, impulsi: effective };
   }
 
   /* Trova il prossimo Impulso "interessante": minimo dei timer attivi. */
