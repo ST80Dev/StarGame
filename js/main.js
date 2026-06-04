@@ -185,14 +185,18 @@ function initNavigation() {
 
   items.forEach((item) => {
     item.addEventListener('click', () => {
+      /* Guard: senza partita la navigazione non fa nulla (main menu
+         attivo). I bottoni rimangono visibili ma inerti finché il
+         giocatore non avvia/carica una partita dal menu (decisione #25). */
+      if (!ORION.game) return;
       items.forEach((i) => i.classList.remove('is-active'));
       item.classList.add('is-active');
       renderView(stage, item.dataset.view);
     });
   });
 
-  // vista iniziale = galassia
-  renderView(stage, 'galaxy');
+  /* La vista iniziale viene attivata da `enterGame()` quando si lascia
+     il main menu (decisione #25). */
 }
 
 function renderView(stage, view) {
@@ -255,7 +259,10 @@ function renderGalaxyView(stage) {
   ORION.openSystemId = -1;
   ORION.currentSystem = null;
   if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
-  if (!ORION.game) newGame();
+  /* Decisione #5/#25: la partita nasce solo dal main menu — non più
+     auto-generazione qui dentro. Se per qualche ragione manca, torniamo
+     al menu (niente seed silenziosi). */
+  if (!ORION.game) { showMainMenu(); return; }
   const g = ORION.game;
 
   stage.innerHTML =
@@ -274,7 +281,6 @@ function renderGalaxyView(stage) {
         '</div>' +
         '<div class="galaxy-overlay__actions">' +
           '<button class="btn btn--mini" data-action="galaxy-reset" type="button" title="Torna alla vista galassia">⤢ Galassia</button>' +
-          '<button class="btn btn--mini" data-action="galaxy-new" type="button" title="Genera una nuova galassia">✦ Nuova</button>' +
         '</div>' +
       '</div>' +
       '<div class="galaxy-hint">Trascina · zoom rotella/pinch · <kbd>Shift</kbd>+trascina = ruota libera · <kbd>Alt</kbd>+trascina = roll · pinch a 2 dita ruota su touch</div>' +
@@ -291,16 +297,9 @@ function renderGalaxyView(stage) {
   onMapContext({ level: 'galaxy', groupId: -1, systemId: -1 });
 
   const resetBtn = stage.querySelector('[data-action="galaxy-reset"]');
-  const newBtn = stage.querySelector('[data-action="galaxy-new"]');
   if (resetBtn) resetBtn.addEventListener('click', () => {
     if (ORION.openSystemId >= 0) closeSystem();
     ORION.map.focusGalaxy();
-  });
-  if (newBtn) newBtn.addEventListener('click', () => {
-    clearSavedGame();
-    newGame();
-    renderGalaxyView(stage);
-    updateTimeControlsHint();
   });
 }
 
@@ -1487,7 +1486,10 @@ function renderSaveModal() {
           : '<p class="save-empty">Nessun autosave ancora. Avvia il tempo o costruisci qualcosa.</p>') +
     '</section>';
 
-  /* Slot manuali (5). Nascosti in ironman (decisione #23/#24). */
+  /* Slot manuali (5). Nascosti in ironman (decisione #23/#24).
+     Dal main menu (game null) si può solo caricare/cancellare —
+     niente salva/sovrascrivi (decisione #25). */
+  const canSave = !!ORION.game;
   if (!ironman) {
     html += '<section class="save-section">' +
       '<h3 class="save-section__title">Slot manuali (5)</h3>' +
@@ -1496,8 +1498,8 @@ function renderSaveModal() {
       const slot = data.slots[i];
       html += '<li class="save-grid__item">' +
         (slot
-          ? saveCardHtml(slot, { canLoad: true, canSave: true, canErase: true })
-          : emptySlotHtml(i)) +
+          ? saveCardHtml(slot, { canLoad: true, canSave: canSave, canErase: true })
+          : (canSave ? emptySlotHtml(i) : emptySlotHtmlReadOnly(i))) +
         '</li>';
     }
     html += '</ul></section>';
@@ -1508,11 +1510,14 @@ function renderSaveModal() {
       '</section>';
   }
 
-  /* Export/Import + Nuova partita */
+  /* Export/Import + Nuova partita. Export richiede una partita corrente;
+     "Nuova partita" rimanda al main menu (decisione #25) e ha senso solo
+     da dentro partita (altrimenti il main menu è già aperto). */
+  const hasGame = !!ORION.game;
   html += '<section class="save-section save-section--actions">' +
-    '<button class="btn" data-action="save-export" type="button">⬇ Esporta .json</button>' +
+    (hasGame ? '<button class="btn" data-action="save-export" type="button">⬇ Esporta .json</button>' : '') +
     '<button class="btn" data-action="save-import" type="button">⬆ Importa .json</button>' +
-    '<button class="btn btn--danger" data-action="save-newgame" type="button">✦ Nuova partita</button>' +
+    (hasGame ? '<button class="btn btn--danger" data-action="save-newgame" type="button">✦ Nuova partita</button>' : '') +
     '</section>';
 
   body.innerHTML = html;
@@ -1546,6 +1551,11 @@ function emptySlotHtml(idx) {
     '<div class="save-card__actions">' +
       '<button class="btn btn--mini" data-action="save-new" data-idx="' + idx + '" type="button">Salva qui</button>' +
     '</div>' +
+    '</div>';
+}
+function emptySlotHtmlReadOnly(idx) {
+  return '<div class="save-card save-card--empty">' +
+    '<div class="save-card__name">Slot ' + (idx + 1) + ' — vuoto</div>' +
     '</div>';
 }
 
@@ -1626,12 +1636,11 @@ function currentDsOfPayload(p) {
 }
 
 function handleNewGame() {
-  if (!confirm('Iniziare una nuova partita? La partita corrente verrà sostituita (salva prima se non vuoi perderla).')) return;
-  clearSavedGame();
-  newGame();
-  remountAfterLoad();
-  showToast('Nuova partita avviata');
+  /* Decisione #25: "Nuova partita" non rigenera silenziosamente. Si
+     torna sempre al main menu nella scheda "Nuova" così il giocatore
+     sceglie seed + preset prima di cristallizzare la partita. */
   closeSaveModal();
+  showMainMenu('new');
 }
 
 function loadPayloadAsGame(payload) {
@@ -1639,17 +1648,19 @@ function loadPayloadAsGame(payload) {
      applica il delta (colonie/tempo/cronaca/mode). Coerente con
      seed+delta (decisione #5). */
   newGame(payload.seed, { payload: payload });
-  remountAfterLoad();
+  enterGame();
   showToast('Partita caricata');
   closeSaveModal();
 }
 
-function remountAfterLoad() {
-  /* Smonta viste correnti e rimonta la galassia: dopo un load, la mappa
-     punta alla galassia del nuovo seed. */
+/* Entra in partita (lascia il main menu, monta la mappa). Usato da:
+   - Continua / Inizia / Carica dal main menu
+   - load slot / import .json dal pannello save */
+function enterGame() {
   if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; }
   if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
   if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
+  hideMainMenu();
   const stage = document.querySelector('[data-view-stage]');
   if (stage) renderGalaxyView(stage);
   setNavActive('galaxy');
@@ -1680,24 +1691,233 @@ function showToast(text) {
   host._t = setTimeout(function () { host.classList.remove('is-visible'); }, 1800);
 }
 
+/* =====================================================================
+   Main menu pre-partita (decisione #25)
+   Sempre mostrato al boot: cristallizza seed + mode + preset prima di
+   entrare in partita. Da dentro la partita si torna qui solo via
+   "Nuova partita" nel pannello Save (con conferma).
+   ===================================================================== */
+
+/* Stato locale del form "Nuova partita" — vive solo nel menu. */
+ORION.menuForm = { seed: null, preset: 'classic', ironman: false };
+/* Vista corrente del menu: 'home' | 'new' | 'info' */
+ORION.menuView = 'home';
+
+function initMainMenu() {
+  const menu = document.querySelector('[data-bind="main-menu"]');
+  if (!menu) return;
+  /* Backdrop click: niente — il main menu è la schermata principale
+     e si chiude solo con un'azione esplicita (Continua/Inizia/Carica). */
+  const ver = document.querySelector('[data-bind="main-menu-version"]');
+  if (ver) ver.textContent = 'Orion Empires ' + ORION.version;
+}
+
+function showMainMenu(view) {
+  ORION.menuView = view || 'home';
+  const menu = document.querySelector('[data-bind="main-menu"]');
+  if (menu) menu.removeAttribute('hidden');
+  renderMainMenu();
+}
+
+function hideMainMenu() {
+  const menu = document.querySelector('[data-bind="main-menu"]');
+  if (menu) menu.setAttribute('hidden', '');
+}
+
+function renderMainMenu() {
+  const body = document.querySelector('[data-bind="main-menu-body"]');
+  if (!body) return;
+  if (ORION.menuView === 'new')  return renderMainMenuNew(body);
+  if (ORION.menuView === 'info') return renderMainMenuInfo(body);
+  return renderMainMenuHome(body);
+}
+
+/* --- Schermata principale: Continua / Nuova / Carica / Info --- */
+function renderMainMenuHome(body) {
+  const auto = ORION.save && ORION.save.loadAutosave ? ORION.save.loadAutosave() : null;
+  const hasAuto = !!auto;
+  const meta = hasAuto ? autoMetaFromPayload(auto) : null;
+
+  body.innerHTML =
+    '<div class="main-menu__actions">' +
+      '<button class="btn btn--menu btn--menu-primary' + (hasAuto ? '' : ' is-disabled') + '" ' +
+        'data-action="menu-continue" type="button"' + (hasAuto ? '' : ' disabled') + '>' +
+        '<span class="btn__glyph">▶</span> Continua' +
+        (meta ? '<span class="btn__sub">' + escapeHtml(meta) + '</span>' : '<span class="btn__sub">nessun autosave</span>') +
+      '</button>' +
+      '<button class="btn btn--menu" data-action="menu-new" type="button">' +
+        '<span class="btn__glyph">✦</span> Nuova partita' +
+        '<span class="btn__sub">scegli seed, preset, ironman</span>' +
+      '</button>' +
+      '<button class="btn btn--menu" data-action="menu-load" type="button">' +
+        '<span class="btn__glyph">📂</span> Carica partita' +
+        '<span class="btn__sub">slot + import .json</span>' +
+      '</button>' +
+      '<button class="btn btn--menu" data-action="menu-info" type="button">' +
+        '<span class="btn__glyph">ⓘ</span> Info' +
+        '<span class="btn__sub">crediti e progetto</span>' +
+      '</button>' +
+    '</div>';
+
+  const cont = body.querySelector('[data-action="menu-continue"]');
+  if (cont && hasAuto) cont.addEventListener('click', function () {
+    newGame(auto.seed, { payload: auto });
+    enterGame();
+    showToast('Partita ripresa');
+  });
+  const ng = body.querySelector('[data-action="menu-new"]');
+  if (ng) ng.addEventListener('click', function () { showMainMenu('new'); });
+  const load = body.querySelector('[data-action="menu-load"]');
+  if (load) load.addEventListener('click', openSaveModal);
+  const info = body.querySelector('[data-action="menu-info"]');
+  if (info) info.addEventListener('click', function () { showMainMenu('info'); });
+
+  /* Focus iniziale: Continua se presente, altrimenti Nuova. */
+  const focusBtn = hasAuto ? cont : ng;
+  if (focusBtn) setTimeout(function () { focusBtn.focus(); }, 0);
+}
+
+/* Etichetta breve per il sub del bottone Continua: "DS xxx · seed". */
+function autoMetaFromPayload(p) {
+  if (!p) return null;
+  const ds = currentDsOfPayload(p);
+  return ds + ' · seed ' + p.seed;
+}
+
+/* --- Form "Nuova partita": seed + preset + ironman --- */
+function renderMainMenuNew(body) {
+  /* Inizializza il form se non ancora fatto in questa apertura. */
+  if (!ORION.menuForm.seed) ORION.menuForm.seed = ORION.rng.newSeed();
+  const PRESETS = (ORION.victory && ORION.victory.PRESETS) || {};
+  const presetLabels = {
+    classic: 'Classico',
+    speedrun: 'Speedrun (più veloce)',
+    nightmare: 'Incubo (ironman, ostile)',
+    longBreath: 'Lungo respiro (galassia ampia)'
+  };
+  const presetOpts = Object.keys(PRESETS).map(function (k) {
+    const sel = (k === ORION.menuForm.preset) ? ' selected' : '';
+    return '<option value="' + k + '"' + sel + '>' + (presetLabels[k] || k) + '</option>';
+  }).join('');
+
+  /* Se il preset corrente forza ironman (nightmare), il checkbox si
+     allinea; altrimenti rispetta la scelta utente. */
+  const presetForcesIronman = !!(PRESETS[ORION.menuForm.preset] && PRESETS[ORION.menuForm.preset].ironman);
+  const ironman = presetForcesIronman ? true : !!ORION.menuForm.ironman;
+
+  body.innerHTML =
+    '<form class="main-menu__form" data-bind="menu-form">' +
+      '<h2 class="main-menu__form-title">Nuova partita</h2>' +
+      '<label class="main-menu__field">' +
+        '<span class="main-menu__field-label">Seed</span>' +
+        '<div class="main-menu__field-row">' +
+          '<input class="main-menu__input" type="text" data-bind="menu-seed" ' +
+            'value="' + escapeHtml(ORION.menuForm.seed) + '" maxlength="32" autocomplete="off">' +
+          '<button type="button" class="btn btn--mini" data-action="menu-seed-new" title="Genera un nuovo seed">⟳ Genera</button>' +
+        '</div>' +
+        '<span class="main-menu__field-hint">Il seed cristallizza la galassia (decisione #5). Sarà visibile in partita ma non rigenerabile.</span>' +
+      '</label>' +
+      '<label class="main-menu__field">' +
+        '<span class="main-menu__field-label">Preset</span>' +
+        '<select class="main-menu__input" data-bind="menu-preset">' + presetOpts + '</select>' +
+        '<span class="main-menu__field-hint">Le piste di vittoria restano in parallelo (decisione #23). M20 esporrà i modificatori liberi.</span>' +
+      '</label>' +
+      '<label class="main-menu__field main-menu__field--row">' +
+        '<input type="checkbox" data-bind="menu-ironman"' + (ironman ? ' checked' : '') +
+          (presetForcesIronman ? ' disabled' : '') + '>' +
+        '<span>Ironman <span class="main-menu__field-hint">— niente slot manuali, solo autosave + export/import .json' +
+          (presetForcesIronman ? ' (imposto dal preset Incubo)' : '') + '</span></span>' +
+      '</label>' +
+      '<div class="main-menu__form-actions">' +
+        '<button type="button" class="btn btn--mini" data-action="menu-cancel">← Indietro</button>' +
+        '<button type="submit" class="btn btn--primary" data-action="menu-start">✦ Inizia partita</button>' +
+      '</div>' +
+    '</form>';
+
+  const form = body.querySelector('[data-bind="menu-form"]');
+  const seedInput = form.querySelector('[data-bind="menu-seed"]');
+  const presetSel = form.querySelector('[data-bind="menu-preset"]');
+  const ironChk = form.querySelector('[data-bind="menu-ironman"]');
+  const seedBtn = form.querySelector('[data-action="menu-seed-new"]');
+  const cancel = form.querySelector('[data-action="menu-cancel"]');
+
+  seedInput.addEventListener('input', function () {
+    ORION.menuForm.seed = seedInput.value.trim() || ORION.rng.newSeed();
+  });
+  seedBtn.addEventListener('click', function () {
+    ORION.menuForm.seed = ORION.rng.newSeed();
+    seedInput.value = ORION.menuForm.seed;
+    seedInput.focus();
+  });
+  presetSel.addEventListener('change', function () {
+    ORION.menuForm.preset = presetSel.value;
+    renderMainMenu(); // rerender per riallineare ironman se forzato
+  });
+  if (ironChk) ironChk.addEventListener('change', function () {
+    ORION.menuForm.ironman = !!ironChk.checked;
+  });
+  cancel.addEventListener('click', function () { showMainMenu('home'); });
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    startNewGameFromMenu();
+  });
+  setTimeout(function () { seedInput.focus(); seedInput.select(); }, 0);
+}
+
+function startNewGameFromMenu() {
+  const PRESETS = (ORION.victory && ORION.victory.PRESETS) || {};
+  const presetId = ORION.menuForm.preset || 'classic';
+  const presetMods = Object.assign({}, PRESETS[presetId] || PRESETS.classic || {});
+  /* Override ironman se l'utente l'ha scelto su un preset non-ironman. */
+  if (ORION.menuForm.ironman) presetMods.ironman = true;
+  const mode = {
+    startedAs: 'sandbox',
+    preset: presetId,
+    modifiers: presetMods
+  };
+  /* Se c'è un autosave esistente, chiedi conferma prima di sostituirlo
+     (§21 "salva prima delle azioni irreversibili"). Gli slot manuali
+     restano comunque intatti. */
+  const auto = ORION.save && ORION.save.loadAutosave ? ORION.save.loadAutosave() : null;
+  if (auto && !confirm('Iniziare una nuova partita? L\'autosave corrente verrà sostituito (gli slot manuali restano).')) return;
+  clearSavedGame();
+  newGame(ORION.menuForm.seed, { mode: mode });
+  /* Reset del form per la prossima apertura */
+  ORION.menuForm = { seed: null, preset: presetId, ironman: !!presetMods.ironman };
+  enterGame();
+  showToast('Partita avviata · seed ' + ORION.game.seed);
+}
+
+/* --- Info / Crediti --- */
+function renderMainMenuInfo(body) {
+  body.innerHTML =
+    '<div class="main-menu__info">' +
+      '<h2 class="main-menu__form-title">Informazioni</h2>' +
+      '<p><strong>Orion Empires</strong> — 4X strategico spaziale a pannelli, scritto in vanilla JS puro (no framework, no CDN, no WebGL).</p>' +
+      '<p>Sviluppo modulo per modulo. Vedi <code>CLAUDE.md</code> per lo stato e <code>ORION_EMPIRES_GDD.md</code> per il design.</p>' +
+      '<p class="main-menu__field-hint">Build: ' + escapeHtml(ORION.version) + '</p>' +
+      '<div class="main-menu__form-actions">' +
+        '<button type="button" class="btn btn--mini" data-action="menu-cancel">← Indietro</button>' +
+      '</div>' +
+    '</div>';
+  const back = body.querySelector('[data-action="menu-cancel"]');
+  if (back) back.addEventListener('click', function () { showMainMenu('home'); });
+}
+
 /* ---------------------------------------------------------------------
    Avvio
    --------------------------------------------------------------------- */
 function boot() {
-  /* M06: assorbe eventuale autosave M05 (chiavi legacy), poi continua
-     dall'autosave moderno se presente. "Nuova partita" è nel pannello
-     salvataggi. */
+  /* M06: assorbe eventuale autosave M05 (chiavi legacy). Idempotente. */
   if (ORION.save && ORION.save.migrateLegacy) ORION.save.migrateLegacy();
-  const auto = ORION.save && ORION.save.loadAutosave ? ORION.save.loadAutosave() : null;
-  if (auto) {
-    newGame(auto.seed, { payload: auto });
-  } else {
-    newGame();
-  }
+  /* Decisione #25: il boot non entra più direttamente in partita —
+     si parte sempre dal main menu (Continua / Nuova / Carica / Info). */
   initNavigation();
   initTimeControls();
   initSaveControls();
-  console.info('%cOrion Empires ' + ORION.version + ' — galassia pronta (seed ' + ORION.game.seed + ', ' + ORION.time.currentDS(ORION.game) + ').', 'color:#2fe6e0');
+  initMainMenu();
+  showMainMenu('home');
+  console.info('%cOrion Empires ' + ORION.version + ' — main menu pronto.', 'color:#2fe6e0');
 }
 
 document.addEventListener('DOMContentLoaded', boot);

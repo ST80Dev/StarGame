@@ -18,6 +18,24 @@
     <div class="star-layer star-layer--near"></div>
   </div>
 
+  <!-- ===== Main menu pre-partita (decisione #25) =====
+       Sempre visibile all'avvio: il seed viene cristallizzato qui prima
+       di entrare in partita (decisione #5). Una volta dentro, lo si
+       raggiunge solo da "Nuova partita" (pannello Save). -->
+  <div class="main-menu" data-bind="main-menu" role="dialog" aria-modal="true" aria-label="Menu principale" hidden>
+    <div class="main-menu__panel">
+      <header class="main-menu__header">
+        <span class="brand-mark main-menu__mark" aria-hidden="true">◈</span>
+        <h1 class="main-menu__title">ORION&nbsp;EMPIRES</h1>
+        <p class="main-menu__sub">4X strategico spaziale a pannelli — vanilla JS</p>
+      </header>
+      <div class="main-menu__body" data-bind="main-menu-body"></div>
+      <footer class="main-menu__footer">
+        <span class="main-menu__version" data-bind="main-menu-version">—</span>
+      </footer>
+    </div>
+  </div>
+
   <!-- ===== Shell applicativa ===== -->
   <div class="app-shell">
 
