@@ -1358,7 +1358,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
           '<div class="struct-item__name">' + def.name + ' <span class="struct-item__cat">' + def.time + ' I</span></div>' +
           '<div class="struct-item__cost">' + costStr + '</div>' +
         '</div>' +
-        '<button class="btn btn--mini struct-item__info" data-info="' + def.id + '" type="button" title="Cosa fa, bonus/malus, concatenazioni" aria-label="Informazioni su ' + def.name + '">ⓘ</button>' +
+        '<button class="btn btn--mini struct-item__info" data-info="' + def.id + '" type="button" title="Cosa fa, bonus/malus, concatenazioni" aria-label="Informazioni su ' + def.name + '">i</button>' +
         statusCell +
       '</li>';
     });

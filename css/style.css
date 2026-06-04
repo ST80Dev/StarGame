@@ -1002,7 +1002,7 @@ button { font-family: inherit; }
 }
 .struct-item {
   display: grid;
-  grid-template-columns: 1.6em 1fr auto;
+  grid-template-columns: 1.6em 1fr auto auto;
   align-items: center;
   gap: 6px;
   padding: 6px 8px;
@@ -1109,6 +1109,7 @@ button { font-family: inherit; }
 }
 .struct-item__demolish:hover { opacity: 1; }
 .struct-item__cancel {
+  grid-column: 3 / -1;
   padding: 2px 8px;
   font-family: var(--font-data);
   font-size: 0.85rem;
@@ -1124,12 +1125,26 @@ button { font-family: inherit; }
 /* M06.7: bottone "ⓘ" della scheda strutture — più piccolo, accento viola
    per distinguerlo da "Costruisci" (azione vs informazione). */
 .struct-item__info {
-  padding: 4px 8px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0 !important;
+  border: 1.4px solid var(--c-violet);
+  border-radius: 50%;
   color: var(--c-violet);
-  opacity: 0.75;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 700;
+  font-size: 0.78rem;
+  line-height: 1;
+  opacity: 0.8;
+  background: transparent;
 }
 .struct-item__info:hover {
   opacity: 1;
+  background: color-mix(in srgb, var(--c-violet) 18%, transparent);
 }
 
 /* btn--mini lite (riusa lo stile dei mini-pulsanti dell'overlay galassia) */
