@@ -574,6 +574,240 @@ button { font-family: inherit; }
 .anomaly--detriti  { border-left-color: var(--c-text-soft); }
 
 /* =====================================================================
+   M04 — Vista Pianeta (layer Canvas + scheda tabella)
+   ===================================================================== */
+.planet-holder { position: absolute; inset: 0; z-index: 2; }
+.planet-holder[hidden] { display: none; }
+.planet-canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.planet-canvas:active { cursor: grabbing; }
+
+/* Cronaca: voce dedicata agli eventi di pianeta */
+.chronicle__entry--planet { color: var(--c-text); }
+.chronicle__entry--planet::before { color: var(--c-violet); }
+
+/* --- Scheda pianeta (pannello destro) --- */
+.planet-head {
+  margin: 0 0 8px;
+}
+.planet-head__type {
+  margin: 0;
+  font-family: var(--font-data);
+  font-size: 0.78rem;
+  color: var(--c-text-soft);
+}
+.planet-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--c-border-soft);
+  padding-bottom: 6px;
+}
+.planet-tab {
+  font-family: var(--font-display);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 4px;
+  color: var(--c-text-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.planet-tab:hover:not(:disabled) {
+  color: var(--c-text);
+  border-color: var(--c-border);
+}
+.planet-tab.is-active {
+  background: rgba(47, 230, 224, 0.10);
+  border-color: var(--c-accent-dim);
+  color: var(--c-accent);
+}
+.planet-tab:disabled { opacity: 0.35; cursor: not-allowed; }
+.planet-tab-content { display: block; }
+
+/* Barre dei potenziali risorse (§7.1) */
+.pot-list, .class-list, .adv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+.pot-item, .class-item, .adv-item {
+  display: grid;
+  grid-template-columns: 5.4em 1fr 2.4em;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-data);
+  font-size: 0.74rem;
+  color: var(--c-text-soft);
+}
+.pot-item__label, .class-item__label, .adv-item__name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pot-item__bar, .class-item__bar, .adv-item__bar {
+  height: 6px;
+  background: rgba(120, 150, 220, 0.10);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.pot-item__fill, .class-item__fill, .adv-item__fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 200ms ease;
+}
+.pot--met   { background: linear-gradient(90deg, #6a7894, #b9c4d8); }
+.pot--en    { background: linear-gradient(90deg, #b8662a, #ffca55); }
+.pot--food  { background: linear-gradient(90deg, #2f7a44, #7fbf5c); }
+.pot--water { background: linear-gradient(90deg, #1f5aa0, #7fc6ea); }
+.pot-item__val, .class-item__val, .adv-item__val {
+  text-align: right;
+  color: var(--c-text);
+}
+
+/* Classi funzionali (§9.2) */
+.class--operai      { background: linear-gradient(90deg, #6a7894, #b9c4d8); }
+.class--scienziati  { background: linear-gradient(90deg, #1b8c8a, #2fe6e0); }
+.class--militari    { background: linear-gradient(90deg, #b8662a, #ff9d3c); }
+.class--mercanti    { background: linear-gradient(90deg, #7d5e96, #b79bff); }
+.class--tecnici     { background: linear-gradient(90deg, #1f5aa0, #7fc6ea); }
+
+/* Risorse avanzate (§7.2) */
+.adv-item__glyph {
+  display: inline-block;
+  width: 1.3em;
+  color: var(--c-violet);
+  text-align: center;
+}
+.adv-item__fill { background: linear-gradient(90deg, #8a6cff, #b79bff); }
+.advanced-hint {
+  margin: 4px 0 8px;
+  padding: 8px 10px;
+  font-family: var(--font-data);
+  font-size: 0.74rem;
+  color: var(--c-text-soft);
+  background: rgba(138, 108, 255, 0.10);
+  border: 1px dashed rgba(138, 108, 255, 0.4);
+  border-radius: var(--radius-sm);
+}
+.advanced-hint strong { color: var(--c-violet); }
+
+/* Tassi di produzione */
+.rate {
+  font-family: var(--font-data);
+  font-weight: 600;
+}
+.rate--pos { color: var(--c-good); }
+.rate--neg { color: var(--c-bad); }
+.rate-aux  { color: var(--c-text-faint); font-size: 0.72rem; }
+
+/* Strutture */
+.planet-slots {
+  margin: 0 0 10px;
+  font-family: var(--font-data);
+  font-size: 0.8rem;
+  color: var(--c-text-soft);
+}
+.planet-slots strong { color: var(--c-text); }
+.planet-slots__queue { color: var(--c-accent-warm); font-size: 0.74rem; margin-left: 6px; }
+
+.struct-cat {
+  margin: 4px 0;
+  padding: 4px 0;
+  border-top: 1px solid var(--c-border-soft);
+}
+.struct-cat > summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-text-soft);
+  padding: 2px 0;
+  list-style: none;
+}
+.struct-cat > summary::-webkit-details-marker { display: none; }
+.struct-cat[open] > summary { color: var(--c-text); }
+
+.struct-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 6px;
+}
+.struct-item {
+  display: grid;
+  grid-template-columns: 1.6em 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-data);
+  font-size: 0.74rem;
+  color: var(--c-text);
+}
+.struct-item__glyph {
+  text-align: center;
+  color: var(--c-accent);
+  font-size: 0.95rem;
+}
+.struct-item__main { min-width: 0; }
+.struct-item__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.struct-item__lvl {
+  font-size: 0.68rem;
+  color: var(--c-accent-warm);
+  margin-left: 4px;
+}
+.struct-item__cat {
+  font-size: 0.66rem;
+  color: var(--c-text-faint);
+  margin-left: 4px;
+}
+.struct-item__cost {
+  font-size: 0.66rem;
+  color: var(--c-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.struct-item.is-built {
+  background: rgba(47, 230, 224, 0.06);
+  border-color: rgba(47, 230, 224, 0.20);
+}
+.struct-item.is-queue {
+  background: rgba(255, 157, 60, 0.06);
+  border-color: rgba(255, 157, 60, 0.25);
+}
+.struct-item.is-locked { opacity: 0.55; }
+.struct-item__locked {
+  color: var(--c-text-faint);
+  font-size: 0.95rem;
+  padding: 0 6px;
+}
+.struct-item__cancel {
+  padding: 2px 8px;
+  font-family: var(--font-data);
+  font-size: 0.85rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--c-bad);
+}
+.struct-item .btn--mini {
+  padding: 4px 10px;
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+}
+
+/* btn--mini lite (riusa lo stile dei mini-pulsanti dell'overlay galassia) */
+
+/* =====================================================================
    HUD inferiore: cronaca + controllo del tempo
    ===================================================================== */
 .hud-bottom {
