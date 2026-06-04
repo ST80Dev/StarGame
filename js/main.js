@@ -369,13 +369,13 @@ function renderBreadcrumb(ctx) {
     const grp = findGroup(ctx.groupId);
     if (grp) crumbs.push('<span class="crumb__sep">›</span>' +
       '<button class="crumb' + (ctx.systemId < 0 ? ' is-current' : '') +
-      '" data-crumb="group" data-id="' + grp.id + '" type="button">' + grp.name + tagHtml(grp.acronym) + '</button>');
+      '" data-crumb="group" data-id="' + grp.id + '" type="button">' + grp.name + '</button>');
   }
   if (ctx.systemId >= 0) {
     const sys = g.galaxy.systems[ctx.systemId];
     const known = g.state.discovery[ctx.systemId] >= ORION.galaxy.DISCOVERY.DETECTED;
     crumbs.push('<span class="crumb__sep">›</span>' +
-      '<span class="crumb is-current">' + (known ? sys.name + systemTagHtml(ctx.systemId) : 'Sistema ignoto') + '</span>');
+      '<span class="crumb is-current">' + (known ? sys.name : 'Sistema ignoto') + '</span>');
   }
   el.innerHTML = crumbs.join('');
 
@@ -648,14 +648,14 @@ function renderSystemBreadcrumb(system, bodyKey) {
   const known = g.state.discovery[system.id] >= ORION.galaxy.DISCOVERY.DETECTED;
   const crumbs = ['<button class="crumb" data-crumb="galaxy" type="button">Galassia</button>'];
   if (grp) crumbs.push('<span class="crumb__sep">›</span>' +
-    '<button class="crumb" data-crumb="group" data-id="' + grp.id + '" type="button">' + grp.name + tagHtml(grp.acronym) + '</button>');
+    '<button class="crumb" data-crumb="group" data-id="' + grp.id + '" type="button">' + grp.name + '</button>');
   crumbs.push('<span class="crumb__sep">›</span>' +
     '<button class="crumb' + (bodyKey ? '' : ' is-current') + '" data-crumb="system" type="button">' +
-    (known ? system.name + systemTagHtml(system.id) : 'Sistema ignoto') + '</button>');
+    (known ? system.name : 'Sistema ignoto') + '</button>');
   if (bodyKey) {
     const body = ORION.system.findBody(system, bodyKey);
     crumbs.push('<span class="crumb__sep">›</span>' +
-      '<span class="crumb is-current">' + (body ? body.name + bodyTagHtml(system.id) : '—') + '</span>');
+      '<span class="crumb is-current">' + (body ? body.name : '—') + '</span>');
   }
   el.innerHTML = crumbs.join('');
 
@@ -866,11 +866,11 @@ function renderPlanetBreadcrumb() {
   const body = ORION.system.findBody(sys, planet.bodyKey);
   const crumbs = ['<button class="crumb" data-crumb="galaxy" type="button">Galassia</button>'];
   if (grp) crumbs.push('<span class="crumb__sep">›</span>' +
-    '<button class="crumb" data-crumb="group" data-id="' + grp.id + '" type="button">' + grp.name + tagHtml(grp.acronym) + '</button>');
+    '<button class="crumb" data-crumb="group" data-id="' + grp.id + '" type="button">' + grp.name + '</button>');
   crumbs.push('<span class="crumb__sep">›</span>' +
-    '<button class="crumb" data-crumb="system" type="button">' + sys.name + systemTagHtml(sys.id) + '</button>');
+    '<button class="crumb" data-crumb="system" type="button">' + sys.name + '</button>');
   crumbs.push('<span class="crumb__sep">›</span>' +
-    '<span class="crumb is-current">' + body.name + bodyTagHtml(sys.id) + '</span>');
+    '<span class="crumb is-current">' + body.name + '</span>');
   el.innerHTML = crumbs.join('');
 
   el.querySelectorAll('[data-crumb]').forEach(function (btn) {
