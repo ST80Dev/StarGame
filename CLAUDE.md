@@ -133,6 +133,15 @@ Architettura a moduli vanilla (namespace globale `ORION`, niente bundler), caric
 10. **Orbite statiche, render on-demand (M03).** Scelta dell'utente: nella vista interna i corpi restano in **posizioni fisse deterministiche dal seed** e il rendering è **on-demand** (nessun loop continuo) — coerente con l'impostazione di M02. L'eventuale rotazione orbitale animata è rimandata (candidato polish/M05 quando ci sarà il game loop). Vantaggio: zero costo CPU a riposo e nessun rischio di stato non deterministico.
 11. **Nebbia di guerra dell'interno fedele a §5.1 (M03).** Scelta dell'utente: l'interno si rivela in base al livello di scoperta — **ESPLORATO** = corpi con dettagli completi (tipi §6.3, lune, anomalie); **RILEVATO** = stella + orbite con i corpi come sagome "da scansionare" (dettagli rimandati a **M07**); **UNKNOWN** = schermo bloccato. All'avvio il sistema d'origine è completo e i vicini mostrano il layout. La scoperta vera (muovere flotte) resta M07.
 12. **Stella dell'interno coerente con M02 + designazione dei corpi (M03).** Il tipo di stella della vista interna **deriva** da quello già scelto in M02 (`galaxy.systems[id].star`), così il colore del nodo e l'interno coincidono. I corpi celesti ricevono una **designazione romana** sul nome del sistema (`Vega I`, `Vega II`…) e le lune un suffisso di lettera (`Vega II a`), convenzione 4X analoga a quella dei nomi-catalogo di M02 (decisione #7). Tutto deterministico (nessun costo di salvataggio).
+13. **Valute regionali leggere (decisione per M12, integra GDD §15).** Il commercio del GDD §15 resta **baratto** come spina dorsale (risorsa↔risorsa, accordi diplomatici); in più si introduce una **moneta per regione** (riusa i gruppi stellari di M02, decisione #9), non una valuta galattica unica. Regole:
+   - **1 valuta per regione**, con **nome a tema** della regione stessa (es. *Stilla di Vega*, *Lama Keth*, *Voto Serenthal*), generata dal seed.
+   - **Si ottiene solo**: vendendo risorse *in* quella regione, completando missioni *per* civiltà di quella regione, o tramite **cambio** presso hub commerciali — il Sindacato Mekhari (§13.2) come banca naturale, con **spread legato a Reputazione §14**.
+   - **Si spende solo**: per beni/tech/figure speciali **esclusivi** di quella regione (motivo unico per averla, non "soldi colorati").
+   - **Le risorse fisiche §7 restano la spina dorsale**: la valuta integra il baratto §15 dove il baratto non funziona bene (servizi, accessi, contratti mercenari, mercato nero).
+   - **Tassi di cambio dinamici** come vettore d'eventi §17 (guerra in regione → valuta crolla → opportunità).
+   - **UI**: niente nuove voci nell'HUD fisso (resta a 4 risorse base + indici). Le valute vivono nel **pannello commercio** dedicato a M12, con possibile **overlay "mappa monetaria"** sulle regioni della mappa M02.
+   - **Save (M06)**: bilancio per regione + tassi correnti come delta — gestibile con seed+delta (decisione #5).
+   - Il GDD §15 andrà esteso prima dell'implementazione di M12 con questa versione *leggera* (non EVE-style).
 
 ---
 
@@ -141,6 +150,7 @@ Architettura a moduli vanilla (namespace globale `ORION`, niente bundler), caric
 - Includere o meno il font Orbitron come asset locale (`/fonts`) in un modulo di polish (M20).
 - Definire lo schema dello stato di gioco (game state) e il `schemaVersion` del save prima di M04/M05 (M02 ha già introdotto `schemaVersion: 1` per galassia/stato).
 - Avviso "schermo troppo piccolo" sotto ~768px (decisione #6) ancora da implementare (candidato M20/polish).
+- Estendere **GDD §15 Commercio** con la versione *leggera* delle valute regionali (decisione #13) prima dell'implementazione di **M12**: nome generato dal seed, regole di acquisizione/spesa esclusive per regione, hub di cambio (Mekhari), tassi dinamici come vettore eventi §17. Nessun impatto su M04–M11.
 
 ---
 
