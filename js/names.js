@@ -202,6 +202,184 @@
     return out;
   }
 
+  /* =====================================================================
+     Nomi propri dei CORPI CELESTI (decisione #26)
+
+     Ogni sistema planetario ha un proprio TEMA (gemme, venti, alberi…) e
+     i suoi corpi ricevono nomi propri inerenti al tema. Così invece di
+     "Vega II II", "Vega II III", "Vega II IV" si ha "Zaffiro", "Smeraldo",
+     "Rubino" — più memorabili, più "romantici" (tema NASA/Visions), e
+     l'appartenenza al sistema viene comunque mostrata come tag/contesto
+     nella UI (mai dentro al nome del corpo).
+
+     18 temi × ~14 nomi = ~250 stringhe. Tema scelto deterministicamente
+     dall'RNG del sistema (`<seed>:sys:<id>`); i nomi vengono assegnati ai
+     corpi in ordine deterministico mescolato — quindi due sistemi che
+     pescano lo stesso tema avranno comunque ordinamento diverso.
+
+     I nomi NON devono essere unici tra sistemi: "Zaffiro" può esistere in
+     più sistemi (in Vega II e in Sirius), perché il contesto di sistema
+     li distingue (Vega II/Zaffiro vs Sirius/Zaffiro).
+     ===================================================================== */
+  const THEMES = [
+    { id: 'gemme', label: 'Gemme',
+      names: ['Zaffiro', 'Smeraldo', 'Rubino', 'Opale', 'Ametista', 'Topazio',
+              'Onice', 'Giada', 'Ambra', 'Quarzo', 'Diamante', 'Granato',
+              'Berillo', 'Tormalina'] },
+    { id: 'pigmenti', label: 'Pigmenti antichi',
+      names: ['Cobalto', 'Cinabro', 'Indaco', 'Vermiglio', 'Porpora', 'Ocra',
+              'Lapislazzuli', 'Malachite', 'Carminio', 'Zafferano', 'Cremisi',
+              'Magenta', 'Verderame', 'Sanguigna'] },
+    { id: 'strumenti', label: 'Strumenti antichi',
+      names: ['Lira', 'Cetra', 'Arpa', 'Flauto', 'Liuto', 'Salterio',
+              'Cembalo', 'Ribeca', 'Tibia', 'Siringa', 'Crotalo', 'Aulos',
+              'Buccina', 'Sistro'] },
+    { id: 'venti', label: 'Venti',
+      names: ['Zefiro', 'Borea', 'Austro', 'Euro', 'Maestrale', 'Scirocco',
+              'Libeccio', 'Aliseo', 'Etesia', 'Foehn', 'Notos', 'Ponente',
+              'Levante', 'Tramontana'] },
+    { id: 'alberi', label: 'Alberi sacri',
+      names: ['Cedro', 'Quercia', 'Salice', 'Betulla', 'Faggio', 'Olmo',
+              'Tiglio', 'Ciliegio', 'Frassino', 'Acero', 'Olivastro', 'Tasso',
+              'Sicomoro', 'Lentisco'] },
+    { id: 'resine', label: 'Resine e profumi',
+      names: ['Mirra', 'Incenso', 'Sandalo', 'Nardo', 'Storace', 'Galbano',
+              'Olibano', 'Mastice', 'Benzoino', 'Zibetto', 'Patchouli', 'Iris',
+              'Vetiver', 'Ambretta'] },
+    { id: 'bestiari', label: 'Bestiari mitologici',
+      names: ['Drago', 'Fenice', 'Grifone', 'Idra', 'Sfinge', 'Chimera',
+              'Manticora', 'Basilisco', 'Pegaso', 'Kirin', 'Salamandra',
+              'Garuda', 'Wyvern', 'Roc'] },
+    { id: 'filosofia', label: 'Concetti greci',
+      names: ['Aletheia', 'Eudaimonia', 'Apeiron', 'Logos', 'Nomos', 'Hyle',
+              'Ananke', 'Telos', 'Praxis', 'Pneuma', 'Kairos', 'Sophia',
+              'Pathos', 'Ethos'] },
+    { id: 'costellazioni', label: 'Costellazioni minori',
+      names: ['Acquario', 'Lince', 'Corvo', 'Vela', 'Centauro', 'Camaleonte',
+              'Cigno', 'Aquila', 'Lupo', 'Bilancia', 'Freccia', 'Scudo',
+              'Bussola', 'Cratere'] },
+    { id: 'stelle', label: 'Stelle storiche',
+      names: ['Algol', 'Mira', 'Polluce', 'Castore', 'Bellatrix', 'Mintaka',
+              'Alnilam', 'Sadr', 'Albireo', 'Mizar', 'Alcor', 'Tania',
+              'Megrez', 'Saiph'] },
+    { id: 'terre', label: 'Terre leggendarie',
+      names: ['Esperia', 'Anatolia', 'Cathay', 'Taprobana', 'Ofir', 'Punt',
+              'Eldorado', 'Cipango', 'Avalon', 'Iperborea', 'Tule', 'Ultima',
+              'Lemuria', 'Mu'] },
+    { id: 'sostanze', label: 'Sostanze mitiche',
+      names: ['Nepenthe', 'Lothos', 'Manna', 'Ichor', 'Ambrosia', 'Nettare',
+              'Soma', 'Idromele', 'Amrita', 'Haoma', 'Theriaca', 'Mithridate',
+              'Elixir', 'Quintessenza'] },
+    { id: 'alchimia', label: 'Alchimia',
+      names: ['Argento', 'Stagno', 'Antimonio', 'Bismuto', 'Vetriolo',
+              'Calcantite', 'Realgar', 'Orpimento', 'Litargirio',
+              'Auripigmento', 'Borace', 'Salnitro', 'Allume', 'Tartaro'] },
+    { id: 'celeste', label: 'Geografia celeste',
+      names: ['Boreale', 'Polare', 'Australe', 'Equatoriale', 'Tropicale',
+              'Eclittica', 'Zenit', 'Nadir', 'Apogeo', 'Perigeo', 'Afelio',
+              'Perielio', 'Sizigia', 'Opposizione'] },
+    { id: 'stati', label: 'Stati poetici',
+      names: ['Sogno', 'Veglia', 'Ombra', 'Eco', 'Riflesso', 'Miraggio',
+              'Aurora', 'Tramonto', 'Penombra', 'Crepuscolo', 'Alba',
+              'Silenzio', 'Vertigine', 'Quiete'] },
+    { id: 'fiori', label: 'Fiori esotici',
+      names: ['Loto', 'Camelia', 'Magnolia', 'Orchidea', 'Ninfea',
+              'Crisantemo', 'Glicine', 'Edelweiss', 'Verbena', 'Belladonna',
+              'Mandragora', 'Acanto', 'Asclepia', 'Gelsomino'] },
+    { id: 'astronomici', label: 'Strumenti astronomici',
+      names: ['Astrolabio', 'Sestante', 'Quadrante', 'Armilla', 'Clessidra',
+              'Compasso', 'Diottra', 'Gnomone', 'Aliade', 'Meridiana',
+              'Eclimetro', 'Telurio', 'Bilancino', 'Pelorus'] },
+    { id: 'marine', label: 'Ninfe marine',
+      names: ['Triton', 'Naiade', 'Nereide', 'Oceanide', 'Galatea', 'Calipso',
+              'Aretusa', 'Anfitrite', 'Doride', 'Tetide', 'Climene', 'Filira',
+              'Pleione', 'Eurinome'] }
+  ];
+
+  /* Sceglie un tema e ne ritorna una sequenza di nomi mescolata in modo
+     deterministico (dall'RNG passato). I corpi del sistema piglieranno i
+     nomi in ordine d'indice orbitale. */
+  function bodyNamesForSystem(rng) {
+    const theme = THEMES[rng.int(0, THEMES.length - 1)];
+    const names = rng.shuffle(theme.names.slice());
+    return { theme: theme.id, themeLabel: theme.label, names: names };
+  }
+
+  /* =====================================================================
+     Sigla regione (decisione #26): 3 lettere a partire dal nome del gruppo
+     stellare. Convenzione "Iniziali del nome completo": iniziale di ogni
+     parola significativa (no preposizioni); se le iniziali sono meno di
+     tre, completa prendendo la prima consonante non-iniziale dalla parola
+     più lunga (poi vocali se nient'altro disponibile). La gestione delle
+     collisioni tra gruppi diversi avviene in galaxy.js (suffisso numerico).
+     ===================================================================== */
+  const STOPWORDS = {
+    'di': 1, 'del': 1, 'della': 1, 'dei': 1, 'delle': 1, 'dello': 1,
+    'da': 1, 'dal': 1, 'dalla': 1, 'dai': 1, 'dalle': 1,
+    'su': 1, 'sul': 1, 'sulla': 1, 'sui': 1, 'sulle': 1,
+    'in': 1, 'nel': 1, 'nella': 1, 'nei': 1, 'nelle': 1,
+    'a': 1, 'al': 1, 'alla': 1, 'ai': 1, 'alle': 1,
+    'e': 1, 'ed': 1, 'o': 1, 'od': 1,
+    'il': 1, 'lo': 1, 'la': 1, 'gli': 1, 'le': 1, 'i': 1,
+    'tra': 1, 'fra': 1, 'con': 1, 'per': 1
+  };
+
+  const VOWELS = 'aeiouàèéìíòóùúAEIOUÀÈÉÌÍÒÓÙÚ';
+  function isVowel(ch) { return VOWELS.indexOf(ch) >= 0; }
+
+  function regionAcronym(name) {
+    if (!name) return 'XXX';
+    const parts = name.split(/[\s\-]+/).filter(function (w) {
+      return w && !STOPWORDS[w.toLowerCase()];
+    });
+    if (parts.length === 0) {
+      const clean = name.replace(/[^A-Za-zÀ-ÿ]/g, '');
+      return (clean.slice(0, 3).toUpperCase() + 'XXX').slice(0, 3);
+    }
+
+    const initials = parts.map(function (p) { return p[0].toUpperCase(); });
+    if (initials.length >= 3) return initials.slice(0, 3).join('');
+
+    // parola più lunga (in caso di pareggio, la prima)
+    let longestIdx = 0;
+    for (let i = 1; i < parts.length; i++) {
+      if (parts[i].length > parts[longestIdx].length) longestIdx = i;
+    }
+    const longest = parts[longestIdx];
+
+    // raccoglie caratteri extra: prima le consonanti, poi le vocali
+    const need = 3 - initials.length;
+    const extra = [];
+    for (let i = 1; i < longest.length && extra.length < need; i++) {
+      if (!isVowel(longest[i])) extra.push(longest[i].toUpperCase());
+    }
+    for (let i = 1; i < longest.length && extra.length < need; i++) {
+      if (isVowel(longest[i])) extra.push(longest[i].toUpperCase());
+    }
+
+    // inserisce l'extra subito dopo l'iniziale della parola più lunga
+    const out = [];
+    for (let i = 0; i < initials.length; i++) {
+      out.push(initials[i]);
+      if (i === longestIdx) {
+        while (extra.length && out.length + (initials.length - 1 - i) < 3) {
+          out.push(extra.shift());
+        }
+      }
+    }
+    while (out.length < 3) out.push(extra.shift() || 'X');
+    return out.slice(0, 3).join('');
+  }
+
   root.ORION = root.ORION || {};
-  root.ORION.names = { generate, generateRegions, inventEvocative, REAL, REGION_KINDS };
+  root.ORION.names = {
+    generate: generate,
+    generateRegions: generateRegions,
+    inventEvocative: inventEvocative,
+    bodyNamesForSystem: bodyNamesForSystem,
+    regionAcronym: regionAcronym,
+    REAL: REAL,
+    REGION_KINDS: REGION_KINDS,
+    THEMES: THEMES
+  };
 })(typeof window !== 'undefined' ? window : this);

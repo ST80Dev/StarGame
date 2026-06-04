@@ -390,13 +390,13 @@ function renderBreadcrumb(ctx) {
     const grp = findGroup(ctx.groupId);
     if (grp) crumbs.push('<span class="crumb__sep">›</span>' +
       '<button class="crumb' + (ctx.systemId < 0 ? ' is-current' : '') +
-      '" data-crumb="group" data-id="' + grp.id + '" type="button">' + grp.name + '</button>');
+      '" data-crumb="group" data-id="' + grp.id + '" type="button">' + grp.name + tagHtml(grp.acronym) + '</button>');
   }
   if (ctx.systemId >= 0) {
     const sys = g.galaxy.systems[ctx.systemId];
     const known = g.state.discovery[ctx.systemId] >= ORION.galaxy.DISCOVERY.DETECTED;
     crumbs.push('<span class="crumb__sep">›</span>' +
-      '<span class="crumb is-current">' + (known ? sys.name : 'Sistema ignoto') + '</span>');
+      '<span class="crumb is-current">' + (known ? sys.name + systemTagHtml(ctx.systemId) : 'Sistema ignoto') + '</span>');
   }
   el.innerHTML = crumbs.join('');
 
@@ -416,6 +416,41 @@ function findGroup(id) {
 
 function row(k, v) { return '<dt>' + k + '</dt><dd>' + v + '</dd>'; }
 
+/* ---------------------------------------------------------------------
+   Decisione #26 — Tag di appartenenza (sigla regione, nome sistema)
+   I corpi celesti hanno ora nomi propri dal tema del sistema (Zaffiro,
+   Smeraldo…). Per non perdere il contesto di "dove sei" lo mostriamo
+   come un piccolo tag accessorio accanto al nome, non dentro al nome.
+   --------------------------------------------------------------------- */
+function regionAcronymFor(sysId) {
+  const g = ORION.game;
+  if (!g) return '';
+  const sys = g.galaxy.systems[sysId];
+  if (!sys) return '';
+  const grp = findGroup(sys.cluster);
+  return (grp && grp.acronym) || '';
+}
+
+function tagHtml(text) {
+  if (!text) return '';
+  return ' <span class="name-tag">[' + text + ']</span>';
+}
+
+/* Tag per il nome di un sistema: [VLV] */
+function systemTagHtml(sysId) {
+  return tagHtml(regionAcronymFor(sysId));
+}
+
+/* Tag per il nome di un pianeta/luna: [VLV·Vega II] */
+function bodyTagHtml(sysId) {
+  const g = ORION.game;
+  if (!g) return '';
+  const sys = g.galaxy.systems[sysId];
+  if (!sys) return '';
+  const acr = regionAcronymFor(sysId);
+  return tagHtml((acr ? acr + '·' : '') + sys.name);
+}
+
 /* --- Pannello: livello Galassia --- */
 function renderGalaxyPanel(title, content) {
   const g = ORION.game;
@@ -429,7 +464,7 @@ function renderGalaxyPanel(title, content) {
   const regions = g.galaxy.groups.map((gp) =>
     '<button class="region-chip" data-region="' + gp.id + '" type="button" ' +
       'style="--rc:' + groupCss(gp.id) + '">' +
-      (gp.id === g.galaxy.homeGroupId ? '★ ' : '') + gp.name +
+      (gp.id === g.galaxy.homeGroupId ? '★ ' : '') + gp.name + tagHtml(gp.acronym) +
       '<span class="region-chip__n">' + gp.members.length + '</span>' +
     '</button>'
   ).join('');
@@ -492,7 +527,7 @@ function renderGroupPanel(title, content, groupId) {
     '</button>';
   }).join('');
 
-  title.textContent = grp.name;
+  title.innerHTML = grp.name + tagHtml(grp.acronym);
   content.innerHTML =
     '<div class="sysinfo">' +
       (isHome ? '<p class="sysinfo__home">★ Regione d\'origine</p>' : '') +
@@ -522,7 +557,7 @@ function renderSystemPanel(title, content, id) {
   const known = disc >= DISCOVERY.DETECTED;
   const starType = g.galaxy.starTypes.find((t) => t.id === sys.star);
 
-  title.textContent = known ? sys.name : 'Sistema sconosciuto';
+  title.innerHTML = known ? (sys.name + systemTagHtml(id)) : 'Sistema sconosciuto';
 
   if (!known) {
     content.innerHTML =
@@ -637,14 +672,14 @@ function renderSystemBreadcrumb(system, bodyKey) {
   const known = g.state.discovery[system.id] >= ORION.galaxy.DISCOVERY.DETECTED;
   const crumbs = ['<button class="crumb" data-crumb="galaxy" type="button">Galassia</button>'];
   if (grp) crumbs.push('<span class="crumb__sep">›</span>' +
-    '<button class="crumb" data-crumb="group" data-id="' + grp.id + '" type="button">' + grp.name + '</button>');
+    '<button class="crumb" data-crumb="group" data-id="' + grp.id + '" type="button">' + grp.name + tagHtml(grp.acronym) + '</button>');
   crumbs.push('<span class="crumb__sep">›</span>' +
     '<button class="crumb' + (bodyKey ? '' : ' is-current') + '" data-crumb="system" type="button">' +
-    (known ? system.name : 'Sistema ignoto') + '</button>');
+    (known ? system.name + systemTagHtml(system.id) : 'Sistema ignoto') + '</button>');
   if (bodyKey) {
     const body = ORION.system.findBody(system, bodyKey);
     crumbs.push('<span class="crumb__sep">›</span>' +
-      '<span class="crumb is-current">' + (body ? body.name : '—') + '</span>');
+      '<span class="crumb is-current">' + (body ? body.name + bodyTagHtml(system.id) : '—') + '</span>');
   }
   el.innerHTML = crumbs.join('');
 
@@ -662,7 +697,7 @@ function renderSystemBreadcrumb(system, bodyKey) {
 function renderSystemInteriorPanel(title, content, system, disc) {
   const DISCOVERY = ORION.galaxy.DISCOVERY;
   const known = disc >= DISCOVERY.DETECTED;
-  title.textContent = known ? system.name : 'Sistema sconosciuto';
+  title.innerHTML = known ? (system.name + systemTagHtml(system.id)) : 'Sistema sconosciuto';
 
   if (!known) {
     content.innerHTML =
@@ -719,7 +754,7 @@ function renderSystemInteriorPanel(title, content, system, disc) {
 function renderBodyPanel(title, content, system, body) {
   const def = ORION.system.BODY_TYPES[body.type];
   const catLabel = { rocky: 'Pianeta', gas: 'Gigante gassoso', moon: 'Luna', belt: 'Cintura asteroidale' }[def.cat] || '—';
-  title.textContent = body.name;
+  title.innerHTML = body.name + bodyTagHtml(system.id);
 
   let extra = '';
   if (body.parentKey) {
@@ -815,7 +850,7 @@ function openPlanet(sysId, bodyKey) {
   setGalaxyHint('planet');
   updatePlanetUI();
 
-  pushChronicle(ORION.time.currentDS(g) + ' — Apertura scheda planetaria di <strong>' + body.name + '</strong>.', 'planet');
+  pushChronicle(ORION.time.currentDS(g) + ' — Apertura scheda planetaria di <strong>' + body.name + '</strong>' + bodyTagHtml(sysId) + '.', 'planet');
 
   /* M06.6: tutorial — prima apertura di un pianeta. */
   if (ORION.tutorial) ORION.tutorial.fire('planet');
@@ -858,11 +893,11 @@ function renderPlanetBreadcrumb() {
   const body = ORION.system.findBody(sys, planet.bodyKey);
   const crumbs = ['<button class="crumb" data-crumb="galaxy" type="button">Galassia</button>'];
   if (grp) crumbs.push('<span class="crumb__sep">›</span>' +
-    '<button class="crumb" data-crumb="group" data-id="' + grp.id + '" type="button">' + grp.name + '</button>');
+    '<button class="crumb" data-crumb="group" data-id="' + grp.id + '" type="button">' + grp.name + tagHtml(grp.acronym) + '</button>');
   crumbs.push('<span class="crumb__sep">›</span>' +
-    '<button class="crumb" data-crumb="system" type="button">' + sys.name + '</button>');
+    '<button class="crumb" data-crumb="system" type="button">' + sys.name + systemTagHtml(sys.id) + '</button>');
   crumbs.push('<span class="crumb__sep">›</span>' +
-    '<span class="crumb is-current">' + body.name + '</span>');
+    '<span class="crumb is-current">' + body.name + bodyTagHtml(sys.id) + '</span>');
   el.innerHTML = crumbs.join('');
 
   el.querySelectorAll('[data-crumb]').forEach(function (btn) {
@@ -880,7 +915,8 @@ function renderPlanetPanel(title, content) {
   const planet = ORION.currentPlanet;
   const colony = ORION.game.colonies[ORION.openPlanetKey];
   const def = ORION.system.BODY_TYPES[planet.type];
-  title.textContent = planet.name;
+  const sysId = ORION.currentSystem ? ORION.currentSystem.id : -1;
+  title.innerHTML = planet.name + bodyTagHtml(sysId);
 
   const tabs = ['colonia', 'risorse', 'strutture', 'popolazione'];
   if (!colony.colonized) ORION.planetTab = 'colonia';
@@ -1069,7 +1105,7 @@ function tryColonize(planet) {
     startedAt: ORION.time.currentDS(g),
     duration: cost.impulsi
   };
-  pushChronicle(ORION.time.currentDS(g) + ' — Spedizione coloniale in viaggio verso <strong>' + planet.name + '</strong> (' + cost.impulsi + ' I).', 'planet');
+  pushChronicle(ORION.time.currentDS(g) + ' — Spedizione coloniale in viaggio verso <strong>' + planet.name + '</strong>' + bodyTagHtml(planet.systemId) + ' (' + cost.impulsi + ' I).', 'planet');
   persistGame(g);
   updateGlobalResourceHud();
   updatePlanetUI();
@@ -1209,7 +1245,7 @@ function tryBuild(id) {
   const r = ORION.planet.startBuild(colony, planet, id, ORION.time.currentDS(g));
   if (!r.ok) { console.info('Costruzione rifiutata:', r.reason); return; }
   const def = ORION.structures.get(id);
-  pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione: <strong>' + def.name + '</strong> su ' + planet.name + ' (' + def.time + ' I).', 'planet');
+  pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione: <strong>' + def.name + '</strong> su ' + planet.name + bodyTagHtml(planet.systemId) + ' (' + def.time + ' I).', 'planet');
   persistGame(g);
   updateGlobalResourceHud();
   updatePlanetUI();
@@ -1379,24 +1415,31 @@ function runAdvance(impulsi) {
 function chronicleEvent(ev) {
   const ds = ORION.time.format((ORION.game.startEpochOrbita || 0) * 100 + ev.impulso);
   const pname = (ev.planet && ev.planet.name) || '—';
+  // Decisione #26: aggiungiamo il tag di appartenenza accanto al nome
+  // del pianeta nelle voci di cronaca, così "Zaffiro" diventa subito
+  // riconducibile a "Vega II nella regione VLV".
+  const sysId = (ev.colony && typeof ev.colony.systemId === 'number') ? ev.colony.systemId
+              : (ev.planet && typeof ev.planet.systemId === 'number') ? ev.planet.systemId
+              : -1;
+  const ptag = sysId >= 0 ? bodyTagHtml(sysId) : '';
   if (ev.kind === 'build-done') {
-    pushChronicle(ds + ' — <strong>' + ev.structName + '</strong> operativa su ' + pname + '.', 'planet');
+    pushChronicle(ds + ' — <strong>' + ev.structName + '</strong> operativa su ' + pname + ptag + '.', 'planet');
   } else if (ev.kind === 'colony-done') {
-    pushChronicle(ds + ' — Nuova colonia attiva su <strong>' + pname + '</strong>.', 'planet');
+    pushChronicle(ds + ' — Nuova colonia attiva su <strong>' + pname + '</strong>' + ptag + '.', 'planet');
   } else if (ev.kind === 'scan-done') {
     const n = (ev.planet && ev.planet.advanced) ? ev.planet.advanced.length : 0;
-    pushChronicle(ds + ' — Osservatorio di ' + pname + ': scansione completata, ' + n + ' risorse avanzate rivelate (§7.2).', 'explore');
+    pushChronicle(ds + ' — Osservatorio di ' + pname + ptag + ': scansione completata, ' + n + ' risorse avanzate rivelate (§7.2).', 'explore');
   } else if (ev.kind === 'scarcity') {
     const RES = { met: 'metalli', en: 'energia', food: 'cibo', water: 'acqua' };
     const sev = ev.sev === 'crit' ? 'critica' : 'in allerta';
-    pushChronicle(ds + ' — ' + pname + ': carenza ' + sev + ' di <strong>' + RES[ev.res] + '</strong>.', 'system');
+    pushChronicle(ds + ' — ' + pname + ptag + ': carenza ' + sev + ' di <strong>' + RES[ev.res] + '</strong>.', 'system');
     /* M06.6: tutorial — prima volta che vediamo una carenza (low o crit). */
     if (ORION.tutorial) ORION.tutorial.fire('scarcity');
   } else if (ev.kind === 'scarcity-recover') {
     const RES = { met: 'metalli', en: 'energia', food: 'cibo', water: 'acqua' };
-    pushChronicle(ds + ' — ' + pname + ': situazione <strong>' + RES[ev.res] + '</strong> rientrata.', 'system');
+    pushChronicle(ds + ' — ' + pname + ptag + ': situazione <strong>' + RES[ev.res] + '</strong> rientrata.', 'system');
   } else if (ev.kind === 'pop-loss') {
-    pushChronicle(ds + ' — ' + pname + ': la popolazione cala per la carestia prolungata.', 'system');
+    pushChronicle(ds + ' — ' + pname + ptag + ': la popolazione cala per la carestia prolungata.', 'system');
   } else if (ev.kind === 'victory') {
     const label = (ORION.victory && ORION.victory.TRACK_LABELS[ev.track]) || ev.track;
     pushChronicle(ds + ' — <strong>Pista chiusa</strong>: ' + label + ' (M20 attiverà la schermata di vittoria).', 'explore');
@@ -1484,8 +1527,10 @@ const MAX_CHRONICLE = 40;
 function resetChronicle(galaxy, startDS) {
   ORION.lastChronicleId = -1;
   const home = galaxy.systems[galaxy.homeId];
+  const homeGrp = galaxy.groups.find(function (gp) { return gp.id === galaxy.homeGroupId; });
+  const homeTag = homeGrp && homeGrp.acronym ? ' <span class="name-tag">[' + homeGrp.acronym + ']</span>' : '';
   const html = startDS + ' — Galassia generata: ' + galaxy.count + ' sistemi. ' +
-    'Origine nel sistema <strong>' + home.name + '</strong>.';
+    'Origine nel sistema <strong>' + home.name + '</strong>' + homeTag + '.';
   if (ORION.game) ORION.game.chronicle = [{ html: html, mod: 'system' }];
   const log = document.querySelector('[data-bind="chronicle"]');
   if (!log) return;
@@ -1534,11 +1579,11 @@ function chronicleSystemEntry(system, disc) {
   const n = system.bodies.length;
   let text, mod;
   if (disc >= DISCOVERY.EXPLORED) {
-    text = ds + ' — Ingresso nel sistema <strong>' + system.name + '</strong> · ' +
+    text = ds + ' — Ingresso nel sistema <strong>' + system.name + '</strong>' + systemTagHtml(system.id) + ' · ' +
       system.stars.label + ' · ' + n + ' corpi celesti.';
     mod = 'explore';
   } else if (disc >= DISCOVERY.DETECTED) {
-    text = ds + ' — Avvicinamento a <strong>' + system.name + '</strong> · sensori a lungo raggio: ' +
+    text = ds + ' — Avvicinamento a <strong>' + system.name + '</strong>' + systemTagHtml(system.id) + ' · sensori a lungo raggio: ' +
       n + ' corpi rilevati, interno da scansionare.';
     mod = 'system';
   } else {
