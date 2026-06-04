@@ -182,29 +182,31 @@
     _buildBackdrop() {
       const rng = root.ORION.rng.makeRng(this.galaxy.seed + ':backdrop');
       // nebulose: blob morbidi in spazio mondo, vicino al piano galattico
+      // Nebulose: meno numerose e meno intense per non saturare la mappa.
       this.nebulae = [];
-      const nNeb = 14;
+      const nNeb = 10;
       for (let i = 0; i < nNeb; i++) {
         this.nebulae.push({
           x: rng.range(-0.1, 1.1),
           y: rng.range(-0.1, 1.1),
           z: rng.range(-0.10, 0.10),
-          r: rng.range(0.18, 0.46),
+          r: rng.range(0.18, 0.42),
           color: rng.pick(NEBULA_COLORS),
-          alpha: rng.range(0.05, 0.16)
+          alpha: rng.range(0.04, 0.11)
         });
       }
-      // polvere stellare decorativa: distribuita nel disco con un po' di alone
+      // polvere stellare decorativa: distribuita nel disco con un po' di alone.
+      // Densità e alpha contenuti per non sbiadire le etichette (fix utente).
       this.dust = [];
-      const nDust = 520;
+      const nDust = 360;
       for (let i = 0; i < nDust; i++) {
         const m = Math.pow(rng.float(), 3);
         this.dust.push({
           x: rng.range(-0.08, 1.08),
           y: rng.range(-0.08, 1.08),
           z: rng.range(-0.14, 0.14),
-          size: 0.4 + m * 1.7,
-          alpha: 0.2 + m * 0.7,
+          size: 0.4 + m * 1.5,
+          alpha: 0.14 + m * 0.55,
           warm: rng.chance(0.5)
         });
       }
@@ -437,9 +439,11 @@
       if (Math.abs(dx) + Math.abs(dy) > 1) this.dragMoved = true;
 
       if (this.rotateModifier) {
-        // Shift + drag = ruota yaw (orizzontale) e modula pitch (verticale)
-        this.yaw += dx * 0.012;
-        this.pitch = clamp(this.pitch - dy * 0.006, 0.15, 1.05);
+        // Shift + drag = ruota yaw (orizzontale) e modula pitch (verticale).
+        // Sensibilità "generosa" così funziona bene anche grabbing al centro,
+        // dove il punto stesso si muove poco perché vicino all'asse di rotazione.
+        this.yaw += dx * 0.020;
+        this.pitch = clamp(this.pitch - dy * 0.010, 0.02, Math.PI / 2 - 0.02);
       } else {
         this.offsetX += dx;
         this.offsetY += dy;
@@ -728,16 +732,20 @@
         const p = this.project(b.x, b.y, b.z);
         if (p.x < -40 || p.x > this.cssW + 40 || p.y < -40 || p.y > this.cssH + 40) continue;
         const col = b.warm ? '#ffe6b0' : '#dfeaff';
-        const len = b.len * p.parallax;
-        this._spike(ctx, p.x, p.y, len, col, 0.5);
-        const bg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 7 * p.parallax);
-        bg.addColorStop(0, hexA(col, 0.85));
-        bg.addColorStop(0.4, hexA(col, 0.22));
+        // cap del parallax sui dettagli decorativi: evita bloom giganti che
+        // saturano la mappa quando il pitch porta una stella vicina al viewer.
+        const par = Math.min(p.parallax, 1.3);
+        const len = b.len * par * 0.85;
+        this._spike(ctx, p.x, p.y, len, col, 0.4);
+        const bloomR = 6 * par;
+        const bg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, bloomR);
+        bg.addColorStop(0, hexA(col, 0.7));
+        bg.addColorStop(0.4, hexA(col, 0.16));
         bg.addColorStop(1, hexA(col, 0));
         ctx.fillStyle = bg;
-        ctx.beginPath(); ctx.arc(p.x, p.y, 7 * p.parallax, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,0.95)';
-        ctx.beginPath(); ctx.arc(p.x, p.y, 1.5 * p.parallax, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(p.x, p.y, bloomR, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.beginPath(); ctx.arc(p.x, p.y, 1.3 * par, 0, Math.PI * 2); ctx.fill();
       }
     }
 
@@ -820,18 +828,24 @@
           ctx.restore();
         }
 
-        // etichetta regione (sempre frontale: leggibile)
+        // etichetta regione con backdrop sottile per restare leggibile
+        // sopra la polvere/nebulose (fix utente).
+        const labelText = (isHome ? '★ ' : '') + g.name.toUpperCase();
         ctx.font = '600 13px "JetBrains Mono", ui-monospace, monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
+        const m = ctx.measureText(labelText);
+        const bgW = m.width + 18, bgH = 32;
+        ctx.fillStyle = 'rgba(8,11,26,' + (0.55 * alpha) + ')';
+        ctx.fillRect(c.x - bgW / 2, c.y - bgH / 2, bgW, bgH);
         ctx.shadowColor = 'rgba(0,0,0,0.85)';
-        ctx.shadowBlur = 4;
-        ctx.fillStyle = hexA(isActive || isHover ? '#ffffff' : col, (isActive || isHover ? 0.95 : 0.72) * alpha * depthFade);
-        ctx.fillText((isHome ? '★ ' : '') + g.name.toUpperCase(), c.x, c.y);
+        ctx.shadowBlur = 3;
+        ctx.fillStyle = hexA(isActive || isHover ? '#ffffff' : col, (isActive || isHover ? 1 : 0.85) * alpha * depthFade);
+        ctx.fillText(labelText, c.x, c.y - 4);
         ctx.shadowBlur = 0;
         ctx.font = '10px "JetBrains Mono", ui-monospace, monospace';
-        ctx.fillStyle = hexA('#9aa6cc', 0.7 * alpha * depthFade);
-        ctx.fillText(g.members.length + ' sistemi', c.x, c.y + 16);
+        ctx.fillStyle = hexA('#cfe0ff', 0.85 * alpha * depthFade);
+        ctx.fillText(g.members.length + ' sistemi', c.x, c.y + 10);
       }
     }
 

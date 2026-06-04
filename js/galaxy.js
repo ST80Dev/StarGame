@@ -64,21 +64,64 @@
      ------------------------------------------------------------------ */
   function layoutSystems(rng, count) {
     const margin = 0.06;
-    const span = 1 - margin * 2;
     const minDist = 0.85 / Math.sqrt(count); // separazione media tra nodi
     const minDist2 = minDist * minDist;
+
+    // Forma generale della galassia (decisione #19, su feedback utente):
+    // ogni partita ha una sagoma diversa, deterministica dal seed —
+    // rotonda · ellittica schiacciata · irregolare. Implementata come
+    // ellisse con eccentricità + rotazione + perturbazione di bordo.
+    const shapeRoll = rng.float();
+    let aspect, lobes, lobeAmp;
+    if (shapeRoll < 0.30) {        // rotondeggiante (~30%)
+      aspect = rng.range(0.92, 1.0);
+      lobes = rng.int(0, 1); lobeAmp = rng.range(0, 0.05);
+    } else if (shapeRoll < 0.62) { // ellittica moderata (~32%)
+      aspect = rng.range(0.65, 0.85);
+      lobes = rng.int(1, 2); lobeAmp = rng.range(0.04, 0.10);
+    } else if (shapeRoll < 0.85) { // ellittica schiacciata (~23%)
+      aspect = rng.range(0.45, 0.62);
+      lobes = rng.int(1, 2); lobeAmp = rng.range(0.05, 0.12);
+    } else {                       // irregolare (~15%)
+      aspect = rng.range(0.55, 0.95);
+      lobes = rng.int(2, 4); lobeAmp = rng.range(0.10, 0.20);
+    }
+    const galRot = rng.range(0, Math.PI);    // angolo dell'asse maggiore
+    const cs = Math.cos(galRot), sn = Math.sin(galRot);
+    const lobePhase = rng.range(0, Math.PI * 2);
+    // raggio massimo della galassia (margine = 0.06)
+    const rMax = 0.5 - margin;
+
+    /* Campiona un punto dentro la sagoma: angolo+raggio in coordinate
+       locali (asse maggiore allineato a x), poi schiaccia in y per
+       l'ellisse e perturba con lobi a bassa frequenza, infine ruota e
+       trasla al centro (0.5, 0.5). */
+    function sampleShape(distScale) {
+      const ang = rng.float() * Math.PI * 2;
+      // raggio con peso radiale: sqrt per uniformità d'area, distScale
+      // limita il sample alla "spread" del cluster.
+      const baseR = Math.sqrt(rng.float()) * distScale;
+      const lobeMod = lobes > 0 ? 1 + Math.cos(ang * lobes + lobePhase) * lobeAmp : 1;
+      const rr = baseR * lobeMod;
+      const lx = Math.cos(ang) * rr;
+      const ly = Math.sin(ang) * rr * aspect;
+      // ruota e trasla
+      const x = 0.5 + (lx * cs - ly * sn);
+      const y = 0.5 + (lx * sn + ly * cs);
+      return { x: x, y: y };
+    }
 
     // numero di cluster proporzionale alla dimensione
     const clusterCount = rng.int(4, 7);
     const clusters = [];
     for (let i = 0; i < clusterCount; i++) {
+      const p = sampleShape(rMax * 0.75);
       clusters.push({
-        x: margin + rng.range(0.12, 0.88) * span,
-        y: margin + rng.range(0.12, 0.88) * span,
+        x: p.x, y: p.y,
         // §5.5 / decisione #18: ogni cluster a una propria "banda" in z
         // (il disco galattico è sottile ma i gruppi si separano in altezza).
         zBase: rng.range(-0.11, 0.11),
-        spread: rng.range(0.10, 0.20),
+        spread: rng.range(0.08, 0.16),
         zSpread: rng.range(0.018, 0.035)
       });
     }

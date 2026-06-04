@@ -43,8 +43,27 @@ ORION.lastChronicleId = -1;
 /* ---------------------------------------------------------------------
    Generazione/avvio di una partita (galassia)
    --------------------------------------------------------------------- */
+/* Preview leggera della persistenza (M06): il seed della partita corrente
+   vive in localStorage così l'F5 NON cambia galassia. Il salvataggio
+   completo (delta colonie, scoperte, cronaca) arriva con M06; qui basta
+   il seed perché la struttura della galassia si rigenera identica
+   (decisione #5 seed+delta). Il pulsante "Nuova" del menu rigenera. */
+const SEED_KEY = 'orion.seed';
+
+function loadSavedSeed() {
+  try { return window.localStorage.getItem(SEED_KEY) || null; }
+  catch (e) { return null; }
+}
+function persistSeed(seed) {
+  try { window.localStorage.setItem(SEED_KEY, seed); } catch (e) {}
+}
+function clearSavedSeed() {
+  try { window.localStorage.removeItem(SEED_KEY); } catch (e) {}
+}
+
 function newGame(seed) {
   seed = seed || ORION.rng.newSeed();
+  persistSeed(seed);
   const galaxy = ORION.galaxy.generate(seed);
   const state = ORION.galaxy.createState(galaxy);
 
@@ -1178,8 +1197,10 @@ function chronicleSystemEntry(system, disc) {
    Avvio
    --------------------------------------------------------------------- */
 function boot() {
-  newGame();          // genera la prima galassia
-  initNavigation();   // monta la vista galassia
+  // Se in localStorage c'è un seed di una partita precedente, lo riusiamo
+  // (preview M06: l'F5 mantiene la stessa galassia). "Nuova" rigenera.
+  newGame(loadSavedSeed());
+  initNavigation();
   console.info('%cOrion Empires ' + ORION.version + ' — galassia pronta (seed ' + ORION.game.seed + ').', 'color:#2fe6e0');
 }
 
