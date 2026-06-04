@@ -215,6 +215,100 @@
     return 'letale';
   }
 
+  /* Nome-base di un sistema, senza designazione di catalogo ("Rigel II" -> "Rigel"). */
+  function baseName(name) {
+    return name.replace(/\s+[IVX]+$/, '');
+  }
+
+  /* Inviluppo convesso (monotone chain di Andrew) dei punti membri di un
+     gruppo. Serve a disegnare il contorno morbido della regione. */
+  function convexHull(points) {
+    if (points.length < 3) return points.slice();
+    const pts = points.slice().sort(function (a, b) {
+      return a.x === b.x ? a.y - b.y : a.x - b.x;
+    });
+    const cross = function (o, a, b) {
+      return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    };
+    const lower = [];
+    for (let i = 0; i < pts.length; i++) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], pts[i]) <= 0) lower.pop();
+      lower.push(pts[i]);
+    }
+    const upper = [];
+    for (let i = pts.length - 1; i >= 0; i--) {
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], pts[i]) <= 0) upper.pop();
+      upper.push(pts[i]);
+    }
+    lower.pop();
+    upper.pop();
+    return lower.concat(upper).map(function (p) { return { x: p.x, y: p.y }; });
+  }
+
+  /* ------------------------------------------------------------------
+     Gruppi stellari / regioni (M02 — navigazione gerarchica)
+     Ogni cluster diventa un "gruppo" navigabile: centroide, confini,
+     inviluppo, raggio, pericolo medio, sistema rappresentativo e nome
+     (schema "misto", vedi names.generateRegions). Deterministico.
+     ------------------------------------------------------------------ */
+  function buildGroups(rng, systems) {
+    const byCluster = {};
+    systems.forEach(function (s) {
+      (byCluster[s.cluster] = byCluster[s.cluster] || []).push(s);
+    });
+
+    const groups = Object.keys(byCluster).map(function (k) {
+      const members = byCluster[k];
+      let cx = 0, cy = 0, minX = 1, minY = 1, maxX = 0, maxY = 0, dangerSum = 0;
+      members.forEach(function (m) {
+        cx += m.x; cy += m.y; dangerSum += m.danger;
+        if (m.x < minX) minX = m.x; if (m.x > maxX) maxX = m.x;
+        if (m.y < minY) minY = m.y; if (m.y > maxY) maxY = m.y;
+      });
+      cx /= members.length; cy /= members.length;
+
+      // raggio = distanza massima dal centroide (per l'alone della regione)
+      let radius = 0;
+      members.forEach(function (m) {
+        const d = Math.sqrt((m.x - cx) * (m.x - cx) + (m.y - cy) * (m.y - cy));
+        if (d > radius) radius = d;
+      });
+
+      // sistema rappresentativo: preferisci un nome reale, poi il più connesso
+      const reals = members.filter(function (m) { return m.realName; });
+      const pool = reals.length ? reals : members;
+      let rep = pool[0];
+      pool.forEach(function (m) { if (m.links.length > rep.links.length) rep = m; });
+
+      return {
+        id: Number(k),
+        members: members.map(function (m) { return m.id; }),
+        cx: cx, cy: cy,
+        minX: minX, minY: minY, maxX: maxX, maxY: maxY,
+        radius: radius,
+        hull: convexHull(members.map(function (m) { return { x: m.x, y: m.y }; })),
+        danger: Math.round(dangerSum / members.length),
+        repId: rep.id,
+        hasReal: reals.length > 0,
+        name: ''     // assegnato sotto
+      };
+    });
+
+    groups.sort(function (a, b) { return a.id - b.id; });
+
+    // nomi regione (schema "misto")
+    const refs = groups.map(function (gp) {
+      return { real: gp.hasReal ? baseName(systems[gp.repId].name) : null };
+    });
+    const names = root.ORION.names.generateRegions(rng, refs);
+    groups.forEach(function (gp, i) {
+      gp.name = names[i];
+      gp.dangerTier = dangerTier(gp.danger);
+    });
+
+    return groups;
+  }
+
   /* ==================================================================
      GENERAZIONE STRUTTURA IMMUTABILE
      ================================================================== */
@@ -255,13 +349,19 @@
     computeDanger(rng, systems, homeId);
     systems.forEach(function (s) { s.dangerTier = dangerTier(s.danger); });
 
+    // gruppi stellari / regioni navigabili (struttura immutabile)
+    const groups = buildGroups(rng, systems);
+    const homeGroupId = systems[homeId].cluster;
+
     return {
       schemaVersion: SCHEMA_VERSION,
       seed: seed,
       count: count,
       systems: systems,
       edges: edges,
+      groups: groups,
       homeId: homeId,
+      homeGroupId: homeGroupId,
       bounds: { minX: 0, minY: 0, maxX: 1, maxY: 1 },
       starTypes: STAR_TYPES
     };

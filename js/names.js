@@ -142,6 +142,52 @@
     return rng.shuffle(out);
   }
 
+  /* =====================================================================
+     Nomi dei GRUPPI STELLARI / regioni (M02 — navigazione gerarchica)
+
+     Decisione utente: schema "misto". Una regione prende il nome da un
+     descrittore evocativo + un riferimento:
+       - se il gruppo contiene un sistema dal nome REALE famoso (Vega,
+         Sirius…), si usa quello come riferimento → "Velo di Vega";
+       - altrimenti si genera un proprio nome evocativo (stile poetico
+         §5.2) → "Distesa di Auvethal".
+     Deterministico (dipende solo dall'RNG → dal seed). Nomi unici.
+     ===================================================================== */
+  const REGION_KINDS = [
+    'Distesa', 'Velo', 'Braccio', 'Ammasso', 'Corona', 'Soglia',
+    'Abisso', 'Cintura', 'Nube', 'Bastione', 'Confine', 'Marca'
+  ];
+
+  /* Un nome proprio evocativo (riusa il banco poetico §5.2). */
+  function inventEvocative(rng) {
+    let name = rng.pick(POETIC.onset);
+    if (rng.chance(0.5)) name += rng.pick(POETIC.mid);
+    name += rng.pick(POETIC.coda);
+    return tidy(name.toLowerCase());
+  }
+
+  /* refs: array allineato ai gruppi, ogni elemento { real: 'Vega' | null }.
+     Ritorna un array di nomi-regione unici, stesso ordine. */
+  function generateRegions(rng, refs) {
+    const used = new Set();
+    const out = [];
+    for (let i = 0; i < refs.length; i++) {
+      const ref = refs[i] && refs[i].real ? refs[i].real : inventEvocative(rng);
+      // scegli un descrittore non ancora abbinato a questo riferimento
+      let name = '';
+      let guard = 0;
+      do {
+        const kind = rng.pick(REGION_KINDS);
+        name = kind + ' di ' + ref;
+        guard++;
+      } while (used.has(name) && guard < 40);
+      if (used.has(name)) name = name + ' ' + (i + 1); // fallback estremo
+      used.add(name);
+      out.push(name);
+    }
+    return out;
+  }
+
   root.ORION = root.ORION || {};
-  root.ORION.names = { generate, REAL };
+  root.ORION.names = { generate, generateRegions, inventEvocative, REAL, REGION_KINDS };
 })(typeof window !== 'undefined' ? window : this);
