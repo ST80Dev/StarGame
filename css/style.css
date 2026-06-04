@@ -288,7 +288,7 @@ button { font-family: inherit; }
   text-shadow: 0 0 8px rgba(47, 230, 224, 0.25);
 }
 .panel__content { padding: 12px 14px; overflow-y: auto; flex: 1; }
-.panel__note { margin-top: 14px; font-size: 0.78rem; color: var(--c-text-soft); line-height: 1.55; }
+.panel__note { margin-top: 14px; font-size: 0.84rem; color: var(--c-text-soft); line-height: 1.55; }
 
 /* --- Lista di navigazione --- */
 .nav-list { display: flex; flex-direction: column; gap: 4px; }
@@ -456,10 +456,17 @@ button { font-family: inherit; }
    Pannello destro — dettagli sistema selezionato (M02)
    ===================================================================== */
 .sysinfo__home {
-  margin: 0 0 10px;
-  font-size: 0.72rem;
+  margin: 0 0 12px;
+  padding: 6px 10px;
+  font-family: var(--font-display);
+  font-size: 0.84rem;
+  font-weight: 600;
   color: var(--c-accent);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
+  background: rgba(47, 230, 224, 0.08);
+  border-left: 3px solid var(--c-accent);
+  border-radius: var(--radius-sm);
+  text-shadow: 0 0 8px rgba(47, 230, 224, 0.25);
 }
 .sysinfo__fog { font-size: 0.8rem; color: var(--c-text-faint); line-height: 1.6; }
 /* Coppie "etichetta — valore" come mini-card che fluiscono e vanno a capo,
@@ -482,9 +489,11 @@ button { font-family: inherit; }
   border-radius: var(--radius-sm);
 }
 .sysinfo__list dt {
-  color: var(--c-text-faint);
-  font-size: 0.58rem;
-  letter-spacing: 0.10em;
+  color: var(--c-text-soft);
+  font-family: var(--font-display);
+  font-size: 0.70rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -492,8 +501,8 @@ button { font-family: inherit; }
   margin: 0;
   color: var(--c-text);
   font-family: var(--font-data);
-  font-weight: 600;
-  font-size: 0.88rem;
+  font-weight: 700;
+  font-size: 0.95rem;
   letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
@@ -558,9 +567,9 @@ button { font-family: inherit; }
 .sysinfo__sub {
   margin: 18px 0 10px;
   font-family: var(--font-display);
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 700;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.20em;
   text-transform: uppercase;
   color: var(--c-accent);
   padding-bottom: 6px;
@@ -616,12 +625,13 @@ button { font-family: inherit; }
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 8px;
+  padding: 7px 10px;
   font-family: var(--font-data);
-  font-size: 0.76rem;
+  font-size: 0.84rem;
+  font-weight: 600;
   text-align: left;
-  color: var(--c-text-soft);
-  background: transparent;
+  color: var(--c-text);
+  background: rgba(8, 12, 30, 0.35);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -695,8 +705,9 @@ button { font-family: inherit; }
 .body-chip__moons {
   margin-left: auto;
   padding-left: 6px;
-  font-size: 0.72rem;
-  color: var(--c-text-faint);
+  font-size: 0.80rem;
+  font-weight: 600;
+  color: var(--c-text-soft);
   flex: 0 0 auto;
   letter-spacing: 0.02em;
 }
@@ -704,11 +715,11 @@ button { font-family: inherit; }
 /* Stato colonia sui chip dei corpi celesti */
 .body-chip__badge {
   margin-left: 6px;
-  padding: 1px 6px;
+  padding: 2px 8px;
   font-family: var(--font-display);
-  font-size: 0.62rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   border-radius: 999px;
   border: 1px solid currentColor;
   flex: 0 0 auto;
@@ -1339,8 +1350,10 @@ button { font-family: inherit; }
 .scar-tag {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
-  font-size: 0.72rem;
+  padding: 3px 10px;
+  font-family: var(--font-data);
+  font-size: 0.80rem;
+  font-weight: 600;
   letter-spacing: 0.06em;
   border-radius: 999px;
   border: 1px solid currentColor;
@@ -1350,8 +1363,8 @@ button { font-family: inherit; }
 
 /* Progress bar generica per code (costruzione, scansione, colonizzazione) */
 .progress-bar {
-  height: 6px;
-  margin-top: 8px;
+  height: 9px;
+  margin-top: 10px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--c-border, rgba(255,255,255,0.15));
   border-radius: 3px;
@@ -1650,15 +1663,17 @@ button { font-family: inherit; }
   gap: 8px;
 }
 .main-menu__field-label {
-  font-family: var(--font-data);
-  font-size: 0.72rem;
-  letter-spacing: 0.10em;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--c-text-soft);
+  color: var(--c-accent);
 }
 .main-menu__field-hint {
-  font-size: 0.7rem;
-  color: var(--c-text-faint);
+  font-size: 0.80rem;
+  line-height: 1.45;
+  color: var(--c-text-soft);
   font-style: italic;
 }
 .main-menu__field-row {
@@ -1965,23 +1980,29 @@ select.main-menu__input { cursor: pointer; }
    M06.5 — Banner fase Insediamento (decisione #27 / GDD §6.2.bis)
    ===================================================================== */
 .settle-banner {
-  padding: 10px 12px;
-  margin-bottom: 12px;
-  border: 1px solid rgba(255, 176, 0, 0.45);
-  background: rgba(255, 176, 0, 0.08);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  border: 1.5px solid rgba(255, 176, 0, 0.55);
+  background: rgba(255, 176, 0, 0.10);
+  border-left: 4px solid #ffb000;
   border-radius: 5px;
+  box-shadow: inset 0 0 18px rgba(255, 176, 0, 0.06);
 }
 .settle-banner__title {
-  margin: 0 0 4px;
-  font-family: var(--font-data);
-  font-size: 0.86rem;
-  letter-spacing: 0.05em;
-  color: #ffb000;
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #ffd070;
+  text-shadow: 0 0 10px rgba(255, 176, 0, 0.35);
 }
 .settle-banner__hint {
-  margin: 0 0 6px;
-  font-size: 0.72rem;
-  color: var(--c-text-soft);
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1.45;
+  color: #f0d8a8;
 }
 .settle-banner .progress-bar__fill {
   background: linear-gradient(90deg, rgba(255,176,0,0.95), rgba(255,176,0,0.55));
