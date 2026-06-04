@@ -491,6 +491,33 @@ button { font-family: inherit; }
   padding: 0 4px;
   margin-left: 4px;
 }
+/* Decisione #26 — tag di appartenenza (sigla regione / sistema) accanto
+   ai nomi propri dei corpi celesti. Visivamente discreto, font display per
+   richiamare la sensazione "etichetta di catalogo astronomico". */
+.name-tag {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: 0.68em;
+  letter-spacing: 0.06em;
+  color: var(--c-amber);
+  background: rgba(255, 174, 92, 0.10);
+  border: 1px solid rgba(255, 174, 92, 0.28);
+  border-radius: 3px;
+  padding: 0 5px;
+  margin-left: 5px;
+  vertical-align: 2px;
+  font-weight: 500;
+  opacity: 0.92;
+  white-space: nowrap;
+}
+.chronicle__entry .name-tag {
+  font-size: 0.78em;
+  vertical-align: 1px;
+}
+.region-chip .name-tag {
+  margin-left: 4px;
+  font-size: 0.62em;
+}
 .danger-badge {
   display: inline-block;
   padding: 1px 7px;
