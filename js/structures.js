@@ -88,11 +88,11 @@
     // ===== Produttive (2) =====
     {
       id: 'fonderia', name: 'Fonderia', cat: 'produttiva', glyph: '🜂',
-      desc: 'Raffina i metalli grezzi: aumenta la resa delle miniere del 25% per livello.',
+      desc: 'Raffina i metalli grezzi: aumenta la resa delle miniere del 40% per livello.',
       cost: { met: 70, en: 25 }, time: 16,
       upkeep: { en: 3 },
       rates: {},   // moltiplicatore, non produzione diretta
-      modifiers: { 'miniera.rates.met': 0.25 },
+      modifiers: { 'miniera.rates.met': 0.40 },
       slots: 1, maxLevel: 3,
       bodyTypes: HABITABLE,
       requires: ['struct:miniera:1']
@@ -103,7 +103,7 @@
       cost: { met: 65, en: 20 }, time: 16,
       upkeep: { water: 2 },
       rates: { en: 2 },
-      modifiers: { 'centrale-solare.rates.en': 0.20 },
+      modifiers: { 'centrale-solare.rates.en': 0.40 },
       slots: 1, maxLevel: 3,
       bodyTypes: HABITABLE,
       requires: ['struct:centrale-solare:1']

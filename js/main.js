@@ -1175,6 +1175,7 @@ function tryColonize(planet) {
     duration: cost.impulsi
   };
   pushChronicle(ORION.time.currentDS(g) + ' — Spedizione coloniale in viaggio verso <strong>' + planet.name + '</strong>' + bodyTagHtml(planet.systemId) + ' (' + cost.impulsi + ' I).', 'planet');
+  if (ORION.tutorial) ORION.tutorial.fire('specialization');
   persistGame(g);
   updateGlobalResourceHud();
   updatePlanetUI();

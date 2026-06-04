@@ -122,6 +122,25 @@
         'e poi di 1 unità ogni 30 I. Hai sempre il tempo di riassestare la coda, costruire ciò che manca, o spostarti.</p>'
     },
     {
+      id: 'specialization',
+      tag: 'M04',
+      title: 'Specializzazione planetaria',
+      body:
+        '<p>Un pianeta ha pochi <strong>slot</strong> (5-9 a seconda del tipo): non puoi metterci tutto. ' +
+        'L\'idea del 4X è <strong>specializzare</strong> ogni colonia su una vocazione.</p>' +
+        '<p>Le 4 risorse base in alto nell\'HUD sono il <strong>pool comune di tutto l\'impero</strong>: ' +
+        'sommano automaticamente quello che producono tutte le tue colonie. ' +
+        'Una colonia mineraria contribuisce ai metalli globali, una agricola al cibo — senza bisogno di trasporti manuali.</p>' +
+        '<p><strong>Esempi di vocazione:</strong></p>' +
+        '<ul>' +
+          '<li><strong>Pianeta natale</strong> (terrestre, 8 slot) → polivalente: 4 estrattive base + abitativo + ospedale + ricerca.</li>' +
+          '<li><strong>Mineraria</strong> (vulcanico/cintura) → 3-4 miniere + 1 fonderia (+40%/lvl) + 1 centrale. Pompa metalli.</li>' +
+          '<li><strong>Agricola</strong> (forestale/oceanico) → 3-4 fattorie + 2 impianti idrici + abitativo. Pompa cibo e acqua.</li>' +
+          '<li><strong>Militare</strong> (terrestre) → hangar + accademia + 4 estrattive base. Costruisce flotte (M08+).</li>' +
+        '</ul>' +
+        '<p>Le strutture <strong>moltiplicative</strong> (fonderia, raffineria) hanno senso solo se hai 2-3 strutture base della stessa categoria — su un pianeta polivalente con 1 sola miniera, la fonderia spreca slot.</p>'
+    },
+    {
       id: 'advanced',
       tag: 'M04',
       title: 'Risorse avanzate',
@@ -158,7 +177,7 @@
         '<p>Estrae <strong>metalli</strong>: ~4/I al livello 1, modulata dal <em>potenziale §7.1</em> del corpo ' +
         '(potenziale 60 = resa piena; 30 = metà). Upkeep 1 energia/I.</p>' +
         '<p><strong>Sinergia:</strong> la <em>Fonderia</em> moltiplica la resa di tutte le miniere del pianeta ' +
-        'di +25% per livello (×1.25 / ×1.50 / ×1.75). Conviene avere almeno 2-3 miniere prima della fonderia.</p>' +
+        'di +40% per livello (×1.40 / ×1.80 / ×2.20). Conviene avere almeno 2 miniere prima della fonderia.</p>' +
         '<p><strong>Attenzione:</strong> consuma energia. Senza centrali sufficienti vai in carenza globale (−10/−30%).</p>'
     },
     {
@@ -166,7 +185,7 @@
       body:
         '<p>Produce <strong>energia</strong>: ~4/I al livello 1, modulata dal potenziale en. Nessun upkeep — è la struttura ' +
         '"pulita" dell\'economia.</p>' +
-        '<p><strong>Sinergia:</strong> la <em>Raffineria energetica</em> moltiplica la resa di tutte le centrali di +20% per livello, ' +
+        '<p><strong>Sinergia:</strong> la <em>Raffineria energetica</em> moltiplica la resa di tutte le centrali di +40% per livello, ' +
         'e produce a sua volta 2 en/I diretti — l\'unica produttiva con effetto doppio.</p>' +
         '<p><strong>Concatenazione:</strong> energia è risorsa-pilastro. Tutte le altre strutture la consumano: tienila in surplus.</p>'
     },
@@ -189,8 +208,8 @@
     {
       id: 'struct:fonderia', tag: 'M04 · 🜂', title: 'Fonderia',
       body:
-        '<p><strong>Non produce direttamente:</strong> moltiplica tutte le miniere del pianeta di <strong>+25% per livello</strong> ' +
-        '(lvl 1 → ×1.25, lvl 3 → ×1.75). Upkeep 3 en/I.</p>' +
+        '<p><strong>Non produce direttamente:</strong> moltiplica tutte le miniere del pianeta di <strong>+40% per livello</strong> ' +
+        '(lvl 1 → ×1.40, lvl 3 → ×2.20). Upkeep 3 en/I.</p>' +
         '<p><strong>Quando costruirla:</strong> almeno 2-3 miniere già operative, altrimenti il guadagno assoluto è basso ' +
         'rispetto all\'upkeep. Esempio: 3 miniere lvl 1 = 12 met/I → con fonderia lvl 1 = 15 met/I.</p>' +
         '<p><strong>Prerequisito:</strong> almeno una miniera già costruita sul pianeta.</p>'
@@ -199,7 +218,7 @@
       id: 'struct:raffineria', tag: 'M04 · ⚛', title: 'Raffineria energetica',
       body:
         '<p><strong>Effetto doppio:</strong> produce 2 en/I diretti <em>e</em> moltiplica tutte le centrali del pianeta di ' +
-        '<strong>+20% per livello</strong>. Upkeep 2 acqua/I (attenzione alla concatenazione idrica).</p>' +
+        '<strong>+40% per livello</strong>. Upkeep 2 acqua/I (attenzione alla concatenazione idrica).</p>' +
         '<p><strong>Quando costruirla:</strong> dopo aver tappato il fabbisogno idrico — altrimenti il consumo extra di acqua ' +
         'può sbilanciare le fattorie.</p>' +
         '<p><strong>Prerequisito:</strong> almeno una centrale solare già costruita.</p>'
