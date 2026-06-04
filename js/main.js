@@ -1276,6 +1276,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
           '<div class="struct-item__name">' + def.name + ' <span class="struct-item__cat">' + def.time + ' I</span></div>' +
           '<div class="struct-item__cost">' + costStr + '</div>' +
         '</div>' +
+        '<button class="btn btn--mini struct-item__info" data-info="' + def.id + '" type="button" title="Cosa fa, bonus/malus, concatenazioni" aria-label="Informazioni su ' + def.name + '">ⓘ</button>' +
         (check.ok
           ? '<button class="btn btn--mini" data-build="' + def.id + '" type="button">Costruisci</button>'
           : '<span class="struct-item__locked" title="' + check.reason + '">◌</span>') +
@@ -1293,6 +1294,16 @@ function renderPlanetStruttureTab(host, planet, colony) {
   host.querySelectorAll('[data-cancel]').forEach(function (btn) {
     btn.addEventListener('click', function () { tryCancel(Number(btn.dataset.cancel)); });
   });
+  /* M06.7: bottone ⓘ apre la scheda tutorial della struttura (on-demand,
+     ignora isEnabled — è un manuale leggero). */
+  host.querySelectorAll('[data-info]').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (ORION.tutorial && ORION.tutorial.openLesson) {
+        ORION.tutorial.openLesson('struct:' + btn.dataset.info);
+      }
+    });
+  });
 }
 
 function tryBuild(id) {
@@ -1305,6 +1316,9 @@ function tryBuild(id) {
   if (!r.ok) { console.info('Costruzione rifiutata:', r.reason); return; }
   const def = ORION.structures.get(id);
   pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione: <strong>' + def.name + '</strong> su ' + planet.name + bodyTagHtml(planet.systemId) + ' (' + def.time + ' I).', 'planet');
+  /* M06.7: alla prima costruzione di un certo tipo, mostra la scheda
+     tutorial dedicata (rispetta isEnabled + isSeen — niente spam). */
+  if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('struct:' + id);
   persistGame(g);
   updateGlobalResourceHud();
   updatePlanetUI();

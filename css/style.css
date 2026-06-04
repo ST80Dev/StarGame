@@ -1006,6 +1006,16 @@ button { font-family: inherit; }
   font-size: 0.66rem;
   letter-spacing: 0.06em;
 }
+/* M06.7: bottone "ⓘ" della scheda strutture — più piccolo, accento viola
+   per distinguerlo da "Costruisci" (azione vs informazione). */
+.struct-item__info {
+  padding: 4px 8px !important;
+  color: var(--c-violet);
+  opacity: 0.75;
+}
+.struct-item__info:hover {
+  opacity: 1;
+}
 
 /* btn--mini lite (riusa lo stile dei mini-pulsanti dell'overlay galassia) */
 

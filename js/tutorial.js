@@ -136,6 +136,136 @@
         'autosufficiente, la galassia si rigenera dal seed. <strong>Importa .json</strong> sostituisce la partita corrente.</p>' +
         '<p>In modalità <strong>Ironman</strong> (preset Incubo) gli slot manuali sono nascosti: solo autosave + export/import, ' +
         'niente save-scumming.</p>'
+    },
+
+    /* ================================================================
+       Lezioni per-struttura (M06.7). Una scheda per ogni voce del
+       catalogo §10: cosa fa, bonus/malus, concatenazioni con le altre
+       strutture. Trigger: bottone ⓘ sulla scheda costruzioni + auto-fire
+       al primo "Costruisci" di quel tipo. Id stabile: 'struct:<id>'.
+       ================================================================ */
+    {
+      id: 'struct:miniera', tag: 'M04 · ⛏', title: 'Miniera',
+      body:
+        '<p>Estrae <strong>metalli</strong>: ~4/I al livello 1, modulata dal <em>potenziale §7.1</em> del corpo ' +
+        '(potenziale 60 = resa piena; 30 = metà). Upkeep 1 energia/I.</p>' +
+        '<p><strong>Sinergia:</strong> la <em>Fonderia</em> moltiplica la resa di tutte le miniere del pianeta ' +
+        'di +25% per livello (×1.25 / ×1.50 / ×1.75). Conviene avere almeno 2-3 miniere prima della fonderia.</p>' +
+        '<p><strong>Attenzione:</strong> consuma energia. Senza centrali sufficienti vai in carenza globale (−10/−30%).</p>'
+    },
+    {
+      id: 'struct:centrale-solare', tag: 'M04 · ⚡', title: 'Centrale solare',
+      body:
+        '<p>Produce <strong>energia</strong>: ~4/I al livello 1, modulata dal potenziale en. Nessun upkeep — è la struttura ' +
+        '"pulita" dell\'economia.</p>' +
+        '<p><strong>Sinergia:</strong> la <em>Raffineria energetica</em> moltiplica la resa di tutte le centrali di +20% per livello, ' +
+        'e produce a sua volta 2 en/I diretti — l\'unica produttiva con effetto doppio.</p>' +
+        '<p><strong>Concatenazione:</strong> energia è risorsa-pilastro. Tutte le altre strutture la consumano: tienila in surplus.</p>'
+    },
+    {
+      id: 'struct:impianto-idrico', tag: 'M04 · ≈', title: 'Impianto idrico',
+      body:
+        '<p>Produce <strong>acqua</strong>: ~4/I al livello 1, modulata dal potenziale water. Upkeep 1 en/I.</p>' +
+        '<p><strong>Concatenazione critica:</strong> la <em>Fattoria</em> consuma 1 acqua/I, l\'<em>Ospedale</em> 0 ma ne fa indirettamente bisogno via pop, ' +
+        'e tutte le abitazioni richiedono 1 acqua/I. Se l\'acqua va in <strong>crit</strong> (zero stock), parte il timer §7.4: ' +
+        'dopo 30 I consecutivi di sete la popolazione cala 1 unità ogni 30 I.</p>'
+    },
+    {
+      id: 'struct:fattoria', tag: 'M04 · ❖', title: 'Fattoria idroponica',
+      body:
+        '<p>Produce <strong>cibo</strong>: ~4/I al livello 1, modulata dal potenziale food. Upkeep 1 en + <strong>1 acqua/I</strong>.</p>' +
+        '<p><strong>Concatenazione:</strong> dipende dall\'acqua. Se l\'impianto idrico è in difficoltà, le fattorie soffrono per prime ' +
+        '→ cala il cibo → carenza popolazione. Pianta più impianti idrici prima delle fattorie.</p>' +
+        '<p><strong>Salute pop §9.3:</strong> cibo + acqua sono i due requisiti vitali. Cibo a zero per 30 I consecutivi → −1 pop ogni 30 I (recovery-friendly).</p>'
+    },
+    {
+      id: 'struct:fonderia', tag: 'M04 · 🜂', title: 'Fonderia',
+      body:
+        '<p><strong>Non produce direttamente:</strong> moltiplica tutte le miniere del pianeta di <strong>+25% per livello</strong> ' +
+        '(lvl 1 → ×1.25, lvl 3 → ×1.75). Upkeep 3 en/I.</p>' +
+        '<p><strong>Quando costruirla:</strong> almeno 2-3 miniere già operative, altrimenti il guadagno assoluto è basso ' +
+        'rispetto all\'upkeep. Esempio: 3 miniere lvl 1 = 12 met/I → con fonderia lvl 1 = 15 met/I.</p>' +
+        '<p><strong>Prerequisito:</strong> almeno una miniera già costruita sul pianeta.</p>'
+    },
+    {
+      id: 'struct:raffineria', tag: 'M04 · ⚛', title: 'Raffineria energetica',
+      body:
+        '<p><strong>Effetto doppio:</strong> produce 2 en/I diretti <em>e</em> moltiplica tutte le centrali del pianeta di ' +
+        '<strong>+20% per livello</strong>. Upkeep 2 acqua/I (attenzione alla concatenazione idrica).</p>' +
+        '<p><strong>Quando costruirla:</strong> dopo aver tappato il fabbisogno idrico — altrimenti il consumo extra di acqua ' +
+        'può sbilanciare le fattorie.</p>' +
+        '<p><strong>Prerequisito:</strong> almeno una centrale solare già costruita.</p>'
+    },
+    {
+      id: 'struct:laboratorio', tag: 'M04 · ⌬', title: 'Laboratorio',
+      body:
+        '<p>Produce <strong>ricerca</strong> distribuita: 3/I a livello 1. Upkeep 2 en/I.</p>' +
+        '<p><strong>Gancio M13:</strong> oggi i punti ricerca si accumulano ma l\'albero tecnologico vero arriverà col modulo M13. ' +
+        'Costruire laboratori adesso è un investimento — quando M13 sarà attivo, i tech che richiedono <code>tech:&lt;id&gt;</code> si sbloccheranno.</p>' +
+        '<p><strong>Pista vittoria:</strong> contribuisce all\'<em>Ascensione tech</em> (#23).</p>'
+    },
+    {
+      id: 'struct:osservatorio', tag: 'M04 · ◎', title: 'Osservatorio planetario',
+      body:
+        '<p>Scansiona il corpo per <strong>rivelare le identità delle risorse avanzate §7.2</strong> (cristalli, esotici, biomassa, ' +
+        'gas nobili, dati, reliquie). Visibile il numero da subito; identità mascherate fino a fine scansione.</p>' +
+        '<p><strong>Timeline:</strong> 14 I per costruirlo + ~10 I di scansione effettiva. Livello 2 dimezza il tempo di scansione.</p>' +
+        '<p><strong>Prerequisito implicito</strong> per l\'<em>Impianto esotico</em>: senza scansione completata non si conosce ' +
+        'la risorsa rara da sfruttare.</p>'
+    },
+    {
+      id: 'struct:cantiere-navale', tag: 'M04 · ⬢', title: 'Hangar stellare',
+      body:
+        '<p><strong>Gancio M08+:</strong> serve a costruire astronavi, grandi astronavi e stazioni. Oggi non produce nulla di visibile, ' +
+        'ma <strong>occupa 2 slot</strong> (struttura grossa) e ha upkeep alto (4 en + 1 met/I).</p>' +
+        '<p><strong>Pianificazione:</strong> non costruirlo sul pianeta natale se hai solo 7-8 slot — meglio dedicarlo ' +
+        'a una colonia "militare" specializzata quando arriverà M08.</p>' +
+        '<p><strong>Concatenazione:</strong> l\'<em>Accademia militare</em> (M14) e questa formano insieme il polo militare.</p>'
+    },
+    {
+      id: 'struct:accademia-militare', tag: 'M04 · ⚔', title: 'Accademia militare',
+      body:
+        '<p><strong>Gancio M14:</strong> forma quadri militari, ufficiali e veterani (figure speciali). Oggi nessun effetto visibile. ' +
+        'Upkeep moderato (2 en + 1 food/I).</p>' +
+        '<p><strong>Sinergia futura:</strong> con l\'<em>Hangar stellare</em> alimenta una colonia a vocazione militare. ' +
+        'In partite a vocazione <em>Tiranno</em> (#23) sarà struttura-chiave.</p>'
+    },
+    {
+      id: 'struct:centro-abitativo', tag: 'M04 · ⌂', title: 'Centro abitativo',
+      body:
+        '<p>Aumenta la <strong>capacità di popolazione (popCap)</strong> di +2 per livello e dà <strong>+0.05 morale</strong> ' +
+        '(cap 1.35, il pianeta base parte già a 1.15). Upkeep 1 en + 1 food + 1 water /I.</p>' +
+        '<p><strong>Morale:</strong> moltiplica la crescita pop §9.3 (base 0.018 unità/I × morale). Più centri → ' +
+        'più tetto demografico e crescita più rapida, ma anche più consumi vitali.</p>' +
+        '<p><strong>Concatenazione critica:</strong> ogni centro consuma cibo + acqua. Non costruire centri se le filiere ' +
+        'cibo/acqua non sono solide.</p>'
+    },
+    {
+      id: 'struct:ospedale', tag: 'M04 · ✚', title: 'Ospedale',
+      body:
+        '<p><strong>Accelera la crescita pop</strong>: ×1.6 (cioè +60%) sulla velocità base di 0.018 unità/I × morale.</p>' +
+        '<p><strong>Esempio concreto:</strong> da popCap 3 a popCap 15 senza ospedale ≈ 500 I (5 Orbite); con ospedale ≈ 310 I. ' +
+        'Conviene se prevedi tante abitazioni.</p>' +
+        '<p><strong>Non protegge dalla carenza vitale:</strong> se cibo o acqua restano a zero per 30 I, la pop cala comunque ' +
+        '(1 unità ogni 30 I, recovery-friendly).</p>'
+    },
+    {
+      id: 'struct:mercato', tag: 'M04 · ⇄', title: 'Mercato',
+      body:
+        '<p><strong>Gancio M12:</strong> hub per le rotte commerciali interne all\'impero e per le <em>valute regionali</em> ' +
+        'previste in §13 (decisione #13 — ogni regione ha una sua moneta a tema).</p>' +
+        '<p>Oggi non produce nulla visibile. Costruirlo è un investimento per quando M12 attiverà gli scambi tra colonie ' +
+        '(produzione specializzata + trasferimento risorse).</p>' +
+        '<p><strong>Pista vittoria:</strong> contribuirà all\'<em>Egemone economico</em> (#23).</p>'
+    },
+    {
+      id: 'struct:impianto-esotico', tag: 'M04 · ✦', title: 'Impianto esotico',
+      body:
+        '<p>Struttura <strong>avanzata</strong>: sfrutta una risorsa avanzata §7.2 per dare <strong>moltiplicatori globali</strong> ' +
+        'a tutta la civiltà (effetto cumulativo tra colonie). Upkeep 5 en/I, occupa 2 slot.</p>' +
+        '<p><strong>Doppio prerequisito:</strong> (1) <em>scansione completata</em> sul pianeta (osservatorio), ' +
+        '(2) tech <code>tech:esotici</code> sbloccato (gancio M13 — oggi resta locked).</p>' +
+        '<p><strong>Pista vittoria:</strong> chiave per l\'<em>Ascensione tech</em>; è la struttura più "endgame" del catalogo M04.</p>'
     }
   ];
 
@@ -364,10 +494,23 @@
   /* ------------------------------------------------------------------
      EXPORT
      ------------------------------------------------------------------ */
+  /* Apertura on-demand: ignora isEnabled e isSeen (manuale leggero).
+     Chiude qualsiasi popup attivo prima di mostrare la nuova scheda. */
+  function openLesson(id) {
+    if (!id || !LESSON_BY_ID[id]) return false;
+    if (_activeLessonId) closeLesson();
+    /* Se l'indice è aperto, lo smonta */
+    const host = document.querySelector('[data-bind="tutorial-modal"]');
+    if (host && !host.hidden) { host.hidden = true; host.innerHTML = ''; }
+    showLesson(id);
+    return true;
+  }
+
   ORION.tutorial = {
     LESSONS: LESSONS,
     initOnGame: initOnGame,
     fire: fire,
+    openLesson: openLesson,
     isEnabled: isEnabled,
     isSeen: isSeen,
     setEnabled: setEnabled,
