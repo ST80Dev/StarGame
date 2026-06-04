@@ -64,26 +64,28 @@
      ------------------------------------------------------------------ */
   function layoutSystems(rng, count) {
     const margin = 0.06;
-    const minDist = 0.85 / Math.sqrt(count); // separazione media tra nodi
+    const minDist = 0.5 / Math.sqrt(count); // separazione tra nodi (vista zoom)
     const minDist2 = minDist * minDist;
 
     // Forma generale della galassia (decisione #19, su feedback utente):
     // ogni partita ha una sagoma diversa, deterministica dal seed —
     // rotonda · ellittica schiacciata · irregolare. Implementata come
     // ellisse con eccentricità + rotazione + perturbazione di bordo.
+    // Distribuzione spostata verso rotonda/irregolare (preferenza utente):
+    // meno ellittiche schiacciate, più sagome quasi-sferiche.
     const shapeRoll = rng.float();
     let aspect, lobes, lobeAmp;
-    if (shapeRoll < 0.30) {        // rotondeggiante (~30%)
-      aspect = rng.range(0.92, 1.0);
+    if (shapeRoll < 0.46) {        // rotondeggiante (~46%)
+      aspect = rng.range(0.90, 1.0);
       lobes = rng.int(0, 1); lobeAmp = rng.range(0, 0.05);
-    } else if (shapeRoll < 0.62) { // ellittica moderata (~32%)
-      aspect = rng.range(0.65, 0.85);
-      lobes = rng.int(1, 2); lobeAmp = rng.range(0.04, 0.10);
-    } else if (shapeRoll < 0.85) { // ellittica schiacciata (~23%)
-      aspect = rng.range(0.45, 0.62);
-      lobes = rng.int(1, 2); lobeAmp = rng.range(0.05, 0.12);
-    } else {                       // irregolare (~15%)
-      aspect = rng.range(0.55, 0.95);
+    } else if (shapeRoll < 0.70) { // ellittica moderata (~24%)
+      aspect = rng.range(0.72, 0.88);
+      lobes = rng.int(1, 2); lobeAmp = rng.range(0.04, 0.09);
+    } else if (shapeRoll < 0.80) { // ellittica schiacciata (~10%)
+      aspect = rng.range(0.55, 0.70);
+      lobes = rng.int(1, 2); lobeAmp = rng.range(0.05, 0.11);
+    } else {                       // irregolare (~20%)
+      aspect = rng.range(0.62, 0.96);
       lobes = rng.int(2, 4); lobeAmp = rng.range(0.10, 0.20);
     }
     const galRot = rng.range(0, Math.PI);    // angolo dell'asse maggiore
@@ -113,52 +115,94 @@
 
     // numero di cluster proporzionale alla dimensione
     const clusterCount = rng.int(4, 7);
+
+    // Centri-cluster con DISTANZA MINIMA reciproca (anti-sovrapposizione
+    // in-piano): i centri vivono nella sagoma ma non troppo vicini.
     const clusters = [];
-    for (let i = 0; i < clusterCount; i++) {
-      const p = sampleShape(rMax * 0.75);
-      clusters.push({
-        x: p.x, y: p.y,
-        // §5.5 / decisione #18: ogni cluster a una propria "banda" in z
-        // (il disco galattico è sottile ma i gruppi si separano in altezza).
-        zBase: rng.range(-0.11, 0.11),
-        spread: rng.range(0.08, 0.16),
-        zSpread: rng.range(0.018, 0.035)
-      });
-    }
-
-    const positions = [];
-    let guard = 0;
-    const guardMax = count * 200;
-
-    while (positions.length < count && guard < guardMax) {
-      guard++;
-      const c = clusters[positions.length % clusterCount];
-      const x = c.x + rng.gauss() * c.spread;
-      const y = c.y + rng.gauss() * c.spread;
-      const z = c.zBase + rng.gauss() * c.zSpread;
-
-      // dentro i confini con margine
-      if (x < margin || x > 1 - margin || y < margin || y > 1 - margin) continue;
-
-      // rispetta la distanza minima dagli altri (solo XY: la separazione in z
-      // è gestita dalle bande dei cluster e non deve allungare i tempi di gen)
-      const p = { x: x, y: y, z: z, cluster: positions.length % clusterCount };
+    let minCenterDist = (rMax * 1.15) / Math.sqrt(clusterCount);
+    let cguard = 0;
+    while (clusters.length < clusterCount && cguard < 6000) {
+      cguard++;
+      const p = sampleShape(rMax * 0.72);
+      if (p.x < margin || p.x > 1 - margin || p.y < margin || p.y > 1 - margin) continue;
       let ok = true;
-      for (let j = 0; j < positions.length; j++) {
-        if (dist2(positions[j], p) < minDist2) { ok = false; break; }
+      for (let j = 0; j < clusters.length; j++) {
+        const dx = clusters[j].x - p.x, dy = clusters[j].y - p.y;
+        if (dx * dx + dy * dy < minCenterDist * minCenterDist) { ok = false; break; }
       }
-      if (ok) positions.push(p);
+      if (ok) clusters.push({ x: p.x, y: p.y });
+      if (cguard % 900 === 0) minCenterDist *= 0.85; // allenta se fatica a piazzare
+    }
+    while (clusters.length < clusterCount) {
+      const p = sampleShape(rMax * 0.72);
+      clusters.push({ x: Math.min(1 - margin, Math.max(margin, p.x)), y: Math.min(1 - margin, Math.max(margin, p.y)) });
     }
 
-    // se il vincolo di distanza ha lasciato buchi, riempi senza vincolo
-    while (positions.length < count) {
-      const c = clusters[positions.length % clusterCount];
-      positions.push({
-        x: Math.min(1 - margin, Math.max(margin, c.x + rng.gauss() * c.spread)),
-        y: Math.min(1 - margin, Math.max(margin, c.y + rng.gauss() * c.spread)),
-        z: c.zBase + rng.gauss() * c.zSpread,
-        cluster: positions.length % clusterCount
-      });
+    // Per ogni centro: distanza dal vicino più prossimo (contiene la spread),
+    // banda z (decisione #18), spread del cluster.
+    clusters.forEach(function (c, i) {
+      let nn = Infinity;
+      for (let j = 0; j < clusters.length; j++) {
+        if (i === j) continue;
+        const dx = clusters[j].x - c.x, dy = clusters[j].y - c.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < nn) nn = d;
+      }
+      c.nn = isFinite(nn) ? nn : rMax;
+      c.zBase = rng.range(-0.11, 0.11);
+      c.zSpread = rng.range(0.018, 0.035);
+      c.spread = Math.min(rng.range(0.08, 0.16), 0.6 * c.nn);
+    });
+
+    // Quote per cluster proporzionali all'area (spread²), somma = count.
+    const totalArea = clusters.reduce(function (s, c) { return s + c.spread * c.spread; }, 0) || 1;
+    const quota = clusters.map(function (c) { return Math.max(3, Math.round(count * (c.spread * c.spread) / totalArea)); });
+    let qsum = quota.reduce(function (s, q) { return s + q; }, 0), qi = 0;
+    while (qsum > count) { if (quota[qi % quota.length] > 3) { quota[qi % quota.length]--; qsum--; } qi++; }
+    while (qsum < count) { quota[qi % quota.length]++; qsum++; qi++; }
+
+    function nearestCluster(x, y) {
+      let bi = 0, bd = Infinity;
+      for (let i = 0; i < clusters.length; i++) {
+        const dx = clusters[i].x - x, dy = clusters[i].y - y;
+        const d = dx * dx + dy * dy;
+        if (d < bd) { bd = d; bi = i; }
+      }
+      return bi;
+    }
+
+    // Campiona i membri: gaussiana attorno al centro, con appartenenza di
+    // VORONOI (territori non sovrapposti in-piano) e distanza minima tra nodi.
+    const positions = [];
+    for (let ci = 0; ci < clusters.length; ci++) {
+      const c = clusters[ci];
+      let placed = 0, g2 = 0;
+      const need = quota[ci];
+      while (placed < need && g2 < need * 200) {
+        g2++;
+        const x = c.x + rng.gauss() * c.spread;
+        const y = c.y + rng.gauss() * c.spread;
+        const z = c.zBase + rng.gauss() * c.zSpread;
+        if (x < margin || x > 1 - margin || y < margin || y > 1 - margin) continue;
+        if (nearestCluster(x, y) !== ci) continue;            // Voronoi: niente sconfini
+        let ok = true;
+        for (let j = 0; j < positions.length; j++) {
+          if (dist2(positions[j], { x: x, y: y }) < minDist2) { ok = false; break; }
+        }
+        if (!ok) continue;
+        positions.push({ x: x, y: y, z: z, cluster: ci });
+        placed++;
+      }
+      // fallback: completa la quota vicino al centro
+      while (placed < need) {
+        positions.push({
+          x: Math.min(1 - margin, Math.max(margin, c.x + rng.gauss() * c.spread)),
+          y: Math.min(1 - margin, Math.max(margin, c.y + rng.gauss() * c.spread)),
+          z: c.zBase + rng.gauss() * c.zSpread,
+          cluster: ci
+        });
+        placed++;
+      }
     }
 
     return positions;
