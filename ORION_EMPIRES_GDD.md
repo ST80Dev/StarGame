@@ -164,6 +164,26 @@ Aldebaran, Vega, Altair, Deneb, Rigel, Betelgeuse, Antares, Procyon, Fomalhaut, 
   - 81-100: Collasso imminente — condizione di sconfitta progressiva
 - **Obiettivo soft:** Mantenere ICG basso è uno scopo continuo, non un obiettivo rigido
 
+### 5.5 Navigazione gerarchica (gruppi stellari)
+La mappa è **scalabile a livelli**, con la sidebar destra che mostra dati
+**coerenti con la scala selezionata**:
+
+1. **Galassia** — i sistemi sono raggruppati in **gruppi stellari** (i cluster
+   di generazione), mostrati come **regioni** con nome proprio. Nomi in schema
+   **misto**: descrittore evocativo + riferimento (un sistema reale famoso del
+   gruppo se presente, es. "Velo di Vega"; altrimenti un nome evocativo, es.
+   "Distesa di Auvethal").
+2. **Gruppo stellare** — entrando (click sulla regione o zoom) compaiono le
+   **singole stelle-sistema** del gruppo, con rotte ed etichette.
+3. **Sistema planetario** — la stella/e (incluse le **binarie**, §6.1) con i
+   corpi in orbita. *(Vista interna: M03.)*
+4. **Pianeta** — il singolo corpo celeste. *(Vista dettaglio: M04.)*
+
+Una **breadcrumb** consente di risalire i livelli. I dati di scala superiore
+restano soggetti alla **nebbia di guerra** (§5.1): di un gruppo non ancora
+esplorato si conoscono nome, numero di sistemi e pericolo medio, ma non i tipi
+stella dei sistemi ignoti.
+
 ---
 
 ## 6. I SISTEMI STELLARI

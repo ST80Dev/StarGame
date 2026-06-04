@@ -426,6 +426,107 @@ button { font-family: inherit; }
 .tier--pericoloso { background: rgba(255, 157, 60, 0.16); color: var(--c-accent-warm); }
 .tier--letale     { background: rgba(255, 92, 108, 0.18); color: var(--c-bad); }
 
+/* Sottotitolo di sezione nel pannello destro */
+.sysinfo__sub {
+  margin: 14px 0 6px;
+  font-family: var(--font-display);
+  font-size: 0.64rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--c-text-faint);
+}
+
+/* Elenco regioni (livello Galassia) */
+.region-list { display: flex; flex-direction: column; gap: 5px; }
+.region-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  font-family: var(--font-data);
+  font-size: 0.76rem;
+  text-align: left;
+  color: var(--c-text);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--c-border-soft);
+  border-left: 3px solid var(--rc, var(--c-accent));
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.region-chip:hover { background: rgba(255, 255, 255, 0.06); border-color: var(--rc, var(--c-accent)); }
+.region-chip__n {
+  margin-left: auto;
+  font-size: 0.68rem;
+  color: var(--c-text-faint);
+}
+
+/* Elenco sistemi (livello Gruppo) */
+.sys-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.sys-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  font-family: var(--font-data);
+  font-size: 0.76rem;
+  text-align: left;
+  color: var(--c-text-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.sys-chip:hover { background: rgba(255, 255, 255, 0.05); color: var(--c-text); }
+.sys-chip.is-sel { border-color: var(--c-accent-warm); color: #fff; }
+.sys-chip.is-fog { color: var(--c-text-faint); font-style: italic; }
+.sys-chip__dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--sc, #fff);
+  box-shadow: 0 0 5px var(--sc, #fff);
+  flex: 0 0 auto;
+}
+
+/* Breadcrumb di navigazione sulla mappa */
+.galaxy-breadcrumb {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: rgba(8, 11, 26, 0.78);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 999px;
+  backdrop-filter: blur(5px);
+  z-index: 3;
+  max-width: 80%;
+  overflow: hidden;
+}
+.crumb {
+  font-family: var(--font-data);
+  font-size: 0.74rem;
+  color: var(--c-text-soft);
+  background: transparent;
+  border: none;
+  padding: 1px 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: var(--transition);
+}
+.crumb:hover { color: var(--c-accent); }
+.crumb.is-current { color: var(--c-text); font-weight: 600; cursor: default; }
+.crumb__sep { color: var(--c-text-faint); font-size: 0.74rem; }
+
 /* =====================================================================
    HUD inferiore: cronaca + controllo del tempo
    ===================================================================== */
