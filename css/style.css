@@ -1591,6 +1591,178 @@ select.main-menu__input { cursor: pointer; }
 }
 
 /* =====================================================================
+   M06.6 — Tutorial contestuale: bottone "?", popup card, indice
+   (decisione #28). Pattern simile alla save-modal ma più leggero;
+   z-index 400 sopra main-menu (200) e save-modal (300).
+   ===================================================================== */
+.btn--tutorial {
+  font-family: var(--font-data);
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 4px 10px;
+  margin-left: 8px;
+  background: rgba(138, 108, 255, 0.10);
+  border: 1px solid rgba(138, 108, 255, 0.35);
+  color: #b9a8ff;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.btn--tutorial:hover { background: rgba(138, 108, 255, 0.20); }
+
+.tutorial-modal[hidden] { display: none; }
+.tutorial-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background: rgba(6, 10, 22, 0.66);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.tutorial-card {
+  width: min(540px, 100%);
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, rgba(18, 24, 48, 0.96), rgba(10, 14, 28, 0.96));
+  border: 1px solid rgba(138, 108, 255, 0.35);
+  border-radius: 10px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5),
+              0 0 0 1px rgba(138, 108, 255, 0.10) inset;
+  overflow: hidden;
+}
+.tutorial-card--index { width: min(640px, 100%); }
+.tutorial-card__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(138, 108, 255, 0.20);
+}
+.tutorial-card__tag {
+  font-family: var(--font-data);
+  font-size: 0.68rem;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: #b9a8ff;
+  background: rgba(138, 108, 255, 0.12);
+  border: 1px solid rgba(138, 108, 255, 0.35);
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+.tutorial-card__title {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  letter-spacing: 0.05em;
+  margin: 0;
+  flex: 1;
+  color: var(--c-text);
+}
+.tutorial-card__close { margin-left: auto; }
+
+.tutorial-card__body {
+  padding: 16px 20px;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: var(--c-text);
+  overflow-y: auto;
+}
+.tutorial-card__body p { margin: 0 0 10px 0; }
+.tutorial-card__body p:last-child { margin-bottom: 0; }
+.tutorial-card__body strong { color: var(--c-accent); }
+.tutorial-card__body em { color: #ffb000; font-style: normal; }
+.tutorial-card__body code {
+  font-family: var(--font-data);
+  font-size: 0.78rem;
+  color: var(--c-accent);
+  background: rgba(47, 230, 224, 0.06);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.tutorial-card__body kbd {
+  font-family: var(--font-data);
+  font-size: 0.72rem;
+  color: #b9a8ff;
+  background: rgba(138, 108, 255, 0.10);
+  border: 1px solid rgba(138, 108, 255, 0.30);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.tutorial-card__body .tut-hint {
+  font-size: 0.78rem;
+  color: var(--c-text-faint);
+  border-top: 1px dashed rgba(120, 160, 255, 0.18);
+  padding-top: 10px;
+  margin-top: 6px;
+}
+
+.tutorial-card__foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid rgba(138, 108, 255, 0.20);
+  background: rgba(8, 12, 24, 0.4);
+}
+.tutorial-card__off { margin-right: auto; }
+.tutorial-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+  font-size: 0.78rem;
+  color: var(--c-text-faint);
+  cursor: pointer;
+}
+.tutorial-toggle input { accent-color: #8a6cff; }
+
+.tutorial-index {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tutorial-index__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  text-align: left;
+  padding: 8px 10px;
+  background: rgba(20, 26, 50, 0.4);
+  border: 1px solid rgba(120, 160, 255, 0.14);
+  border-radius: 6px;
+  color: var(--c-text);
+  font-size: 0.84rem;
+  cursor: pointer;
+}
+.tutorial-index__row:hover {
+  background: rgba(138, 108, 255, 0.10);
+  border-color: rgba(138, 108, 255, 0.35);
+}
+.tutorial-index__tag {
+  font-family: var(--font-data);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  color: #b9a8ff;
+  background: rgba(138, 108, 255, 0.10);
+  border: 1px solid rgba(138, 108, 255, 0.25);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.tutorial-index__title { font-family: var(--font-display); letter-spacing: 0.03em; }
+.tutorial-index__state {
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+}
+.tutorial-index__state.is-seen { color: #6a7fa8; }
+.tutorial-index__state.is-unseen { color: #ffb000; }
+
+/* =====================================================================
    M06.5 — Step "Scegli colonia originaria" (decisione #27 / GDD §6.2.bis)
    ===================================================================== */
 .main-menu__pick {

@@ -30,11 +30,12 @@
 (function (root) {
   const ORION = root.ORION = root.ORION || {};
 
-  /* Schema 4 (M06.5 / decisione #27): v3 + scelta colonia originaria
-     (`homeWorld`) + fase Insediamento sulle colonie (`phase`,
-     `settlingStart`, `settlingDuration`).
-     Sub-migrazioni componibili: v1→v2 (victory), v2→v3 (chronicle),
-     v3→v4 (homeWorld:null + colonia operational, retro-compat). */
+  /* Schema 4: fondo M06.5 (decisione #27, scelta colonia + Insediamento)
+     e M06.6 (decisione #28, tutorial contestuale).
+     - M06.5 aggiunge `homeWorld` + colonia.phase/settlingStart/settlingDuration
+     - M06.6 aggiunge game.tutorial = { enabled, seenLessons }
+     Sub-migrazioni componibili: v1→v2 (victory), v2→v3 (chronicle), v3→v4
+     (homeWorld:null + colonia operational + tutorial vuoto, retro-compat). */
   const SCHEMA_VERSION = 4;
 
   const STORAGE_KEY = 'orion.saves.v3';
@@ -87,7 +88,9 @@
       chronicle: capChronicle(game.chronicle),
       /* M06.5 (decisione #27): scelta colonia originaria, salvata
          esplicitamente per non doverla rideterminare al runtime. */
-      homeWorld: game.homeWorld || null
+      homeWorld: game.homeWorld || null,
+      /* M06.6 (decisione #28): stato tutorial contestuale. */
+      tutorial: game.tutorial || { enabled: false, seenLessons: [] }
     };
   }
 
@@ -113,10 +116,14 @@
       if (!Array.isArray(payload.chronicle)) payload.chronicle = [];
       payload.schema = 3;
     }
-    /* v3 → v4 (M06.5 / decisione #27): aggiungi homeWorld:null e marca
-       ogni colonia esistente come 'operational'. NIENTE Insediamento
-       retroattivo per i save vecchi (sarebbe punitivo: chi ha già
-       giocato deve restare operativo). */
+    /* v3 → v4: fonde M06.5 (homeWorld + colonia.phase) e M06.6 (tutorial).
+       - M06.5 (decisione #27): aggiungi homeWorld:null e marca ogni colonia
+         esistente come 'operational'. NIENTE Insediamento retroattivo per
+         i save vecchi (sarebbe punitivo: chi ha già giocato deve restare
+         operativo).
+       - M06.6 (decisione #28): aggiungi stato tutorial. Per i save legacy
+         il tutorial parte disabilitato (l'utente conosce già il gioco)
+         ma le lezioni restano riapribili dalla "?". */
     if ((payload.schema || 3) < 4) {
       if (!payload.homeWorld) payload.homeWorld = null;
       if (payload.colonies && typeof payload.colonies === 'object') {
@@ -127,6 +134,12 @@
           if (c.settlingStart === undefined) c.settlingStart = null;
           if (c.settlingDuration === undefined) c.settlingDuration = 60;
         });
+      }
+      if (!payload.tutorial || typeof payload.tutorial !== 'object') {
+        payload.tutorial = { enabled: false, seenLessons: [] };
+      }
+      if (!Array.isArray(payload.tutorial.seenLessons)) {
+        payload.tutorial.seenLessons = [];
       }
       payload.schema = 4;
     }
