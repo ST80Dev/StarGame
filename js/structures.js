@@ -112,7 +112,7 @@
     // ===== Ricerca (2) =====
     {
       id: 'laboratorio', name: 'Laboratorio', cat: 'ricerca', glyph: '⌬',
-      desc: 'Contribuisce alla ricerca distribuita della civiltà (§11.1).',
+      desc: 'Contribuisce alla ricerca distribuita della civiltà.',
       cost: { met: 60, en: 20 }, time: 14,
       upkeep: { en: 2 },
       rates: { research: 3 },
@@ -122,7 +122,7 @@
     },
     {
       id: 'osservatorio', name: 'Osservatorio planetario', cat: 'ricerca', glyph: '◎',
-      desc: 'Scansiona suolo, atmosfera e sottosuolo: rivela le risorse avanzate parzialmente nascoste (§7.3).',
+      desc: 'Scansiona suolo, atmosfera e sottosuolo: rivela le risorse avanzate parzialmente nascoste.',
       cost: { met: 55, en: 25 }, time: 14,
       upkeep: { en: 2 },
       rates: { scan: 1 },
@@ -174,7 +174,7 @@
     },
     {
       id: 'mercato', name: 'Mercato', cat: 'civile', glyph: '⇄',
-      desc: 'Hub commerciale per le rotte interne (§7.5). Funzione piena nel modulo commercio (M12).',
+      desc: 'Hub commerciale per le rotte interne. Funzione piena nel modulo commercio (M12).',
       cost: { met: 50, en: 15 }, time: 12,
       upkeep: { en: 1 },
       rates: {},
@@ -186,7 +186,7 @@
     // ===== Avanzate (1, gancio §7.2) =====
     {
       id: 'impianto-esotico', name: 'Impianto esotico', cat: 'avanzata', glyph: '✦',
-      desc: 'Sfrutta risorse avanzate per moltiplicatori globali. Richiede una risorsa rara identificata sul pianeta (§7.2).',
+      desc: 'Sfrutta risorse avanzate per moltiplicatori globali. Richiede una risorsa rara identificata sul pianeta.',
       cost: { met: 120, en: 60, water: 10 }, time: 40,
       upkeep: { en: 5 },
       rates: { exotic: 1 },

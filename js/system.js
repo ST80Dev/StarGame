@@ -103,7 +103,7 @@
   const ANOMALY_KINDS = {
     detriti: { label: 'Campo di detriti', desc: 'Relitti e frammenti in deriva: insidie alla navigazione, possibili recuperi.' },
     nebulosa: { label: 'Nebulosa locale', desc: 'Gas denso che acceca i sensori: effetti su scansioni ed esplorazione.' },
-    reliquie: { label: 'Reliquie antiche', desc: 'Tracce di una civiltà perduta: potenziali tecnologie uniche (§7.2).' }
+    reliquie: { label: 'Reliquie antiche', desc: 'Tracce di una civiltà perduta: potenziali tecnologie uniche.' }
   };
 
   function weightedPick(rng, weights) {
