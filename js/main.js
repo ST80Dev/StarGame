@@ -1451,42 +1451,295 @@ function bodyDotColor(b) {
 
 /* ---------------------------------------------------------------------
    M05 — Controllo del tempo (GDD §4.3)
+   Decisione #31: l'utente non clicca più "+N Impulsi" — accende il timer
+   (▶) e il tempo scorre automaticamente, con auto-pausa su ogni evento
+   notevole (decisione #31 trigger list). Il loop discreto Impulso-per-
+   Impulso (M05) NON è toccato: l'auto-advance chiama runAdvance(1) per
+   tick — il determinismo (decisione #5/#22) resta intatto.
    --------------------------------------------------------------------- */
+const PLAY_LEVELS = [0.5, 1, 2, 4, 8, 16, 32];   // 7 livelli #31
+const PLAY_BASE_SEC = 30;                         // 1× = 30 secondi reali / Ι
+const PLAY_ANIM_THRESHOLD = 3.0;                  // animazione DS sotto 3s/Ι disattivata
+const PLAY_DEFAULT_LEVEL = 1;                     // default: 1× (30s/Ι)
+const PLAY_LS_LEVEL  = 'orion.playSpeed';
+const PLAY_LS_PAUSES = 'orion.autopause';
+const DEFAULT_AUTOPAUSE = {
+  'build-done': true, 'colony-done': true, 'scan-done': true,
+  'scarcity': true, 'scarcity-recover': true, 'pop-loss': true,
+  'victory': true, 'settle-stage': true, 'settle-done': true
+};
+
+ORION.timer = {
+  playing: false,
+  level: PLAY_DEFAULT_LEVEL,
+  intervalId: null,
+  rafId: null,
+  lastTickReal: 0,        // performance.now() dell'ultimo tick (per interpolazione)
+  pauses: null            // caricato da localStorage
+};
+
+function loadTimerPrefs() {
+  try {
+    const lv = parseFloat(localStorage.getItem(PLAY_LS_LEVEL));
+    if (lv && PLAY_LEVELS.indexOf(lv) >= 0) ORION.timer.level = lv;
+    const ap = localStorage.getItem(PLAY_LS_PAUSES);
+    ORION.timer.pauses = ap ? Object.assign({}, DEFAULT_AUTOPAUSE, JSON.parse(ap))
+                            : Object.assign({}, DEFAULT_AUTOPAUSE);
+  } catch (_) {
+    ORION.timer.pauses = Object.assign({}, DEFAULT_AUTOPAUSE);
+  }
+}
+function saveTimerPrefs() {
+  try {
+    localStorage.setItem(PLAY_LS_LEVEL, String(ORION.timer.level));
+    localStorage.setItem(PLAY_LS_PAUSES, JSON.stringify(ORION.timer.pauses));
+  } catch (_) { /* private mode */ }
+}
+
+function secPerImpulse(level) {
+  /* 1× = 30s/Ι, gli altri livelli scalano linearmente: secPerI = 30/level */
+  return PLAY_BASE_SEC / (level || 1);
+}
+function timerLabel() {
+  const l = ORION.timer.level;
+  const s = secPerImpulse(l);
+  const sStr = (s >= 1) ? s.toFixed(s % 1 ? 2 : 0).replace(/\.?0+$/, '') + 's'
+                        : Math.round(s * 1000) + 'ms';
+  return l + '× · ' + sStr + '/Ι';
+}
+
 function initTimeControls() {
-  document.querySelectorAll('[data-action="advance"]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      const n = parseInt(btn.dataset.impulsi, 10) || 1;
-      runAdvance(n);
-    });
+  loadTimerPrefs();
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest && e.target.closest('[data-action]');
+    if (!btn) return;
+    const act = btn.dataset.action;
+    if (act === 'play-toggle')      togglePlay();
+    else if (act === 'play-faster') changeSpeed(+1);
+    else if (act === 'play-slower') changeSpeed(-1);
+    else if (act === 'play-step')   { stopPlay(); runAdvance(1); }
+    else if (act === 'advance-to-event') { stopPlay(); runAdvance(null); }
   });
-  const nextBtn = document.querySelector('[data-action="advance-to-event"]');
-  if (nextBtn) nextBtn.addEventListener('click', function () { runAdvance(null); });
+  /* Shortcuts globali (decisione #31): Space play/pause · +/- speed
+     · → singolo Ι · E prossimo evento. Ignorati su input/textarea. */
+  document.addEventListener('keydown', function (e) {
+    if (!ORION.game) return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    if (e.target.isContentEditable) return;
+    if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+    else if (e.key === '+' || e.key === '=') { e.preventDefault(); changeSpeed(+1); }
+    else if (e.key === '-' || e.key === '_') { e.preventDefault(); changeSpeed(-1); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); stopPlay(); runAdvance(1); }
+    else if (e.key === 'e' || e.key === 'E') { e.preventDefault(); stopPlay(); runAdvance(null); }
+  });
+  renderTimeControls();
   updateTimeControlsHint();
 }
 
-/* Esegue un avanzamento, traduce gli eventi in cronaca, aggiorna HUD/UI. */
+function changeSpeed(delta) {
+  const idx = PLAY_LEVELS.indexOf(ORION.timer.level);
+  const next = Math.max(0, Math.min(PLAY_LEVELS.length - 1, (idx < 0 ? 1 : idx) + delta));
+  ORION.timer.level = PLAY_LEVELS[next];
+  saveTimerPrefs();
+  if (ORION.timer.playing) { stopPlay(); startPlay(); }   // riallinea l'intervallo
+  renderTimeControls();
+}
+
+function togglePlay() {
+  if (!ORION.game) return;
+  if (ORION.timer.playing) stopPlay(); else startPlay();
+}
+function startPlay() {
+  if (!ORION.game || ORION.timer.playing) return;
+  ORION.timer.playing = true;
+  ORION.timer.lastTickReal = performance.now();
+  const ms = Math.max(100, secPerImpulse(ORION.timer.level) * 1000);
+  ORION.timer.intervalId = setInterval(playTick, ms);
+  startDateInterpolation();
+  renderTimeControls();
+}
+function stopPlay() {
+  if (!ORION.timer.playing) return;
+  ORION.timer.playing = false;
+  if (ORION.timer.intervalId) { clearInterval(ORION.timer.intervalId); ORION.timer.intervalId = null; }
+  stopDateInterpolation();
+  renderTimeControls();
+  /* Snap finale alla DS reale (interpolazione spenta) */
+  if (ORION.game) setHudDate(ORION.time.currentDS(ORION.game));
+}
+function playTick() {
+  if (!ORION.game) { stopPlay(); return; }
+  ORION.timer.lastTickReal = performance.now();
+  /* Avanza 1 Ι: stesso loop di `runAdvance(1)`, ma controlliamo gli eventi
+     per decidere se l'utente vuole essere fermato. */
+  const res = runAdvance(1);
+  if (res && res.events && shouldAutoPause(res.events)) {
+    stopPlay();
+    showEventOverlay(res.events);
+  }
+}
+function shouldAutoPause(events) {
+  if (!events || !events.length) return false;
+  const prefs = ORION.timer.pauses || DEFAULT_AUTOPAUSE;
+  for (let i = 0; i < events.length; i++) {
+    if (prefs[events[i].kind]) return true;
+  }
+  return false;
+}
+
+/* Animazione B (decisione #31): tra un tick e l'altro, la DS in HUD
+   scorre liscia con requestAnimationFrame. Disattivata sotto 3s/Ι. */
+function startDateInterpolation() {
+  stopDateInterpolation();
+  if (secPerImpulse(ORION.timer.level) < PLAY_ANIM_THRESHOLD) return;
+  function frame() {
+    if (!ORION.timer.playing) return;
+    const g = ORION.game;
+    if (!g) return;
+    const ms = secPerImpulse(ORION.timer.level) * 1000;
+    const elapsed = performance.now() - ORION.timer.lastTickReal;
+    const frac = Math.max(0, Math.min(0.999, elapsed / ms));
+    const base = (g.startEpochOrbita || 0) * 100 + (g.timeImpulsi || 0);
+    /* mostra l'Ι "in transito": la cifra Ι scorre verso la successiva */
+    setHudDate(ORION.time.format(base + Math.floor(frac), 'compact'));
+    ORION.timer.rafId = requestAnimationFrame(frame);
+  }
+  ORION.timer.rafId = requestAnimationFrame(frame);
+}
+function stopDateInterpolation() {
+  if (ORION.timer.rafId) { cancelAnimationFrame(ORION.timer.rafId); ORION.timer.rafId = null; }
+}
+
+/* Disegna i 5 controlli compatti (decisione #31) nella barra HUD. */
+function renderTimeControls() {
+  const host = document.querySelector('[data-bind="time-controls"]');
+  if (!host) return;
+  const playing = ORION.timer.playing;
+  const glyph = playing ? '⏸' : '▶';
+  const label = timerLabel();
+  const idx = PLAY_LEVELS.indexOf(ORION.timer.level);
+  const atMin = idx <= 0, atMax = idx >= PLAY_LEVELS.length - 1;
+  host.innerHTML =
+    '<button class="btn btn--mini btn--play-step" data-action="play-slower" type="button"' +
+    (atMin ? ' disabled' : '') + ' title="Rallenta (-)">−</button>' +
+    '<button class="btn btn--play" data-action="play-toggle" type="button" title="Play/Pause (Space)">' +
+      '<span class="btn__glyph" aria-hidden="true">' + glyph + '</span>' +
+      '<span class="btn__label">' + escapeHtml(label) + '</span>' +
+    '</button>' +
+    '<button class="btn btn--mini btn--play-step" data-action="play-faster" type="button"' +
+    (atMax ? ' disabled' : '') + ' title="Accelera (+)">+</button>' +
+    '<button class="btn btn--mini" data-action="play-step" type="button" title="Singolo Impulso (→)">' +
+      '<span class="btn__glyph" aria-hidden="true">⏵Ι</span>' +
+    '</button>' +
+    '<button class="btn btn--primary btn--next-event" data-action="advance-to-event" type="button" title="Prossimo evento (E)">' +
+      '<span class="btn__glyph" aria-hidden="true">⏭</span>' +
+      '<span class="btn__label">Evento</span>' +
+      '<span class="time-control__delta" data-bind="event-delta">+— Ι</span>' +
+    '</button>';
+}
+
+/* Overlay di auto-pausa: lista degli eventi che hanno scatenato lo stop +
+   bottoni "Riprendi" e "Non pausare più su [tipo]". Decisione #31. */
+function showEventOverlay(events) {
+  const host = document.querySelector('[data-bind="event-overlay"]');
+  if (!host || !events || !events.length) return;
+  /* Mostra solo gli eventi che hanno fatto scattare la pausa (quelli con
+     pref true). Riusa le stringhe della cronaca per coerenza. */
+  const prefs = ORION.timer.pauses || DEFAULT_AUTOPAUSE;
+  const triggered = events.filter(function (e) { return prefs[e.kind]; });
+  const KIND_LABELS = {
+    'build-done': 'Completamento struttura',
+    'colony-done': 'Nuova colonia',
+    'scan-done': 'Scansione completata',
+    'scarcity': 'Carenza',
+    'scarcity-recover': 'Carenza rientrata',
+    'pop-loss': 'Calo popolazione',
+    'victory': 'Pista chiusa',
+    'settle-stage': 'Fase Insediamento',
+    'settle-done': 'Insediamento completato'
+  };
+  /* Raggruppa per kind: una checkbox per categoria, una sola voce di sintesi. */
+  const byKind = {};
+  triggered.forEach(function (e) { (byKind[e.kind] = byKind[e.kind] || []).push(e); });
+  let html = '<div class="event-overlay__panel" role="alertdialog" aria-label="Evento — tempo in pausa">' +
+    '<h3 class="event-overlay__title">⏸ Tempo in pausa</h3>' +
+    '<ul class="event-overlay__list">';
+  Object.keys(byKind).forEach(function (kind) {
+    const list = byKind[kind];
+    const lbl = KIND_LABELS[kind] || kind;
+    html += '<li class="event-overlay__item">' +
+      '<div class="event-overlay__row">' +
+        '<span class="event-overlay__kind">' + escapeHtml(lbl) + '</span>' +
+        '<span class="event-overlay__count">' + list.length + '×</span>' +
+      '</div>' +
+      '<label class="event-overlay__pref">' +
+        '<input type="checkbox" data-pause-kind="' + kind + '"> ' +
+        'Non fermare più su questo' +
+      '</label>' +
+    '</li>';
+  });
+  html += '</ul>' +
+    '<div class="event-overlay__actions">' +
+      '<button class="btn btn--mini" data-action="event-close" type="button">Chiudi</button>' +
+      '<button class="btn btn--primary" data-action="event-resume" type="button">▶ Riprendi</button>' +
+    '</div>' +
+  '</div>';
+  host.innerHTML = html;
+  host.hidden = false;
+  /* Handlers */
+  host.querySelector('[data-action="event-resume"]').addEventListener('click', function () {
+    applyEventOverlayPrefs(host);
+    hideEventOverlay();
+    startPlay();
+  });
+  host.querySelector('[data-action="event-close"]').addEventListener('click', function () {
+    applyEventOverlayPrefs(host);
+    hideEventOverlay();
+  });
+}
+function applyEventOverlayPrefs(host) {
+  host.querySelectorAll('input[data-pause-kind]').forEach(function (cb) {
+    if (cb.checked) ORION.timer.pauses[cb.dataset.pauseKind] = false;
+  });
+  saveTimerPrefs();
+}
+function hideEventOverlay() {
+  const host = document.querySelector('[data-bind="event-overlay"]');
+  if (host) { host.hidden = true; host.innerHTML = ''; }
+}
+
+/* Esegue un avanzamento, traduce gli eventi in cronaca, aggiorna HUD/UI.
+   Ritorna { events, impulsi } per consentire all'auto-advance di valutare
+   gli eventi e decidere se fermarsi (decisione #31). */
 function runAdvance(impulsi) {
   const g = ORION.game;
-  if (!g) return;
+  if (!g) return null;
   /* M06.6: tutorial — primo avanzamento del tempo. */
   if (ORION.tutorial) ORION.tutorial.fire('advance');
   const before = g.timeImpulsi || 0;
   const res = (impulsi == null) ? ORION.time.advanceToNextEvent() : ORION.time.advance(impulsi);
   const after = g.timeImpulsi || 0;
-  if (after === before) return;
+  if (after === before) return res;
 
-  // Eventi → cronaca (raggruppiamo eventi identici dello stesso Impulso
-  // per non spammare; in M05 sono comunque pochi)
   if (res.events && res.events.length) {
     res.events.forEach(function (ev) { chronicleEvent(ev); });
   }
-  // Update visuali (snap a fine batch — decisione M05)
   setHudDate(ORION.time.currentDS(g));
-  pulseHud();
+  /* La pulse marca lo "snap a fine batch" (decisione M05). In auto-advance
+     a 1 Ι/tick farebbe lampeggiare a ogni step — invadente. La saltiamo
+     se il timer sta girando e l'animazione DS è attiva (sopra 3s/Ι). */
+  const skipPulse = ORION.timer && ORION.timer.playing &&
+                    secPerImpulse(ORION.timer.level) >= PLAY_ANIM_THRESHOLD;
+  if (!skipPulse) pulseHud();
   updateGlobalResourceHud();
   if (ORION.openPlanetKey) updatePlanetUI();
   updateTimeControlsHint();
   persistGame(g);
+  /* Rilancia l'animazione DS dal tick corrente (ricomincia da Ι appena maturato) */
+  if (ORION.timer && ORION.timer.playing) {
+    ORION.timer.lastTickReal = performance.now();
+  }
+  return res;
 }
 
 function chronicleEvent(ev) {
@@ -1533,17 +1786,16 @@ function chronicleEvent(ev) {
   }
 }
 
-/* Aggiorna l'etichetta "Prossimo evento" con il delta in Impulsi. */
+/* Aggiorna solo il chip delta accanto a "⏭ Evento": il resto del bottone
+   è ridisegnato da renderTimeControls(). Mostra il delta nel formato
+   durata del Calendario del Faro (#30): es. "+1Κ·10Ι" invece di "+60 I". */
 function updateTimeControlsHint() {
   const g = ORION.game;
-  const btn = document.querySelector('[data-action="advance-to-event"]');
-  if (!btn || !g) return;
+  if (!g) return;
+  const delta = document.querySelector('[data-bind="event-delta"]');
+  if (!delta) return;
   const n = ORION.time.nextEventImpulsi(g);
-  const glyph = btn.querySelector('.btn__glyph');
-  // ricostruzione minima per non rompere il markup pre-esistente
-  btn.innerHTML = (glyph ? '<span class="btn__glyph" aria-hidden="true">⏭</span>' : '') +
-    '<span class="btn__label">Next</span>' +
-    '<span class="time-control__delta">+' + n + ' I</span>';
+  delta.textContent = '+' + ORION.time.format(n, 'duration');
 }
 
 /* Pulse rapida sui valori HUD per segnalare l'aggiornamento. */
@@ -1593,6 +1845,14 @@ function starCss(g, starId) {
 function setHudDate(ds) {
   const el = document.querySelector('[data-bind="data-stellare"]');
   if (el) el.textContent = ds;
+}
+
+/* Stoppa il timer alla chiusura della partita per non avere advance
+   in background dopo "Nuova partita" / Esc al main menu (decisione #31). */
+function stopTimerIfRunning() {
+  if (ORION && ORION.timer && ORION.timer.playing) {
+    try { stopPlay(); } catch (_) { /* niente */ }
+  }
 }
 
 /* Log limitato agli ultimi N (decisione #5): unica fonte di crescita
@@ -1858,10 +2118,10 @@ function handleImport() {
 }
 
 function currentDsOfPayload(p) {
-  if (!p || !ORION.time) return 'DS —';
+  if (!p || !ORION.time) return '—';
   const orb = p.startEpochOrbita || 0;
   const i = p.timeImpulsi || 0;
-  return ORION.time.format(orb * 100 + i);
+  return ORION.time.format(orb * 100 + i, 'compact');
 }
 
 function handleNewGame() {
@@ -1895,6 +2155,7 @@ function enterGame() {
   setNavActive('galaxy');
   updateGlobalResourceHud();
   setHudDate(ORION.time.currentDS(ORION.game));
+  renderTimeControls();        /* #31: ridisegna i 5 controlli per la partita */
   updateTimeControlsHint();
   /* M06.6: tutorial — la "?" diventa attiva solo dentro partita. */
   updateTutorialButton();
@@ -1947,6 +2208,7 @@ function initMainMenu() {
 
 function showMainMenu(view) {
   ORION.menuView = view || 'home';
+  stopTimerIfRunning();   // niente auto-advance mentre sei al menu (#31)
   const menu = document.querySelector('[data-bind="main-menu"]');
   if (menu) menu.removeAttribute('hidden');
   renderMainMenu();

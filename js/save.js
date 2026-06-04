@@ -256,10 +256,10 @@
     };
   }
   function currentDsLabel(payload) {
-    if (!payload || !ORION.time || !ORION.time.format) return 'DS —';
+    if (!payload || !ORION.time || !ORION.time.format) return '—';
     const orb = payload.startEpochOrbita || 0;
     const i = payload.timeImpulsi || 0;
-    return ORION.time.format(orb * 100 + i);
+    return ORION.time.format(orb * 100 + i, 'compact');
   }
 
   function saveSlot(idx, game, name) {
