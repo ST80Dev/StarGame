@@ -374,6 +374,18 @@ function renderView(stage, view) {
     return;
   }
 
+  // M10 Fase B (decisione #47): vista "Civiltà" — dossier delle civiltà AI
+  // contattate + anteprima ICG/Reputazione. Read-only, niente diplomazia
+  // interattiva (M11).
+  if (view === 'civ') {
+    if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; }
+    if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
+    if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
+    if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
+    renderCivView(stage);
+    return;
+  }
+
   // Altre viste: smonta tutto e mostra il placeholder.
   if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; }
   if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
@@ -2359,7 +2371,7 @@ function openExpeditionPicker(colony) {
     const acr = regionAcronymFor(sid);
     const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
     const dur = ORION.expedition.computeDuration(g.galaxy, sid, crewXp);
-    const chance = ORION.expedition.accidentChance(g.galaxy, sid, crewXp);
+    const chance = ORION.expedition.accidentChance(g.galaxy, sid, crewXp, g);
     const dangerN = ORION.expedition.dangerNorm(g.galaxy, sid);
     const dangerTier = sys.dangerTier || ORION.galaxy.dangerTier(sys.danger);
     const DISCOVERY = ORION.galaxy.DISCOVERY;
@@ -2565,6 +2577,80 @@ function renderFleetView(stage) {
       renderFleetView(stage);
     });
   });
+}
+
+/* =====================================================================
+   M10 Fase B (decisione #47) — Vista "Civiltà" + dossier
+   Read-only: mostra le civiltà AI CONTATTATE con il loro dossier
+   (allineamento, archetipo, tratto, sede, sistemi noti, disposizione) +
+   anteprima ICG §5.4 / Reputazione §14. La diplomazia interattiva (M11)
+   e lo scontro (M09) restano fuori scope.
+   ===================================================================== */
+function renderCivView(stage) {
+  if (!stage) return;
+  const g = ORION.game;
+  if (!g) return;
+  if (!ORION.ai) { renderViewPlaceholder(stage, 'civ'); return; }
+  /* Tutorial: concetti sulle civiltà alla prima apertura della vista. */
+  if (ORION.tutorial) ORION.tutorial.fire('civilizations');
+
+  const ALIGN_LABEL = { bene: 'Bene', male: 'Male', neutrale: 'Neutrale' };
+  const contacted = ORION.ai.contactedCivs(g);
+  const icg = (typeof g.icg === 'number') ? Math.round(g.icg) : '—';
+  const rep = ORION.ai.reputationPreview ? ORION.ai.reputationPreview(g) : '—';
+
+  /* Card dossier per ogni civiltà contattata. */
+  let cards;
+  if (!contacted.length) {
+    cards = '<p class="panel__note">Nessuna civiltà ancora identificata. <strong>Esplora la galassia</strong> ' +
+      '(spedizioni M07 / flotte M08): al primo avvistamento di un loro sistema scatta il <strong>primo contatto</strong> ' +
+      'e qui comparirà il dossier. Intanto la Cronaca riporta le <em>voci</em> dei poteri lontani.</p>';
+  } else {
+    cards = '<ul class="civ-list">' + contacted.map(function (c) {
+      const disp = Math.round(c.disposition || 0);
+      const dispLabel = ORION.ai.dispositionLabel(disp);
+      // barra disposizione: -100..100 → 0..100% con riempimento da centro
+      const pct = Math.max(0, Math.min(100, (disp + 100) / 2));
+      const dispCls = disp <= -15 ? 'neg' : (disp >= 15 ? 'pos' : 'mid');
+      const known = ORION.ai.knownSystemsCount(g, c);
+      const ptier = ORION.ai.powerTier(c.power || 0);
+      const seat = (g.galaxy.groups.find(function (gp) { return gp.id === c.homeGroupId; }) || {});
+      return '<li class="civ-card" style="--civ-color:' + escapeHtml(c.color) + '">' +
+        '<div class="civ-card__head">' +
+          '<span class="civ-card__swatch" aria-hidden="true"></span>' +
+          '<span class="civ-card__name">' + escapeHtml(c.name) + '</span>' +
+          '<span class="civ-chip civ-chip--' + c.alignment + '">' + (ALIGN_LABEL[c.alignment] || c.alignment) + '</span>' +
+        '</div>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Tratto</span><span>' + escapeHtml(c.traitLabel) + '</span></div>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Sede</span><span>' +
+          escapeHtml(seat.tierLabel || '—') + (seat.name ? ' · ' + escapeHtml(seat.name) : '') + '</span></div>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Potenza</span><span class="civ-power civ-power--' + ptier + '">' + ptier + '</span>' +
+          '<span class="civ-card__k">Sistemi noti</span><span>' + known + '</span></div>' +
+        '<div class="civ-disp">' +
+          '<div class="civ-disp__top"><span class="civ-card__k">Disposizione verso di te</span>' +
+            '<span class="civ-disp__label civ-disp__label--' + dispCls + '">' + dispLabel + '</span></div>' +
+          '<div class="civ-disp__bar"><span class="civ-disp__mid" aria-hidden="true"></span>' +
+            '<span class="civ-disp__fill civ-disp__fill--' + dispCls + '" style="width:' + pct.toFixed(0) + '%"></span></div>' +
+        '</div>' +
+      '</li>';
+    }).join('') + '</ul>';
+  }
+
+  stage.innerHTML =
+    '<div class="civ-view">' +
+      '<header class="fleet-view__head">' +
+        '<h2 class="fleet-view__title">Civiltà della galassia <span class="fleet-view__sub">M10 · Fase B</span></h2>' +
+        '<div class="civ-indices">' +
+          '<span class="civ-index" title="Indice Corruzione Galattica (§5.4)">ICG <strong>' + icg + '</strong></span>' +
+          '<span class="civ-index" title="Reputazione — anteprima (§14)">Reputazione <strong>' + rep + '</strong></span>' +
+        '</div>' +
+      '</header>' +
+      '<p class="panel__note">Le civiltà vivono in <strong>background</strong> (espandono, si fanno guerra, cadono e ' +
+        'nascono). Qui vedi solo quelle <strong>contattate</strong>: identità, disposizione verso di te e territorio ' +
+        '<em>noto</em>. Trattati e alleanze arrivano con la <strong>Diplomazia</strong> (M11); gli scontri con il ' +
+        '<strong>Combattimento</strong> (M09).</p>' +
+      cards +
+    '</div>';
 }
 
 function findFleet(id) {
@@ -3690,7 +3776,7 @@ function chronicleEvent(ev) {
   } else if (ev.kind === 'civ-contact') {
     /* M10 Fase A (decisione #47): primo contatto con una civiltà AI.
        La scheda-dossier vera arriva in Fase B; qui è una voce di cronaca. */
-    pushChronicle(ds + ' — <strong>Primo contatto</strong> con <strong>' + escapeHtml(ev.civName) + '</strong> nel/nella ' + escapeHtml(ev.regionLabel) + ' · <em>' + escapeHtml(ev.traitLabel) + '</em>.', 'civ');
+    pushChronicle(ds + ' — <strong>Primo contatto</strong> con <strong>' + escapeHtml(ev.civName) + '</strong> nel/nella ' + escapeHtml(ev.regionLabel) + ' · <em>' + escapeHtml(ev.traitLabel) + '</em> · <span class="chronicle__hint">dossier nella vista Civiltà ⬡</span>.', 'civ');
     if (ORION.tutorial) ORION.tutorial.fire('civilizations');
   } else if (ev.kind === 'civ-expand') {
     /* Voce di cronaca "da lontano": effetto senza svelare la mappa. */

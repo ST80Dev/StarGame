@@ -3784,3 +3784,65 @@ select.main-menu__input { cursor: pointer; }
   margin: 8px 0 4px;
   font-size: 0.95em;
 }
+
+/* =====================================================================
+   M10 Fase B (decisione #47) — Vista "Civiltà" + dossier
+   ===================================================================== */
+.civ-view { padding: 4px 2px; }
+.civ-indices { display: flex; gap: 10px; align-items: center; }
+.civ-index {
+  font-size: 0.82rem; color: var(--c-text-faint);
+  background: rgba(157, 123, 255, 0.10);
+  border: 1px solid rgba(157, 123, 255, 0.30);
+  border-radius: 6px; padding: 3px 9px;
+}
+.civ-index strong { color: #c7b5ff; font-family: var(--font-display); margin-left: 2px; }
+
+.civ-list { list-style: none; margin: 12px 0 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
+.civ-card {
+  border: 1px solid var(--c-border);
+  border-left: 3px solid var(--civ-color, #9d7bff);
+  border-radius: 8px; padding: 11px 13px;
+  background: rgba(12, 16, 32, 0.55);
+}
+.civ-card__head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.civ-card__swatch {
+  width: 11px; height: 11px; border-radius: 3px;
+  background: var(--civ-color, #9d7bff); flex: 0 0 auto;
+  box-shadow: 0 0 6px var(--civ-color, #9d7bff);
+}
+.civ-card__name { font-family: var(--font-display); font-size: 0.98rem; color: var(--c-text); flex: 1 1 auto; }
+.civ-chip {
+  font-size: 0.70rem; text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 2px 7px; border-radius: 4px; flex: 0 0 auto;
+}
+.civ-chip--bene     { background: rgba(63, 202, 160, 0.16); color: #6fe0b8; border: 1px solid rgba(63,202,160,0.4); }
+.civ-chip--male     { background: rgba(224, 85, 110, 0.16); color: #f08296; border: 1px solid rgba(224,85,110,0.4); }
+.civ-chip--neutrale { background: rgba(160, 168, 190, 0.14); color: #c0c8da; border: 1px solid rgba(160,168,190,0.34); }
+
+.civ-card__row { display: flex; gap: 8px; align-items: baseline; font-size: 0.82rem; margin: 3px 0; flex-wrap: wrap; }
+.civ-card__k { color: var(--c-text-faint); font-size: 0.74rem; }
+.civ-power { text-transform: capitalize; font-weight: 600; }
+.civ-power--debole    { color: #8fa0c0; }
+.civ-power--media     { color: #e0c060; }
+.civ-power--forte     { color: #f0a64a; }
+.civ-power--dominante { color: #f08296; }
+
+.civ-disp { margin-top: 9px; }
+.civ-disp__top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+.civ-disp__label { font-size: 0.78rem; font-weight: 600; }
+.civ-disp__label--neg { color: #f08296; }
+.civ-disp__label--mid { color: #c0c8da; }
+.civ-disp__label--pos { color: #6fe0b8; }
+.civ-disp__bar {
+  position: relative; height: 7px; border-radius: 4px;
+  background: rgba(160, 168, 190, 0.14); overflow: hidden;
+}
+.civ-disp__mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(216,226,255,0.35); }
+.civ-disp__fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; opacity: 0.85; }
+.civ-disp__fill--neg { background: linear-gradient(90deg, #e0556e, #f0a64a); }
+.civ-disp__fill--mid { background: linear-gradient(90deg, #7f8aa8, #c0c8da); }
+.civ-disp__fill--pos { background: linear-gradient(90deg, #f0a64a, #3fcaa0); }
+
+.chronicle__hint { color: var(--c-text-faint); font-style: italic; font-size: 0.92em; }
