@@ -2809,7 +2809,520 @@ select.main-menu__input { cursor: pointer; }
 }
 
 /* =====================================================================
-   M08 Fase A — Vista Flotte + overlay (decisione #42)
+   M07.2 — Plancia di Colonia (decisione #44)
+   Overlay DOM sopra il planet-canvas: widget a cardinali (top-bar /
+   risorse / strutture / coda / popolazione / cronaca) per dare al centro
+   il colpo d'occhio e le azioni ad alta frequenza (espandi modulo,
+   annulla in coda). Sincronia con la sidebar — stessi tryBuild/tryCancel.
+   ===================================================================== */
+.colony-deck {
+  position: absolute;
+  inset: 0;
+  z-index: 3;              /* sopra planet-canvas (z=2), sotto breadcrumb (z=4) */
+  pointer-events: none;    /* il pan/zoom del canvas sotto resta utilizzabile */
+  padding: 56px 16px 36px;
+  display: block;
+  overflow: hidden;
+}
+.colony-deck[hidden] { display: none; }
+
+.deck-grid {
+  display: grid;
+  grid-template-columns: 240px 1fr 280px;
+  grid-template-rows: auto 1fr auto auto;
+  grid-template-areas:
+    "topbar    topbar     topbar"
+    "resources .          queue"
+    "structs   structs    structs"
+    "pop       pop        pop"
+    "footer    footer     footer";
+  gap: 12px;
+  height: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* I figli del deck-grid catturano click (il root ha pointer-events:none). */
+.deck-grid > * { pointer-events: auto; }
+
+/* ---- Top-bar --------------------------------------------------- */
+.deck-topbar {
+  grid-area: topbar;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  background: linear-gradient(180deg, rgba(14, 20, 44, 0.85) 0%, rgba(14, 20, 44, 0.55) 100%);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius);
+  backdrop-filter: blur(8px);
+}
+.deck-topbar__title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.deck-topbar__name {
+  font-family: var(--font-display, inherit);
+  font-size: 1.4rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--c-text);
+}
+.deck-topbar__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.deck-topbar__type {
+  font-size: 0.82rem;
+  color: var(--c-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.deck-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(120, 160, 255, 0.12);
+  border: 1px solid var(--c-border-soft);
+  font-size: 0.78rem;
+  color: var(--c-text-soft);
+  font-family: var(--font-data, inherit);
+}
+.deck-chip--home {
+  background: rgba(255, 157, 60, 0.18);
+  border-color: rgba(255, 157, 60, 0.45);
+  color: var(--c-accent-warm);
+}
+.deck-chip--phase {
+  background: rgba(138, 108, 255, 0.18);
+  border-color: rgba(138, 108, 255, 0.45);
+  color: var(--c-violet);
+}
+
+/* ---- Section heads (riusati da tutte le sezioni) ---------------- */
+.deck-section__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 0 2px;
+}
+.deck-section__title {
+  font-family: var(--font-display, inherit);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--c-text-soft);
+}
+.deck-section__sub {
+  font-size: 0.72rem;
+  color: var(--c-text-faint);
+  font-family: var(--font-data, inherit);
+}
+.deck-section__empty {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  color: var(--c-text-faint);
+  font-style: italic;
+}
+
+/* ---- Risorse XXL (colonna sinistra) ---------------------------- */
+.deck-resources {
+  grid-area: resources;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-self: start;
+}
+.deck-res {
+  padding: 8px 10px;
+  background: rgba(14, 20, 44, 0.75);
+  border: 1px solid var(--c-border-soft);
+  border-left: 3px solid var(--c-border);
+  border-radius: var(--radius);
+  backdrop-filter: blur(6px);
+}
+.deck-res__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+.deck-res__icon {
+  font-size: 1rem;
+  color: var(--c-accent);
+}
+.deck-res__label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--c-text-soft);
+}
+.deck-res__value {
+  font-family: var(--font-data, inherit);
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--c-text);
+  line-height: 1.1;
+}
+.deck-res__rate {
+  font-size: 0.78rem;
+  color: var(--c-text-faint);
+  font-family: var(--font-data, inherit);
+}
+.deck-res__rate.is-pos { color: var(--c-good); }
+.deck-res__rate.is-neg { color: var(--c-bad); }
+.deck-res.is-low {
+  border-left-color: var(--c-warn);
+  box-shadow: inset 0 0 0 1px rgba(255, 202, 85, 0.18);
+}
+.deck-res.is-crit {
+  border-left-color: var(--c-bad);
+  box-shadow: inset 0 0 0 1px rgba(255, 92, 108, 0.28);
+}
+
+/* ---- Strutture costruite (riga centrale ampia) ------------------ */
+.deck-structures {
+  grid-area: structs;
+  padding: 10px 12px;
+  background: rgba(14, 20, 44, 0.72);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius);
+  backdrop-filter: blur(6px);
+}
+.deck-struct-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px;
+}
+.deck-struct {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 28px 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 6px 28px;
+  background: rgba(8, 12, 30, 0.55);
+  border: 1px solid var(--c-border-soft);
+  border-left: 3px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  min-height: 40px;
+}
+.deck-struct.is-busy { opacity: 0.92; }
+.deck-cat--estrattiva { border-left-color: var(--c-accent-warm); }
+.deck-cat--produttiva { border-left-color: var(--c-accent); }
+.deck-cat--ricerca    { border-left-color: var(--c-violet); }
+.deck-cat--militare   { border-left-color: var(--c-bad); }
+.deck-cat--civile     { border-left-color: var(--c-good); }
+.deck-cat--avanzata   { border-left-color: #ff66c4; }
+
+.deck-struct__info {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  color: var(--c-violet);
+  background: transparent;
+  border: 1px solid rgba(138, 108, 255, 0.5);
+  border-radius: 50%;
+  cursor: pointer;
+  line-height: 1;
+}
+.deck-struct__info:hover {
+  background: rgba(138, 108, 255, 0.15);
+  color: var(--c-text);
+}
+.deck-struct__glyph {
+  font-size: 1.1rem;
+  color: var(--c-text);
+}
+.deck-struct__main {
+  min-width: 0;
+}
+.deck-struct__name {
+  font-size: 0.82rem;
+  color: var(--c-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.deck-struct__lvl {
+  color: var(--c-accent);
+  font-family: var(--font-data, inherit);
+  font-size: 0.78rem;
+}
+.deck-struct__pips {
+  display: inline-flex;
+  gap: 3px;
+  margin-top: 2px;
+}
+.deck-pip {
+  width: 8px;
+  height: 3px;
+  background: rgba(120, 160, 255, 0.18);
+  border-radius: 1px;
+}
+.deck-pip.is-on { background: var(--c-accent); }
+
+.deck-struct__expand {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 56px;
+  padding: 4px 8px;
+  background: rgba(47, 230, 224, 0.12);
+  border: 1px solid var(--c-accent-dim);
+  border-radius: var(--radius-sm);
+  color: var(--c-accent);
+  cursor: pointer;
+  font-family: var(--font-data, inherit);
+}
+.deck-struct__expand:hover:not(.is-locked):not([disabled]) {
+  background: rgba(47, 230, 224, 0.22);
+  border-color: var(--c-accent);
+}
+.deck-struct__expand-plus {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1;
+}
+.deck-struct__expand-cost {
+  display: inline-flex;
+  gap: 3px;
+  font-size: 0.68rem;
+  color: var(--c-text-soft);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.deck-cost-item { white-space: nowrap; }
+.deck-struct__expand.is-locked,
+.deck-struct__expand[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: rgba(120, 160, 255, 0.04);
+  border-color: var(--c-border-soft);
+  color: var(--c-text-faint);
+}
+.deck-struct__max {
+  font-size: 0.72rem;
+  color: var(--c-text-faint);
+  font-family: var(--font-data, inherit);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 4px 8px;
+}
+.deck-struct__progress {
+  position: relative;
+  width: 56px;
+  height: 6px;
+  background: rgba(120, 160, 255, 0.12);
+  border-radius: 3px;
+  overflow: hidden;
+  align-self: center;
+}
+.deck-struct__progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--c-accent);
+  transition: width 0.3s ease;
+}
+.deck-structures__hint {
+  margin-top: 8px;
+  text-align: center;
+}
+
+/* ---- Coda (colonna destra) ------------------------------------- */
+.deck-queue {
+  grid-area: queue;
+  padding: 10px 12px;
+  background: rgba(14, 20, 44, 0.75);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius);
+  backdrop-filter: blur(6px);
+  align-self: start;
+  max-height: 100%;
+  overflow-y: auto;
+}
+.deck-queue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.deck-queue-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: rgba(8, 12, 30, 0.55);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+}
+.deck-queue-item.is-demolish { border-left: 3px solid var(--c-bad); }
+.deck-queue-item__glyph { font-size: 1rem; color: var(--c-text); }
+.deck-queue-item__main { min-width: 0; }
+.deck-queue-item__name {
+  font-size: 0.78rem;
+  color: var(--c-text);
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.deck-queue-item__cd {
+  font-family: var(--font-data, inherit);
+  color: var(--c-text-soft);
+  font-size: 0.72rem;
+}
+.deck-queue-item__bar {
+  height: 4px;
+  background: rgba(120, 160, 255, 0.12);
+  border-radius: 2px;
+  margin-top: 3px;
+  overflow: hidden;
+}
+.deck-queue-item__fill {
+  height: 100%;
+  background: var(--c-accent);
+  transition: width 0.3s ease;
+}
+.deck-queue-item__cancel {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--c-border-soft);
+  border-radius: 50%;
+  color: var(--c-text-soft);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+.deck-queue-item__cancel:hover {
+  background: rgba(255, 92, 108, 0.18);
+  color: var(--c-bad);
+  border-color: var(--c-bad);
+}
+
+/* ---- Popolazione ----------------------------------------------- */
+.deck-population {
+  grid-area: pop;
+  padding: 8px 12px;
+  background: rgba(14, 20, 44, 0.72);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius);
+  backdrop-filter: blur(6px);
+}
+.deck-pop__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.deck-pop__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(120, 160, 255, 0.08);
+  border: 1px solid var(--c-border-soft);
+  font-size: 0.74rem;
+  font-family: var(--font-data, inherit);
+}
+.deck-pop__chip-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--c-text-soft);
+}
+.deck-pop__chip-pct {
+  color: var(--c-text);
+  font-weight: 600;
+}
+/* Tinte per classe — riusano le palette già definite per .class--* */
+.deck-pop__chip.class--operai      { border-color: rgba(255, 157, 60, 0.4); }
+.deck-pop__chip.class--scienziati  { border-color: rgba(138, 108, 255, 0.4); }
+.deck-pop__chip.class--militari    { border-color: rgba(255, 92, 108, 0.4); }
+.deck-pop__chip.class--mercanti    { border-color: rgba(255, 202, 85, 0.4); }
+.deck-pop__chip.class--tecnici     { border-color: rgba(47, 230, 224, 0.4); }
+
+/* ---- Footer cronaca ------------------------------------------- */
+.deck-footer {
+  grid-area: footer;
+  padding: 6px 12px;
+  background: rgba(14, 20, 44, 0.72);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius);
+  backdrop-filter: blur(6px);
+}
+.deck-footer-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.78rem;
+  color: var(--c-text-soft);
+}
+.deck-footer-log li {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.deck-footer-log li strong { color: var(--c-text); }
+
+/* ---- Responsive (decisione #6: ≥768px) ------------------------- */
+@media (max-width: 1199px) {
+  .deck-grid {
+    grid-template-columns: 200px 1fr 220px;
+  }
+  .deck-topbar__name { font-size: 1.2rem; }
+  .deck-res__value { font-size: 1.2rem; }
+}
+@media (max-width: 900px) {
+  .colony-deck { padding: 48px 8px 24px; }
+  .deck-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "topbar"
+      "resources"
+      "structs"
+      "queue"
+      "pop"
+      "footer";
+  }
+  .deck-resources {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .deck-res { flex: 1 1 110px; min-width: 110px; }
+}
+
+/* =====================================================================
+   M08 Fase A — Vista Flotte + overlay
    ===================================================================== */
 .cantieri-row__select {
   background: rgba(20, 24, 38, 0.85);
