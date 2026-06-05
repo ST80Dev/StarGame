@@ -62,8 +62,8 @@
        più fattorie/impianti idrici o — per i mondi più capienti — import via
        rotte commerciali (M12). Contabilità per-colonia (emenda decisione #35).
        Il consumo si applica solo in fase `operational` (non durante settling). */
-    POP_FOOD_PER_UNIT:  1.0,    // cibo consumato per unità di pop / Impulso (decisione #38: ritarato sul modello a moduli)
-    POP_WATER_PER_UNIT: 0.8,    // acqua consumata per unità di pop / Impulso
+    POP_FOOD_PER_UNIT:  2.5,    // cibo consumato per unità di pop / Impulso (decisione #38: ritarato sul modello a moduli)
+    POP_WATER_PER_UNIT: 2.0,    // acqua consumata per unità di pop / Impulso
     POP_SUPPLY_REF:     3,      // surplus locale che dà crescita a velocità piena
     POP_LEVEL_COST:     0.6,    // freno temporale: ogni livello costa 1+0.6·(pop−1) accumulo
 
