@@ -62,8 +62,8 @@
        più fattorie/impianti idrici o — per i mondi più capienti — import via
        rotte commerciali (M12). Contabilità per-colonia (emenda decisione #35).
        Il consumo si applica solo in fase `operational` (non durante settling). */
-    POP_FOOD_PER_UNIT:  1.4,    // cibo consumato per unità di pop / Impulso
-    POP_WATER_PER_UNIT: 1.0,    // acqua consumata per unità di pop / Impulso
+    POP_FOOD_PER_UNIT:  1.0,    // cibo consumato per unità di pop / Impulso (decisione #38: ritarato sul modello a moduli)
+    POP_WATER_PER_UNIT: 0.8,    // acqua consumata per unità di pop / Impulso
     POP_SUPPLY_REF:     3,      // surplus locale che dà crescita a velocità piena
     POP_LEVEL_COST:     0.6,    // freno temporale: ogni livello costa 1+0.6·(pop−1) accumulo
 
@@ -75,8 +75,8 @@
        strutture tech M13). Le risorse decidono un tetto, l'habitat un altro:
        cresce solo chi soddisfa entrambi. Numeri qui, mai mostrati in UI. */
     POP_HOUSING_BASE:      3.0,   // unità sostenibili dall'insediamento nudo
-    POP_HOUSING_PER_LEVEL: 2.5,   // capacità abitativa per livello di centro abitativo
-    POP_HOSPITAL_HOUSING:  1.5,   // capacità extra per livello di ospedale (densità/sanità)
+    POP_HOUSING_PER_LEVEL: 4.5,   // capacità abitativa per resa-cumulata moduli centro abitativo
+    POP_HOSPITAL_HOUSING:  3.0,   // capacità extra per resa-cumulata moduli ospedale (densità/sanità)
     POP_CROWD_START:       0.8,   // rapporto pop/capacità oltre cui inizia il malus
     POP_CROWD_SLOPE:       2.5,   // ripidità del crollo morale da sovraffollamento
 
@@ -463,9 +463,10 @@
          Il giocatore lo deduce vedendo la morale calare; si rialza sviluppando
          l'habitat (centro abitativo, ospedale, future strutture M13). */
       const hosp = (colony.structures['ospedale'] && colony.structures['ospedale'].level) || 0;
+      const Sm = root.ORION.structures;
       const housingCap = CFG.POP_HOUSING_BASE
-        + habit * CFG.POP_HOUSING_PER_LEVEL
-        + hosp * CFG.POP_HOSPITAL_HOUSING;
+        + (habit > 0 ? Sm.moduleSum(habit) : 0) * CFG.POP_HOUSING_PER_LEVEL
+        + (hosp > 0 ? Sm.moduleSum(hosp) : 0) * CFG.POP_HOSPITAL_HOUSING;
       const crowd = housingCap > 0 ? pop.total / housingCap : 99;
       if (crowd > CFG.POP_CROWD_START) {
         morale *= Math.max(0.05, 1 - (crowd - CFG.POP_CROWD_START) * CFG.POP_CROWD_SLOPE);

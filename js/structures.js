@@ -54,7 +54,7 @@
       cost: { met: 40, en: 10 }, time: 10,
       upkeep: { en: 1 },
       rates: { met: 4 },
-      slots: 1, maxLevel: 3,
+      slots: 1, maxLevel: 5,
       bodyTypes: HABITABLE.concat(ORBITAL)
     },
     {
@@ -62,8 +62,8 @@
       desc: 'Pannelli ad alta efficienza per catturare l\'irradianza stellare.',
       cost: { met: 35, en: 5 }, time: 9,
       upkeep: {},
-      rates: { en: 4 },
-      slots: 1, maxLevel: 3,
+      rates: { en: 6 },
+      slots: 1, maxLevel: 5,
       bodyTypes: HABITABLE.concat(['gassoso'])
     },
     {
@@ -72,7 +72,7 @@
       cost: { met: 30, en: 12 }, time: 10,
       upkeep: { en: 1 },
       rates: { water: 4 },
-      slots: 1, maxLevel: 3,
+      slots: 1, maxLevel: 5,
       bodyTypes: HABITABLE
     },
     {
@@ -81,7 +81,7 @@
       cost: { met: 25, en: 10, water: 5 }, time: 9,
       upkeep: { en: 1, water: 1 },
       rates: { food: 4 },
-      slots: 1, maxLevel: 3,
+      slots: 1, maxLevel: 5,
       bodyTypes: HABITABLE
     },
 
@@ -116,7 +116,7 @@
       cost: { met: 60, en: 20 }, time: 14,
       upkeep: { en: 2 },
       rates: { research: 3 },
-      slots: 1, maxLevel: 3,
+      slots: 1, maxLevel: 4,
       bodyTypes: HABITABLE,
       hooks: ['research']         // gancio M13
     },
@@ -159,8 +159,8 @@
       desc: 'Aumenta la capacità di popolazione e il morale.',
       cost: { met: 40, en: 10, water: 5 }, time: 10,
       upkeep: { en: 1, food: 1, water: 1 },
-      rates: { popCap: 2 },
-      slots: 1, maxLevel: 3,
+      rates: {},                 // l'effetto vive nel gate sovraffollamento (§9.3)
+      slots: 1, maxLevel: 5,
       bodyTypes: HABITABLE
     },
     {
@@ -169,7 +169,7 @@
       cost: { met: 55, en: 20, food: 5 }, time: 14,
       upkeep: { en: 2, food: 1 },
       rates: { popGrowth: 0.2 },
-      slots: 1, maxLevel: 2,
+      slots: 1, maxLevel: 3,
       bodyTypes: HABITABLE
     },
     {
@@ -209,17 +209,55 @@
     });
   }
 
-  /* Scala la produzione di una struttura in base al livello (×1.6 per lvl). */
-  function levelScale(level) { return 1 + 0.6 * Math.max(0, (level || 1) - 1); }
+  /* Modello "moduli a rendimento crescente" (decisione #38).
+     Livello L = L moduli = L slot. La PRODUZIONE totale è la somma di L
+     moduli, ognuno un po' più produttivo del precedente (rendimento
+     crescente): modulo i = base·(1 + GAIN·(i−1)).
+       moduleSum(L) = Σ_{i=1..L} (1 + GAIN·(i−1)) = L + GAIN·L·(L−1)/2
+     Es. (GAIN 0.22): L1=1.0 · L2=2.2 · L3=3.66 · L4=5.32 · L5=7.2
+     L'UPKEEP invece scala LINEARMENTE (ogni modulo consuma uguale) → l'output
+     per slot sale, ma il costo cresce (vedi stepCost). */
+  const GAIN = 0.22;
+  function moduleSum(level) {
+    const L = Math.max(1, level || 1);
+    return L + GAIN * L * (L - 1) / 2;
+  }
+  /* Compat: vecchio nome usato altrove → ora resa cumulata dei moduli. */
+  function levelScale(level) { return moduleSum(level); }
+
+  /* Footprint slot di una struttura a un dato livello = slot-base × livello. */
+  function slotFootprint(def, level) {
+    return (def && def.slots ? def.slots : 1) * Math.max(1, level || 1);
+  }
+
+  /* Costo/tempo del modulo che porta AL livello L (decisione #38: escalano).
+     Costo ×L (freno forte sul "tall"); tempo più dolce (×1 + 0.3·(L−1)). */
+  function scaleCost(cost, factor) {
+    const out = {};
+    Object.keys(cost || {}).forEach(function (k) { out[k] = Math.round(cost[k] * factor); });
+    return out;
+  }
+  function stepCost(def, toLevel) {
+    return scaleCost(def.cost || {}, Math.max(1, toLevel || 1));
+  }
+  function stepTime(def, toLevel) {
+    const L = Math.max(1, toLevel || 1);
+    return Math.round((def.time || 1) * (1 + 0.3 * (L - 1)));
+  }
 
   root.ORION = root.ORION || {};
   root.ORION.structures = {
     CATEGORIES: CATEGORIES,
     STRUCTURES: STRUCTURES,
+    GAIN: GAIN,
     get: get,
     byCategory: byCategory,
     buildableOn: buildableOn,
     levelScale: levelScale,
+    moduleSum: moduleSum,
+    slotFootprint: slotFootprint,
+    stepCost: stepCost,
+    stepTime: stepTime,
     HABITABLE: HABITABLE,
     ORBITAL: ORBITAL
   };

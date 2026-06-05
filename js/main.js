@@ -1529,7 +1529,10 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
   // se la popolazione supera la capacità abitativa → spinge il giocatore a
   // sviluppare l'habitat senza dirglielo esplicitamente.
   const hospLvl = (colony.structures['ospedale'] && colony.structures['ospedale'].level) || 0;
-  const housingCap = CFG.POP_HOUSING_BASE + habit * CFG.POP_HOUSING_PER_LEVEL + hospLvl * CFG.POP_HOSPITAL_HOUSING;
+  const Sm = ORION.structures;
+  const housingCap = CFG.POP_HOUSING_BASE
+    + (habit > 0 ? Sm.moduleSum(habit) : 0) * CFG.POP_HOUSING_PER_LEVEL
+    + (hospLvl > 0 ? Sm.moduleSum(hospLvl) : 0) * CFG.POP_HOSPITAL_HOUSING;
   const crowd = housingCap > 0 ? total / housingCap : 99;
   if (crowd > CFG.POP_CROWD_START) {
     const crowdPen = Math.max(0.05, 1 - (crowd - CFG.POP_CROWD_START) * CFG.POP_CROWD_SLOPE);
