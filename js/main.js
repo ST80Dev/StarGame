@@ -1399,10 +1399,11 @@ function renderPlanetStruttureTab(host, planet, colony) {
   const inQueue = colony.queue.reduce(function (a, q) {
     const d = S.get(q.id); return a + ((d && d.slots) || 1);
   }, 0);
+  const queueCount = colony.queue.length;
 
   let html = '<div class="sysinfo">' +
     '<p class="planet-slots">Slot · <strong>' + (used + inQueue) + ' / ' + planet.slots + '</strong>' +
-      (inQueue ? ' <span class="planet-slots__queue">(' + inQueue + ' in coda)</span>' : '') + '</p>';
+      (queueCount ? ' <span class="planet-slots__queue">(' + queueCount + ' ' + (queueCount === 1 ? 'progetto' : 'progetti') + ' in coda · ' + inQueue + ' slot)</span>' : '') + '</p>';
 
   // costruite
   const builtIds = Object.keys(colony.structures);
