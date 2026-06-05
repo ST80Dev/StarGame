@@ -1399,10 +1399,11 @@ function renderPlanetStruttureTab(host, planet, colony) {
   const inQueue = colony.queue.reduce(function (a, q) {
     const d = S.get(q.id); return a + ((d && d.slots) || 1);
   }, 0);
+  const queueCount = colony.queue.length;
 
   let html = '<div class="sysinfo">' +
     '<p class="planet-slots">Slot · <strong>' + (used + inQueue) + ' / ' + planet.slots + '</strong>' +
-      (inQueue ? ' <span class="planet-slots__queue">(' + inQueue + ' in coda)</span>' : '') + '</p>';
+      (queueCount ? ' <span class="planet-slots__queue">(' + queueCount + ' ' + (queueCount === 1 ? 'progetto' : 'progetti') + ' in coda · ' + inQueue + ' slot)</span>' : '') + '</p>';
 
   // costruite
   const builtIds = Object.keys(colony.structures);
@@ -1659,15 +1660,36 @@ function renderCantieriSection(colony, planet) {
   if (hasHangar) {
     const sShips = colony.ships && colony.ships.explorer || 0;
     const queue = colony.assets.shipQueue || [];
-    const payOk = canPay(shipCost);
+    /* Decisione #41: cantieri (build paralleli) + attracchi (porto a terra). */
+    const E = ORION.expedition || {};
+    const buildSlots = E.hangarBuildSlots ? E.hangarBuildSlots(colony) : 1;
+    const docks = E.hangarDockCapacity ? E.hangarDockCapacity(colony) : 1;
+    const active = E.activeShipBuilds ? E.activeShipBuilds(colony) : queue.length;
+    const flying = E.shipsOnExpedition ? E.shipsOnExpedition(ORION.game, ORION.openPlanetKey) : 0;
+    const bound = sShips + active + flying;
+    const techBonus = E.techSpeedBonus ? E.techSpeedBonus(colony) : 0;
+    const effShipTime = E.applyTechSpeed ? E.applyTechSpeed(shipTime, colony) : shipTime;
+    const cantieriCls = active >= buildSlots ? ' cantieri-cap--full' : '';
+    const portCls = bound >= docks ? ' cantieri-cap--full' : '';
+    const techHtml = techBonus > 0
+      ? ' <span class="cantieri-tech-chip" title="Bonus tecnici: ' + (E.techCountOf ? E.techCountOf(colony) : 0) + ' tecnici → −' + Math.round(techBonus * 100) + '% tempo costruzione">⚙ −' + Math.round(techBonus * 100) + '%</span>'
+      : '';
+    const check = E.canBuildShip ? E.canBuildShip(ORION.game, colony, ORION.openPlanetKey) : { ok: payOk };
+    const buildEnabled = payOk && check.ok;
+    const blockReason = !check.ok ? check.reason : (!payOk ? 'Risorse insufficienti' : '');
     html += '<div class="cantieri-row">' +
       '<div class="cantieri-row__head">' +
         '<span class="cantieri-row__glyph" aria-hidden="true">▱</span>' +
         '<span class="cantieri-row__name">Hangar di costruzione</span>' +
         '<span class="cantieri-row__counter">Scafi: <strong>' + sShips + '</strong></span>' +
+      '</div>' +
+      '<div class="cantieri-row__caps">' +
+        '<span class="cantieri-cap' + cantieriCls + '" title="Build paralleli abilitati dal livello dell\'Hangar">Cantieri <strong>' + active + ' / ' + buildSlots + '</strong></span>' +
+        '<span class="cantieri-cap' + portCls + '" title="Posti d\'attracco a terra · in spedizione: ' + flying + '">Attracchi <strong>' + bound + ' / ' + docks + '</strong></span>' +
+        techHtml +
       '</div>';
     queue.forEach(function (q, idx) {
-      const total = shipTime;
+      const total = q.totalTime || effShipTime;
       const remain = Math.max(0, q.duration | 0);
       const pct = Math.round(((total - remain) / total) * 100);
       html += '<div class="struct-item is-queue">' +
@@ -1679,9 +1701,10 @@ function renderCantieriSection(colony, planet) {
         '<button class="btn btn--mini struct-item__cancel" data-cancel-ship="' + idx + '" type="button" title="Annulla (rimborso 50%)">×</button>' +
       '</div>';
     });
+    const buildAttrs = buildEnabled ? '' : (' disabled title="' + escapeHtml(blockReason) + '"');
     html += '<div class="cantieri-row__build">' +
-      '<span class="cantieri-row__cost">' + costStr(shipCost) + ' · ' + shipTime + ' I</span>' +
-      '<button class="btn btn--mini" data-build-ship type="button"' + (payOk ? '' : ' disabled') + '>+ Scafo esploratore</button>' +
+      '<span class="cantieri-row__cost">' + costStr(shipCost) + ' · ' + effShipTime + ' I' + (techBonus > 0 ? ' <span class="cantieri-row__base">(' + shipTime + ' base)</span>' : '') + '</span>' +
+      '<button class="btn btn--mini" data-build-ship type="button"' + buildAttrs + '>+ Scafo esploratore</button>' +
     '</div></div>';
   }
 
@@ -1690,6 +1713,9 @@ function renderCantieriSection(colony, planet) {
     const avg = crews.length ? (ORION.expedition.averageXp(crews)).toFixed(1) : '0';
     const queue = colony.assets.crewQueue || [];
     const payOk = canPay(crewCost);
+    const E2 = ORION.expedition || {};
+    const techBonus2 = E2.techSpeedBonus ? E2.techSpeedBonus(colony) : 0;
+    const effCrewTime = E2.applyTechSpeed ? E2.applyTechSpeed(crewTime, colony) : crewTime;
     html += '<div class="cantieri-row">' +
       '<div class="cantieri-row__head">' +
         '<span class="cantieri-row__glyph" aria-hidden="true">⚔</span>' +
@@ -1699,7 +1725,7 @@ function renderCantieriSection(colony, planet) {
         '</span>' +
       '</div>';
     queue.forEach(function (q, idx) {
-      const total = crewTime;
+      const total = q.totalTime || effCrewTime;
       const remain = Math.max(0, q.duration | 0);
       const pct = Math.round(((total - remain) / total) * 100);
       html += '<div class="struct-item is-queue">' +
@@ -1712,7 +1738,7 @@ function renderCantieriSection(colony, planet) {
       '</div>';
     });
     html += '<div class="cantieri-row__build">' +
-      '<span class="cantieri-row__cost">' + costStr(crewCost) + ' · ' + crewTime + ' I</span>' +
+      '<span class="cantieri-row__cost">' + costStr(crewCost) + ' · ' + effCrewTime + ' I' + (techBonus2 > 0 ? ' <span class="cantieri-row__base">(' + crewTime + ' base)</span>' : '') + '</span>' +
       '<button class="btn btn--mini" data-build-crew type="button"' + (payOk ? '' : ' disabled') + '>+ Equipaggio esploratore</button>' +
     '</div></div>';
   }
@@ -1725,7 +1751,7 @@ function tryBuildShip() {
   const g = ORION.game;
   const colony = g.colonies[ORION.openPlanetKey];
   const planet = ORION.currentPlanet;
-  const r = ORION.planet.startShipBuild(colony, planet);
+  const r = ORION.planet.startShipBuild(colony, planet, g, ORION.openPlanetKey);
   if (!r.ok) { console.info('Costruzione scafo rifiutata:', r.reason); showToast(r.reason); return; }
   pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione di uno <strong>scafo esploratore</strong> su ' + planet.name + bodyTagHtml(planet.systemId) + '.', 'planet');
   persistGame(g);
@@ -2150,6 +2176,10 @@ const DEFAULT_AUTOPAUSE = {
   /* M07 (decisione #37): pausa solo su esiti notevoli. Non su launch
      (azione utente), né su ship-built/crew-formed (frequenti). */
   'expedition-arrived': true, 'expedition-ship-lost': true, 'expedition-discovery': true,
+  /* Decisione #41: cronaca info quando una nave rientra a porto saturo
+     (in orbita parcheggio). Default OFF: è un'informazione, non un evento
+     critico. L'utente può accenderla dall'overlay. */
+  'expedition-dock-overflow': false,
   /* M07.1 (decisione #40): le 2 segnalazioni urgenti del Governatore
      si auto-pausano (carenze in arrivo e coda ferma da troppo); le 3
      strategiche (slot liberi, pop vicina al tetto, veterani inattivi)
@@ -2353,6 +2383,7 @@ function showEventOverlay(events) {
     'expedition-arrived': 'Spedizione: sistema esplorato',
     'expedition-ship-lost': 'Spedizione: scafo perso',
     'expedition-discovery': 'Spedizione: scoperta fortuita',
+    'expedition-dock-overflow': 'Hangar: nave in orbita parcheggio',
     'gov-queue-empty': 'Governatore: coda di costruzione ferma',
     'gov-slots-idle': 'Governatore: slot inutilizzati',
     'gov-pop-near-cap': 'Governatore: popolazione vicina al tetto',
@@ -2516,6 +2547,8 @@ function chronicleEvent(ev) {
       (ev.shipLost ? ' · scafo perso' : ' · equipaggio promosso (+1 xp)') + '.', 'explore');
   } else if (ev.kind === 'expedition-discovery') {
     pushChronicle(ds + ' — <strong>Scoperta fortuita</strong>: l\'equipaggio porta in patria osservazioni inattese.', 'explore');
+  } else if (ev.kind === 'expedition-dock-overflow') {
+    pushChronicle(ds + ' — Porto saturo su ' + pname + ptag + ' (' + (ev.bound || '?') + '/' + (ev.docks || '?') + '): la nave rientrata resta in <strong>orbita parcheggio</strong> in attesa di un attracco libero.', 'planet');
   } else if (ev.kind === 'gov-queue-empty') {
     pushChronicle(ds + ' — <strong>Governatore di ' + pname + ptag + '</strong>: la coda di costruzione è ferma — i cantieri attendono ordini.', 'planet');
     if (ORION.tutorial) ORION.tutorial.fire('governor');

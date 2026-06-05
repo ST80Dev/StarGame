@@ -619,16 +619,24 @@
     });
   }
 
-  function startShipBuild(colony, planet) {
+  function startShipBuild(colony, planet, game, colonyKey) {
     ensureAssets(colony);
-    if (!hasStructLevel(colony, 'cantiere-navale', 1)) {
+    /* Decisione #41: check di capacità hangar (cantieri + attracchi).
+       Se ORION.expedition è caricato, deleghiamo a canBuildShip; altrimenti
+       fallback al solo controllo di esistenza hangar (test headless). */
+    const E = root.ORION && root.ORION.expedition;
+    if (E && E.canBuildShip) {
+      const check = E.canBuildShip(game, colony, colonyKey);
+      if (!check.ok) return check;
+    } else if (!hasStructLevel(colony, 'cantiere-navale', 1)) {
       return { ok: false, reason: 'Hangar di costruzione non costruito' };
     }
     const cost = expCfg('SHIP_COST', { met: 25, en: 12 });
-    const time = expCfg('SHIP_TIME', 10);
+    let time = expCfg('SHIP_TIME', 10);
+    if (E && E.applyTechSpeed) time = E.applyTechSpeed(time, colony);
     if (!canPay(colony, cost)) return { ok: false, reason: 'Risorse insufficienti' };
     pay(colony, cost);
-    colony.assets.shipQueue.push({ kind: 'explorer', duration: time });
+    colony.assets.shipQueue.push({ kind: 'explorer', duration: time, totalTime: time });
     return { ok: true };
   }
 
@@ -638,10 +646,14 @@
       return { ok: false, reason: 'Accademia militare non costruita' };
     }
     const cost = expCfg('CREW_COST', { food: 12, water: 6 });
-    const time = expCfg('CREW_TIME', 12);
+    let time = expCfg('CREW_TIME', 12);
+    /* Decisione #41: i tecnici accelerano anche l'addestramento equipaggi
+       (analogia: logistica/ingegneria di supporto). */
+    const E = root.ORION && root.ORION.expedition;
+    if (E && E.applyTechSpeed) time = E.applyTechSpeed(time, colony);
     if (!canPay(colony, cost)) return { ok: false, reason: 'Risorse insufficienti' };
     pay(colony, cost);
-    colony.assets.crewQueue.push({ kind: 'explorer', duration: time });
+    colony.assets.crewQueue.push({ kind: 'explorer', duration: time, totalTime: time });
     return { ok: true };
   }
 

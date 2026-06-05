@@ -263,11 +263,23 @@
     {
       id: 'struct:cantiere-navale', tag: 'Strutture · ▱', title: 'Hangar di costruzione',
       body:
-        '<p>Servirà a costruire astronavi, grandi astronavi e stazioni. Oggi non produce nulla di visibile, ' +
-        'ma <strong>occupa 2 slot</strong> (struttura grossa) e ha upkeep alto (4 en + 1 met/I).</p>' +
-        '<p><strong>Pianificazione:</strong> non costruirlo sul pianeta natale se hai solo 7-8 slot — meglio dedicarlo ' +
-        'a una colonia "militare" specializzata.</p>' +
-        '<p><strong>Concatenazione:</strong> l\'<em>Accademia militare</em> e questa formano insieme il polo militare.</p>'
+        '<p>Cuore della tua flotta: <strong>costruisce astronavi</strong> e fa da <strong>porto a terra</strong> ' +
+        'per quelle a riposo. Occupa 2 slot per modulo (struttura grossa) e ha upkeep 4 en + 1 met/I.</p>' +
+        '<p><strong>Doppia capacità (cresce col livello):</strong></p>' +
+        '<ul style="margin: 4px 0 6px 18px; font-size: 0.92em;">' +
+          '<li><strong>Cantieri</strong> (navi costruibili in parallelo): 2 · 3 · 4 · 5 · 7 ai livelli 1-5</li>' +
+          '<li><strong>Attracchi</strong> (posti d\'attracco a terra): 4 · 8 · 13 · 18 · 25</li>' +
+        '</ul>' +
+        '<p>Più hangar sulla stessa colonia <strong>cumulano</strong> entrambe le capacità.</p>' +
+        '<p><strong>Bonus tecnici:</strong> la classe <em>tecnici</em> (vedi tab Popolazione) accelera la costruzione ' +
+        'di scafi/equipaggi — <strong>−2.5% tempo per tecnico</strong> oltre la soglia 2, cap −30%. Una colonia "scientifica" ' +
+        'con molti tecnici vara navi più in fretta.</p>' +
+        '<p><strong>Quando il porto si satura</strong> (limite raggiunto): non puoi costruire altre navi finché non lanci ' +
+        'una spedizione (libera attracco) o espandi l\'Hangar. Le navi che rientrano e non hanno posto restano in ' +
+        '"orbita parcheggio" (nessuna penalità oggi — sarà M09: esposte a cattura).</p>' +
+        '<p><strong>Ganci futuri:</strong> il <em>Porto stellare orbitale</em> (M16) darà capacità di attracco molto più ampia; ' +
+        'il <em>Bacino orbitale</em> (M15) servirà alle grandi navi (incrociatori/dreadnought/ammiraglie).</p>' +
+        '<p><strong>Concatenazione:</strong> l\'<em>Accademia militare</em> forma gli equipaggi che servono per usare le navi.</p>'
     },
     {
       id: 'struct:accademia-militare', tag: 'Strutture · ⚔', title: 'Accademia militare',
