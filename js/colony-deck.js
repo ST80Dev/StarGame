@@ -1,6 +1,6 @@
 /* =====================================================================
    ORION EMPIRES — colony-deck.js
-   Modulo M07.2 (decisione #42): "Plancia di Colonia".
+   Modulo M07.2 (decisione #44): "Plancia di Colonia".
 
    Overlay DOM montato come sibling del .planet-holder quando il livello
    attivo è Pianeta E il corpo è colonizzato. La sfera bakata di
@@ -8,7 +8,7 @@
    (top-bar / risorse / strutture / coda / popolazione / cronaca) per dare
    al *centro* il colpo d'occhio che oggi vive solo nella sidebar.
 
-   Principi (decisione #42):
+   Principi (decisione #44):
      - Centro = colpo d'occhio + entry point ad alta frequenza (espandi
        modulo, annulla in coda). Sincronia con la sidebar: stessa azione,
        stesso effetto, niente "il deck sa cose che la sidebar non sa".
@@ -189,7 +189,7 @@
     }
 
     /* Strutture costruite — entry-point per "+Espandi" e "Smantella".
-       (Costruire nuovi tipi resta solo in sidebar — decisione #42.)        */
+       (Costruire nuovi tipi resta solo in sidebar — decisione #44.)        */
     _renderStructures() {
       const colony = this.colony, planet = this.planet;
       const S = ORION.structures;

@@ -588,12 +588,15 @@
         const q = sq[i];
         q.duration = (q.duration || 0) - 1;
         if (q.duration <= 0) {
+          /* M08 Fase A: il counter incrementa il KIND completato (default
+             'explorer' per retro-compat con shipQueue legacy senza kind). */
           colony.ships = colony.ships || { explorer: 0 };
-          colony.ships.explorer = (colony.ships.explorer || 0) + 1;
+          const k = q.kind || 'explorer';
+          colony.ships[k] = (colony.ships[k] || 0) + 1;
           events.push({
             kind: 'ship-built',
             colony: colony, planet: planet,
-            shipKind: q.kind || 'explorer',
+            shipKind: k,
             impulso: game.timeImpulsi
           });
         } else {
@@ -646,6 +649,18 @@
     game.expeditions = still;
   }
 
+  /* 6d) M08 Fase A — flotte mobili. Itera game.fleets[] facendo avanzare
+        gli ordini di movimento (idle/move/explore/patrol/return). NIENTE
+        rimozione automatica: le flotte sono entità persistenti, vengono
+        sciolte solo esplicitamente via ORION.fleet.dissolveFleet. */
+  function processFleets(game, events) {
+    if (!Array.isArray(game.fleets) || !game.fleets.length) return;
+    if (!root.ORION.fleet || !root.ORION.fleet.tick) return;
+    for (let i = 0; i < game.fleets.length; i++) {
+      root.ORION.fleet.tick(game, game.fleets[i], events);
+    }
+  }
+
   /* 6) Osservatorio: avanza scansione, sblocca avanzate al traguardo. */
   function processObservatory(game, colony, planet, events) {
     const obs = colony.structures['osservatorio'];
@@ -691,6 +706,8 @@
     }
     /* M07: spedizioni in volo (1 tick per ogni Impulso). */
     processExpeditions(game, events);
+    /* M08 Fase A: flotte mobili (movimento + ordini). */
+    processFleets(game, events);
     /* M07.1 (decisione #40): Governatore coloniale — Tier 1 "Vigile".
        Letture sullo stato già aggiornato del tick corrente; non agisce,
        emette solo eventi `gov-*` che la chronicle/auto-pause gestiscono
@@ -830,6 +847,15 @@
         const e = game.expeditions[i];
         if (!e || e.status === 'done') continue;
         const d = (e.status === 'outbound') ? e.durationOut : e.durationBack;
+        if (d > 0 && d < best) best = d;
+      }
+    }
+    /* M08 Fase A: flotte in transito */
+    if (Array.isArray(game.fleets)) {
+      for (let i = 0; i < game.fleets.length; i++) {
+        const f = game.fleets[i];
+        if (!f || !f.location || f.location.status !== 'in-transit') continue;
+        const d = f.etaImpulsi || 0;
         if (d > 0 && d < best) best = d;
       }
     }

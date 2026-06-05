@@ -999,6 +999,18 @@ button { font-family: inherit; }
 }
 .struct-cat > summary::-webkit-details-marker { display: none; }
 .struct-cat[open] > summary { color: var(--c-text); }
+.struct-cat__count {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  font-family: var(--font-data);
+  font-size: 0.62rem;
+  letter-spacing: 0;
+  color: var(--c-text-faint);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 999px;
+}
 
 .struct-list {
   display: flex;
@@ -1008,9 +1020,11 @@ button { font-family: inherit; }
 }
 .struct-item {
   display: grid;
-  grid-template-columns: 1.6em 1fr auto auto;
+  grid-template-columns: 1.6em 1fr;
+  grid-auto-columns: auto;
+  grid-auto-flow: column;
   align-items: center;
-  gap: 6px;
+  gap: 3px;
   padding: 6px 8px;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid var(--c-border-soft);
@@ -1019,6 +1033,8 @@ button { font-family: inherit; }
   font-size: 0.74rem;
   color: var(--c-text);
 }
+/* Lascia un po' di respiro fra blocco-testo e cluster bottoni a destra. */
+.struct-item__main + * { margin-left: 4px; }
 .struct-item__glyph {
   text-align: center;
   color: var(--c-accent);
@@ -1034,6 +1050,44 @@ button { font-family: inherit; }
   font-size: 0.68rem;
   color: var(--c-accent-warm);
   margin-left: 4px;
+}
+/* Badge livello — gradiente da pallido a oro col progresso lvl/maxLevel.
+   Sostituisce il vecchio "×N" testuale: dà a colpo d'occhio quanto è
+   sviluppata la struttura e non si confonde col "Prossimo · L<N+1>"
+   nella riga del costo. */
+.struct-item__lvl-badge {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  margin-right: 6px;
+  vertical-align: 1px;
+  line-height: 1.25;
+}
+.struct-item__lvl-badge.lv-1 {
+  color: #7aa7c4;
+  background: rgba(122, 167, 196, 0.10);
+}
+.struct-item__lvl-badge.lv-2 {
+  color: var(--c-accent);
+  background: rgba(47, 230, 224, 0.14);
+}
+.struct-item__lvl-badge.lv-3 {
+  color: var(--c-accent-warm);
+  background: rgba(255, 194, 74, 0.16);
+}
+.struct-item__lvl-badge.lv-4 {
+  color: #ff9d3c;
+  background: rgba(255, 157, 60, 0.18);
+}
+.struct-item__lvl-badge.lv-max {
+  color: #ffd24a;
+  background: rgba(255, 210, 74, 0.22);
+  box-shadow: 0 0 8px rgba(255, 210, 74, 0.30);
 }
 .struct-item__cat {
   font-size: 0.66rem;
@@ -1079,14 +1133,21 @@ button { font-family: inherit; }
   border-color: var(--c-accent-warm);
   background: color-mix(in srgb, var(--c-accent-warm) 22%, transparent);
 }
-.struct-item .btn--icon {
-  padding: 2px 10px;
-  font-size: 1.2rem;
+.struct-item .btn--mini.btn--icon {
+  padding: 0 5px;
+  font-size: 1.4rem;
+  min-width: 22px;
+  border-color: transparent;
+  background: transparent;
+}
+.struct-item .btn--mini.btn--icon:hover:not(:disabled) {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--c-accent-warm) 18%, transparent);
 }
 .struct-item__locked--icon {
-  font-size: 1.2rem;
+  font-size: 1.4rem;
   font-weight: 800;
-  padding: 0 10px;
+  padding: 0 5px;
   color: color-mix(in srgb, var(--c-accent-warm) 45%, var(--c-text-faint));
 }
 .struct-item__cost--max {
@@ -1157,16 +1218,24 @@ button { font-family: inherit; }
 .struct-item.is-queue.is-demolish .progress-bar__fill {
   background: var(--c-bad);
 }
-.struct-item__demolish {
-  padding: 2px 8px;
+.struct-item .btn--mini.struct-item__demolish {
+  padding: 0 4px;
   font-family: var(--font-data);
-  font-size: 0.85rem;
+  font-size: 1.05rem;
   text-transform: none;
   letter-spacing: 0;
   color: var(--c-bad);
-  opacity: 0.7;
+  opacity: 0.65;
+  border-color: transparent;
+  background: transparent;
+  min-width: 22px;
+  line-height: 1;
 }
-.struct-item__demolish:hover { opacity: 1; }
+.struct-item .btn--mini.struct-item__demolish:hover:not(:disabled) {
+  opacity: 1;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--c-bad) 18%, transparent);
+}
 .struct-item__cancel {
   grid-column: 3 / -1;
   padding: 2px 8px;
@@ -1183,27 +1252,28 @@ button { font-family: inherit; }
 }
 /* M06.7: bottone "ⓘ" della scheda strutture — più piccolo, accento viola
    per distinguerlo da "Costruisci" (azione vs informazione). */
-.struct-item__info {
+.struct-item .btn--mini.struct-item__info {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
   padding: 0 !important;
-  border: 1.4px solid var(--c-violet);
+  border: 1.4px solid transparent !important;
   border-radius: 50%;
   color: var(--c-violet);
   font-family: var(--font-display);
   font-style: italic;
   font-weight: 700;
-  font-size: 0.78rem;
+  font-size: 0.95rem;
   line-height: 1;
-  opacity: 0.8;
+  opacity: 0.85;
   background: transparent;
 }
-.struct-item__info:hover {
+.struct-item .btn--mini.struct-item__info:hover {
   opacity: 1;
-  background: color-mix(in srgb, var(--c-violet) 18%, transparent);
+  background: color-mix(in srgb, var(--c-violet) 22%, transparent);
 }
 
 /* btn--mini lite (riusa lo stile dei mini-pulsanti dell'overlay galassia) */
@@ -2346,6 +2416,7 @@ select.main-menu__input { cursor: pointer; }
 .cantieri-row__counter { font-size: 0.88em; color: var(--c-text, #d8def0); }
 .cantieri-row__build {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
@@ -2353,6 +2424,15 @@ select.main-menu__input { cursor: pointer; }
 }
 .cantieri-row__cost { font-size: 0.85em; color: var(--c-muted, #8a93b8); }
 .cantieri-row__base { color: var(--c-muted, #8a93b8); opacity: 0.65; font-size: 0.88em; }
+/* M08 Fase A: il dropdown classe nave prende l'intera prima riga del
+   build-row e il pulsante "+ Costruisci" non si comprime — evitiamo
+   troncature del label nel pannello stretto a destra. Le altre righe
+   (Accademia, senza dropdown) restano col comportamento di default. */
+.cantieri-row__build .cantieri-row__select { flex: 1 1 100%; }
+.cantieri-row__build:has(.cantieri-row__select) .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 
 /* Decisione #41: capacità Hangar (cantieri + attracchi) + chip tecnici */
 .cantieri-row__caps {
@@ -2383,6 +2463,127 @@ select.main-menu__input { cursor: pointer; }
   color: #a8d4ee;
   font-family: var(--font-mono, monospace);
 }
+
+/* Roster equipaggi (tab Forze): lista per-equipaggio a riposo / in missione */
+.crew-roster {
+  list-style: none;
+  margin: 4px 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.crew-roster__item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(110, 90, 200, 0.07);
+  border: 1px solid rgba(125, 110, 220, 0.20);
+  border-radius: 8px;
+  font-size: 0.85em;
+}
+.crew-roster__item--away {
+  background: rgba(220, 160, 70, 0.07);
+  border-color: rgba(220, 160, 70, 0.22);
+}
+.crew-roster__rank {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.78em;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 9px;
+  background: rgba(140, 110, 230, 0.16);
+  color: #c8b6ff;
+}
+.crew-roster__rank--t1 { background: rgba(90, 170, 220, 0.18); color: #a8d4ee; }
+.crew-roster__rank--t2 { background: rgba(120, 200, 140, 0.18); color: #aee6c0; }
+.crew-roster__rank--t3 { background: rgba(230, 190, 90, 0.20); color: #f0d8a0; }
+.crew-roster__id {
+  color: var(--c-text, #d8def0);
+  font-family: var(--font-mono, monospace);
+}
+.crew-roster__status {
+  margin-left: auto;
+  font-size: 0.85em;
+  color: var(--c-muted, #8a93b8);
+}
+.crew-roster__status--rest { color: #9fd0a8; }
+.crew-roster__status--away { color: #e6b878; }
+
+/* Comandanti nominati (decisione #43, M07 → gancio M14): roster figure
+   con nome/rango/specializzazione/tratto. Stile sobrio, accento ambra
+   per distinguersi dal viola degli equipaggi anonimi. */
+.commander-row {
+  background: rgba(220, 170, 90, 0.04);
+  border: 1px solid rgba(220, 170, 90, 0.18);
+}
+.commander-row__hint {
+  margin: 6px 0 0;
+  font-size: 0.78em;
+  color: var(--c-muted, #8a93b8);
+  font-style: italic;
+}
+.commander-roster {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.commander-roster__item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px 8px;
+  background: rgba(220, 170, 90, 0.07);
+  border: 1px solid rgba(220, 170, 90, 0.22);
+  border-radius: 8px;
+  font-size: 0.85em;
+}
+.commander-roster__rank {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.74em;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 9px;
+  background: rgba(230, 180, 90, 0.20);
+  color: #f0d8a0;
+}
+.commander-roster__name {
+  color: var(--c-text, #d8def0);
+  font-weight: 600;
+  font-family: var(--font-display, var(--font-mono, monospace));
+  letter-spacing: 0.02em;
+}
+.commander-roster__spec {
+  font-size: 0.78em;
+  padding: 1px 7px;
+  background: rgba(120, 200, 140, 0.14);
+  border: 1px solid rgba(120, 200, 140, 0.32);
+  border-radius: 9px;
+  color: #aee6c0;
+}
+.commander-roster__trait {
+  font-size: 0.78em;
+  padding: 1px 7px;
+  background: rgba(140, 110, 230, 0.14);
+  border: 1px solid rgba(140, 110, 230, 0.30);
+  border-radius: 9px;
+  color: #c8b6ff;
+  font-style: italic;
+}
+.commander-roster__status {
+  margin-left: auto;
+  font-size: 0.78em;
+  color: var(--c-muted, #8a93b8);
+}
+.commander-roster__status--idle { color: #c8b6ff; }
 
 /* xp chip viola */
 .xp-chip {
@@ -2608,7 +2809,7 @@ select.main-menu__input { cursor: pointer; }
 }
 
 /* =====================================================================
-   M07.2 — Plancia di Colonia (decisione #42)
+   M07.2 — Plancia di Colonia (decisione #44)
    Overlay DOM sopra il planet-canvas: widget a cardinali (top-bar /
    risorse / strutture / coda / popolazione / cronaca) per dare al centro
    il colpo d'occhio e le azioni ad alta frequenza (espandi modulo,
@@ -3120,3 +3321,202 @@ select.main-menu__input { cursor: pointer; }
   .deck-res { flex: 1 1 110px; min-width: 110px; }
 }
 
+/* =====================================================================
+   M08 Fase A — Vista Flotte + overlay
+   ===================================================================== */
+.cantieri-row__select {
+  background: rgba(20, 24, 38, 0.85);
+  color: var(--c-text, #e9ecf6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-family: inherit;
+  font-size: 0.9em;
+  margin-right: 4px;
+}
+.cantieri-row__select:focus {
+  outline: 1px solid var(--c-cyan, #2fe6e0);
+}
+
+.fleet-view {
+  padding: 16px 20px;
+  color: var(--c-text, #e9ecf6);
+  height: 100%;
+  overflow-y: auto;
+}
+.fleet-view__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.fleet-view__title {
+  margin: 0;
+  font-family: var(--font-display, sans-serif);
+  font-size: 1.4em;
+  letter-spacing: 0.05em;
+}
+.fleet-view__sub {
+  font-size: 0.6em;
+  opacity: 0.6;
+  margin-left: 8px;
+  letter-spacing: 0.08em;
+}
+.fleet-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fleet-item {
+  background: rgba(20, 24, 38, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 10px 12px;
+}
+.fleet-item__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.fleet-item__name { flex: 1; }
+.fleet-status {
+  font-size: 0.85em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: var(--font-mono, monospace);
+  background: rgba(255, 255, 255, 0.06);
+}
+.fleet-status--docked   { color: var(--c-cyan, #2fe6e0); }
+.fleet-status--in-transit { color: var(--c-amber, #ffae5c); }
+.fleet-status--orbiting { color: #b993ff; }
+.fleet-item__row,
+.fleet-item__ships {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 0.9em;
+  opacity: 0.9;
+  margin: 2px 0;
+}
+.fleet-item__actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+/* Overlays creazione/ordini — riusa il pattern di expedition-pick-overlay. */
+.fleet-create-overlay,
+.fleet-orders-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 360;
+  background: rgba(2, 4, 12, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.fleet-create-overlay[hidden],
+.fleet-orders-overlay[hidden] { display: none; }
+.fleet-create-overlay__panel,
+.fleet-orders-overlay__panel {
+  background: rgba(14, 18, 32, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 18px 20px;
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  color: var(--c-text, #e9ecf6);
+}
+.fleet-create-overlay__head,
+.fleet-orders-overlay__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.fleet-create-overlay__head h2,
+.fleet-orders-overlay__head h2 {
+  margin: 0;
+  font-family: var(--font-display, sans-serif);
+  font-size: 1.2em;
+}
+.fleet-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+  font-size: 0.95em;
+}
+.fleet-field select,
+.fleet-field input[type="text"] {
+  background: rgba(20, 24, 38, 0.85);
+  color: var(--c-text, #e9ecf6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  padding: 4px 6px;
+  font-family: inherit;
+}
+.fleet-create-overlay__actions,
+.fleet-order-block {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.fleet-create-overlay__actions { justify-content: flex-end; }
+.fleet-order-block h3 {
+  margin: 0;
+  flex: 0 0 100%;
+  font-size: 0.95em;
+  letter-spacing: 0.04em;
+  font-family: var(--font-display, sans-serif);
+}
+.fleet-order-block select {
+  flex: 1;
+  min-width: 140px;
+  background: rgba(20, 24, 38, 0.85);
+  color: var(--c-text, #e9ecf6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-family: inherit;
+}
+.fleet-manage-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 0.9em;
+}
+.fleet-manage-table th,
+.fleet-manage-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  text-align: left;
+}
+.fleet-manage-table th {
+  font-family: var(--font-display, sans-serif);
+  letter-spacing: 0.04em;
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+.fleet-crew-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0 4px;
+  font-size: 0.95em;
+}
