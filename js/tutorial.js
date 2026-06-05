@@ -146,15 +146,15 @@
       tag: '§9',
       title: 'Popolazione e capacità di carico',
       body:
-        '<p>La popolazione è in <strong>unità</strong> (mostrate come abitanti reali). Ogni unità <strong>consuma cibo e ' +
-        'acqua</strong>: la colonia cresce finché la sua <strong>produzione locale</strong> supera il consumo, poi si ferma ' +
-        'in <strong>plateau</strong> — un equilibrio stabile, <strong>senza carestia</strong>.</p>' +
-        '<p>Per alzare il tetto costruisci più <strong>fattorie</strong> e <strong>impianti idrici</strong> (conta il più ' +
-        'scarso dei due — legge del minimo). Ogni livello in più costa progressivamente più tempo: <strong>salire è sempre ' +
-        'più lento</strong>, anche con risorse in abbondanza.</p>' +
-        '<p>I mondi grandi e ospitali possono arrivare a <strong>miliardi</strong> di abitanti, ma la sola agricoltura ' +
-        'locale non basta: saturarli del tutto è un <strong>obiettivo di lungo periodo</strong> che richiederà import via ' +
-        'rotte commerciali (M12). I mondi aridi e le lune restano piccoli finché non li rifornisci.</p>'
+        '<p>La popolazione è in <strong>unità</strong> (mostrate come abitanti reali) e cresce <strong>lentamente, di lungo ' +
+        'periodo</strong>: ogni livello in più costa progressivamente più tempo. Prima o poi la crescita si ferma in ' +
+        '<strong>plateau</strong> — un equilibrio stabile, <strong>senza carestia</strong>.</p>' +
+        '<p>Il plateau non è mai casuale: significa che <strong>qualcosa</strong> non regge più la popolazione. Possono ' +
+        'essere le risorse, l\'energia, la <strong>morale</strong> di una città che cresce. Quando ti fermi, guarda la ' +
+        'scheda Popolazione: <strong>cosa è calato?</strong> Adatta la colonia di conseguenza e la crescita riprende.</p>' +
+        '<p>I mondi grandi e ospitali possono arrivare a <strong>miliardi</strong> di abitanti, ma è un ' +
+        '<strong>obiettivo di lungo periodo</strong>: richiede una colonia molto sviluppata e, per i mondi più affamati ' +
+        '(deserti, lune), rifornimenti via rotte commerciali (M12).</p>'
     },
     {
       id: 'advanced',

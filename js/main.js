@@ -1525,6 +1525,17 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
     morale *= 0.6;
     moraleParts.push('×0.6 carenza cibo/acqua');
   }
+  // Sovraffollamento: segnale implicito (decisione #37bis). La morale cala
+  // se la popolazione supera la capacità abitativa → spinge il giocatore a
+  // sviluppare l'habitat senza dirglielo esplicitamente.
+  const hospLvl = (colony.structures['ospedale'] && colony.structures['ospedale'].level) || 0;
+  const housingCap = CFG.POP_HOUSING_BASE + habit * CFG.POP_HOUSING_PER_LEVEL + hospLvl * CFG.POP_HOSPITAL_HOUSING;
+  const crowd = housingCap > 0 ? total / housingCap : 99;
+  if (crowd > CFG.POP_CROWD_START) {
+    const crowdPen = Math.max(0.05, 1 - (crowd - CFG.POP_CROWD_START) * CFG.POP_CROWD_SLOPE);
+    morale *= crowdPen;
+    moraleParts.push('×' + crowdPen.toFixed(2) + ' sovraffollamento');
+  }
   let growthEst = 0;
   if (canGrow) {
     growthEst = CFG.POP_GROWTH_BASE * morale * supplyFactor;
@@ -1573,7 +1584,7 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
         row('Crescita', '<span class="rate ' + (canGrow ? 'rate--pos' : 'rate--neg') + '">' + growthStr + '</span>') +
       '</dl>' +
       '<p class="panel__note">Morale: ' + moraleParts.join(' · ') + '. Moltiplica la crescita pop §9.3.</p>' +
-      '<p class="panel__note">La popolazione cresce finché la produzione locale di <strong>cibo e acqua</strong> supera il consumo, poi si ferma in <strong>plateau</strong> (senza carestia). Più fattorie/impianti idrici alzano il tetto; i grandi mondi richiederanno <strong>import via rotte commerciali</strong> (M12).</p>' +
+      '<p class="panel__note">La crescita si ferma in <strong>plateau</strong> (senza carestia) quando l\'ambiente non regge più popolazione. Entrano in gioco più fattori — risorse, energia, <strong>morale</strong> — e una città che cresce ne mette alla prova di nuovi. Osserva cosa cala e adatta la colonia.</p>' +
       '<p class="sysinfo__sub">Classi funzionali</p>' +
       bars +
       targetHtml +
