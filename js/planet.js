@@ -323,8 +323,11 @@
     /* Popolazione iniziale §9: M06.5 fissa (no più % di popCap). */
     const popBase = Math.max(1, Math.min(opts.popBase || 3, planet.popCap || 12));
     colony.pop.total = popBase;
-    colony.pop.classes.operai = Math.floor(popBase * 0.5);
-    colony.pop.classes.tecnici = popBase - colony.pop.classes.operai;
+    /* Classi frazionarie: la colonia natale nasce 50/50 operai/tecnici come
+       seme. Lo shift di time.js converge poi alla vocazione dedotta dalle
+       strutture costruite (non più int → niente oscillazione a pop bassa). */
+    colony.pop.classes.operai = popBase * 0.5;
+    colony.pop.classes.tecnici = popBase * 0.5;
     /* Stock di avvio M06.5: ridotto a ~55% del buffer M06 (decisione #27)
        — l'atterraggio consuma. Moltiplicatore da preset. */
     const mul = (typeof opts.stockMul === 'number') ? opts.stockMul : 1.0;
