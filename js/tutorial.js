@@ -376,6 +376,25 @@
         '<em>vocazione</em> scelta da te (estrattiva, agricola, militare, ricerca); il Tier 3 <em>Autonomo</em> ' +
         'estenderà la delega ad asset, difese e rotte commerciali. Richiederanno tech dedicati e una <em>figura ' +
         'Governatore</em> da assegnare alla colonia.</p>'
+    },
+    {
+      id: 'commander-promoted', tag: 'Forze · ★', title: 'Un Comandante emerge dall\'equipaggio',
+      body:
+        '<p>Quando un equipaggio raggiunge <strong>xp 5</strong> (rango <em>asso</em>), dal gruppo emerge ' +
+        'naturalmente un <strong>Comandante nominato</strong>: una figura militare con <strong>nome proprio</strong>, ' +
+        '<strong>tratto di personalità</strong> e <strong>specializzazione</strong>.</p>' +
+        '<p>Il Comandante eredita l\'esperienza che il crew aveva accumulato. L\'equipaggio <strong>non viene perso</strong> ' +
+        'ma riparte da zero — sono più persone, l\'ufficiale si stacca e il gruppo si riforma sotto il vuoto lasciato.</p>' +
+        '<p><strong>Specializzazioni</strong> (tre famiglie):</p>' +
+        '<ul>' +
+          '<li><strong>Navigatore</strong> — esperto di rotte iperspaziali</li>' +
+          '<li><strong>Tattico</strong> — comando in battaglia</li>' +
+          '<li><strong>Logista</strong> — supply chain e usura della flotta</li>' +
+        '</ul>' +
+        '<p>I Comandanti vengono elencati nella tab <strong>Forze</strong>. Per ora restano <em>in panchina</em>: ' +
+        'i loro bonus si attiveranno con il modulo <strong>Flotta</strong> (M08), quando potranno essere assegnati ' +
+        'a navi più evolute (corvette, fregate, incrociatori) e portare i bonus della loro specializzazione. ' +
+        'Tienili da parte: sono il nucleo della tua futura ufficialità.</p>'
     }
   ];
 
