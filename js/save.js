@@ -36,7 +36,7 @@
      - M06.6 aggiunge game.tutorial = { enabled, seenLessons }
      Sub-migrazioni componibili: v1→v2 (victory), v2→v3 (chronicle), v3→v4
      (homeWorld:null + colonia operational + tutorial vuoto, retro-compat). */
-  const SCHEMA_VERSION = 6;
+  const SCHEMA_VERSION = 7;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -96,7 +96,11 @@
       expeditions: Array.isArray(game.expeditions) ? game.expeditions : [],
       /* M08 Fase A (decisione #42): flotte mobili. Counter scafi per
          classe vive in colony.ships e viene auto-serializzato. */
-      fleets: Array.isArray(game.fleets) ? game.fleets : []
+      fleets: Array.isArray(game.fleets) ? game.fleets : [],
+      /* Decisione #45: mapping centrale gruppo→capitale. Lo stato
+         capitalState delle singole colonie vive in game.colonies e
+         viene auto-serializzato. */
+      capitals: (game.capitals && typeof game.capitals === 'object') ? game.capitals : {}
     };
   }
 
@@ -189,6 +193,16 @@
         });
       }
       payload.schema = 6;
+    }
+    /* v6 → v7 (Decisione #45): aggiungi game.capitals (lazy: vuoto qui,
+       initFromHome lo popolerà al caricamento). Le colonie esistenti
+       lasciano capitalState undefined → bonusOf fallback su isCapital
+       letto dal mapping centrale. Niente migrazione distruttiva. */
+    if ((payload.schema || 6) < 7) {
+      if (!payload.capitals || typeof payload.capitals !== 'object') {
+        payload.capitals = {};
+      }
+      payload.schema = 7;
     }
     return payload;
   }

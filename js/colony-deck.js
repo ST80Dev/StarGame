@@ -164,7 +164,7 @@
     /* Card risorse XXL (colonna sinistra). */
     _renderResources() {
       const colony = this.colony, planet = this.planet;
-      const out = ORION.planet.structureOutput(colony, planet);
+      const out = ORION.planet.structureOutput(colony, planet, ORION.game);
       const scar = colony._scar;
       const keys = ['met', 'en', 'food', 'water'];
 
@@ -244,7 +244,7 @@
         } else if (isMax) {
           action = '<span class="deck-struct__max" title="Livello massimo (' + maxL + ')">max</span>';
         } else {
-          const check = ORION.planet.canBuild(colony, planet, id);
+          const check = ORION.planet.canBuild(colony, planet, id, ORION.game);
           const nextCost = S.stepCost(def, lvl + 1);
           const nextTime = S.stepTime(def, lvl + 1);
           const costStr = Object.keys(nextCost).map(function (k) {

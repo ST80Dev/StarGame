@@ -93,7 +93,12 @@
         '<strong>costo cresce</strong> a ogni livello: espandere all\'infinito non conviene.</p>' +
         '<p>Le <strong>estrattive</strong> coprono il fabbisogno; le <strong>produttive</strong> (fonderia, raffineria) ' +
         '<strong>moltiplicano</strong> la resa delle estrattive. Con slot limitati devi <strong>scegliere la vocazione</strong> ' +
-        'del pianeta: non puoi avere tutto al massimo. L\'<strong>osservatorio</strong> rivela le risorse avanzate dopo ~10 <span class="ds-unit">Ι</span>.</p>'
+        'del pianeta: non puoi avere tutto al massimo. L\'<strong>osservatorio</strong> rivela le risorse avanzate dopo ~10 <span class="ds-unit">Ι</span>.</p>' +
+        '<p><strong>Laboratorio</strong> e <strong>Osservatorio</strong> sono ganci per la tecnologia: accumulano contatori ' +
+        'che si sbloccheranno con l\'albero tech. Puoi <strong>rinviarli senza penalità</strong>, oggi non danno benefici immediati.</p>' +
+        '<p>Servono più slot? Più avanti sblocchi <strong>Centro di ingegneria planetaria</strong> (bonifica territoriale) e ' +
+        '<strong>Terraformatori</strong>: strutture tech-gated che <strong>espandono lo spazio costruibile</strong> ' +
+        'del pianeta. Inoltre la <strong>capitale di gruppo</strong> riceve +10 slot di riserva.</p>'
     },
     {
       id: 'advance',
@@ -151,14 +156,14 @@
       title: 'Popolazione e capacità di carico',
       body:
         '<p>La popolazione è in <strong>unità</strong> (mostrate come abitanti reali) e cresce <strong>lentamente, di lungo ' +
-        'periodo</strong>: ogni livello in più costa progressivamente più tempo. Prima o poi la crescita si ferma in ' +
-        '<strong>plateau</strong> — un equilibrio stabile, <strong>senza carestia</strong>.</p>' +
-        '<p>Il plateau non è mai casuale: significa che <strong>qualcosa</strong> non regge più la popolazione. Possono ' +
-        'essere le risorse, l\'energia, la <strong>morale</strong> di una città che cresce. Quando ti fermi, guarda la ' +
-        'scheda Popolazione: <strong>cosa è calato?</strong> Adatta la colonia di conseguenza e la crescita riprende.</p>' +
-        '<p>I mondi grandi e ospitali possono arrivare a <strong>miliardi</strong> di abitanti, ma è un ' +
-        '<strong>obiettivo di lungo periodo</strong>: richiede una colonia molto sviluppata e, per i mondi più affamati ' +
-        '(deserti, lune), rifornimenti via rotte commerciali (in arrivo).</p>'
+        'periodo</strong>: ogni livello in più costa progressivamente più tempo.</p>' +
+        '<p>Ogni unità di popolazione <strong>consuma davvero</strong> cibo e acqua dallo stock locale. Se la produzione locale ' +
+        'non basta, lo stock scende → la colonia entra in <strong>allerta</strong> (≤20, malus −10%) o <strong>critico</strong> ' +
+        '(=0, malus −30%). Bastano 3 Impulsi di netto positivo per uscirne.</p>' +
+        '<p><strong>Buffer di tolleranza:</strong> la popolazione cala solo dopo <strong>30 Impulsi consecutivi</strong> di fame ' +
+        'o sete, e poi di 1 unità ogni 30 <span class="ds-unit">Ι</span> — hai sempre il tempo di reagire prima di perdere persone.</p>' +
+        '<p>La crescita si ferma in <strong>plateau</strong> quando produzione = consumo. Guarda la scheda Popolazione per ' +
+        'capire <strong>cosa manca</strong>: più fattorie/impianti idrici, o (futuro) rifornimenti via rotte commerciali.</p>'
     },
     {
       id: 'advanced',
@@ -395,6 +400,40 @@
         'i loro bonus si attiveranno con il modulo <strong>Flotta</strong> (M08), quando potranno essere assegnati ' +
         'a navi più evolute (corvette, fregate, incrociatori) e portare i bonus della loro specializzazione. ' +
         'Tienili da parte: sono il nucleo della tua futura ufficialità.</p>'
+    },
+    /* Decisione #45 — espansione slot via bonifica + terraformazione. */
+    {
+      id: 'terraforming', tag: 'Strutture · ⛭', title: 'Bonifica e Terraformazione',
+      body:
+        '<p>Hai pochi <strong>slot</strong> su questo pianeta? Esistono due strutture <em>tech-gated</em> che li espandono.</p>' +
+        '<p><strong>Centro di ingegneria planetaria (⛭):</strong> bonifica le aree marginali del pianeta. ' +
+        'Slot guadagnati per tipo:</p>' +
+        '<ul>' +
+          '<li><strong>Mondi-giardino</strong> (terrestre, oceanico, forestale): <strong>+8 slot</strong></li>' +
+          '<li><strong>Mondi-fabbrica</strong> (desertico, vulcanico, ghiacciato): <strong>+5 slot</strong></li>' +
+          '<li><strong>Piccoli</strong> (luna, gassoso, cintura): <strong>+3 slot</strong></li>' +
+        '</ul>' +
+        '<p><strong>Terraformatori (✦):</strong> tier 2, richiede la Bonifica già costruita. Trasforma il pianeta su scala ' +
+        'continentale: <strong>+12 slot</strong> sui giardino, <strong>+7</strong> sui mondi-fabbrica (no luna/gassoso/cintura).</p>' +
+        '<p>Entrambe richiedono una <strong>tecnologia dedicata</strong> (oggi non ancora disponibile — gancio per il modulo Ricerca futuro). ' +
+        'Pensale come obiettivi di lungo periodo per i tuoi mondi più importanti.</p>'
+    },
+    {
+      id: 'capital', tag: 'Colonia · ★', title: 'Capitale di Gruppo',
+      body:
+        '<p>Ogni <strong>gruppo stellare</strong> (regione della galassia) può avere <strong>una sola colonia capitale</strong> ' +
+        'per volta. La capitale gode di:</p>' +
+        '<ul>' +
+          '<li><strong>+15% produzione</strong> uniforme su tutte le risorse</li>' +
+          '<li><strong>+10 slot</strong> di riserva (per difese future, stazioni orbitali, ricerca avanzata)</li>' +
+          '<li><strong>Sede ambasciata</strong> (futura, modulo Diplomazia)</li>' +
+          '<li><strong>Governatore di sector</strong> (futuro, modulo Figure speciali)</li>' +
+        '</ul>' +
+        '<p>La <strong>home iniziale</strong> è auto-promossa a capitale del suo gruppo. Per cambiarla, vai nella scheda ' +
+        'Colonia → "Dichiara capitale". <strong>Transizione 80 <span class="ds-unit">Ι</span></strong>: la vecchia capitale ' +
+        'subisce <strong>−10% produzione</strong>, la nuova ha <strong>0 bonus</strong> finché non si stabilizza. ' +
+        'Un cambio è quindi una scelta strategica seria.</p>' +
+        '<p><strong>Ganci futuri:</strong> le capitali saranno bersagli politici/militari più ambiti (M09 difese, M11 diplomazia, M18 reputazione).</p>'
     }
   ];
 

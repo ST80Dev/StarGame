@@ -41,24 +41,24 @@
     luna:       { met: 40, en: 30, food: 8,  water: 28 }    // sovrascritta dal padre
   };
 
-  /* Slot di costruzione (§10.2). Espandibili con tech (M13).
-     Mondi piccoli (ghiacciato/luna/gassoso/cintura) +1 rispetto al baseline
-     iniziale per dare spazio a una specializzazione minima (3-4 estrattive
-     base + qualcosa). Decisione di sessione post-M06.7. */
-  /* Decisione #38 (+ riserva difese/avanzate): col modello a moduli (livello =
-     slot) gli slot sono la leva strategica. Dimensionati a simulazione perché i
-     mondi-giardino raggiungano ~¾ del cap-popolazione in autosufficienza CON
-     margine per economia/militare (top pieno = import M12). In più si tiene una
-     RISERVA esplicita di slot per le strutture indispensabili dei moduli futuri:
-     difese planetarie (M09), stazioni/piattaforme orbitali (M15/M16), strutture
-     tech avanzate (M13) — perché un mondo ricco e popoloso sarà il bersaglio più
-     ambito e dovrà potersi difendere senza sacrificare la propria vocazione.
-     Mondi-giardino +2, mondi-fabbrica/piccoli +1 rispetto al primo dimensionamento.
-     + varianza #36 (`+0..+2`). */
+  /* Slot di costruzione (§10.2). Espandibili con tech (M13) e con le
+     strutture di bonifica/terraformazione (decisione #45).
+     Decisione #45 — rebalance future-ready: i numeri base sono dimensionati
+     per dare spazio a 3 ladder progressivi:
+       1) Base nudo (qui sotto): la colonia "media" usa ~⅔ degli slot per
+          economia/popolazione, lasciando margine per difese (M09), stazioni
+          (M15/M16) e strutture tech (M13).
+       2) Bonifica territoriale: +8 (giardino) / +5 (fabbrica) / +3 (piccolo)
+          via Centro di ingegneria planetaria (struttura tech-gated).
+       3) Terraformazione: +12 (giardino) / +7 (fabbrica) via Terraformatori
+          (tech-gated, richiede Bonifica).
+     + Riserva di +10 slot per la capitale del gruppo (decisione #45).
+     I numeri qui EMENDANO le decisioni #35/#36/#38 (rispettivamente: bumped
+     mondi piccoli · varianza 0..+2 · BASE_SLOTS dimensionati). */
   const BASE_SLOTS = {
-    terrestre: 21, desertico: 10, oceanico: 21,
-    ghiacciato: 10, vulcanico: 10, forestale: 20,
-    gassoso:    8, cintura:    8, luna:      8
+    terrestre: 35, desertico: 20, oceanico: 35,
+    ghiacciato: 20, vulcanico: 20, forestale: 32,
+    gassoso:   14, cintura:    14, luna:      14
   };
 
   /* Popolazione massima (in "unità popolazione", §9). 0 = non abitabile. */
@@ -367,11 +367,57 @@
   }
 
   /* ------------------------------------------------------------------
+     SLOT EFFETTIVI (decisione #45) — somma del base + espansione da
+     strutture (Centro di ingegneria planetaria, Terraformatori) + bonus
+     capitale di gruppo (+10 se la colonia è capitale piena).
+
+     Parametri:
+       - planet (immutabile)
+       - colony (delta, opzionale: senza colonia ritorna solo planet.slots)
+       - game   (opzionale: serve per il bonus capitale; senza, lo si
+                ignora e si torna solo a slot + espansioni)
+       - colonyKey (opzionale: chiave per lookup in game.capitals; se
+                manca e game c'è, prova a derivarla da systemId:bodyKey)
+     ------------------------------------------------------------------ */
+  function effectiveSlots(planet, colony, game, colonyKey) {
+    if (!planet) return 0;
+    let total = planet.slots || 0;
+    if (colony && colony.structures) {
+      const S = root.ORION.structures;
+      const ids = Object.keys(colony.structures);
+      for (let i = 0; i < ids.length; i++) {
+        const def = S && S.get(ids[i]);
+        if (!def || !def.expandsSlots) continue;
+        const bonus = def.expandsSlots[planet.type];
+        if (!bonus) continue;
+        const lvl = colony.structures[ids[i]].level || 1;
+        const msum = S && S.moduleSum ? S.moduleSum(lvl) : lvl;
+        total += bonus * msum;
+      }
+    }
+    if (game && root.ORION.capital && root.ORION.capital.slotsBonus) {
+      const key = colonyKey || (colony ? (colony.systemId + ':' + colony.bodyKey) : null);
+      if (key) total += root.ORION.capital.slotsBonus(game, key);
+    }
+    return Math.round(total);
+  }
+
+  /* Helper interno: deriva la colonyKey per le API che ne hanno bisogno. */
+  function _colonyKey(colony) {
+    if (!colony) return null;
+    return colony.systemId + ':' + colony.bodyKey;
+  }
+
+  /* ------------------------------------------------------------------
      CALCOLI: produzione potenziale per Impulso (lettura, no avanzamento).
      Combina i tassi delle strutture con i potenziali del pianeta.
-     Bonus pianeta base §8.1: +20% se isHomeBase.
+     Bonus pianeta base §8.1 (EMENDATA da decisione #45): il +20% legacy
+     su isHomeBase viene sostituito dal +15% uniforme della "Capitale di
+     Gruppo". La home iniziale è auto-promossa a capitale del proprio
+     gruppo (capital.initFromHome) → eredita il bonus senza interruzioni.
+     Per i test headless senza modulo capital, fallback a isHomeBase ×1.15.
      ------------------------------------------------------------------ */
-  function structureOutput(colony, planet) {
+  function structureOutput(colony, planet, game, colonyKey) {
     const out = { met: 0, en: 0, food: 0, water: 0, research: 0, scan: 0, popCap: 0, popGrowth: 0, exotic: 0 };
     const upkeep = { met: 0, en: 0, food: 0, water: 0 };
     if (!colony.colonized) return { rates: out, upkeep: upkeep, used: 0 };
@@ -411,8 +457,18 @@
         if (k === 'en')    base *= pot.en  / 60;
         if (k === 'food')  base *= pot.food / 60;
         if (k === 'water') base *= pot.water / 60;
-        // bonus pianeta base §8.1
-        if (colony.isHomeBase) base *= 1.20;
+        // bonus capitale di gruppo §8.1 (EMENDATA da decisione #45):
+        // +15% se capitale piena, 0 se pre-capital, -10% se decommissioning.
+        // Fallback per test headless: senza il modulo capital, usa il
+        // +20% legacy su isHomeBase per non rompere i test esistenti.
+        const C = root.ORION.capital;
+        if (C && C.bonusOf) {
+          const key = colonyKey || _colonyKey(colony);
+          const bonus = C.bonusOf(game, key);
+          if (bonus) base *= (1 + bonus);
+        } else if (colony.isHomeBase) {
+          base *= 1.20;     // fallback legacy (test headless senza capital.js)
+        }
         // modificatori da produttive (es. fonderia → +40%/modulo miniera)
         const modKey = def.id + '.rates.' + k;
         if (mods[modKey]) base *= (1 + mods[modKey]);
@@ -440,8 +496,11 @@
     };
   }
 
-  /* Verifica prerequisiti di una struttura sulla colonia. */
-  function canBuild(colony, planet, structId) {
+  /* Verifica prerequisiti di una struttura sulla colonia.
+     Decisione #45: accetta `game` (opzionale) per leggere il bonus slot
+     della capitale di gruppo. Senza `game` (test headless / chiamanti
+     legacy) usa planet.slots puro = comportamento pre-#45. */
+  function canBuild(colony, planet, structId, game) {
     const def = root.ORION.structures.get(structId);
     if (!def) return { ok: false, reason: 'Struttura sconosciuta' };
     // tipo di corpo compatibile
@@ -473,7 +532,8 @@
       const d = root.ORION.structures.get(q.id);
       return a + ((d && d.slots) || 1);   // ogni voce in coda = +1 modulo
     }, 0);
-    if (used + inQueue + (def.slots || 1) > planet.slots) return { ok: false, reason: 'Slot insufficienti' };
+    const slotCap = effectiveSlots(planet, colony, game);
+    if (used + inQueue + (def.slots || 1) > slotCap) return { ok: false, reason: 'Slot insufficienti' };
     // prerequisiti gancio (decisione: in M04 solo segnaliamo,
     // l'attivazione vera dei tech è M13; 'scan' = osservatorio costruito)
     const req = def.requires || [];
@@ -510,8 +570,8 @@
 
   /* Avvia una costruzione: sottrae il costo dallo stock e mette in coda.
      L'avanzamento del timer e il completamento sono M05. */
-  function startBuild(colony, planet, structId, startedAtDS) {
-    const check = canBuild(colony, planet, structId);
+  function startBuild(colony, planet, structId, startedAtDS, game) {
+    const check = canBuild(colony, planet, structId, game);
     if (!check.ok) return check;
     const S = root.ORION.structures;
     const def = S.get(structId);
@@ -731,6 +791,7 @@
     startSettling: startSettling,
     structureOutput: structureOutput,
     theoreticalOutput: theoreticalOutput,
+    effectiveSlots: effectiveSlots,
     canBuild: canBuild,
     startBuild: startBuild,
     cancelBuild: cancelBuild,
