@@ -1294,6 +1294,40 @@ function renderPlanetRisorseTab(host, planet, colony) {
     '</div>';
 }
 
+/* Saldo netto per Impulso che si otterrebbe espandendo (o costruendo)
+   una struttura: produzione − consumo, dopo − prima. Tiene conto dei
+   modificatori (es. fonderia che amplifica le miniere). */
+function marginalNet(colony, planet, structId) {
+  const before = ORION.planet.structureOutput(colony, planet);
+  const cur = colony.structures[structId];
+  const curLvl = cur ? (cur.level || 0) : 0;
+  const clonedStructures = Object.assign({}, colony.structures);
+  clonedStructures[structId] = { level: curLvl + 1, hp: cur ? cur.hp : 100 };
+  const clonedColony = Object.assign({}, colony, { structures: clonedStructures });
+  const after = ORION.planet.structureOutput(clonedColony, planet);
+  const delta = {};
+  ['met', 'en', 'food', 'water'].forEach(function (k) {
+    const beforeNet = (before.rates[k] || 0) - (before.upkeep[k] || 0);
+    const afterNet  = (after.rates[k]  || 0) - (after.upkeep[k]  || 0);
+    delta[k] = afterNet - beforeNet;
+  });
+  return delta;
+}
+
+function deltaBalanceHtml(delta) {
+  const parts = [];
+  ['met', 'en', 'food', 'water'].forEach(function (k) {
+    const v = delta[k] || 0;
+    if (Math.abs(v) < 0.01) return;
+    const sign = v > 0 ? '+' : '−';
+    const val = Math.round(Math.abs(v) * 100) / 100;
+    const cls = v > 0 ? 'struct-item__d--pos' : 'struct-item__d--neg';
+    parts.push('<span class="' + cls + '">' + sign + val + ' ' + resGlyph(k) + '</span>');
+  });
+  if (!parts.length) return '';
+  return '<span class="struct-item__delta" title="Saldo netto per Impulso se costruita">' + parts.join(' ') + '</span>';
+}
+
 /* --- Tab Strutture --- */
 function renderPlanetStruttureTab(host, planet, colony) {
   const S = ORION.structures;
@@ -1326,21 +1360,29 @@ function renderPlanetStruttureTab(host, planet, colony) {
         : '<span class="struct-item__locked is-busy" title="' + demoCheck.reason + '">🗑</span>';
       // Decisione #38: bottone "+ Espandi" (aggiunge un modulo = +slot, costo escalante)
       let upBtn;
+      let infoLine;
       if (lvl >= maxL) {
         upBtn = '<span class="struct-item__locked" title="Livello massimo (' + maxL + ')">max</span>';
+        infoLine = '<div class="struct-item__cost struct-item__cost--max">Livello massimo</div>';
       } else {
         const up = ORION.planet.canBuild(colony, planet, id);
         const nextCost = S.stepCost(def, lvl + 1);
-        const costStr = Object.keys(nextCost).map(function (k) { return resGlyph(k) + nextCost[k]; }).join(' ');
+        const nextTime = S.stepTime(def, lvl + 1);
+        const costStr = Object.keys(nextCost).map(function (k) { return resGlyph(k) + nextCost[k]; }).join(' · ');
+        const balance = deltaBalanceHtml(marginalNet(colony, planet, id));
         if (up.ok) {
-          upBtn = '<button class="btn btn--mini" data-build="' + id + '" type="button" title="Espandi a ×' + (lvl + 1) + ' (+' + (def.slots || 1) + ' slot · ' + costStr + ')">+ Espandi</button>';
+          upBtn = '<button class="btn btn--mini" data-build="' + id + '" type="button" title="Espandi a ×' + (lvl + 1) + ' (+' + (def.slots || 1) + ' slot)">+ Espandi</button>';
         } else {
           upBtn = '<span class="struct-item__locked" title="' + escapeHtml(up.reason) + '">+ Espandi</span>';
         }
+        infoLine = '<div class="struct-item__cost"><span class="struct-item__cost-label">×' + (lvl + 1) + '</span> ' + costStr + ' · ' + nextTime + ' I' + (balance ? ' ' + balance : '') + '</div>';
       }
       html += '<li class="struct-item is-built">' +
         '<span class="struct-item__glyph">' + def.glyph + '</span>' +
-        '<span class="struct-item__name">' + def.name + ' <span class="struct-item__lvl">×' + lvl + '</span> <span class="struct-item__cat">' + slotInfo + '</span></span>' +
+        '<div class="struct-item__main">' +
+          '<div class="struct-item__name">' + def.name + ' <span class="struct-item__lvl">×' + lvl + '</span> <span class="struct-item__cat">' + slotInfo + '</span></div>' +
+          infoLine +
+        '</div>' +
         upBtn + demoBtn +
       '</li>';
     });
@@ -1406,6 +1448,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
       const check = ORION.planet.canBuild(colony, planet, def.id);
       const cost = def.cost || {};
       const costStr = Object.keys(cost).map(function (k) { return resGlyph(k) + cost[k]; }).join(' · ');
+      const balance = deltaBalanceHtml(marginalNet(colony, planet, def.id));
       let statusCell;
       let extraClass = check.ok ? '' : ' is-locked';
       if (check.ok) {
@@ -1431,7 +1474,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
         '<span class="struct-item__glyph">' + def.glyph + '</span>' +
         '<div class="struct-item__main">' +
           '<div class="struct-item__name">' + def.name + ' <span class="struct-item__cat">' + def.time + ' I</span></div>' +
-          '<div class="struct-item__cost">' + costStr + '</div>' +
+          '<div class="struct-item__cost">' + costStr + (balance ? ' ' + balance : '') + '</div>' +
         '</div>' +
         '<button class="btn btn--mini struct-item__info" data-info="' + def.id + '" type="button" title="Cosa fa, bonus/malus, concatenazioni" aria-label="Informazioni su ' + def.name + '">i</button>' +
         statusCell +
@@ -1981,11 +2024,12 @@ function potentialBars(planet) {
 }
 
 function rateGrid(rates, upkeep) {
-  function fmt(v) { return (v >= 0 ? '+' : '') + (Math.round(v * 100) / 100); }
+  function fmtNet(v) { return (v >= 0 ? '+' : '−') + (Math.round(Math.abs(v) * 100) / 100); }
+  function fmtAbs(v) { return Math.round(Math.abs(v) * 100) / 100; }
   const items = [];
   ['met', 'en', 'food', 'water'].forEach(function (k) {
     const r = rates[k] || 0; const u = upkeep[k] || 0; const net = r - u;
-    if (r || u) items.push(row(resLabel(k), '<span class="rate ' + (net >= 0 ? 'rate--pos' : 'rate--neg') + '">' + fmt(net) + ' / I</span> <span class="rate-aux">(+' + fmt(r) + ' / −' + fmt(u) + ')</span>'));
+    if (r || u) items.push(row(resLabel(k), '<span class="rate ' + (net >= 0 ? 'rate--pos' : 'rate--neg') + '">' + fmtNet(net) + ' / I</span> <span class="rate-aux">(+' + fmtAbs(r) + ' / −' + fmtAbs(u) + ')</span>'));
   });
   if (rates.research) items.push(row('Ricerca', '<span class="rate rate--pos">+' + (Math.round(rates.research * 100) / 100) + ' / I</span>'));
   if (rates.scan) items.push(row('Scansione', '<span class="rate rate--pos">+' + rates.scan + ' / I</span>'));
