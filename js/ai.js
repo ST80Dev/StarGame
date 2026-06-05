@@ -677,6 +677,66 @@
     };
   }
 
+  /* ------------------------------------------------------------------
+     M10 Fase B (decisione #47): helper per il dossier-civiltà e la vista
+     "Civiltà". Valori COARSE dove serve mantenere la nebbia (#5/§5.1):
+     il giocatore conosce l'identità e la disposizione, ma la potenza
+     resta una stima a fasce, non un numero esatto.
+     ------------------------------------------------------------------ */
+  function dispositionLabel(v) {
+    if (v <= -40) return 'Ostile';
+    if (v <= -15) return 'Diffidente';
+    if (v < 15) return 'Neutrale';
+    if (v < 40) return 'Cordiale';
+    return 'Amichevole';
+  }
+  function powerTier(power) {
+    if (power < 40) return 'debole';
+    if (power < 90) return 'media';
+    if (power < 160) return 'forte';
+    return 'dominante';
+  }
+  /* Quanti sistemi della civiltà il giocatore ha già visto (DETECTED+).
+     È ciò che il giocatore "sa", non il totale reale (nebbia di guerra). */
+  function knownSystemsCount(game, civ) {
+    let n = 0;
+    for (let i = 0; i < civ.systems.length; i++) {
+      if (discovered(game, civ.systems[i])) n++;
+    }
+    return n;
+  }
+  /* Lista delle civiltà già contattate (vive). */
+  function contactedCivs(game) {
+    return (game.civs || []).filter(function (c) { return c.alive && c.contacted; });
+  }
+
+  /* ------------------------------------------------------------------
+     SCAFFOLD materializzazione LOD (decisione #47) — gancio M09.
+     Quando una civiltà AGGREGATA deve entrare in uno scontro col
+     giocatore, M09 la "materializzerà" in una forza concreta. Qui forniamo
+     solo il DESCRITTORE (puro, nessuna mutazione di stato, nessun
+     combattimento): M09 lo consumerà per costruire le entità reali, poi
+     chiamerà demobilize() per riportare la civiltà ad aggregata.
+     In Fase A/B la materializzazione NON avviene (lo scontro è M09).
+     ------------------------------------------------------------------ */
+  function materialize(game, civ, sysId) {
+    if (!civ) return null;
+    // forza concreta proporzionale alla potenza aggregata locale (coarse)
+    const units = Math.max(1, Math.round(civ.power / 25));
+    return {
+      civId: civ.id, civName: civ.name, alignment: civ.alignment,
+      color: civ.color, atSystem: sysId,
+      units: units, power: civ.power,
+      // M09 riempirà ships:[] con classi reali (riuso catalogo ORION.fleet)
+      ships: []
+    };
+  }
+  function demobilize(/* game, civ, outcome */) {
+    /* Placeholder Fase A/B: la civiltà resta aggregata. M09 applicherà qui
+       l'esito dello scontro (perdite di potenza/sistemi) sullo stato civ. */
+    return true;
+  }
+
   /* Reputazione globale del giocatore come anteprima (§14, decisione #47):
      media delle disposizioni delle civiltà CONTATTATE, mappata 0..100.
      Se nessun contatto, neutro (50). */
@@ -699,6 +759,13 @@
     civForSystem: civForSystem,
     pirateThreat: pirateThreat,
     dossier: dossier,
-    reputationPreview: reputationPreview
+    reputationPreview: reputationPreview,
+    /* Fase B */
+    dispositionLabel: dispositionLabel,
+    powerTier: powerTier,
+    knownSystemsCount: knownSystemsCount,
+    contactedCivs: contactedCivs,
+    materialize: materialize,
+    demobilize: demobilize
   };
 })(typeof window !== 'undefined' ? window : this);
