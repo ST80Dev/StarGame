@@ -688,6 +688,13 @@
     }
     /* M07: spedizioni in volo (1 tick per ogni Impulso). */
     processExpeditions(game, events);
+    /* M07.1 (decisione #40): Governatore coloniale — Tier 1 "Vigile".
+       Letture sullo stato già aggiornato del tick corrente; non agisce,
+       emette solo eventi `gov-*` che la chronicle/auto-pause gestiscono
+       come tutti gli altri. */
+    if (root.ORION.governor && root.ORION.governor.tick) {
+      root.ORION.governor.tick(game, events);
+    }
   }
 
   /* M06.5 (decisione #27): scriptata della fase Insediamento.
