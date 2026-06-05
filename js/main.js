@@ -134,7 +134,13 @@ function newGame(seed, opts) {
     fleets: [],
     /* Decisione #45: mapping centrale gruppo→capitale (lazy initFromHome
        dopo colonizeHomePlanet). */
-    capitals: {}
+    capitals: {},
+    /* M10 Fase A (decisione #47): civiltà AI, pirati e ICG. Generati dal
+       seed via ORION.ai.ensure() dopo la colonizzazione della home (idempotente:
+       restano vuoti se ripristinati da un payload). */
+    civs: [],
+    piracy: { nests: [] },
+    icg: null
   };
   // startDS = Data Stellare INIZIALE (epoca .00), fissa per la partita.
   ORION.game.startDS = ORION.time.format(startOrbita * 100);
@@ -167,6 +173,12 @@ function newGame(seed, opts) {
     if (saved.capitals && typeof saved.capitals === 'object') {
       ORION.game.capitals = Object.assign({}, saved.capitals);
     }
+    /* M10 Fase A (decisione #47): ripristina civiltà AI / pirati / ICG.
+       Se il payload è di uno schema < 8 questi sono vuoti → ORION.ai.ensure()
+       sotto li genera dal seed (la galassia preesiste, prende vita al load). */
+    if (Array.isArray(saved.civs)) ORION.game.civs = saved.civs.slice();
+    if (saved.piracy && typeof saved.piracy === 'object') ORION.game.piracy = saved.piracy;
+    if (typeof saved.icg === 'number') ORION.game.icg = saved.icg;
     /* Tutorial: rispetta lo stato del payload se presente. */
     if (saved.tutorial && typeof saved.tutorial === 'object') {
       ORION.game.tutorial = {
@@ -185,6 +197,13 @@ function newGame(seed, opts) {
      della home, non fa nulla. */
   if (ORION.capital && ORION.capital.initFromHome) {
     ORION.capital.initFromHome(ORION.game);
+  }
+  /* M10 Fase A (decisione #47): genera le civiltà AI dal seed se assenti
+     (partita nuova o save pre-schema-8). Idempotente: non rigenera se il
+     payload conteneva già game.civs. Va DOPO colonizeHomePlanet così i
+     sistemi del giocatore non vengono mai annessi alle AI. */
+  if (ORION.ai && ORION.ai.ensure) {
+    ORION.ai.ensure(ORION.game);
   }
 
   setHudDate(ORION.time.currentDS(ORION.game));
@@ -263,6 +282,22 @@ function updateGlobalResourceHud() {
   setVal('acqua', totals.water);
   const popEl = document.querySelector('[data-bind="popolazione"]');
   if (popEl) popEl.textContent = ORION.planet.formatPeople(people);
+  updateGlobalIndicesHud();
+}
+
+/* M10 Fase A (decisione #47): ICG §5.4 + Reputazione §14 come ANTEPRIMA.
+   I valori veri/sistematizzati arrivano con M18; qui mostriamo l'output
+   emergente dello strato AI (ICG dalle azioni delle civiltà maligne/buone,
+   Reputazione dalla media delle disposizioni delle civiltà contattate). */
+function updateGlobalIndicesHud() {
+  const g = ORION.game;
+  if (!g) return;
+  const icgEl = document.querySelector('[data-bind="icg"]');
+  if (icgEl && typeof g.icg === 'number') icgEl.textContent = Math.round(g.icg).toString();
+  const repEl = document.querySelector('[data-bind="reputazione"]');
+  if (repEl && ORION.ai && ORION.ai.reputationPreview) {
+    repEl.textContent = ORION.ai.reputationPreview(g).toString();
+  }
 }
 
 /* ---------------------------------------------------------------------
@@ -336,6 +371,18 @@ function renderView(stage, view) {
     if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
     if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
     renderFleetView(stage);
+    return;
+  }
+
+  // M10 Fase B (decisione #47): vista "Civiltà" — dossier delle civiltà AI
+  // contattate + anteprima ICG/Reputazione. Read-only, niente diplomazia
+  // interattiva (M11).
+  if (view === 'civ') {
+    if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; }
+    if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
+    if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
+    if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
+    renderCivView(stage);
     return;
   }
 
@@ -1275,7 +1322,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
       });
       if (bits.length) scarRow = '<p class="sysinfo__sub">Stato risorse</p><p class="scar-row">' + bits.join(' ') + '</p>';
     }
-    /* Decisione #47 (Fase 0 — rifiuti): accumulo, saturazione e netto/Ι.
+    /* Decisione #48 (Fase 0 — rifiuti): accumulo, saturazione e netto/Ι.
        Non è nell'HUD fisso: vive nella scheda colonia finché non diventa
        rilevante. Il "deperimento" è la saturazione che abbatte la produzione. */
     let wasteRow = '';
@@ -2348,7 +2395,7 @@ function openExpeditionPicker(colony) {
     const acr = regionAcronymFor(sid);
     const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
     const dur = ORION.expedition.computeDuration(g.galaxy, sid, crewXp);
-    const chance = ORION.expedition.accidentChance(g.galaxy, sid, crewXp);
+    const chance = ORION.expedition.accidentChance(g.galaxy, sid, crewXp, g);
     const dangerN = ORION.expedition.dangerNorm(g.galaxy, sid);
     const dangerTier = sys.dangerTier || ORION.galaxy.dangerTier(sys.danger);
     const DISCOVERY = ORION.galaxy.DISCOVERY;
@@ -2554,6 +2601,80 @@ function renderFleetView(stage) {
       renderFleetView(stage);
     });
   });
+}
+
+/* =====================================================================
+   M10 Fase B (decisione #47) — Vista "Civiltà" + dossier
+   Read-only: mostra le civiltà AI CONTATTATE con il loro dossier
+   (allineamento, archetipo, tratto, sede, sistemi noti, disposizione) +
+   anteprima ICG §5.4 / Reputazione §14. La diplomazia interattiva (M11)
+   e lo scontro (M09) restano fuori scope.
+   ===================================================================== */
+function renderCivView(stage) {
+  if (!stage) return;
+  const g = ORION.game;
+  if (!g) return;
+  if (!ORION.ai) { renderViewPlaceholder(stage, 'civ'); return; }
+  /* Tutorial: concetti sulle civiltà alla prima apertura della vista. */
+  if (ORION.tutorial) ORION.tutorial.fire('civilizations');
+
+  const ALIGN_LABEL = { bene: 'Bene', male: 'Male', neutrale: 'Neutrale' };
+  const contacted = ORION.ai.contactedCivs(g);
+  const icg = (typeof g.icg === 'number') ? Math.round(g.icg) : '—';
+  const rep = ORION.ai.reputationPreview ? ORION.ai.reputationPreview(g) : '—';
+
+  /* Card dossier per ogni civiltà contattata. */
+  let cards;
+  if (!contacted.length) {
+    cards = '<p class="panel__note">Nessuna civiltà ancora identificata. <strong>Esplora la galassia</strong> ' +
+      '(spedizioni M07 / flotte M08): al primo avvistamento di un loro sistema scatta il <strong>primo contatto</strong> ' +
+      'e qui comparirà il dossier. Intanto la Cronaca riporta le <em>voci</em> dei poteri lontani.</p>';
+  } else {
+    cards = '<ul class="civ-list">' + contacted.map(function (c) {
+      const disp = Math.round(c.disposition || 0);
+      const dispLabel = ORION.ai.dispositionLabel(disp);
+      // barra disposizione: -100..100 → 0..100% con riempimento da centro
+      const pct = Math.max(0, Math.min(100, (disp + 100) / 2));
+      const dispCls = disp <= -15 ? 'neg' : (disp >= 15 ? 'pos' : 'mid');
+      const known = ORION.ai.knownSystemsCount(g, c);
+      const ptier = ORION.ai.powerTier(c.power || 0);
+      const seat = (g.galaxy.groups.find(function (gp) { return gp.id === c.homeGroupId; }) || {});
+      return '<li class="civ-card" style="--civ-color:' + escapeHtml(c.color) + '">' +
+        '<div class="civ-card__head">' +
+          '<span class="civ-card__swatch" aria-hidden="true"></span>' +
+          '<span class="civ-card__name">' + escapeHtml(c.name) + '</span>' +
+          '<span class="civ-chip civ-chip--' + c.alignment + '">' + (ALIGN_LABEL[c.alignment] || c.alignment) + '</span>' +
+        '</div>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Tratto</span><span>' + escapeHtml(c.traitLabel) + '</span></div>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Sede</span><span>' +
+          escapeHtml(seat.tierLabel || '—') + (seat.name ? ' · ' + escapeHtml(seat.name) : '') + '</span></div>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Potenza</span><span class="civ-power civ-power--' + ptier + '">' + ptier + '</span>' +
+          '<span class="civ-card__k">Sistemi noti</span><span>' + known + '</span></div>' +
+        '<div class="civ-disp">' +
+          '<div class="civ-disp__top"><span class="civ-card__k">Disposizione verso di te</span>' +
+            '<span class="civ-disp__label civ-disp__label--' + dispCls + '">' + dispLabel + '</span></div>' +
+          '<div class="civ-disp__bar"><span class="civ-disp__mid" aria-hidden="true"></span>' +
+            '<span class="civ-disp__fill civ-disp__fill--' + dispCls + '" style="width:' + pct.toFixed(0) + '%"></span></div>' +
+        '</div>' +
+      '</li>';
+    }).join('') + '</ul>';
+  }
+
+  stage.innerHTML =
+    '<div class="civ-view">' +
+      '<header class="fleet-view__head">' +
+        '<h2 class="fleet-view__title">Civiltà della galassia <span class="fleet-view__sub">M10 · Fase B</span></h2>' +
+        '<div class="civ-indices">' +
+          '<span class="civ-index" title="Indice Corruzione Galattica (§5.4)">ICG <strong>' + icg + '</strong></span>' +
+          '<span class="civ-index" title="Reputazione — anteprima (§14)">Reputazione <strong>' + rep + '</strong></span>' +
+        '</div>' +
+      '</header>' +
+      '<p class="panel__note">Le civiltà vivono in <strong>background</strong> (espandono, si fanno guerra, cadono e ' +
+        'nascono). Qui vedi solo quelle <strong>contattate</strong>: identità, disposizione verso di te e territorio ' +
+        '<em>noto</em>. Trattati e alleanze arrivano con la <strong>Diplomazia</strong> (M11); gli scontri con il ' +
+        '<strong>Combattimento</strong> (M09).</p>' +
+      cards +
+    '</div>';
 }
 
 function findFleet(id) {
@@ -3182,7 +3303,7 @@ const PLAY_LS_PAUSES = 'orion.autopause';
 const DEFAULT_AUTOPAUSE = {
   'build-done': true, 'demolish-done': true, 'colony-done': true, 'scan-done': true,
   'scarcity': true, 'scarcity-recover': true, 'pop-loss': true,
-  /* Decisione #47 (Fase 0): la saturazione rifiuti (saturo/critico) merita
+  /* Decisione #48 (Fase 0): la saturazione rifiuti (saturo/critico) merita
      una pausa — è il nudge per agire prima del deperimento. Il rientro è
      buona notizia, non interrompe. */
   'waste': true, 'waste-recover': false,
@@ -3216,7 +3337,16 @@ const DEFAULT_AUTOPAUSE = {
   /* Decisione #45: eventi rari capitale di gruppo, sempre notevoli. */
   'capital-declared': true,
   'capital-transition-end': true,
-  'capital-decommissioned': true
+  'capital-decommissioned': true,
+  /* M10 Fase A (decisione #47): primo contatto, caduta e nascita di una
+     civiltà sono notevoli → auto-pausa ON. Espansioni/guerre/razzie sono
+     "voci di cronaca" atmosferiche e frequenti → OFF (niente interruzioni). */
+  'civ-contact': true,
+  'civ-fallen': true,
+  'civ-emerged': true,
+  'civ-expand': false,
+  'civ-war': false,
+  'pirate-raid': false
 };
 
 ORION.timer = {
@@ -3430,7 +3560,13 @@ function showEventOverlay(events) {
     'commander-promoted': 'Nuovo Comandante nominato',
     'capital-declared': 'Capitale di gruppo dichiarata',
     'capital-transition-end': 'Capitale entrata in carica',
-    'capital-decommissioned': 'Vecchia capitale decommissionata'
+    'capital-decommissioned': 'Vecchia capitale decommissionata',
+    'civ-contact': 'Primo contatto con una civiltà',
+    'civ-expand': 'Civiltà AI: espansione',
+    'civ-war': 'Guerra tra civiltà',
+    'civ-fallen': 'Civiltà caduta',
+    'civ-emerged': 'Nuova civiltà emersa',
+    'pirate-raid': 'Razzia pirata'
   };
   /* Raggruppa per kind: una checkbox per categoria, una sola voce di sintesi. */
   const byKind = {};
@@ -3546,7 +3682,7 @@ function chronicleEvent(ev) {
     const RES = { met: 'metalli', en: 'energia', food: 'cibo', water: 'acqua' };
     pushChronicle(ds + ' — ' + pname + ptag + ': situazione <strong>' + RES[ev.res] + '</strong> rientrata.', 'system');
   } else if (ev.kind === 'waste') {
-    /* Decisione #47 (Fase 0): saturazione rifiuti. */
+    /* Decisione #48 (Fase 0): saturazione rifiuti. */
     const sev = ev.sev === 'critico' ? 'critica (produzione in deperimento)' : 'satura';
     pushChronicle(ds + ' — ' + pname + ptag + ': gestione rifiuti <strong>' + sev + '</strong>.', 'system');
     if (ORION.tutorial) ORION.tutorial.fire('waste');
@@ -3674,6 +3810,23 @@ function chronicleEvent(ev) {
     if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('capital');
   } else if (ev.kind === 'capital-decommissioned') {
     pushChronicle(ds + ' — <strong>' + pname + ptag + '</strong> ha terminato il decommissioning · ritorno a regime normale.', 'planet');
+  } else if (ev.kind === 'civ-contact') {
+    /* M10 Fase A (decisione #47): primo contatto con una civiltà AI.
+       La scheda-dossier vera arriva in Fase B; qui è una voce di cronaca. */
+    pushChronicle(ds + ' — <strong>Primo contatto</strong> con <strong>' + escapeHtml(ev.civName) + '</strong> nel/nella ' + escapeHtml(ev.regionLabel) + ' · <em>' + escapeHtml(ev.traitLabel) + '</em> · <span class="chronicle__hint">dossier nella vista Civiltà ⬡</span>.', 'civ');
+    if (ORION.tutorial) ORION.tutorial.fire('civilizations');
+  } else if (ev.kind === 'civ-expand') {
+    /* Voce di cronaca "da lontano": effetto senza svelare la mappa. */
+    pushChronicle(ds + ' — Voci dal/dalla ' + escapeHtml(ev.regionLabel) + ': <strong>' + escapeHtml(ev.civName) + '</strong> ha annesso un nuovo sistema.', 'civ');
+  } else if (ev.kind === 'civ-war') {
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.winner) + '</strong> strappa un sistema a <strong>' + escapeHtml(ev.loser) + '</strong> nel/nella ' + escapeHtml(ev.regionLabel) + '.', 'civ');
+    if (ORION.tutorial) ORION.tutorial.fire('civilizations');
+  } else if (ev.kind === 'civ-fallen') {
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.civName) + '</strong> è caduta: ridotta a zero sistemi, assorbita da <strong>' + escapeHtml(ev.conqueror) + '</strong>.', 'civ');
+  } else if (ev.kind === 'civ-emerged') {
+    pushChronicle(ds + ' — Una nuova potenza emerge nel/nella ' + escapeHtml(ev.regionLabel) + ': <strong>' + escapeHtml(ev.civName) + '</strong>.', 'civ');
+  } else if (ev.kind === 'pirate-raid') {
+    pushChronicle(ds + ' — Predoni hanno colpito una rotta nel/nella ' + escapeHtml(ev.regionLabel) + '.', 'system');
   }
 }
 

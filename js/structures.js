@@ -162,7 +162,7 @@
       hooks: ['characters']       // gancio M14
     },
 
-    // ===== Civili (4 — decisione #47 aggiunge l'impianto di riciclo) =====
+    // ===== Civili (4 — decisione #48 aggiunge l'impianto di riciclo) =====
     {
       id: 'centro-abitativo', name: 'Centro abitativo', cat: 'civile', glyph: '⌂',
       desc: 'Aumenta la capacità di popolazione e il morale.',
@@ -194,7 +194,7 @@
       bodyTypes: HABITABLE,
       hooks: ['trade']            // gancio M12
     },
-    /* Decisione #47 (Fase 0 — gestione rifiuti): popolazione e industria
+    /* Decisione #48 (Fase 0 — gestione rifiuti): popolazione e industria
        generano rifiuti continui; l'impianto di riciclo li tratta recuperando
        energia e alzando la capacità di contenimento → abbatte la saturazione
        (e quindi il "deperimento" graduale della produzione). I campi

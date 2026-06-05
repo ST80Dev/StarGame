@@ -80,7 +80,7 @@
     POP_CROWD_START:       0.8,   // rapporto pop/capacità oltre cui inizia il malus
     POP_CROWD_SLOPE:       2.5,   // ripidità del crollo morale da sovraffollamento
 
-    /* Gestione rifiuti — Fase 0 (decisione #47). Modello IBRIDO: i rifiuti
+    /* Gestione rifiuti — Fase 0 (decisione #48). Modello IBRIDO: i rifiuti
        sono una QUANTITÀ accumulata (`colony.waste.stock`) e una SATURAZIONE
        (stock/capacità) che genera pressione. Popolazione e industria li
        producono; gli impianti di riciclo li trattano (→ energia) e ne alzano
@@ -219,7 +219,7 @@
     return colony.pop;
   }
 
-  /* Stato rifiuti (decisione #47) — lazy init, NESSUN bump di schema:
+  /* Stato rifiuti (decisione #48) — lazy init, NESSUN bump di schema:
      `colony.waste` (senza underscore) viene auto-serializzato come parte
      di game.colonies, i save vecchi caricano con waste undefined e lo
      ricreano al primo tick (pattern già usato per governor/commanders). */
@@ -397,7 +397,7 @@
     if (!colony.colonized) return null;
     const out = root.ORION.planet.structureOutput(colony, planet, game, colonyKey);
     const malus = scarcityMalus(scar);
-    /* Decisione #47: la saturazione di rifiuti del tick precedente abbatte
+    /* Decisione #48: la saturazione di rifiuti del tick precedente abbatte
        la produzione in modo progressivo (recovery-friendly, mai fail-state). */
     const wMalus = wasteMalus(colony.waste);
     const settling = (colony.phase === 'settling') ? 0.5 : 1.0;
@@ -663,7 +663,7 @@
     colony.pop.classes[underK] = (colony.pop.classes[underK] || 0) + move;
   }
 
-  /* 5b) Rifiuti (decisione #47, Fase 0). Eseguito DOPO la produzione/pop:
+  /* 5b) Rifiuti (decisione #48, Fase 0). Eseguito DOPO la produzione/pop:
      genera rifiuti da popolazione + industria, li tratta con gli impianti di
      riciclo (recuperando energia), aggiorna stock/saturazione/stato e
      accumula i rifiuti non trattati. Niente durante l'Insediamento (pop
@@ -883,6 +883,14 @@
     if (root.ORION.governor && root.ORION.governor.tick) {
       root.ORION.governor.tick(game, events);
     }
+    /* M10 Fase A (decisione #47): civiltà AI in background. Simulazione
+       AGGREGATA a cadenza interna (ogni AI_EVERY_I Impulsi, dopo il warm-up):
+       espansione, guerre AI-vs-AI, nascita/morte (roster vivo), ICG §5.4,
+       disposizione emergente verso il giocatore, pirati atmosferici.
+       Determinismo: RNG derivato da seed+Impulso, zero Math.random. */
+    if (root.ORION.ai && root.ORION.ai.tick) {
+      root.ORION.ai.tick(game, events);
+    }
   }
 
   /* M06.5 (decisione #27): scriptata della fase Insediamento.
@@ -995,7 +1003,7 @@
         const rem = end - (game.timeImpulsi || 0);
         if (rem > 0 && rem < best) best = rem;
       }
-      // Decisione #47: rifiuti in accumulo verso la prossima soglia
+      // Decisione #48: rifiuti in accumulo verso la prossima soglia
       // (guardia o overflow), così "Prossimo evento" si ferma prima del
       // deperimento. Solo se i rifiuti stanno effettivamente salendo.
       if (c.colonized && c.phase !== 'settling' && c.waste && c.waste.net > 0 && c.waste.capacity > 0) {
@@ -1073,7 +1081,7 @@
     nextCrewId: nextCrewId,
     targetClassWeights: targetClassWeights,
     ensureScarcity: ensureScarcity,
-    /* Decisione #47 — gestione rifiuti (Fase 0) */
+    /* Decisione #48 — gestione rifiuti (Fase 0) */
     ensureWaste: ensureWaste,
     wasteCapacity: wasteCapacity,
     wasteMalus: wasteMalus,

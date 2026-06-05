@@ -51,6 +51,7 @@
     ACCIDENT_LOW:   0.05,      // danger <= 0.33
     ACCIDENT_MID:   0.15,      // 0.33 < danger <= 0.66
     ACCIDENT_HIGH:  0.30,      // danger > 0.66
+    PIRATE_ACCIDENT: 0.15,     // M10 Fase B: +rischio max da covo pirata (threat 1.0)
 
     INCIDENT_DELAY_MIN: 10,    // +Ι ritardo
     INCIDENT_DELAY_MAX: 20,
@@ -218,13 +219,23 @@
     return Math.max(1, dur);
   }
 
-  function accidentChance(galaxy, targetSystemId, crewXp) {
+  function accidentChance(galaxy, targetSystemId, crewXp, game) {
     const d = dangerNorm(galaxy, targetSystemId);
     let c;
     if (d <= 0.33) c = CFG.ACCIDENT_LOW;
     else if (d <= 0.66) c = CFG.ACCIDENT_MID;
     else c = CFG.ACCIDENT_HIGH;
-    return Math.max(0, c * accidentXpScale(crewXp || 0));
+    c *= accidentXpScale(crewXp || 0);
+    /* M10 Fase B (decisione #47): i covi pirata (§17.5) danno "denti" al
+       pericolo — alzano il rischio di incidente lungo la rotta riusando
+       ORION.ai.pirateThreat. Recovery-friendly (#22): aumenta solo la
+       probabilità, non introduce un esito fatale nuovo (la risoluzione di
+       uno scontro vero resta a M09). `game` è opzionale per retro-compat. */
+    if (game && ORION.ai && ORION.ai.pirateThreat) {
+      const threat = ORION.ai.pirateThreat(game, targetSystemId);
+      if (threat > 0) c += threat * CFG.PIRATE_ACCIDENT;
+    }
+    return Math.max(0, c);
   }
 
   /* ------------------------------------------------------------------
@@ -328,7 +339,7 @@
      ------------------------------------------------------------------ */
   function rollIncident(game, exp) {
     const rng = ORION.rng.makeRng(game.seed + ':expedition:' + exp.id);
-    const chance = accidentChance(game.galaxy, exp.targetSystemId, exp.crewXp || 0);
+    const chance = accidentChance(game.galaxy, exp.targetSystemId, exp.crewXp || 0, game);
     if (rng.float() >= chance) return null;
     const danger = dangerNorm(game.galaxy, exp.targetSystemId);
     /* Distribuzione (decisione #37):

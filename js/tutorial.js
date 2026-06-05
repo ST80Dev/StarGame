@@ -204,6 +204,21 @@
         '<p>In modalità <strong>Ironman</strong> (preset Incubo) gli slot manuali sono nascosti: solo autosave + export/import, ' +
         'niente save-scumming.</p>'
     },
+    {
+      id: 'civilizations',
+      tag: 'Galassia · Civiltà',
+      title: 'Le civiltà della galassia',
+      body:
+        '<p>La galassia <strong>preesiste</strong>: 4-5 civiltà AI vivono già, ognuna con un <strong>allineamento</strong> ' +
+        '(Bene / Male / Neutrale-opportunista) e una <strong>caratteristica riconoscibile</strong>. Gli imperi consolidati ' +
+        'stanno verso il <strong>Nucleo</strong>, gli arrampicatori verso la <strong>Frontiera</strong> e l\'<strong>Orlo</strong>.</p>' +
+        '<p>Agiscono in <strong>background</strong>: espandono, si fanno guerra <em>tra loro</em>, possono cadere (ridotte a zero ' +
+        'sistemi) o vederne nascere di nuove. Tu ne percepisci gli effetti dalla <strong>Cronaca</strong> (voci da regioni lontane) ' +
+        'e dai confini colorati che compaiono sulla mappa <strong>man mano che esplori</strong>.</p>' +
+        '<p>L\'<strong>ICG</strong> (Indice Corruzione Galattica, in HUD) sale quando le civiltà maligne si espandono, scende quando ' +
+        'le buone stabilizzano. La loro <strong>disposizione</strong> verso di te si forma già ora; la diplomazia vera (trattati, ' +
+        'alleanze) arriva più avanti.</p>'
+    },
 
     /* ================================================================
        Lezioni per-struttura (M06.7). Una scheda per ogni voce del
