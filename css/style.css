@@ -2918,6 +2918,87 @@ select.main-menu__input { cursor: pointer; }
 }
 
 /* =====================================================================
+   Decisione #45 — Capitale di Gruppo
+   Sezione opt-in nella tab Colonia: stato + bottone dichiarazione +
+   barra di transizione (entrante: ambra · uscente: rosso).
+   ===================================================================== */
+.capital-section {
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: rgba(255, 176, 0, 0.06);
+  border: 1px solid rgba(255, 176, 0, 0.22);
+  border-radius: 6px;
+}
+.capital-section__title {
+  margin: 0 0 6px;
+  color: #ffb000;
+}
+.capital-section__glyph {
+  display: inline-block;
+  width: 1.2em;
+  text-align: center;
+}
+.capital-section__hint {
+  margin: 8px 0 0;
+  font-size: 0.82em;
+  opacity: 0.7;
+}
+.capital-state {
+  margin: 4px 0 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  background: rgba(0, 0, 0, 0.18);
+  border-left: 3px solid rgba(255, 255, 255, 0.18);
+}
+.capital-state--capital {
+  border-left-color: #ffb000;
+  background: rgba(255, 176, 0, 0.10);
+  color: #ffd166;
+}
+.capital-state--pre-capital {
+  border-left-color: #2fe6e0;
+  background: rgba(47, 230, 224, 0.08);
+  color: #9af0ec;
+}
+.capital-state--decommissioning {
+  border-left-color: #ff6f5c;
+  background: rgba(255, 111, 92, 0.08);
+  color: #ffb3a8;
+}
+.capital-transition-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 4px 0 8px;
+}
+.capital-transition-bar__fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ffb000, #ffd166);
+  transition: width 0.2s ease-out;
+}
+.capital-transition-bar--neg .capital-transition-bar__fill {
+  background: linear-gradient(90deg, #ff6f5c, #ffb3a8);
+}
+.capital-declare-btn {
+  background: linear-gradient(180deg, #ffb000, #d68f00);
+  border: 1px solid #ffd166;
+  color: #1a1208;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 0.85em;
+  width: 100%;
+  margin-top: 4px;
+}
+.capital-declare-btn:hover {
+  background: linear-gradient(180deg, #ffd166, #ffb000);
+}
+
+/* =====================================================================
    M07.2 — Plancia di Colonia (decisione #44)
    Overlay DOM sopra il planet-canvas: widget a cardinali (top-bar /
    risorse / strutture / coda / popolazione / cronaca) per dare al centro

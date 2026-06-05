@@ -131,7 +131,10 @@ function newGame(seed, opts) {
     /* M07 (decisione #37): spedizioni di esplorazione in viaggio. */
     expeditions: [],
     /* M08 Fase A (decisione #42): flotte mobili. */
-    fleets: []
+    fleets: [],
+    /* Decisione #45: mapping centrale gruppo→capitale (lazy initFromHome
+       dopo colonizeHomePlanet). */
+    capitals: {}
   };
   // startDS = Data Stellare INIZIALE (epoca .00), fissa per la partita.
   ORION.game.startDS = ORION.time.format(startOrbita * 100);
@@ -139,6 +142,11 @@ function newGame(seed, opts) {
   // M04/M06.5: colonizza il pianeta natale (scelta esplicita se passata
   // dal menu, altrimenti homeWorld flaggato da system.js).
   colonizeHomePlanet(ORION.game, ORION.game.startDS);
+  /* Decisione #45: auto-promuove la home come capitale del proprio gruppo
+     (idempotente: non sovrascrive una capitale già designata). */
+  if (ORION.capital && ORION.capital.initFromHome) {
+    ORION.capital.initFromHome(ORION.game);
+  }
 
   // M06: se c'è un payload (autosave/slot/import), ripristina i delta
   // sopra la galassia rigenerata. La galassia stessa resta sacra
@@ -154,6 +162,11 @@ function newGame(seed, opts) {
     if (Array.isArray(saved.expeditions)) ORION.game.expeditions = saved.expeditions.slice();
     if (Array.isArray(saved.fleets)) ORION.game.fleets = saved.fleets.slice();
     if (Array.isArray(saved.chronicle)) ORION.game.chronicle = saved.chronicle.slice();
+    /* Decisione #45: ripristina mapping capitali; se vuoto, initFromHome
+       sotto auto-popola con la home (retro-compat schema 6). */
+    if (saved.capitals && typeof saved.capitals === 'object') {
+      ORION.game.capitals = Object.assign({}, saved.capitals);
+    }
     /* Tutorial: rispetta lo stato del payload se presente. */
     if (saved.tutorial && typeof saved.tutorial === 'object') {
       ORION.game.tutorial = {
@@ -165,6 +178,13 @@ function newGame(seed, opts) {
   /* Normalizza in ogni caso (idempotente) e mostra/nasconde la "?" in HUD. */
   if (ORION.tutorial && ORION.tutorial.initOnGame) {
     ORION.tutorial.initOnGame(ORION.game, tutorialEnabled);
+  }
+  /* Decisione #45: assicura che la home sia capitale del proprio gruppo
+     anche dopo il restore di un save schema 6 (capitals: {} di default).
+     Idempotente: se game.capitals contiene già un mapping per il gruppo
+     della home, non fa nulla. */
+  if (ORION.capital && ORION.capital.initFromHome) {
+    ORION.capital.initFromHome(ORION.game);
   }
 
   setHudDate(ORION.time.currentDS(ORION.game));
@@ -1241,7 +1261,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
   const def = ORION.system.BODY_TYPES[planet.type];
 
   if (colony.colonized) {
-    const out = ORION.planet.structureOutput(colony, planet);
+    const out = ORION.planet.structureOutput(colony, planet, ORION.game);
     const scar = colony._scar;
     let scarRow = '';
     if (scar) {
@@ -1274,22 +1294,38 @@ function renderPlanetColoniaTab(host, planet, colony) {
           '<div class="progress-bar"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
         '</div>';
     }
+    /* Decisione #45: chip stato capitale al posto del banner +20% legacy.
+       Il bonus +15% capitale piena ha sostituito il +20% home base (#8). */
+    const isCap = (ORION.capital && ORION.capital.isCapital) ? ORION.capital.isCapital(g, ORION.openPlanetKey) : !!colony.isHomeBase;
+    const capState = colony.capitalState && colony.capitalState.phase;
+    let stateLine;
+    if (capState === 'capital' || (isCap && !capState)) {
+      stateLine = '<p class="sysinfo__home">★ Capitale di gruppo — bonus +15% produzione, +10 slot</p>';
+    } else if (capState === 'pre-capital') {
+      stateLine = '<p class="sysinfo__home">◌ In transizione (entrante) — bonus capitale in attivazione</p>';
+    } else if (capState === 'decommissioning') {
+      stateLine = '<p class="sysinfo__home">◌ In decommissioning — malus −10% produzione fino al passaggio</p>';
+    } else {
+      stateLine = '<p class="sysinfo__home">◉ Colonia attiva</p>';
+    }
     host.innerHTML =
       '<div class="sysinfo">' +
         settlingBanner +
-        (colony.isHomeBase ? '<p class="sysinfo__home">★ Pianeta base — bonus +20% produzione</p>' : '<p class="sysinfo__home">◉ Colonia attiva</p>') +
+        stateLine +
         '<dl class="sysinfo__list">' +
           row('Colonizzato dal', colony.colonizedDS || '—') +
           row('Popolazione', popRangePeople(colony, planet)) +
-          row('Slot utilizzati', out.used + ' / ' + planet.slots) +
+          row('Slot utilizzati', out.used + ' / ' + ORION.planet.effectiveSlots(planet, colony, g)) +
           row('Ostilità ' + hostilityNoun(planet), planet.hostility) +
         '</dl>' +
         '<p class="sysinfo__sub">Riepilogo produzione (/Impulso)</p>' +
         rateGrid(out.rates, out.upkeep) +
         scarRow +
+        renderCapitalSection(colony, planet) +
         renderGovernorSection(colony, planet) +
       '</div>';
     bindGovernorHandlers(host, planet, colony);
+    bindCapitalHandlers(host, planet, colony);
     return;
   }
 
@@ -1357,6 +1393,103 @@ function renderPlanetColoniaTab(host, planet, colony) {
 
   const btn = host.querySelector('[data-action="colonize"]');
   if (btn) btn.addEventListener('click', function () { tryColonize(planet); });
+}
+
+/* --- Decisione #45: Capitale di Gruppo, sezione tab Colonia ---
+   Max 1 capitale per gruppo. Bottone "Dichiara capitale" disponibile
+   se la colonia è operativa e non è già capitale piena. Cambio supportato
+   (transizione 80 Ι con malus −10% sulla vecchia e bonus 0 sulla nuova). */
+function renderCapitalSection(colony, planet) {
+  const g = ORION.game;
+  if (!g || !ORION.capital) return '';
+  if (colony.phase === 'settling') return '';
+  const colKey = ORION.openPlanetKey;
+  if (!colKey) return '';
+  const cap = ORION.capital;
+  const gid = cap.groupOfColony(g, colKey);
+  if (gid == null) return '';
+  /* Nome del gruppo per il bottone (sigla regione comoda). */
+  const groups = (g.galaxy && g.galaxy.groups) || [];
+  let groupName = 'gruppo';
+  for (let i = 0; i < groups.length; i++) {
+    if (groups[i].id === gid) {
+      groupName = groups[i].name || groups[i].label || groupName;
+      break;
+    }
+  }
+  const isCap = cap.isCapital(g, colKey);
+  const st = colony.capitalState && colony.capitalState.phase;
+  const check = cap.canDeclare(g, colKey);
+  const currentCapKey = cap.getOf(g, gid);
+  let statusHtml;
+  if (st === 'capital' || (isCap && !st)) {
+    statusHtml = '<p class="capital-state capital-state--capital">★ Capitale del <strong>' + escapeHtml(groupName) + '</strong> — bonus +15% produzione, +10 slot.</p>';
+  } else if (st === 'pre-capital') {
+    const dur = colony.capitalState.transitionDuration || cap.TRANSITION_DURATION;
+    const remain = Math.max(0, (colony.capitalState.transitionEnd || 0) - (g.timeImpulsi || 0));
+    const pct = Math.min(100, Math.round(((dur - remain) / dur) * 100));
+    statusHtml = '<p class="capital-state capital-state--pre-capital">◌ Transizione in corso (entrante) — ' + remain + ' ' + iU() + ' al passaggio.</p>' +
+      '<div class="capital-transition-bar"><div class="capital-transition-bar__fill" style="width:' + pct + '%"></div></div>';
+  } else if (st === 'decommissioning') {
+    const dur = colony.capitalState.transitionDuration || cap.TRANSITION_DURATION;
+    const remain = Math.max(0, (colony.capitalState.transitionEnd || 0) - (g.timeImpulsi || 0));
+    const pct = Math.min(100, Math.round(((dur - remain) / dur) * 100));
+    statusHtml = '<p class="capital-state capital-state--decommissioning">◌ Decommissioning — malus −10% per altri ' + remain + ' ' + iU() + '.</p>' +
+      '<div class="capital-transition-bar capital-transition-bar--neg"><div class="capital-transition-bar__fill" style="width:' + pct + '%"></div></div>';
+  } else {
+    statusHtml = '<p class="capital-state">◉ Colonia di gruppo (non capitale).</p>';
+  }
+  let actionHtml = '';
+  if (check.ok) {
+    const label = currentCapKey
+      ? 'Dichiara capitale del ' + groupName + ' (sostituisci attuale)'
+      : 'Dichiara capitale del ' + groupName;
+    actionHtml = '<button type="button" class="btn btn--mini capital-declare-btn" data-action="capital-declare">' +
+      '★ ' + escapeHtml(label) +
+      '</button>';
+  } else if (st && (st === 'pre-capital' || st === 'decommissioning')) {
+    actionHtml = '<p class="panel__note capital-section__hint">Transizione in corso — attendi che si stabilizzi.</p>';
+  }
+  return '<div class="capital-section" data-bind="capital-section">' +
+    '<p class="sysinfo__sub capital-section__title">' +
+      '<span class="capital-section__glyph" aria-hidden="true">★</span> Capitale di gruppo' +
+    '</p>' +
+    statusHtml +
+    actionHtml +
+    '<p class="panel__note capital-section__hint">Una sola capitale per gruppo stellare. Benefici futuri: sede ambasciata (diplomazia), figura Governatore di sector.</p>' +
+  '</div>';
+}
+
+function bindCapitalHandlers(host, planet, colony) {
+  if (!host) return;
+  const btn = host.querySelector('[data-action="capital-declare"]');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    const g = ORION.game;
+    if (!g || !ORION.capital) return;
+    const colKey = ORION.openPlanetKey;
+    const check = ORION.capital.canDeclare(g, colKey);
+    if (!check.ok) { console.info('Dichiarazione rifiutata:', check.reason); return; }
+    if (check.previousCapital) {
+      const msg = 'Verrà sostituita la capitale attuale del gruppo. La transizione richiede ' +
+        ORION.capital.TRANSITION_DURATION + ' Ι, durante i quali la vecchia capitale ha −10% produzione e la nuova ancora 0 bonus. Procedere?';
+      if (!window.confirm(msg)) return;
+    }
+    const res = ORION.capital.declare(g, colKey, g.timeImpulsi || 0);
+    if (!res.ok) return;
+    /* Evento di cronaca a parte del tick (la dichiarazione è azione utente). */
+    const cap = ORION.capital;
+    const gid = cap.groupOfColony(g, colKey);
+    const groups = (g.galaxy && g.galaxy.groups) || [];
+    let groupName = 'gruppo';
+    for (let i = 0; i < groups.length; i++) {
+      if (groups[i].id === gid) { groupName = groups[i].name || groupName; break; }
+    }
+    pushChronicle(ORION.time.currentDS(g) + ' — <strong>' + escapeHtml(planet.name) + bodyTagHtml(planet.systemId) + '</strong> dichiarata capitale del <em>' + escapeHtml(groupName) + '</em> (transizione ' + cap.TRANSITION_DURATION + ' ' + iU() + ').', 'planet');
+    if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('capital');
+    persistGame(g);
+    updatePlanetUI();
+  });
 }
 
 /* --- M07.1 (decisione #40): Governatore coloniale, sezione tab Colonia ---
@@ -1452,7 +1585,7 @@ function tryColonize(planet) {
 
 /* --- Tab Risorse --- */
 function renderPlanetRisorseTab(host, planet, colony) {
-  const out = ORION.planet.structureOutput(colony, planet);
+  const out = ORION.planet.structureOutput(colony, planet, ORION.game);
   const advancedHtml = advancedResHtml(planet, colony);
   const stockRows = ['met', 'en', 'food', 'water'].map(function (k) {
     return row(resLabel(k), Math.round(colony.stock[k] || 0));
@@ -1474,13 +1607,13 @@ function renderPlanetRisorseTab(host, planet, colony) {
    una struttura: produzione − consumo, dopo − prima. Tiene conto dei
    modificatori (es. fonderia che amplifica le miniere). */
 function marginalNet(colony, planet, structId) {
-  const before = ORION.planet.structureOutput(colony, planet);
+  const before = ORION.planet.structureOutput(colony, planet, ORION.game);
   const cur = colony.structures[structId];
   const curLvl = cur ? (cur.level || 0) : 0;
   const clonedStructures = Object.assign({}, colony.structures);
   clonedStructures[structId] = { level: curLvl + 1, hp: cur ? cur.hp : 100 };
   const clonedColony = Object.assign({}, colony, { structures: clonedStructures });
-  const after = ORION.planet.structureOutput(clonedColony, planet);
+  const after = ORION.planet.structureOutput(clonedColony, planet, ORION.game);
   const delta = {};
   ['met', 'en', 'food', 'water'].forEach(function (k) {
     const beforeNet = (before.rates[k] || 0) - (before.upkeep[k] || 0);
@@ -1536,7 +1669,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
   const queueCount = colony.queue.length;
 
   let html = '<div class="sysinfo">' +
-    '<p class="planet-slots">Slot · <strong>' + (used + inQueue) + ' / ' + planet.slots + '</strong>' +
+    '<p class="planet-slots">Slot · <strong>' + (used + inQueue) + ' / ' + ORION.planet.effectiveSlots(planet, colony, ORION.game) + '</strong>' +
       (queueCount ? ' <span class="planet-slots__queue">(' + queueCount + ' ' + (queueCount === 1 ? 'progetto' : 'progetti') + ' in coda · ' + inQueue + ' slot)</span>' : '') + '</p>';
 
   // in coda — con countdown e barra di avanzamento (M05)
@@ -1610,7 +1743,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
           upBtn = '<span class="struct-item__locked" title="Livello massimo (' + maxL + ')">max</span>';
           infoLine = '<div class="struct-item__cost struct-item__cost--max">Livello massimo</div>';
         } else {
-          const up = ORION.planet.canBuild(colony, planet, def.id);
+          const up = ORION.planet.canBuild(colony, planet, def.id, ORION.game);
           const nextCost = S.stepCost(def, lvl + 1);
           const nextTime = S.stepTime(def, lvl + 1);
           const costStr = Object.keys(nextCost).map(function (k) { return '<span class="struct-item__cost-item">' + resIcon(k) + nextCost[k] + '</span>'; }).join(' ');
@@ -1634,7 +1767,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
         '</li>';
       } else {
         // === NON COSTRUITA ===
-        const check = ORION.planet.canBuild(colony, planet, def.id);
+        const check = ORION.planet.canBuild(colony, planet, def.id, ORION.game);
         const cost = def.cost || {};
         const costStr = Object.keys(cost).map(function (k) { return '<span class="struct-item__cost-item">' + resIcon(k) + cost[k] + '</span>'; }).join(' ');
         const balance = deltaBalanceHtml(marginalNet(colony, planet, def.id));
@@ -1704,13 +1837,18 @@ function tryBuild(id) {
   const planet = ORION.currentPlanet;
   // M05: la struttura va in coda e maturerà col game loop. Niente più
   // auto-complete (era lo stub M04).
-  const r = ORION.planet.startBuild(colony, planet, id, ORION.time.currentDS(g));
+  const r = ORION.planet.startBuild(colony, planet, id, ORION.time.currentDS(g), g);
   if (!r.ok) { console.info('Costruzione rifiutata:', r.reason); return; }
   const def = ORION.structures.get(id);
   pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione: <strong>' + def.name + '</strong> su ' + planet.name + bodyTagHtml(planet.systemId) + ' (' + def.time + ' ' + iU() + ').', 'planet');
   /* M06.7: alla prima costruzione di un certo tipo, mostra la scheda
      tutorial dedicata (rispetta isEnabled + isSeen — niente spam). */
-  if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('struct:' + id);
+  if (ORION.tutorial && ORION.tutorial.fire) {
+    ORION.tutorial.fire('struct:' + id);
+    /* Decisione #45: alla prima costruzione della Bonifica territoriale,
+       mostra anche la scheda concettuale "terraforming" (introduce il tier 2). */
+    if (id === 'centro-ingegneria-planetaria') ORION.tutorial.fire('terraforming');
+  }
   persistGame(g);
   updateGlobalResourceHud();
   updatePlanetUI();
@@ -2701,7 +2839,7 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
   // RICHIESTA sulla produzione di cibo/acqua, non un drenaggio dello stock.
   // La popolazione cresce finché produzione > consumo e si stabilizza in
   // plateau quando si pareggiano — senza carestia. Legge del minimo.
-  const out = ORION.planet.structureOutput(colony, planet);
+  const out = ORION.planet.structureOutput(colony, planet, ORION.game);
   const foodNet = (out.rates.food || 0) - (out.upkeep.food || 0);
   const waterNet = (out.rates.water || 0) - (out.upkeep.water || 0);
   const sustFood = CFG.POP_FOOD_PER_UNIT > 0 ? foodNet / CFG.POP_FOOD_PER_UNIT : 0;
@@ -2914,7 +3052,11 @@ const DEFAULT_AUTOPAUSE = {
   'fleet-launched': false, 'fleet-leg-hop': false,
   /* Decisione #43 (M07.2): nascita di un Comandante nominato — evento
      narrativo forte (nuova figura giocabile), auto-pausa di default. */
-  'commander-promoted': true
+  'commander-promoted': true,
+  /* Decisione #45: eventi rari capitale di gruppo, sempre notevoli. */
+  'capital-declared': true,
+  'capital-transition-end': true,
+  'capital-decommissioned': true
 };
 
 ORION.timer = {
@@ -3122,7 +3264,10 @@ function showEventOverlay(events) {
     'fleet-discovery': 'Flotta: sistema esplorato',
     'fleet-launched': 'Flotta: salto iperspaziale',
     'fleet-leg-hop': 'Flotta: hop intermedio',
-    'commander-promoted': 'Nuovo Comandante nominato'
+    'commander-promoted': 'Nuovo Comandante nominato',
+    'capital-declared': 'Capitale di gruppo dichiarata',
+    'capital-transition-end': 'Capitale entrata in carica',
+    'capital-decommissioned': 'Vecchia capitale decommissionata'
   };
   /* Raggruppa per kind: una checkbox per categoria, una sola voce di sintesi. */
   const byKind = {};
@@ -3338,6 +3483,14 @@ function chronicleEvent(ev) {
   } else if (ev.kind === 'gov-veterans-idle') {
     pushChronicle(ds + ' — <strong>Governatore di ' + pname + ptag + '</strong>: ' + (ev.count || 1) + ' equipaggio/i veterano/i disponibile/i, nessuna spedizione in corso.', 'explore');
     if (ORION.tutorial) ORION.tutorial.fire('governor');
+  } else if (ev.kind === 'capital-declared') {
+    pushChronicle(ds + ' — <strong>' + pname + ptag + '</strong> dichiarata capitale di gruppo (transizione in corso).', 'planet');
+    if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('capital');
+  } else if (ev.kind === 'capital-transition-end') {
+    pushChronicle(ds + ' — <strong>' + pname + ptag + '</strong> entra ufficialmente in carica come capitale di gruppo · bonus +15% produzione, +10 slot.', 'planet');
+    if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('capital');
+  } else if (ev.kind === 'capital-decommissioned') {
+    pushChronicle(ds + ' — <strong>' + pname + ptag + '</strong> ha terminato il decommissioning · ritorno a regime normale.', 'planet');
   }
 }
 
@@ -4031,7 +4184,7 @@ function homeCandidateCardHtml(c) {
       '<div><dt>Pericolo</dt><dd>' + escapeHtml(c.system.dangerTier) + ' (' + c.system.danger + ')</dd></div>' +
       '<div><dt>Ostilità ' + hostilityNoun(c.planet) + '</dt><dd>' + c.planet.hostility + '</dd></div>' +
       '<div><dt>Pop. max</dt><dd>' + popMaxPeople(c.planet) + '</dd></div>' +
-      '<div><dt>Slot</dt><dd>' + c.planet.slots + '</dd></div>' +
+      '<div><dt>Slot</dt><dd>' + (c.planet.slots) + '</dd></div>' +
     '</dl>' +
     '<div class="main-menu__pot-bars">' +
       potBar('Met', p.met) + potBar('En', p.en) + potBar('Cibo', p.food) + potBar('Acqua', p.water) +

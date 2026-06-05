@@ -167,7 +167,10 @@
       id: 'centro-abitativo', name: 'Centro abitativo', cat: 'civile', glyph: '⌂',
       desc: 'Aumenta la capacità di popolazione e il morale.',
       cost: { met: 40, en: 10, water: 5 }, time: 10,
-      upkeep: { en: 1, food: 1, water: 1 },
+      /* Decisione #45: rimossa upkeep food dal centro abitativo — è housing,
+         non logistica alimentare. Il cibo lo consuma la popolazione stessa
+         (drenaggio reale sullo stock, processProduction in time.js). */
+      upkeep: { en: 1, water: 1 },
       rates: {},                 // l'effetto vive nel gate sovraffollamento (§9.3)
       slots: 1, maxLevel: 5,
       bodyTypes: HABITABLE
@@ -192,7 +195,7 @@
       hooks: ['trade']            // gancio M12
     },
 
-    // ===== Avanzate (1, gancio §7.2) =====
+    // ===== Avanzate (3 — decisione #45 aggiunge bonifica + terraformazione) =====
     {
       id: 'impianto-esotico', name: 'Impianto esotico', cat: 'avanzata', glyph: '✦',
       desc: 'Sfrutta risorse avanzate per moltiplicatori globali. Richiede una risorsa rara identificata sul pianeta.',
@@ -202,6 +205,38 @@
       slots: 2, maxLevel: 2,
       bodyTypes: HABITABLE.concat(ORBITAL),
       requires: ['scan', 'tech:esotici']   // gancio M13
+    },
+    /* Decisione #45: 2 strutture tech-gated che ESPANDONO la capacità di
+       costruzione del pianeta. Il bonus slot vive nel campo `expandsSlots`
+       (mappa per tipo corpo), letto da planet.effectiveSlots(). */
+    {
+      id: 'centro-ingegneria-planetaria', name: 'Centro di ingegneria planetaria', cat: 'avanzata', glyph: '⛭',
+      desc: 'Bonifica territoriale: recupera terreno edificabile dalle aree marginali del pianeta. Espande la capacità di costruzione (slot).',
+      cost: { met: 180, en: 80, water: 30 }, time: 50,
+      upkeep: { en: 4 },
+      rates: {},
+      slots: 2, maxLevel: 1,
+      bodyTypes: HABITABLE.concat(ORBITAL),
+      requires: ['tech:bonifica-territoriale'],   // gancio M13
+      /* Espansione slot per tipo corpo (decisione #45):
+         - giardino (terrestre/oceanico/forestale): +8 slot
+         - mondo-fabbrica (desertico/vulcanico/ghiacciato): +5
+         - piccolo (luna/gassoso/cintura): +3 */
+      expandsSlots: { terrestre: 8, oceanico: 8, forestale: 8,
+                      desertico: 5, vulcanico: 5, ghiacciato: 5,
+                      luna: 3, gassoso: 3, cintura: 3 }
+    },
+    {
+      id: 'terraformatori', name: 'Terraformatori', cat: 'avanzata', glyph: '✦',
+      desc: 'Trasforma il pianeta su scala continentale: nuovi biomi, nuovi spazi insediabili. Solo su corpi abitabili o industriali.',
+      cost: { met: 320, en: 180, water: 60, food: 20 }, time: 90,
+      upkeep: { en: 8, water: 2 },
+      rates: {},
+      slots: 3, maxLevel: 1,
+      bodyTypes: ['terrestre', 'oceanico', 'forestale', 'desertico', 'vulcanico', 'ghiacciato'],
+      requires: ['tech:terraformazione', 'struct:centro-ingegneria-planetaria:1'],
+      expandsSlots: { terrestre: 12, oceanico: 12, forestale: 12,
+                      desertico: 7, vulcanico: 7, ghiacciato: 7 }
     }
   ];
 

@@ -311,18 +311,34 @@
 
   /* 3) Produzione/consumo per Impulso con malus di scarsità.
         M06.5 (decisione #27): durante `settling` la produzione è al 50%
-        ("atterraggio, scarico moduli"). Recovery-friendly: finisce sola. */
-  function processProduction(colony, planet, scar) {
+        ("atterraggio, scarico moduli"). Recovery-friendly: finisce sola.
+
+        DECISIONE #45 (emenda #37): la popolazione drena DAVVERO lo stock
+        di cibo/acqua (POP_FOOD_PER_UNIT / POP_WATER_PER_UNIT per unità).
+        La carestia è restaurata: se la produzione locale non copre il
+        consumo, lo stock scende → low/crit triggerano normalmente.
+        Il buffer 30 Ι prima del decremento pop (decisione #22, recovery-
+        friendly) resta intatto: il giocatore ha sempre il tempo di reagire. */
+  function processProduction(colony, planet, scar, game, colonyKey) {
     if (!colony.colonized) return null;
-    const out = root.ORION.planet.structureOutput(colony, planet);
+    const out = root.ORION.planet.structureOutput(colony, planet, game, colonyKey);
     const malus = scarcityMalus(scar);
     const settling = (colony.phase === 'settling') ? 0.5 : 1.0;
     const stock = colony.stock;
+    const pop = colony.pop || { total: 0 };
+    /* Drenaggio cibo/acqua da popolazione: solo in fase operational
+       (durante settling la pop è bloccata e i moduli avanguardia sono
+       autosufficienti, decisione #27). */
+    const popFoodDemand  = (colony.phase !== 'settling') ? (pop.total || 0) * CFG.POP_FOOD_PER_UNIT  : 0;
+    const popWaterDemand = (colony.phase !== 'settling') ? (pop.total || 0) * CFG.POP_WATER_PER_UNIT : 0;
     const net = {};
     ['met', 'en', 'food', 'water'].forEach(function (k) {
       const r = (out.rates[k] || 0) * malus * settling;
       const u = out.upkeep[k] || 0;
-      net[k] = r - u;
+      let n = r - u;
+      if (k === 'food')  n -= popFoodDemand;
+      if (k === 'water') n -= popWaterDemand;
+      net[k] = n;
       stock[k] = (stock[k] || 0) + net[k];
       if (stock[k] < 0) stock[k] = 0;     // i negativi diventano "carestia"
     });
@@ -479,16 +495,13 @@
       let growth = CFG.POP_GROWTH_BASE * morale;
       if (colony.structures['ospedale']) growth *= (1 + CFG.POP_GROWTH_HOSPITAL);
 
-      /* Capacità di carico (decisione #37): il consumo pro-capite della
-         popolazione è una RICHIESTA sulla produzione (non un drenaggio dello
-         stock → niente carestia da popolazione). La crescita è alimentata dal
-         SURPLUS = produzione locale − consumo (legge del minimo: vince il più
-         scarso tra cibo e acqua). Quando il surplus → 0 la crescita → 0: la
-         popolazione si stabilizza in PLATEAU senza mai carestia né "low". Per
-         alzare il tetto: più fattorie/idrici o import via rotte (M12). */
-      const foodSurplus  = (prod.net.food  || 0) - pop.total * CFG.POP_FOOD_PER_UNIT;
-      const waterSurplus = (prod.net.water || 0) - pop.total * CFG.POP_WATER_PER_UNIT;
-      const surplus = Math.min(foodSurplus, waterSurplus);
+      /* Capacità di carico (DECISIONE #45, emenda #37): il consumo pop è
+         ora drenato direttamente in processProduction → prod.net.food/water
+         INCLUDE già la richiesta della popolazione corrente. Quindi il
+         "surplus" che alimenta la crescita = net diretto (positivo = c'è
+         margine per nuove unità; ≤0 = plateau o carestia). Legge del minimo
+         tra cibo e acqua. La crescita resta lenta e di lungo periodo. */
+      const surplus = Math.min(prod.net.food || 0, prod.net.water || 0);
       const supplyFactor = surplus <= 0 ? 0 : Math.min(1, surplus / CFG.POP_SUPPLY_REF);
 
       growth *= supplyFactor;
@@ -710,7 +723,7 @@
       if (!colony.colonized) continue;
 
       const scar = ensureScarcity(colony);
-      const prod = processProduction(colony, planet, scar);
+      const prod = processProduction(colony, planet, scar, game, keys[i]);
       processScarcity(game, colony, planet, prod, events);
       processPopulation(game, colony, planet, prod, events);
       processObservatory(game, colony, planet, events);
@@ -721,6 +734,12 @@
     processExpeditions(game, events);
     /* M08 Fase A: flotte mobili (movimento + ordini). */
     processFleets(game, events);
+    /* Decisione #45: Capitale di Gruppo — avanza timer di transizione
+       (pre-capital → capital · decommissioning → null). Emette eventi
+       a fine transizione. */
+    if (root.ORION.capital && root.ORION.capital.tick) {
+      root.ORION.capital.tick(game, events);
+    }
     /* M07.1 (decisione #40): Governatore coloniale — Tier 1 "Vigile".
        Letture sullo stato già aggiornato del tick corrente; non agisce,
        emette solo eventi `gov-*` che la chronicle/auto-pause gestiscono
@@ -871,6 +890,11 @@
         const d = f.etaImpulsi || 0;
         if (d > 0 && d < best) best = d;
       }
+    }
+    /* Decisione #45: transizioni capitale in corso. */
+    if (root.ORION.capital && root.ORION.capital.nextTransitionDelta) {
+      const d = root.ORION.capital.nextTransitionDelta(game);
+      if (d > 0 && d < best) best = d;
     }
     if (!isFinite(best)) return CFG.NEXT_EVENT_FALLBACK;
     return Math.min(CFG.NEXT_EVENT_HARD_CAP, Math.max(1, best));
