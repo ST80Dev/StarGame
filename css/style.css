@@ -2446,6 +2446,55 @@ select.main-menu__input { cursor: pointer; }
   font-family: var(--font-mono, monospace);
 }
 
+/* Roster equipaggi (tab Forze): lista per-equipaggio a riposo / in missione */
+.crew-roster {
+  list-style: none;
+  margin: 4px 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.crew-roster__item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(110, 90, 200, 0.07);
+  border: 1px solid rgba(125, 110, 220, 0.20);
+  border-radius: 8px;
+  font-size: 0.85em;
+}
+.crew-roster__item--away {
+  background: rgba(220, 160, 70, 0.07);
+  border-color: rgba(220, 160, 70, 0.22);
+}
+.crew-roster__rank {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.78em;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 9px;
+  background: rgba(140, 110, 230, 0.16);
+  color: #c8b6ff;
+}
+.crew-roster__rank--t1 { background: rgba(90, 170, 220, 0.18); color: #a8d4ee; }
+.crew-roster__rank--t2 { background: rgba(120, 200, 140, 0.18); color: #aee6c0; }
+.crew-roster__rank--t3 { background: rgba(230, 190, 90, 0.20); color: #f0d8a0; }
+.crew-roster__id {
+  color: var(--c-text, #d8def0);
+  font-family: var(--font-mono, monospace);
+}
+.crew-roster__status {
+  margin-left: auto;
+  font-size: 0.85em;
+  color: var(--c-muted, #8a93b8);
+}
+.crew-roster__status--rest { color: #9fd0a8; }
+.crew-roster__status--away { color: #e6b878; }
+
 /* xp chip viola */
 .xp-chip {
   display: inline-block;

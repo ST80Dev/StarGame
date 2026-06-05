@@ -1705,6 +1705,14 @@ function renderPlanetForzeTab(host, planet, colony) {
    M07 — Cantieri & Squadre (decisione #37): HTML del blocco, riutilizzato
    dalla tab Forze (M07.x).
    ===================================================================== */
+/* Etichetta breve e leggibile per un equipaggio a partire dal suo id
+   tecnico (`crew-<impulso>-<counter>`) → "Equipaggio 7". Fallback: id grezzo. */
+function crewShortLabel(id) {
+  if (!id) return 'Equipaggio';
+  const m = /-(\d+)$/.exec(String(id));
+  return m ? ('Equipaggio ' + m[1]) : String(id);
+}
+
 function renderCantieriSection(colony, planet) {
   const hasHangar = !!(colony.structures && colony.structures['cantiere-navale']);
   const hasAcademy = !!(colony.structures && colony.structures['accademia-militare']);
@@ -1738,6 +1746,7 @@ function renderCantieriSection(colony, planet) {
     let sShips = 0;
     classes.forEach(function (cls) { sShips += (colony.ships && colony.ships[cls.id]) || 0; });
     const queue = colony.assets.shipQueue || [];
+    const payOk = canPay(shipCost);
     /* Decisione #41: cantieri (build paralleli) + attracchi (porto a terra). */
     const E = ORION.expedition || {};
     const buildSlots = E.hangarBuildSlots ? E.hangarBuildSlots(colony) : 1;
@@ -1833,14 +1842,44 @@ function renderCantieriSection(colony, planet) {
     const E2 = ORION.expedition || {};
     const techBonus2 = E2.techSpeedBonus ? E2.techSpeedBonus(colony) : 0;
     const effCrewTime = E2.applyTechSpeed ? E2.applyTechSpeed(crewTime, colony) : crewTime;
+    /* Equipaggi in missione: vivono nelle spedizioni (rimossi dall'array
+       della colonia al lancio), li recuperiamo per mostrarli nel roster. */
+    const away = expeditionsForColony(colony);
+    const totalCrews = crews.length + away.length;
     html += '<div class="cantieri-row">' +
       '<div class="cantieri-row__head">' +
         '<span class="cantieri-row__glyph" aria-hidden="true">⚔</span>' +
         '<span class="cantieri-row__name">Accademia militare</span>' +
-        '<span class="cantieri-row__counter">Equipaggi: <strong>' + crews.length + '</strong>' +
-          (crews.length ? ' <span class="xp-chip" title="Esperienza media">xp ' + avg + '</span>' : '') +
+        '<span class="cantieri-row__counter">Equipaggi: <strong>' + totalCrews + '</strong>' +
+          (totalCrews ? ' <span class="xp-chip" title="Esperienza media (a riposo)">xp ' + avg + '</span>' : '') +
         '</span>' +
       '</div>';
+    /* Roster per-equipaggio: a riposo (assegnabili) + in missione. */
+    if (totalCrews) {
+      html += '<ul class="crew-roster">';
+      crews.forEach(function (c) {
+        const enr = ORION.expedition.enrichmentForXp(c.xp || 0);
+        html += '<li class="crew-roster__item">' +
+          '<span class="crew-roster__rank crew-roster__rank--t' + enr.tier + '">' + enr.label + '</span>' +
+          '<span class="crew-roster__id">' + escapeHtml(crewShortLabel(c.id)) + '</span>' +
+          '<span class="xp-chip" title="Esperienza">xp ' + (c.xp || 0) + '</span>' +
+          '<span class="crew-roster__status crew-roster__status--rest">a riposo</span>' +
+        '</li>';
+      });
+      away.forEach(function (e) {
+        const enr = ORION.expedition.enrichmentForXp(e.crewXp || 0);
+        const target = ORION.game.galaxy.systems[e.targetSystemId];
+        const tname = target ? target.name : '—';
+        const st = e.status === 'returning' ? 'in rientro' : 'in missione';
+        html += '<li class="crew-roster__item crew-roster__item--away">' +
+          '<span class="crew-roster__rank crew-roster__rank--t' + enr.tier + '">' + enr.label + '</span>' +
+          '<span class="crew-roster__id">' + escapeHtml(crewShortLabel(e.crewId)) + '</span>' +
+          '<span class="xp-chip" title="Esperienza">xp ' + (e.crewXp || 0) + '</span>' +
+          '<span class="crew-roster__status crew-roster__status--away" title="' + escapeHtml(tname) + '">' + st + ' → ' + escapeHtml(tname) + '</span>' +
+        '</li>';
+      });
+      html += '</ul>';
+    }
     queue.forEach(function (q, idx) {
       const total = q.totalTime || effCrewTime;
       const remain = Math.max(0, q.duration | 0);
