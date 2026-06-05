@@ -16,6 +16,31 @@
 
 ---
 
+## Note operative (regole di lavoro)
+
+> Regole di processo cui attenersi **prima** di toccare il codice in ogni sessione. Non riguardano il design del gioco — riguardano *come* si lavora sul repo.
+
+### R1 — Branch nuovo se quello corrente è già mergiato
+
+**Prima di iniziare nuove modifiche** (anche all'interno della stessa sessione, subito dopo aver mergiato una PR appena confermata) **verificare sempre** che il branch di lavoro corrente non corrisponda a una PR già mergiata in `main`. Se lo è, **aprire un nuovo branch** dedicato alle nuove modifiche e lasciare all'utente di consolidarlo successivamente in una PR.
+
+**Perché**: riusare un branch già chiuso sovrascriverebbe la cronologia chiara "1 PR = 1 modulo / 1 decisione" e renderebbe ambigua la storia (commit nuovi appesi a una PR già chiusa non riaprono la PR, restano orfani sul branch finché qualcuno non se ne accorge).
+
+**Come verificare in pratica** (sequenza tipica a inizio sessione, prima del primo edit):
+1. `git branch --show-current` — vedi il branch corrente.
+2. `git fetch origin main` + `git log origin/main..HEAD --oneline` — se ritorna **vuoto**, il branch è già stato interamente mergiato in main ⇒ serve un branch nuovo.
+3. In dubbio, controlla lo stato della PR associata via MCP github (`mcp__github__list_pull_requests` o `get_pull_request` sul numero): se `merged: true` ⇒ branch nuovo obbligatorio.
+4. Apri il nuovo branch a partire da main aggiornato:
+   ```
+   git checkout main && git pull origin main
+   git checkout -b claude/<nome-nuovo>
+   ```
+   Il nome rispetta la convenzione del task corrente (`claude/<slug>` come da istruzioni di sessione).
+
+**Eccezione**: se il branch corrente esiste ma la sua PR è **ancora aperta** (non mergiata) e le nuove modifiche sono coerenti col suo scope, si può continuare a committare lì. La regola scatta solo su PR **mergiate** (o chiuse senza merge che non vanno riaperte).
+
+---
+
 ## Stato moduli
 
 Legenda: ✅ completato · 🚧 in corso · ⬜ non iniziato · ⏸️ in attesa di conferma
