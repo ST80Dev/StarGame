@@ -1275,6 +1275,29 @@ function renderPlanetColoniaTab(host, planet, colony) {
       });
       if (bits.length) scarRow = '<p class="sysinfo__sub">Stato risorse</p><p class="scar-row">' + bits.join(' ') + '</p>';
     }
+    /* Decisione #47 (Fase 0 — rifiuti): accumulo, saturazione e netto/Ι.
+       Non è nell'HUD fisso: vive nella scheda colonia finché non diventa
+       rilevante. Il "deperimento" è la saturazione che abbatte la produzione. */
+    let wasteRow = '';
+    if (ORION.time && ORION.time.wasteStatus) {
+      const W = ORION.time.wasteStatus(colony);
+      const pct = Math.round(W.saturation * 100);
+      const cls = W.state === 'critico' ? 'crit' : W.state === 'saturo' ? 'low' : 'ok';
+      const stateLbl = W.state === 'critico' ? 'critica' : W.state === 'saturo' ? 'satura' : 'nominale';
+      const netTxt = (W.net > 0 ? '+' : '') + (Math.round(W.net * 10) / 10);
+      const barPct = Math.min(100, pct);
+      wasteRow =
+        '<p class="sysinfo__sub">Rifiuti ♻</p>' +
+        '<dl class="sysinfo__list">' +
+          row('Accumulo', Math.round(W.stock) + ' / ' + Math.round(W.capacity)) +
+          row('Saturazione', '<span class="waste-tag waste--' + cls + '">' + stateLbl + ' · ' + pct + '%</span>') +
+          row('Netto', netTxt + ' /' + iU() + (W.net > 0 ? ' (in accumulo)' : W.net < 0 ? ' (in calo)' : ' (stabile)')) +
+        '</dl>' +
+        '<div class="progress-bar"><div class="progress-bar__fill waste-fill--' + cls + '" style="width:' + barPct + '%"></div></div>' +
+        (W.state !== 'ok'
+          ? '<p class="waste-hint">La saturazione abbassa la produzione. Costruisci un <strong>Impianto di riciclo</strong> per trattare i rifiuti e recuperarne energia.</p>'
+          : '');
+    }
     /* M06.5 (decisione #27): banner fase Insediamento con countdown e
        progress bar. Recovery-friendly: finisce sempre da sola. */
     let settlingBanner = '';
@@ -1321,6 +1344,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
         '<p class="sysinfo__sub">Riepilogo produzione (/Impulso)</p>' +
         rateGrid(out.rates, out.upkeep) +
         scarRow +
+        wasteRow +
         renderCapitalSection(colony, planet) +
         renderGovernorSection(colony, planet) +
       '</div>';
@@ -3158,6 +3182,10 @@ const PLAY_LS_PAUSES = 'orion.autopause';
 const DEFAULT_AUTOPAUSE = {
   'build-done': true, 'demolish-done': true, 'colony-done': true, 'scan-done': true,
   'scarcity': true, 'scarcity-recover': true, 'pop-loss': true,
+  /* Decisione #47 (Fase 0): la saturazione rifiuti (saturo/critico) merita
+     una pausa — è il nudge per agire prima del deperimento. Il rientro è
+     buona notizia, non interrompe. */
+  'waste': true, 'waste-recover': false,
   'victory': true, 'settle-stage': true, 'settle-done': true,
   /* M07 (decisione #37): pausa solo su esiti notevoli. Non su launch
      (azione utente), né su ship-built/crew-formed (frequenti). */
@@ -3378,6 +3406,8 @@ function showEventOverlay(events) {
     'scan-done': 'Scansione completata',
     'scarcity': 'Carenza',
     'scarcity-recover': 'Carenza rientrata',
+    'waste': 'Rifiuti: saturazione',
+    'waste-recover': 'Rifiuti: rientrata',
     'pop-loss': 'Calo popolazione',
     'victory': 'Pista chiusa',
     'settle-stage': 'Fase Insediamento',
@@ -3515,6 +3545,13 @@ function chronicleEvent(ev) {
   } else if (ev.kind === 'scarcity-recover') {
     const RES = { met: 'metalli', en: 'energia', food: 'cibo', water: 'acqua' };
     pushChronicle(ds + ' — ' + pname + ptag + ': situazione <strong>' + RES[ev.res] + '</strong> rientrata.', 'system');
+  } else if (ev.kind === 'waste') {
+    /* Decisione #47 (Fase 0): saturazione rifiuti. */
+    const sev = ev.sev === 'critico' ? 'critica (produzione in deperimento)' : 'satura';
+    pushChronicle(ds + ' — ' + pname + ptag + ': gestione rifiuti <strong>' + sev + '</strong>.', 'system');
+    if (ORION.tutorial) ORION.tutorial.fire('waste');
+  } else if (ev.kind === 'waste-recover') {
+    pushChronicle(ds + ' — ' + pname + ptag + ': saturazione rifiuti <strong>rientrata</strong>.', 'system');
   } else if (ev.kind === 'pop-loss') {
     pushChronicle(ds + ' — ' + pname + ptag + ': la popolazione cala per la carestia prolungata.', 'system');
   } else if (ev.kind === 'victory') {

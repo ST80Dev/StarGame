@@ -162,7 +162,7 @@
       hooks: ['characters']       // gancio M14
     },
 
-    // ===== Civili (3) =====
+    // ===== Civili (4 — decisione #47 aggiunge l'impianto di riciclo) =====
     {
       id: 'centro-abitativo', name: 'Centro abitativo', cat: 'civile', glyph: '⌂',
       desc: 'Aumenta la capacità di popolazione e il morale.',
@@ -193,6 +193,25 @@
       slots: 1, maxLevel: 2,
       bodyTypes: HABITABLE,
       hooks: ['trade']            // gancio M12
+    },
+    /* Decisione #47 (Fase 0 — gestione rifiuti): popolazione e industria
+       generano rifiuti continui; l'impianto di riciclo li tratta recuperando
+       energia e alzando la capacità di contenimento → abbatte la saturazione
+       (e quindi il "deperimento" graduale della produzione). I campi
+       `wasteProcess` (rifiuti trattati per modulo/Ι) e `wasteCapacity`
+       (contenimento aggiunto per modulo) sono letti da time.js → processWaste.
+       Costruibile anche su corpi orbitali: gancio per le "colonie riciclanti"
+       su mondi ostili (Fase 1, quando M13 sbloccherà le tech dedicate). */
+    {
+      id: 'impianto-riciclo', name: 'Impianto di riciclo', cat: 'civile', glyph: '♻',
+      desc: 'Tratta i rifiuti prodotti da popolazione e industria, recuperandone energia. Aumenta la capacità di contenimento e abbatte la saturazione.',
+      cost: { met: 50, en: 15 }, time: 12,
+      upkeep: { en: 1 },
+      rates: {},
+      slots: 1, maxLevel: 5,
+      bodyTypes: HABITABLE.concat(ORBITAL),
+      wasteProcess: 3,        // rifiuti trattati per modulo / Ι (→ energia)
+      wasteCapacity: 150      // contenimento aggiunto per modulo
     },
 
     // ===== Avanzate (3 — decisione #45 aggiunge bonifica + terraformazione) =====
