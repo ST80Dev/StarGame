@@ -404,7 +404,7 @@
       return { ok: true };
     }
 
-    /* Fase B (decisione #67): rotta multi-tappa.
+    /* Fase B (decisione #46): rotta multi-tappa.
        order = {
          type: 'move-route',
          waypoints: [sysId, ...],          // 1+ tappe in sequenza
@@ -440,7 +440,7 @@
       return { ok: true };
     }
 
-    /* Fase B (decisione #67): pattuglia su N sistemi in loop.
+    /* Fase B (decisione #46): pattuglia su N sistemi in loop.
        order = {
          type: 'patrol-loop',
          loop: [sysId, sysId, sysId, ...],   // ≥ 2 sistemi
@@ -687,7 +687,7 @@
       return;
     }
 
-    /* Fase B (decisione #67): rotta multi-tappa. La sotto-rotta verso la
+    /* Fase B (decisione #46): rotta multi-tappa. La sotto-rotta verso la
        tappa corrente (wpIdx) è appena terminata. */
     if (order.type === 'move-route') {
       const wpReached = order.waypoints[order.wpIdx];
@@ -721,7 +721,7 @@
       return;
     }
 
-    /* Fase B (decisione #67): pattuglia su N sistemi in loop. */
+    /* Fase B (decisione #46): pattuglia su N sistemi in loop. */
     if (order.type === 'patrol-loop') {
       const sysReached = order.loop[order.loopIdx];
       events.push({

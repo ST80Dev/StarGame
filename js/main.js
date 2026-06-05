@@ -2406,6 +2406,8 @@ function renderFleetView(stage) {
   const g = ORION.game;
   if (!g) return;
   if (!Array.isArray(g.fleets)) g.fleets = [];
+  /* M08 Fase B: tutorial — overview alla prima apertura della vista. */
+  if (ORION.tutorial) ORION.tutorial.fire('fleet-overview');
 
   /* Helpers locali */
   function sysName(id) {
@@ -2426,6 +2428,14 @@ function renderFleetView(stage) {
     if (o.type === 'explore') return 'esplorazione di ' + sysName(o.toSysId);
     if (o.type === 'return') return 'rientro alla base';
     if (o.type === 'patrol') return 'pattuglia ' + sysName(o.sysA) + ' ↔ ' + sysName(o.sysB);
+    if (o.type === 'move-route') {
+      const tot = (o.waypoints || []).length;
+      const cur = (o.wpIdx || 0) + 1;
+      return 'rotta a tappe (' + cur + '/' + tot + ')';
+    }
+    if (o.type === 'patrol-loop') {
+      return 'pattuglia ciclica · ' + (o.loop || []).length + ' nodi';
+    }
     return o.type;
   }
   function colonyName(key) {
@@ -2550,6 +2560,8 @@ function ensureFleetOverlayHost(cls) {
 }
 
 function openFleetCreateOverlay(eligibleColonies) {
+  /* M08 Fase B: tutorial — classi navi alla prima creazione/manage. */
+  if (ORION.tutorial) ORION.tutorial.fire('fleet-classes');
   const g = ORION.game;
   const host = ensureFleetOverlayHost('fleet-create-overlay');
   const colonyOptions = eligibleColonies.map(function (e) {
@@ -2699,6 +2711,8 @@ function openFleetOrdersOverlay(fleetId) {
   const g = ORION.game;
   const fleet = findFleet(fleetId);
   if (!fleet) return;
+  /* M08 Fase B: tutorial — ordini e rotte composte alla prima apertura. */
+  if (ORION.tutorial) ORION.tutorial.fire('fleet-orders');
   const host = ensureFleetOverlayHost('fleet-orders-overlay');
 
   /* Sistemi raggiungibili (nebbia di guerra rispettata: mostriamo tutti
@@ -2753,7 +2767,7 @@ function openFleetOrdersOverlay(fleetId) {
         '<select data-bind="fleet-order-pat-b">' + optsMove + '</select>' +
         '<button class="btn btn--mini" data-action="fleet-order-patrol" type="button">Imposta</button>' +
       '</section>' +
-      /* Fase B (decisione #67): rotta multi-tappa e pattuglia su N sistemi.
+      /* Fase B (decisione #46): rotta multi-tappa e pattuglia su N sistemi.
          Il giocatore costruisce la lista delle tappe (gancio per "vagare"
          tra sistemi favorevoli; AI/rifugi neutrali verranno con M10-M11). */
       '<section class="fleet-order-block fleet-order-block--route">' +
@@ -3164,7 +3178,7 @@ const DEFAULT_AUTOPAUSE = {
      non sorpresa. Hop intermedi mai. */
   'fleet-arrived': true, 'fleet-route-complete': true, 'fleet-discovery': true,
   'fleet-launched': false, 'fleet-leg-hop': false,
-  /* Fase B (decisione #67): tappa intermedia raggiunta. Default OFF —
+  /* Fase B (decisione #46): tappa intermedia raggiunta. Default OFF —
      non interrompiamo a ogni waypoint, può essere una rotta lunga. L'arrivo
      finale e la `route-complete` continuano a fermare il tempo. */
   'fleet-waypoint-reached': false,
@@ -3587,7 +3601,7 @@ function chronicleEvent(ev) {
       (sys ? sys.name : '—') + '</strong>' + stag + ' esplorato.', 'explore');
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
   } else if (ev.kind === 'fleet-waypoint-reached') {
-    /* Fase B (decisione #67): cronaca breve per ogni tappa. La voce è
+    /* Fase B (decisione #46): cronaca breve per ogni tappa. La voce è
        silenziata dal log se si chiude la prima tappa di un singolo move
        (già coperta da `fleet-arrived`); qui interessa solo nella catena
        multi-tappa. */
