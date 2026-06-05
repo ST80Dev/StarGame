@@ -525,7 +525,9 @@
       this.canvas.height = Math.round(h * this.dpr);
       this.canvas.style.width = w + 'px';
       this.canvas.style.height = h + 'px';
-      this.fitR = Math.min(w, h) * 0.34;
+      /* M07.2 polish: zoom iniziale ridotto per fare spazio ai widget
+         della Plancia di Colonia (decisione #44). Prima 0.34 → ora 0.28. */
+      this.fitR = Math.min(w, h) * 0.28;
       if (!hadFit) this.resetView();
       this.requestRender();
     }
@@ -709,11 +711,11 @@
         }
       }
 
-      // nome del pianeta in alto
-      this._titleBadge(ctx, px, py - R - 24);
-
-      // badge informativo in basso-sinistra (tipo + stato colonia)
-      this._infoBadge(ctx);
+      /* M07.2 polish (decisione #44): nome pianeta + tipo + stato colonia
+         vivono ora nella breadcrumb estesa e nei widget della Plancia.
+         I badge canvas (titleBadge/infoBadge) sono stati rimossi per
+         evitare ridondanza visiva. Le funzioni restano definite ma non
+         più chiamate da render(). */
     }
 
     _starGlow(ctx, px, py, R) {

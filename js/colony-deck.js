@@ -109,9 +109,11 @@
       const planet = this.planet, colony = this.colony, body = this.body;
       if (!planet || !colony || !body) { this.host.innerHTML = ''; return; }
 
+      /* M07.2 polish (decisione #44): nome pianeta + tipo + chip fase
+         vivono ora nella breadcrumb estesa (renderPlanetBreadcrumb in
+         main.js). Niente più _renderTopBar() qui, per non duplicare. */
       const html =
         '<div class="deck-grid">' +
-          this._renderTopBar() +
           this._renderResources() +
           this._renderStructures() +
           this._renderQueue() +
