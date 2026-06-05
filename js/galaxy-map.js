@@ -799,6 +799,9 @@
       if (reveal > 0.01) {
         this._drawEdges(ctx, reveal);
         this._drawNodes(ctx, reveal);
+        /* M10 Fase A (decisione #47): confini delle civiltà AI. Visibili solo
+           sui sistemi che il giocatore ha DETECTED/EXPLORED (scoperta-guidata). */
+        this._drawCivOwnership(ctx, reveal);
         /* M08 Fase B (decisione #46): markers flotte + rotte in transito.
            Visualizzazione read-only: il drag&drop ordini è polish successivo. */
         this._drawFleets(ctx, reveal);
@@ -1120,6 +1123,38 @@
         }
       }
       ctx.globalAlpha = 1;
+    }
+
+    /* M10 Fase A (decisione #47): anello di proprietà colorato per le
+       civiltà AI. Disegnato SOLO sui sistemi noti al giocatore (DETECTED+),
+       coerente con la visibilità scoperta-guidata. Niente hull/territori
+       pieni in Fase A: un anello netto per sistema posseduto, come per le
+       colonie del giocatore — il "dossier" e i confini ricchi sono Fase B. */
+    _drawCivOwnership(ctx, reveal) {
+      const game = root.ORION && root.ORION.game;
+      if (!game || !Array.isArray(game.civs) || !game.civs.length) return;
+      const g = this.galaxy;
+      const disc = this.state.discovery;
+      const DET = DISCOVERY.DETECTED;
+      ctx.save();
+      ctx.globalAlpha = reveal;
+      for (let c = 0; c < game.civs.length; c++) {
+        const civ = game.civs[c];
+        if (!civ || !civ.alive) continue;
+        for (let s = 0; s < civ.systems.length; s++) {
+          const sid = civ.systems[s];
+          if (disc[sid] < DET) continue;          // ignoto al giocatore → non mostrare
+          const sys = g.systems[sid];
+          if (!sys) continue;
+          const p = this.project(sys.x, sys.y, sys.z || 0);
+          if (p.x < -30 || p.x > this.cssW + 30 || p.y < -30 || p.y > this.cssH + 30) continue;
+          const r = this.nodeRadius(p.parallax);
+          // anello di proprietà nel colore della civiltà
+          this._ring(ctx, p, r + 4.5, hexA(civ.color, 0.9), 1.6);
+          this._ring(ctx, p, r + 7.5, hexA(civ.color, 0.35), 1);
+        }
+      }
+      ctx.restore();
     }
 
     /* M08 Fase B (decisione #46): rendering delle flotte sulla mappa.

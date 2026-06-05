@@ -747,6 +747,14 @@
     if (root.ORION.governor && root.ORION.governor.tick) {
       root.ORION.governor.tick(game, events);
     }
+    /* M10 Fase A (decisione #47): civiltà AI in background. Simulazione
+       AGGREGATA a cadenza interna (ogni AI_EVERY_I Impulsi, dopo il warm-up):
+       espansione, guerre AI-vs-AI, nascita/morte (roster vivo), ICG §5.4,
+       disposizione emergente verso il giocatore, pirati atmosferici.
+       Determinismo: RNG derivato da seed+Impulso, zero Math.random. */
+    if (root.ORION.ai && root.ORION.ai.tick) {
+      root.ORION.ai.tick(game, events);
+    }
   }
 
   /* M06.5 (decisione #27): scriptata della fase Insediamento.
