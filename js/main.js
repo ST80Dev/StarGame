@@ -1014,6 +1014,11 @@ function planetTabAlerts(colony) {
   if (colony.moraleMalus) a.popolazione = 'warn';
   // colonia: insediamento o colonizzazione in corso
   if (colony.colonizing || colony.phase === 'settling') a.colonia = 'info';
+  // forze: coda scafi/equipaggi attiva
+  if (colony.assets && (
+    (colony.assets.shipQueue && colony.assets.shipQueue.length) ||
+    (colony.assets.crewQueue && colony.assets.crewQueue.length)
+  )) a.forze = 'info';
   return a;
 }
 
@@ -1028,6 +1033,7 @@ function alertTitle(tab, colony, level) {
   if (tab === 'risorse') return level === 'bad' ? 'Scarsità critica' : 'Scarsità in allerta';
   if (tab === 'popolazione') return 'Morale in calo';
   if (tab === 'colonia') return colony.phase === 'settling' ? 'Insediamento in corso' : 'Colonizzazione in corso';
+  if (tab === 'forze') return 'Reclutamento in corso';
   return '';
 }
 
@@ -1049,11 +1055,21 @@ function renderPlanetPanel(title, content) {
                        (colony.assets.crewQueue && colony.assets.crewQueue.length))) ||
     expeditionsForColony(colony).length > 0
   );
+  /* Tab Forze (reclutamento — gancio M08/M14): visibile non appena è
+     costruita una struttura che recluta personale (Hangar / Accademia).
+     Tenuta separata da Strutture per non sovraccaricarla e per dare casa
+     alle classi future (flotta da combattimento, figure speciali, …). */
+  const hasRecruitment = colony.colonized && colony.structures && (
+    !!colony.structures['cantiere-navale'] ||
+    !!colony.structures['accademia-militare']
+  );
   const tabs = ['colonia', 'risorse', 'strutture', 'popolazione'];
+  if (hasRecruitment) tabs.push('forze');
   if (hasExplorationAssets) tabs.push('esplorazione');
   if (!colony.colonized) ORION.planetTab = 'colonia';
-  /* Se la tab attiva è 'esplorazione' ma non più visibile, fallback. */
+  /* Fallback se la tab attiva non è più visibile. */
   if (ORION.planetTab === 'esplorazione' && !hasExplorationAssets) ORION.planetTab = 'colonia';
+  if (ORION.planetTab === 'forze' && !hasRecruitment) ORION.planetTab = 'colonia';
   const activeTab = ORION.planetTab;
   const alerts = planetTabAlerts(colony);
 
@@ -1068,6 +1084,7 @@ function renderPlanetPanel(title, content) {
           risorse:      { icon: '⛁', label: 'Risorse',  full: 'Risorse' },
           strutture:    { icon: '⚒', label: 'Strutt.',  full: 'Strutture' },
           popolazione:  { icon: '♟', label: 'Pop.',     full: 'Popolazione' },
+          forze:        { icon: '⚔', label: 'Forze',    full: 'Forze e reclutamento' },
           esplorazione: { icon: '✦', label: 'Esplor.',  full: 'Esplorazione' }
         }[t];
         const disabled = (!colony.colonized && t !== 'colonia');
@@ -1099,6 +1116,7 @@ function renderPlanetPanel(title, content) {
   else if (activeTab === 'risorse') renderPlanetRisorseTab(host, planet, colony);
   else if (activeTab === 'strutture') renderPlanetStruttureTab(host, planet, colony);
   else if (activeTab === 'popolazione') renderPlanetPopolazioneTab(host, planet, colony);
+  else if (activeTab === 'forze') renderPlanetForzeTab(host, planet, colony);
   else if (activeTab === 'esplorazione') renderPlanetEsplorazioneTab(host, planet, colony);
 
   /* M06.6: tutorial — schede per tab pianeta. Risorse copre l'idea delle
@@ -1491,9 +1509,8 @@ function renderPlanetStruttureTab(host, planet, colony) {
       '</div>';
   }
 
-  // M07 (decisione #39): blocco Cantieri & Squadre — visibile solo se
-  // almeno una delle due strutture-gancio è costruita.
-  html += renderCantieriSection(colony, planet);
+  // Cantieri & Squadre (M07) → spostati nella tab dedicata "Forze".
+  // La tab si sblocca quando è costruita Hangar o Accademia.
 
   // costruibili — solo strutture NON ancora presenti (decisione #38: quelle
   // già costruite si potenziano dal bottone "+ Espandi" in "Costruite").
@@ -1557,19 +1574,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
   host.querySelectorAll('[data-demolish]').forEach(function (btn) {
     btn.addEventListener('click', function () { tryDemolish(btn.dataset.demolish); });
   });
-  /* M07: cantieri scafi/equipaggi */
-  host.querySelectorAll('[data-build-ship]').forEach(function (btn) {
-    btn.addEventListener('click', function () { tryBuildShip(); });
-  });
-  host.querySelectorAll('[data-build-crew]').forEach(function (btn) {
-    btn.addEventListener('click', function () { tryBuildCrew(); });
-  });
-  host.querySelectorAll('[data-cancel-ship]').forEach(function (btn) {
-    btn.addEventListener('click', function () { tryCancelShip(Number(btn.dataset.cancelShip)); });
-  });
-  host.querySelectorAll('[data-cancel-crew]').forEach(function (btn) {
-    btn.addEventListener('click', function () { tryCancelCrew(Number(btn.dataset.cancelCrew)); });
-  });
+  /* Listener cantieri/equipaggi: ora vivono nella tab Forze. */
   /* M06.7: bottone ⓘ apre la scheda tutorial della struttura (on-demand,
      ignora isEnabled — è un manuale leggero). */
   host.querySelectorAll('[data-info]').forEach(function (btn) {
@@ -1630,7 +1635,39 @@ function tryDemolish(id) {
 }
 
 /* =====================================================================
-   M07 — Cantieri & Squadre (decisione #37): UI nella tab Strutture
+   Tab Forze e reclutamento — gancio M07 → M08/M14.
+   Casa unica del reclutamento personale (oggi: scafi+equipaggi
+   esploratori). Visibile solo se almeno una struttura di reclutamento
+   è costruita (Hangar o Accademia). I moduli futuri (M08 flotta da
+   combattimento, M14 figure speciali) aggiungeranno qui le proprie
+   sezioni.
+   ===================================================================== */
+function renderPlanetForzeTab(host, planet, colony) {
+  const inner = renderCantieriSection(colony, planet);
+  if (!inner) {
+    host.innerHTML = '<div class="sysinfo"><p class="panel__note">' +
+      'Costruisci un <em>Hangar di costruzione</em> o un\'<em>Accademia militare</em> ' +
+      'per iniziare a reclutare scafi ed equipaggi.</p></div>';
+    return;
+  }
+  host.innerHTML = '<div class="sysinfo">' + inner + '</div>';
+  host.querySelectorAll('[data-build-ship]').forEach(function (btn) {
+    btn.addEventListener('click', function () { tryBuildShip(); });
+  });
+  host.querySelectorAll('[data-build-crew]').forEach(function (btn) {
+    btn.addEventListener('click', function () { tryBuildCrew(); });
+  });
+  host.querySelectorAll('[data-cancel-ship]').forEach(function (btn) {
+    btn.addEventListener('click', function () { tryCancelShip(Number(btn.dataset.cancelShip)); });
+  });
+  host.querySelectorAll('[data-cancel-crew]').forEach(function (btn) {
+    btn.addEventListener('click', function () { tryCancelCrew(Number(btn.dataset.cancelCrew)); });
+  });
+}
+
+/* =====================================================================
+   M07 — Cantieri & Squadre (decisione #37): HTML del blocco, riutilizzato
+   dalla tab Forze (M07.x).
    ===================================================================== */
 function renderCantieriSection(colony, planet) {
   const hasHangar = !!(colony.structures && colony.structures['cantiere-navale']);
