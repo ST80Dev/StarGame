@@ -83,13 +83,17 @@
     {
       id: 'build',
       tag: 'M04',
-      title: 'Strutture, slot e coda',
+      title: 'Strutture, slot ed espansione',
       body:
-        '<p>Le strutture occupano <strong>slot</strong> e impiegano <strong>Impulsi</strong> per essere completate ' +
-        '(vedi la durata sotto ogni voce). Non sono istantanee: avanza il tempo per veder maturare la coda.</p>' +
-        '<p>Le <strong>estrattive</strong> (miniere, centrali, fattorie, raccoglitori) coprono il fabbisogno; le ' +
-        '<strong>produttive</strong> (fonderia, raffineria) <strong>moltiplicano</strong> quello che le estrattive producono. ' +
-        'L\'<strong>osservatorio</strong> rivela l\'identità delle risorse avanzate dopo circa 10 I di scansione.</p>'
+        '<p>Ogni struttura occupa <strong>slot</strong> e si costruisce in <strong>Impulsi</strong> (non è istantanea: ' +
+        'avanza il tempo per veder maturare la coda). Gli slot di un pianeta sono <strong>limitati</strong>: sono la tua ' +
+        'risorsa strategica più scarsa.</p>' +
+        '<p>Una struttura si <strong>espande</strong> (bottone "+ Espandi"): ogni livello aggiunge un <strong>modulo</strong> ' +
+        '→ occupa <strong>1 slot in più</strong> e produce di più (i moduli successivi rendono un po\' più dei primi). Ma il ' +
+        '<strong>costo cresce</strong> a ogni livello: espandere all\'infinito non conviene.</p>' +
+        '<p>Le <strong>estrattive</strong> coprono il fabbisogno; le <strong>produttive</strong> (fonderia, raffineria) ' +
+        '<strong>moltiplicano</strong> la resa delle estrattive. Con slot limitati devi <strong>scegliere la vocazione</strong> ' +
+        'del pianeta: non puoi avere tutto al massimo. L\'<strong>osservatorio</strong> rivela le risorse avanzate dopo ~10 I.</p>'
     },
     {
       id: 'advance',

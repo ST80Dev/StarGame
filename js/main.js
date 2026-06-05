@@ -1269,7 +1269,7 @@ function renderPlanetRisorseTab(host, planet, colony) {
 function renderPlanetStruttureTab(host, planet, colony) {
   const S = ORION.structures;
   const used = Object.keys(colony.structures).reduce(function (a, id) {
-    const d = S.get(id); return a + ((d && d.slots) || 1);
+    const d = S.get(id); return a + S.slotFootprint(d, colony.structures[id].level || 1);
   }, 0);
   const inQueue = colony.queue.reduce(function (a, q) {
     const d = S.get(q.id); return a + ((d && d.slots) || 1);
@@ -1286,15 +1286,33 @@ function renderPlanetStruttureTab(host, planet, colony) {
     builtIds.forEach(function (id) {
       const def = S.get(id);
       const ent = colony.structures[id];
+      const lvl = ent.level || 1;
+      const maxL = def.maxLevel || 1;
+      const slotInfo = (def.slots && def.slots > 1)
+        ? (lvl * def.slots) + ' slot'
+        : lvl + (lvl > 1 ? ' moduli' : ' modulo');
       const demoCheck = ORION.planet.canDemolish(colony, planet, id);
       const demoBtn = demoCheck.ok
         ? '<button class="btn btn--mini struct-item__demolish" data-demolish="' + id + '" type="button" title="Smantella (rimborso 50% · 70% sulla colonia natale · morale −0,10 per 30 Ι)">🗑</button>'
         : '<span class="struct-item__locked is-busy" title="' + demoCheck.reason + '">🗑</span>';
+      // Decisione #38: bottone "+ Espandi" (aggiunge un modulo = +slot, costo escalante)
+      let upBtn;
+      if (lvl >= maxL) {
+        upBtn = '<span class="struct-item__locked" title="Livello massimo (' + maxL + ')">max</span>';
+      } else {
+        const up = ORION.planet.canBuild(colony, planet, id);
+        const nextCost = S.stepCost(def, lvl + 1);
+        const costStr = Object.keys(nextCost).map(function (k) { return resGlyph(k) + nextCost[k]; }).join(' ');
+        if (up.ok) {
+          upBtn = '<button class="btn btn--mini" data-build="' + id + '" type="button" title="Espandi a ×' + (lvl + 1) + ' (+' + (def.slots || 1) + ' slot · ' + costStr + ')">+ Espandi</button>';
+        } else {
+          upBtn = '<span class="struct-item__locked" title="' + escapeHtml(up.reason) + '">+ Espandi</span>';
+        }
+      }
       html += '<li class="struct-item is-built">' +
         '<span class="struct-item__glyph">' + def.glyph + '</span>' +
-        '<span class="struct-item__name">' + def.name + ' <span class="struct-item__lvl">lvl ' + (ent.level || 1) + '</span></span>' +
-        '<span class="struct-item__cat">' + S.CATEGORIES[def.cat].label + '</span>' +
-        demoBtn +
+        '<span class="struct-item__name">' + def.name + ' <span class="struct-item__lvl">×' + lvl + '</span> <span class="struct-item__cat">' + slotInfo + '</span></span>' +
+        upBtn + demoBtn +
       '</li>';
     });
     html += '</ul>';
@@ -1340,8 +1358,11 @@ function renderPlanetStruttureTab(host, planet, colony) {
       '</div>';
   }
 
-  // costruibili
-  const available = S.buildableOn(planet.type);
+  // costruibili — solo strutture NON ancora presenti (decisione #38: quelle
+  // già costruite si potenziano dal bottone "+ Espandi" in "Costruite").
+  const available = S.buildableOn(planet.type).filter(function (def) {
+    return !colony.structures[def.id];
+  });
   html += '<p class="sysinfo__sub">Costruibili</p>';
   const byCat = {};
   available.forEach(function (def) { (byCat[def.cat] = byCat[def.cat] || []).push(def); });
