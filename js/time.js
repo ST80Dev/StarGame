@@ -570,6 +570,79 @@
     }
   }
 
+  /* 6b) M07 — code asset (scafi Hangar / equipaggi Accademia).
+        Decisione #37: counter scafi e array equipaggi separati dalla
+        coda strutture; produzione 1/Ι (no malus scarsità — il loop le
+        considera prodotti di "qualità", non risorse di flusso). */
+  let _assetCounter = 0;
+  function processAssets(game, colony, planet, events) {
+    if (!colony.assets) return;
+    /* Scafi */
+    const sq = colony.assets.shipQueue;
+    if (Array.isArray(sq) && sq.length) {
+      const still = [];
+      for (let i = 0; i < sq.length; i++) {
+        const q = sq[i];
+        q.duration = (q.duration || 0) - 1;
+        if (q.duration <= 0) {
+          colony.ships = colony.ships || { explorer: 0 };
+          colony.ships.explorer = (colony.ships.explorer || 0) + 1;
+          events.push({
+            kind: 'ship-built',
+            colony: colony, planet: planet,
+            shipKind: q.kind || 'explorer',
+            impulso: game.timeImpulsi
+          });
+        } else {
+          still.push(q);
+        }
+      }
+      colony.assets.shipQueue = still;
+    }
+    /* Equipaggi */
+    const cq = colony.assets.crewQueue;
+    if (Array.isArray(cq) && cq.length) {
+      const still = [];
+      for (let i = 0; i < cq.length; i++) {
+        const q = cq[i];
+        q.duration = (q.duration || 0) - 1;
+        if (q.duration <= 0) {
+          colony.crews = colony.crews || { explorer: [] };
+          if (!Array.isArray(colony.crews.explorer)) colony.crews.explorer = [];
+          _assetCounter++;
+          colony.crews.explorer.push({
+            id: 'crew-' + (game.timeImpulsi || 0) + '-' + _assetCounter,
+            xp: 0
+          });
+          events.push({
+            kind: 'crew-formed',
+            colony: colony, planet: planet,
+            crewKind: q.kind || 'explorer',
+            impulso: game.timeImpulsi
+          });
+        } else {
+          still.push(q);
+        }
+      }
+      colony.assets.crewQueue = still;
+    }
+  }
+
+  /* 6c) M07 — spedizioni in viaggio. Itera game.expeditions[], rimuove
+        quelle 'done'. Gli eventi tipo expedition-* sono gestiti dal
+        modulo expedition.js. */
+  function processExpeditions(game, events) {
+    if (!Array.isArray(game.expeditions) || !game.expeditions.length) return;
+    if (!root.ORION.expedition || !root.ORION.expedition.tick) return;
+    const still = [];
+    for (let i = 0; i < game.expeditions.length; i++) {
+      const exp = game.expeditions[i];
+      root.ORION.expedition.tick(game, exp, events);
+      if (exp.status !== 'done') still.push(exp);
+    }
+    game.expeditions = still;
+  }
+
   /* 6) Osservatorio: avanza scansione, sblocca avanzate al traguardo. */
   function processObservatory(game, colony, planet, events) {
     const obs = colony.structures['osservatorio'];
@@ -610,8 +683,11 @@
       processScarcity(game, colony, planet, prod, events);
       processPopulation(game, colony, planet, prod, events);
       processObservatory(game, colony, planet, events);
+      processAssets(game, colony, planet, events);
       processSettling(game, colony, planet, events);
     }
+    /* M07: spedizioni in volo (1 tick per ogni Impulso). */
+    processExpeditions(game, events);
   }
 
   /* M06.5 (decisione #27): scriptata della fase Insediamento.
@@ -724,7 +800,29 @@
         const rem = end - (game.timeImpulsi || 0);
         if (rem > 0 && rem < best) best = rem;
       }
+      // M07: scafi/equipaggi in costruzione
+      if (c.assets) {
+        const sq = c.assets.shipQueue || [];
+        for (let i = 0; i < sq.length; i++) {
+          const d = sq[i].duration || 0;
+          if (d > 0 && d < best) best = d;
+        }
+        const cq = c.assets.crewQueue || [];
+        for (let i = 0; i < cq.length; i++) {
+          const d = cq[i].duration || 0;
+          if (d > 0 && d < best) best = d;
+        }
+      }
     });
+    /* M07: spedizioni in viaggio (outbound o returning) */
+    if (Array.isArray(game.expeditions)) {
+      for (let i = 0; i < game.expeditions.length; i++) {
+        const e = game.expeditions[i];
+        if (!e || e.status === 'done') continue;
+        const d = (e.status === 'outbound') ? e.durationOut : e.durationBack;
+        if (d > 0 && d < best) best = d;
+      }
+    }
     if (!isFinite(best)) return CFG.NEXT_EVENT_FALLBACK;
     return Math.min(CFG.NEXT_EVENT_HARD_CAP, Math.max(1, best));
   }

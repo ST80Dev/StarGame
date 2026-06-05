@@ -313,6 +313,37 @@
         '<p><strong>Doppio prerequisito:</strong> (1) <em>scansione completata</em> sul pianeta (osservatorio), ' +
         '(2) tech <code>tech:esotici</code> sbloccato (gancio M13 — oggi resta locked).</p>' +
         '<p><strong>Pista vittoria:</strong> chiave per l\'<em>Ascensione tech</em>; è la struttura più "endgame" del catalogo M04.</p>'
+    },
+
+    /* ================================================================
+       M07 — Esplorazione (decisione #37). Due lezioni:
+         exploration       — overview del sistema (sblocco tab)
+         expedition-launch — al primo lancio riuscito
+       ================================================================ */
+    {
+      id: 'exploration', tag: 'M07 · ✦', title: 'Esplorare la galassia',
+      body:
+        '<p>I sistemi non noti vivono in <strong>nebbia di guerra</strong>: <em>UNKNOWN → DETECTED → EXPLORED</em>. ' +
+        'Per scoprire l\'interno di un sistema rilevato (o ignorato) ti serve una <strong>spedizione</strong>.</p>' +
+        '<p>Una spedizione consuma <strong>1 scafo esploratore</strong> (Hangar di costruzione) + ' +
+        '<strong>1 equipaggio esploratore</strong> (Accademia militare). Gli equipaggi accumulano <strong>xp</strong> ad ogni rientro: ' +
+        'più xp = viaggi più rapidi e meno incidenti (cap −15% durata, −20% incidenti).</p>' +
+        '<p>Il <em>pericolo §5.3</em> del sistema target modula la durata del salto iperspaziale (40-80 Ι base) ' +
+        'e la probabilità di incidente (5% sicuro → 30% letale). ' +
+        '<strong>Recovery-friendly</strong> (#22): nel peggiore dei casi perdi lo scafo, l\'equipaggio si salva sempre.</p>' +
+        '<p>I tre tier di <em>iperguida</em> (M13, decisione #32) ridurranno drasticamente le durate (×3, ×8, ×20).</p>'
+    },
+    {
+      id: 'expedition-launch', tag: 'M07 · ✦', title: 'Primo salto iperspaziale',
+      body:
+        '<p>La spedizione viaggia verso il sistema target, rivela il suo interno (passa a EXPLORED, ' +
+        'i suoi vicini ignoti diventano DETECTED), poi rientra alla colonia d\'origine.</p>' +
+        '<p><strong>Incidenti tipici:</strong> ritardo (+10-20 Ι), avaria minore (+10-15% usura), avaria critica ' +
+        '(scafo perso, equipaggio in fuga — solo su pericolo > 50), scoperta fortuita (raro, positivo).</p>' +
+        '<p><strong>Strategia:</strong> tieni gli equipaggi vivi e mandali in missione ripetutamente per costruire ' +
+        '<em>veterani</em>. Uno scafo logoro al 100% va in pensione: niente fail-state, costruisci il prossimo.</p>' +
+        '<p><strong>Ganci futuri:</strong> M08 introdurrà classi navi vere (caccia, fregata, incrociatore — ' +
+        'decisione #34); M13 attiverà l\'iperguida.</p>'
     }
   ];
 

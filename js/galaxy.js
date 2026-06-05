@@ -623,6 +623,27 @@
     galaxy.homeGroupId = galaxy.systems[newHomeId].cluster;
   }
 
+  /* ==================================================================
+     M07 — Esplorazione (decisione #37)
+     revealSystem(): promuove un sistema a EXPLORED nello state della
+     galassia (delta serializzabile), e promuove a DETECTED tutti i suoi
+     vicini ancora UNKNOWN. Idempotente: chiamarla due volte è no-op.
+     ================================================================== */
+  function revealSystem(galaxy, systemId, state) {
+    if (!galaxy || !galaxy.systems || !galaxy.systems[systemId]) return false;
+    if (!state || !Array.isArray(state.discovery)) return false;
+    if (state.discovery[systemId] >= DISCOVERY.EXPLORED) return false;
+    state.discovery[systemId] = DISCOVERY.EXPLORED;
+    const links = galaxy.systems[systemId].links || [];
+    for (let i = 0; i < links.length; i++) {
+      const nid = links[i];
+      if (state.discovery[nid] === DISCOVERY.UNKNOWN) {
+        state.discovery[nid] = DISCOVERY.DETECTED;
+      }
+    }
+    return true;
+  }
+
   root.ORION = root.ORION || {};
   root.ORION.galaxy = {
     generate: generate,
@@ -631,6 +652,7 @@
     dangerTier: dangerTier,
     pickHomeCandidates: pickHomeCandidates,
     recomputeDanger: recomputeDanger,
+    revealSystem: revealSystem,
     SCHEMA_VERSION: SCHEMA_VERSION
   };
 })(typeof window !== 'undefined' ? window : this);

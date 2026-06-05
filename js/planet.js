@@ -292,7 +292,14 @@
       /* M06.5: fase Insediamento. */
       phase: 'operational',         // 'settling' | 'operational'
       settlingStart: null,          // Impulso (game.timeImpulsi) in cui inizia l'Insediamento
-      settlingDuration: 60          // durata in Impulsi (sovrascritta dal preset all'init)
+      settlingDuration: 60,         // durata in Impulsi (sovrascritta dal preset all'init)
+      /* M07 (decisione #37): scafi e equipaggi prodotti dall'Hangar e
+         dall'Accademia. Scafi sono counter (intercambiabili), equipaggi
+         sono entità con xp persistente. Le code dedicate (assets.*) sono
+         separate da `queue` (strutture). */
+      ships:  { explorer: 0 },                      // counter
+      crews:  { explorer: [] },                     // [{ id, xp }]
+      assets: { shipQueue: [], crewQueue: [] }      // [{ kind, duration }]
     };
   }
 
@@ -571,6 +578,96 @@
     colony.scanned.advancedKnown = planet.advanced.map(function (a) { return a.id; });
   }
 
+  /* ==================================================================
+     M07 — Cantieri & Squadre (decisione #37)
+     Scafi (Hangar di costruzione, id 'cantiere-navale') e equipaggi
+     (Accademia militare, id 'accademia-militare'). Costo+durata fissi
+     dalle costanti di ORION.expedition.CFG quando il modulo è caricato,
+     fallback inline per i test headless.
+     ================================================================== */
+
+  function expCfg(key, fallback) {
+    if (root.ORION && root.ORION.expedition && root.ORION.expedition.CFG) {
+      return root.ORION.expedition.CFG[key];
+    }
+    return fallback;
+  }
+
+  function ensureAssets(colony) {
+    if (!colony.ships) colony.ships = { explorer: 0 };
+    if (!colony.crews) colony.crews = { explorer: [] };
+    if (!colony.assets) colony.assets = { shipQueue: [], crewQueue: [] };
+    if (!Array.isArray(colony.assets.shipQueue)) colony.assets.shipQueue = [];
+    if (!Array.isArray(colony.assets.crewQueue)) colony.assets.crewQueue = [];
+  }
+
+  function hasStructLevel(colony, structId, lvl) {
+    const ent = colony.structures && colony.structures[structId];
+    return !!(ent && (ent.level || 0) >= (lvl || 1));
+  }
+
+  function canPay(colony, cost) {
+    const keys = Object.keys(cost || {});
+    for (let i = 0; i < keys.length; i++) {
+      if ((colony.stock[keys[i]] || 0) < cost[keys[i]]) return false;
+    }
+    return true;
+  }
+  function pay(colony, cost) {
+    Object.keys(cost || {}).forEach(function (k) {
+      colony.stock[k] = (colony.stock[k] || 0) - cost[k];
+    });
+  }
+
+  function startShipBuild(colony, planet) {
+    ensureAssets(colony);
+    if (!hasStructLevel(colony, 'cantiere-navale', 1)) {
+      return { ok: false, reason: 'Hangar di costruzione non costruito' };
+    }
+    const cost = expCfg('SHIP_COST', { met: 25, en: 12 });
+    const time = expCfg('SHIP_TIME', 10);
+    if (!canPay(colony, cost)) return { ok: false, reason: 'Risorse insufficienti' };
+    pay(colony, cost);
+    colony.assets.shipQueue.push({ kind: 'explorer', duration: time });
+    return { ok: true };
+  }
+
+  function startCrewBuild(colony, planet) {
+    ensureAssets(colony);
+    if (!hasStructLevel(colony, 'accademia-militare', 1)) {
+      return { ok: false, reason: 'Accademia militare non costruita' };
+    }
+    const cost = expCfg('CREW_COST', { food: 12, water: 6 });
+    const time = expCfg('CREW_TIME', 12);
+    if (!canPay(colony, cost)) return { ok: false, reason: 'Risorse insufficienti' };
+    pay(colony, cost);
+    colony.assets.crewQueue.push({ kind: 'explorer', duration: time });
+    return { ok: true };
+  }
+
+  function cancelShipBuild(colony, idx) {
+    ensureAssets(colony);
+    if (idx < 0 || idx >= colony.assets.shipQueue.length) return { ok: false };
+    colony.assets.shipQueue.splice(idx, 1);
+    /* Rimborso 50% (recovery-friendly, decisione #22). */
+    const cost = expCfg('SHIP_COST', { met: 25, en: 12 });
+    Object.keys(cost).forEach(function (k) {
+      colony.stock[k] = (colony.stock[k] || 0) + Math.floor(cost[k] * 0.5);
+    });
+    return { ok: true };
+  }
+
+  function cancelCrewBuild(colony, idx) {
+    ensureAssets(colony);
+    if (idx < 0 || idx >= colony.assets.crewQueue.length) return { ok: false };
+    colony.assets.crewQueue.splice(idx, 1);
+    const cost = expCfg('CREW_COST', { food: 12, water: 6 });
+    Object.keys(cost).forEach(function (k) {
+      colony.stock[k] = (colony.stock[k] || 0) + Math.floor(cost[k] * 0.5);
+    });
+    return { ok: true };
+  }
+
   root.ORION = root.ORION || {};
   root.ORION.planet = {
     SCHEMA_VERSION: SCHEMA_VERSION,
@@ -592,6 +689,12 @@
     cancelBuild: cancelBuild,
     canDemolish: canDemolish,
     startDemolish: startDemolish,
-    applyScan: applyScan
+    applyScan: applyScan,
+    /* M07 (decisione #37) — cantieri/squadre */
+    ensureAssets: ensureAssets,
+    startShipBuild: startShipBuild,
+    startCrewBuild: startCrewBuild,
+    cancelShipBuild: cancelShipBuild,
+    cancelCrewBuild: cancelCrewBuild
   };
 })(typeof window !== 'undefined' ? window : this);

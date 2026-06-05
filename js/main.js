@@ -35,7 +35,7 @@ ORION.currentSystem = null;
 ORION.planetView = null;
 ORION.openPlanetKey = null;     // "<sysId>:<bodyKey>"
 ORION.currentPlanet = null;
-ORION.planetTab = 'colonia';    // 'colonia' | 'risorse' | 'strutture' | 'popolazione'
+ORION.planetTab = 'colonia';    // 'colonia' | 'risorse' | 'strutture' | 'popolazione' | 'esplorazione' (M07)
 
 /* Ultimo sistema annotato in cronaca (evita doppioni consecutivi). */
 ORION.lastChronicleId = -1;
@@ -127,7 +127,9 @@ function newGame(seed, opts) {
       ? { systemId: opts.homeWorld.systemId, bodyKey: opts.homeWorld.bodyKey }
       : null,
     /* M06.6: stato tutorial (decisione #28). Persistito nel save (schema 4). */
-    tutorial: { enabled: tutorialEnabled, seenLessons: [] }
+    tutorial: { enabled: tutorialEnabled, seenLessons: [] },
+    /* M07 (decisione #37): spedizioni di esplorazione in viaggio. */
+    expeditions: []
   };
   // startDS = Data Stellare INIZIALE (epoca .00), fissa per la partita.
   ORION.game.startDS = ORION.time.format(startOrbita * 100);
@@ -147,6 +149,7 @@ function newGame(seed, opts) {
     if (saved.mode) ORION.game.mode = saved.mode;
     if (saved.victoryTracks) ORION.game.victoryTracks = saved.victoryTracks;
     if (saved.eventSchedule) ORION.game.eventSchedule = saved.eventSchedule;
+    if (Array.isArray(saved.expeditions)) ORION.game.expeditions = saved.expeditions.slice();
     if (Array.isArray(saved.chronicle)) ORION.game.chronicle = saved.chronicle.slice();
     /* Tutorial: rispetta lo stato del payload se presente. */
     if (saved.tutorial && typeof saved.tutorial === 'object') {
@@ -1035,8 +1038,22 @@ function renderPlanetPanel(title, content) {
   const sysId = ORION.currentSystem ? ORION.currentSystem.id : -1;
   title.innerHTML = planet.name + bodyTagHtml(sysId);
 
+  /* M07 (decisione #37): tab Esplorazione visibile solo se la colonia ha
+     mai prodotto scafi/equipaggi (o ne sta producendo / ha spedizioni
+     attive da qui). Non vogliamo mostrarla preventivamente: sblocca quando
+     l'utente costruisce Hangar/Accademia e avvia la prima produzione. */
+  const hasExplorationAssets = colony.colonized && (
+    (colony.ships && (colony.ships.explorer || 0) > 0) ||
+    (colony.crews && Array.isArray(colony.crews.explorer) && colony.crews.explorer.length > 0) ||
+    (colony.assets && ((colony.assets.shipQueue && colony.assets.shipQueue.length) ||
+                       (colony.assets.crewQueue && colony.assets.crewQueue.length))) ||
+    expeditionsForColony(colony).length > 0
+  );
   const tabs = ['colonia', 'risorse', 'strutture', 'popolazione'];
+  if (hasExplorationAssets) tabs.push('esplorazione');
   if (!colony.colonized) ORION.planetTab = 'colonia';
+  /* Se la tab attiva è 'esplorazione' ma non più visibile, fallback. */
+  if (ORION.planetTab === 'esplorazione' && !hasExplorationAssets) ORION.planetTab = 'colonia';
   const activeTab = ORION.planetTab;
   const alerts = planetTabAlerts(colony);
 
@@ -1047,10 +1064,11 @@ function renderPlanetPanel(title, content) {
     '<nav class="planet-tabs" role="tablist">' +
       tabs.map(function (t) {
         const meta = {
-          colonia:     { icon: '⚑', label: 'Colonia',  full: 'Colonia' },
-          risorse:     { icon: '⛁', label: 'Risorse',  full: 'Risorse' },
-          strutture:   { icon: '⌂', label: 'Strutt.',  full: 'Strutture' },
-          popolazione: { icon: '♟', label: 'Pop.',     full: 'Popolazione' }
+          colonia:      { icon: '⚑', label: 'Colonia',  full: 'Colonia' },
+          risorse:      { icon: '⛁', label: 'Risorse',  full: 'Risorse' },
+          strutture:    { icon: '⌂', label: 'Strutt.',  full: 'Strutture' },
+          popolazione:  { icon: '♟', label: 'Pop.',     full: 'Popolazione' },
+          esplorazione: { icon: '✦', label: 'Esplor.',  full: 'Esplorazione' }
         }[t];
         const disabled = (!colony.colonized && t !== 'colonia');
         const isActive = (t === activeTab);
@@ -1081,6 +1099,7 @@ function renderPlanetPanel(title, content) {
   else if (activeTab === 'risorse') renderPlanetRisorseTab(host, planet, colony);
   else if (activeTab === 'strutture') renderPlanetStruttureTab(host, planet, colony);
   else if (activeTab === 'popolazione') renderPlanetPopolazioneTab(host, planet, colony);
+  else if (activeTab === 'esplorazione') renderPlanetEsplorazioneTab(host, planet, colony);
 
   /* M06.6: tutorial — schede per tab pianeta. Risorse copre l'idea delle
      avanzate mascherate (§7.2); Strutture copre slot/coda/durata. */
@@ -1089,7 +1108,17 @@ function renderPlanetPanel(title, content) {
     else if (activeTab === 'risorse' && planet.advanced && planet.advanced.length > 0) {
       ORION.tutorial.fire('advanced');
     }
+    else if (activeTab === 'esplorazione') ORION.tutorial.fire('exploration');
   }
+}
+
+/* M07: ritorna le spedizioni che originano da una colonia (per UI). */
+function expeditionsForColony(colony) {
+  if (!ORION.game || !Array.isArray(ORION.game.expeditions)) return [];
+  const key = colony.systemId + ':' + colony.bodyKey;
+  return ORION.game.expeditions.filter(function (e) {
+    return e && e.originColonyKey === key && e.status !== 'done';
+  });
 }
 
 /* --- Tab Colonia / Colonizzazione --- */
@@ -1358,6 +1387,10 @@ function renderPlanetStruttureTab(host, planet, colony) {
       '</div>';
   }
 
+  // M07 (decisione #39): blocco Cantieri & Squadre — visibile solo se
+  // almeno una delle due strutture-gancio è costruita.
+  html += renderCantieriSection(colony, planet);
+
   // costruibili — solo strutture NON ancora presenti (decisione #38: quelle
   // già costruite si potenziano dal bottone "+ Espandi" in "Costruite").
   const available = S.buildableOn(planet.type).filter(function (def) {
@@ -1419,6 +1452,19 @@ function renderPlanetStruttureTab(host, planet, colony) {
   host.querySelectorAll('[data-demolish]').forEach(function (btn) {
     btn.addEventListener('click', function () { tryDemolish(btn.dataset.demolish); });
   });
+  /* M07: cantieri scafi/equipaggi */
+  host.querySelectorAll('[data-build-ship]').forEach(function (btn) {
+    btn.addEventListener('click', function () { tryBuildShip(); });
+  });
+  host.querySelectorAll('[data-build-crew]').forEach(function (btn) {
+    btn.addEventListener('click', function () { tryBuildCrew(); });
+  });
+  host.querySelectorAll('[data-cancel-ship]').forEach(function (btn) {
+    btn.addEventListener('click', function () { tryCancelShip(Number(btn.dataset.cancelShip)); });
+  });
+  host.querySelectorAll('[data-cancel-crew]').forEach(function (btn) {
+    btn.addEventListener('click', function () { tryCancelCrew(Number(btn.dataset.cancelCrew)); });
+  });
   /* M06.7: bottone ⓘ apre la scheda tutorial della struttura (on-demand,
      ignora isEnabled — è un manuale leggero). */
   host.querySelectorAll('[data-info]').forEach(function (btn) {
@@ -1475,6 +1521,311 @@ function tryDemolish(id) {
   pushChronicle(ORION.time.currentDS(g) + ' — Avviato smantellamento: <strong>' + def.name + '</strong> su ' + planet.name + bodyTagHtml(planet.systemId) + ' (' + dur + ' Ι).', 'planet');
   persistGame(g);
   updateGlobalResourceHud();
+  updatePlanetUI();
+}
+
+/* =====================================================================
+   M07 — Cantieri & Squadre (decisione #37): UI nella tab Strutture
+   ===================================================================== */
+function renderCantieriSection(colony, planet) {
+  const hasHangar = !!(colony.structures && colony.structures['cantiere-navale']);
+  const hasAcademy = !!(colony.structures && colony.structures['accademia-militare']);
+  if (!hasHangar && !hasAcademy) return '';
+  const E = (ORION.expedition && ORION.expedition.CFG) || {};
+  const shipCost = E.SHIP_COST || { met: 25, en: 12 };
+  const shipTime = E.SHIP_TIME || 10;
+  const crewCost = E.CREW_COST || { food: 12, water: 6 };
+  const crewTime = E.CREW_TIME || 12;
+  ORION.planet.ensureAssets(colony);
+
+  function costStr(c) {
+    return Object.keys(c).map(function (k) { return resGlyph(k) + c[k]; }).join(' · ');
+  }
+  function canPay(c) {
+    const ks = Object.keys(c);
+    for (let i = 0; i < ks.length; i++) {
+      if ((colony.stock[ks[i]] || 0) < c[ks[i]]) return false;
+    }
+    return true;
+  }
+
+  let html = '<div class="cantieri-section">' +
+    '<p class="sysinfo__sub">Cantieri & Squadre <span class="cantieri-section__hint">(M07 — esplorazione)</span></p>';
+
+  if (hasHangar) {
+    const sShips = colony.ships && colony.ships.explorer || 0;
+    const queue = colony.assets.shipQueue || [];
+    const payOk = canPay(shipCost);
+    html += '<div class="cantieri-row">' +
+      '<div class="cantieri-row__head">' +
+        '<span class="cantieri-row__glyph" aria-hidden="true">▱</span>' +
+        '<span class="cantieri-row__name">Hangar di costruzione</span>' +
+        '<span class="cantieri-row__counter">Scafi: <strong>' + sShips + '</strong></span>' +
+      '</div>';
+    queue.forEach(function (q, idx) {
+      const total = shipTime;
+      const remain = Math.max(0, q.duration | 0);
+      const pct = Math.round(((total - remain) / total) * 100);
+      html += '<div class="struct-item is-queue">' +
+        '<span class="struct-item__glyph">▱</span>' +
+        '<div class="struct-item__main">' +
+          '<div class="struct-item__name">Scafo esploratore <span class="struct-item__cat">' + remain + ' / ' + total + ' I</span></div>' +
+          '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
+        '</div>' +
+        '<button class="btn btn--mini struct-item__cancel" data-cancel-ship="' + idx + '" type="button" title="Annulla (rimborso 50%)">×</button>' +
+      '</div>';
+    });
+    html += '<div class="cantieri-row__build">' +
+      '<span class="cantieri-row__cost">' + costStr(shipCost) + ' · ' + shipTime + ' I</span>' +
+      '<button class="btn btn--mini" data-build-ship type="button"' + (payOk ? '' : ' disabled') + '>+ Scafo esploratore</button>' +
+    '</div></div>';
+  }
+
+  if (hasAcademy) {
+    const crews = (colony.crews && colony.crews.explorer) || [];
+    const avg = crews.length ? (ORION.expedition.averageXp(crews)).toFixed(1) : '0';
+    const queue = colony.assets.crewQueue || [];
+    const payOk = canPay(crewCost);
+    html += '<div class="cantieri-row">' +
+      '<div class="cantieri-row__head">' +
+        '<span class="cantieri-row__glyph" aria-hidden="true">⚔</span>' +
+        '<span class="cantieri-row__name">Accademia militare</span>' +
+        '<span class="cantieri-row__counter">Equipaggi: <strong>' + crews.length + '</strong>' +
+          (crews.length ? ' <span class="xp-chip" title="Esperienza media">xp ' + avg + '</span>' : '') +
+        '</span>' +
+      '</div>';
+    queue.forEach(function (q, idx) {
+      const total = crewTime;
+      const remain = Math.max(0, q.duration | 0);
+      const pct = Math.round(((total - remain) / total) * 100);
+      html += '<div class="struct-item is-queue">' +
+        '<span class="struct-item__glyph">⚔</span>' +
+        '<div class="struct-item__main">' +
+          '<div class="struct-item__name">Equipaggio esploratore <span class="struct-item__cat">' + remain + ' / ' + total + ' I</span></div>' +
+          '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
+        '</div>' +
+        '<button class="btn btn--mini struct-item__cancel" data-cancel-crew="' + idx + '" type="button" title="Annulla (rimborso 50%)">×</button>' +
+      '</div>';
+    });
+    html += '<div class="cantieri-row__build">' +
+      '<span class="cantieri-row__cost">' + costStr(crewCost) + ' · ' + crewTime + ' I</span>' +
+      '<button class="btn btn--mini" data-build-crew type="button"' + (payOk ? '' : ' disabled') + '>+ Equipaggio esploratore</button>' +
+    '</div></div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function tryBuildShip() {
+  const g = ORION.game;
+  const colony = g.colonies[ORION.openPlanetKey];
+  const planet = ORION.currentPlanet;
+  const r = ORION.planet.startShipBuild(colony, planet);
+  if (!r.ok) { console.info('Costruzione scafo rifiutata:', r.reason); showToast(r.reason); return; }
+  pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione di uno <strong>scafo esploratore</strong> su ' + planet.name + bodyTagHtml(planet.systemId) + '.', 'planet');
+  persistGame(g);
+  updateGlobalResourceHud();
+  updatePlanetUI();
+}
+
+function tryBuildCrew() {
+  const g = ORION.game;
+  const colony = g.colonies[ORION.openPlanetKey];
+  const planet = ORION.currentPlanet;
+  const r = ORION.planet.startCrewBuild(colony, planet);
+  if (!r.ok) { console.info('Formazione equipaggio rifiutata:', r.reason); showToast(r.reason); return; }
+  pushChronicle(ORION.time.currentDS(g) + ' — Avviata formazione di un <strong>equipaggio esploratore</strong> presso l\'Accademia di ' + planet.name + bodyTagHtml(planet.systemId) + '.', 'planet');
+  persistGame(g);
+  updateGlobalResourceHud();
+  updatePlanetUI();
+}
+
+function tryCancelShip(idx) {
+  const colony = ORION.game.colonies[ORION.openPlanetKey];
+  ORION.planet.cancelShipBuild(colony, idx);
+  persistGame(ORION.game);
+  updateGlobalResourceHud();
+  updatePlanetUI();
+}
+function tryCancelCrew(idx) {
+  const colony = ORION.game.colonies[ORION.openPlanetKey];
+  ORION.planet.cancelCrewBuild(colony, idx);
+  persistGame(ORION.game);
+  updateGlobalResourceHud();
+  updatePlanetUI();
+}
+
+/* =====================================================================
+   M07 — Tab Esplorazione (decisione #37)
+   Mostra spedizioni attive (status, ETA, wear, xp) + bottone "Organizza
+   spedizione" → overlay con lista sistemi DETECTED/UNKNOWN raggiungibili
+   da questa colonia (via galaxy.routes).
+   ===================================================================== */
+function renderPlanetEsplorazioneTab(host, planet, colony) {
+  const g = ORION.game;
+  ORION.planet.ensureAssets(colony);
+  const ships = (colony.ships && colony.ships.explorer) || 0;
+  const crews = (colony.crews && colony.crews.explorer) || [];
+  const xpAvg = crews.length ? ORION.expedition.averageXp(crews).toFixed(1) : '0';
+
+  const expeditions = expeditionsForColony(colony);
+
+  let listHtml;
+  if (expeditions.length) {
+    listHtml = '<ul class="expedition-list">' + expeditions.map(function (e) {
+      const target = g.galaxy.systems[e.targetSystemId];
+      const acr = regionAcronymFor(e.targetSystemId);
+      const targetName = target ? target.name : '—';
+      const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
+      const status = e.status;
+      const rem = (status === 'outbound') ? (e.durationOut | 0) :
+                  (status === 'returning') ? (e.durationBack | 0) : 0;
+      const wear = Math.min(100, e.shipWear || 0);
+      const xp = e.crewXp || 0;
+      const incCount = (e.incidents || []).length;
+      const enr = ORION.expedition.enrichmentForXp(xp);
+      const statusLabel = status === 'outbound' ? 'In rotta' :
+                          status === 'returning' ? 'Rientro' : 'Conclusa';
+      return '<li class="expedition-item">' +
+        '<div class="expedition-item__head">' +
+          '<span class="expedition-item__status expedition-status--' + status + '">' + statusLabel + '</span>' +
+          '<span class="expedition-item__target">' + escapeHtml(targetName) + tag + '</span>' +
+          '<span class="expedition-item__eta">ETA ' + rem + ' I</span>' +
+        '</div>' +
+        '<div class="expedition-item__bars">' +
+          '<div class="wear-bar" title="Usura scafo ' + wear + '%">' +
+            '<div class="wear-bar__fill" style="width:' + wear + '%"></div>' +
+            '<span class="wear-bar__label">scafo ' + wear + '%</span>' +
+          '</div>' +
+          '<span class="xp-chip" title="' + enr.label + '">xp ' + xp + ' · ' + enr.label + '</span>' +
+          (incCount ? '<span class="expedition-item__inc" title="Incidenti accumulati">⚠ ' + incCount + '</span>' : '') +
+        '</div>' +
+      '</li>';
+    }).join('') + '</ul>';
+  } else {
+    listHtml = '<p class="panel__note">Nessuna spedizione attiva. Costruisci scafi e equipaggi, poi pianifica una rotta.</p>';
+  }
+
+  const canOrganize = ships >= 1 && crews.length >= 1;
+  const reachable = ORION.expedition.reachableTargets(g.galaxy, g.state, colony.systemId);
+  const hasTargets = reachable.length > 0;
+
+  host.innerHTML =
+    '<div class="sysinfo">' +
+      '<p class="sysinfo__sub">Risorse disponibili</p>' +
+      '<dl class="sysinfo__list">' +
+        row('Scafi esploratori', String(ships)) +
+        row('Equipaggi', crews.length + (crews.length ? ' (xp medio ' + xpAvg + ')' : '')) +
+        row('Sistemi raggiungibili', String(reachable.length)) +
+      '</dl>' +
+      '<button class="btn btn--mini btn--enter" data-action="exp-organize" type="button"' +
+        ((canOrganize && hasTargets) ? '' : ' disabled') +
+        ' title="' + (canOrganize ? (hasTargets ? 'Pianifica un salto iperspaziale' : 'Nessuna rotta inesplorata adiacente') : 'Servono uno scafo e un equipaggio') + '">' +
+        '✦ Organizza spedizione ▸' +
+      '</button>' +
+      '<p class="sysinfo__sub">Spedizioni attive</p>' +
+      listHtml +
+      '<p class="panel__note">Costruisci scafi nell\'<em>Hangar di costruzione</em> e forma equipaggi nell\'<em>Accademia militare</em>. ' +
+        'Ogni missione completata restituisce l\'equipaggio con +1 xp; gli scafi accumulano usura. ' +
+        'I tre tier di <em>iperguida</em> (M13) ridurranno i tempi di salto iperspaziale.</p>' +
+    '</div>';
+
+  const btn = host.querySelector('[data-action="exp-organize"]');
+  if (btn && !btn.disabled) btn.addEventListener('click', function () { openExpeditionPicker(colony); });
+}
+
+function openExpeditionPicker(colony) {
+  const g = ORION.game;
+  const reachable = ORION.expedition.reachableTargets(g.galaxy, g.state, colony.systemId);
+  const ships = (colony.ships && colony.ships.explorer) || 0;
+  const crews = (colony.crews && colony.crews.explorer) || [];
+  const crewXp = crews.length ? (crews[0].xp || 0) : 0;
+
+  let host = document.querySelector('[data-bind="exp-picker"]');
+  if (!host) {
+    host = document.createElement('div');
+    host.className = 'expedition-pick-overlay';
+    host.setAttribute('data-bind', 'exp-picker');
+    host.setAttribute('role', 'dialog');
+    host.setAttribute('aria-modal', 'true');
+    host.setAttribute('aria-label', 'Organizza spedizione');
+    document.body.appendChild(host);
+  }
+
+  const cards = reachable.map(function (sid) {
+    const sys = g.galaxy.systems[sid];
+    const acr = regionAcronymFor(sid);
+    const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
+    const dur = ORION.expedition.computeDuration(g.galaxy, sid, crewXp);
+    const chance = ORION.expedition.accidentChance(g.galaxy, sid, crewXp);
+    const dangerN = ORION.expedition.dangerNorm(g.galaxy, sid);
+    const dangerTier = sys.dangerTier || ORION.galaxy.dangerTier(sys.danger);
+    const DISCOVERY = ORION.galaxy.DISCOVERY;
+    const disc = g.state.discovery[sid];
+    const discLabel = disc >= DISCOVERY.DETECTED ? 'rilevato' : 'ignoto';
+    const nameLabel = disc >= DISCOVERY.DETECTED ? sys.name : 'Sistema ignoto';
+    return '<div class="expedition-card">' +
+      '<div class="expedition-card__head">' +
+        '<span class="expedition-card__name">' + escapeHtml(nameLabel) + tag + '</span>' +
+        '<span class="danger-badge tier--' + dangerTier + '">' + sys.danger + ' · ' + dangerTier + '</span>' +
+      '</div>' +
+      '<dl class="save-card__meta">' +
+        '<div><dt>Stato</dt><dd>' + discLabel + '</dd></div>' +
+        '<div><dt>Durata viaggio</dt><dd>' + dur + ' I (a/r)</dd></div>' +
+        '<div><dt>Rischio incidente</dt><dd>' + Math.round(chance * 100) + '%</dd></div>' +
+      '</dl>' +
+      '<div class="expedition-card__actions">' +
+        '<button class="btn btn--mini btn--primary" data-action="exp-launch" data-sys="' + sid + '" type="button">✦ Invia</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  host.innerHTML =
+    '<div class="expedition-pick-overlay__panel" role="document">' +
+      '<header class="expedition-pick-overlay__head">' +
+        '<h2 class="expedition-pick-overlay__title">Organizza spedizione</h2>' +
+        '<button class="btn btn--mini" data-action="exp-pick-close" type="button" aria-label="Chiudi">✕</button>' +
+      '</header>' +
+      '<p class="panel__note">Scafi disponibili: <strong>' + ships + '</strong> · ' +
+        'Equipaggi: <strong>' + crews.length + '</strong>. Verrà impegnato il primo equipaggio in lista (' +
+        (crews.length ? 'xp ' + (crews[0].xp || 0) : 'nessuno') + ').</p>' +
+      '<div class="expedition-pick-overlay__grid">' + cards + '</div>' +
+    '</div>';
+  host.hidden = false;
+
+  host.addEventListener('click', function (e) {
+    if (e.target === host || e.target.matches('[data-action="exp-pick-close"]')) {
+      closeExpeditionPicker();
+    }
+  });
+  host.querySelectorAll('[data-action="exp-launch"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const sid = Number(b.dataset.sys);
+      doLaunchExpedition(colony, sid);
+    });
+  });
+}
+
+function closeExpeditionPicker() {
+  const host = document.querySelector('[data-bind="exp-picker"]');
+  if (host) { host.hidden = true; host.innerHTML = ''; }
+}
+
+function doLaunchExpedition(colony, targetSystemId) {
+  const g = ORION.game;
+  const key = colony.systemId + ':' + colony.bodyKey;
+  const r = ORION.expedition.launch(g, key, targetSystemId);
+  if (!r.ok) { showToast(r.reason || 'Lancio rifiutato'); return; }
+  const sys = g.galaxy.systems[targetSystemId];
+  const acr = regionAcronymFor(targetSystemId);
+  const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
+  pushChronicle(ORION.time.currentDS(g) + ' — Spedizione partita verso <strong>' +
+    (sys ? sys.name : 'sistema ignoto') + '</strong>' + tag +
+    ' · salto iperspaziale, durata stimata ' + r.expedition.durationOut + ' I.', 'explore');
+  if (ORION.tutorial) ORION.tutorial.fire('expedition-launch');
+  closeExpeditionPicker();
+  persistGame(g);
   updatePlanetUI();
 }
 
@@ -1691,7 +2042,10 @@ const PLAY_LS_PAUSES = 'orion.autopause';
 const DEFAULT_AUTOPAUSE = {
   'build-done': true, 'demolish-done': true, 'colony-done': true, 'scan-done': true,
   'scarcity': true, 'scarcity-recover': true, 'pop-loss': true,
-  'victory': true, 'settle-stage': true, 'settle-done': true
+  'victory': true, 'settle-stage': true, 'settle-done': true,
+  /* M07 (decisione #37): pausa solo su esiti notevoli. Non su launch
+     (azione utente), né su ship-built/crew-formed (frequenti). */
+  'expedition-arrived': true, 'expedition-ship-lost': true, 'expedition-discovery': true
 };
 
 ORION.timer = {
@@ -1884,7 +2238,10 @@ function showEventOverlay(events) {
     'pop-loss': 'Calo popolazione',
     'victory': 'Pista chiusa',
     'settle-stage': 'Fase Insediamento',
-    'settle-done': 'Insediamento completato'
+    'settle-done': 'Insediamento completato',
+    'expedition-arrived': 'Spedizione: sistema esplorato',
+    'expedition-ship-lost': 'Spedizione: scafo perso',
+    'expedition-discovery': 'Spedizione: scoperta fortuita'
   };
   /* Raggruppa per kind: una checkbox per categoria, una sola voce di sintesi. */
   const byKind = {};
@@ -2014,6 +2371,35 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — ' + txt, 'planet');
   } else if (ev.kind === 'settle-done') {
     pushChronicle(ds + ' — Insediamento completato — la colonia di <strong>' + pname + '</strong> è operativa.', 'planet');
+  } else if (ev.kind === 'ship-built') {
+    pushChronicle(ds + ' — Nuovo <strong>scafo esploratore</strong> pronto al varo su ' + pname + ptag + '.', 'planet');
+  } else if (ev.kind === 'crew-formed') {
+    pushChronicle(ds + ' — Nuovo <strong>equipaggio esploratore</strong> brevettato dall\'Accademia di ' + pname + ptag + '.', 'planet');
+  } else if (ev.kind === 'expedition-arrived') {
+    const sys = ORION.game.galaxy.systems[ev.systemId];
+    const tag = ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
+    pushChronicle(ds + ' — Salto iperspaziale completato: sistema <strong>' + (sys ? sys.name : '—') + '</strong>' + tag + ' esplorato.', 'explore');
+    /* Forza un re-render della mappa galassia (il sistema target è ora EXPLORED) */
+    if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+  } else if (ev.kind === 'expedition-incident') {
+    const inc = ev.incident || {};
+    let txt;
+    if (inc.kind === 'delay')         txt = 'Incidente in rotta: ritardo (+' + inc.amount + ' Ι).';
+    else if (inc.kind === 'wear')     txt = 'Incidente in rotta: avaria propulsori (+' + inc.amount + '% usura).';
+    else if (inc.kind === 'critical') txt = 'Avaria critica: scafo compromesso, equipaggio in fuga su scialuppa di salvataggio.';
+    else if (inc.kind === 'discovery')txt = 'Scoperta fortuita lungo la rotta iperspaziale.';
+    else txt = 'Incidente in rotta.';
+    pushChronicle(ds + ' — ' + txt, 'system');
+  } else if (ev.kind === 'expedition-ship-lost') {
+    pushChronicle(ds + ' — <strong>Scafo ritirato dal servizio</strong> (usura 100%): rotta di rientro su nave di soccorso.', 'system');
+  } else if (ev.kind === 'expedition-return') {
+    const exp = ev.expedition;
+    const sys = exp && ORION.game.galaxy.systems[exp.targetSystemId];
+    const tag = exp ? systemTagHtml(exp.targetSystemId) : '';
+    pushChronicle(ds + ' — Spedizione rientrata da <strong>' + (sys ? sys.name : '—') + '</strong>' + tag +
+      (ev.shipLost ? ' · scafo perso' : ' · equipaggio promosso (+1 xp)') + '.', 'explore');
+  } else if (ev.kind === 'expedition-discovery') {
+    pushChronicle(ds + ' — <strong>Scoperta fortuita</strong>: l\'equipaggio porta in patria osservazioni inattese.', 'explore');
   }
 }
 
