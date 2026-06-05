@@ -1064,16 +1064,29 @@ button { font-family: inherit; }
 }
 .btn--icon {
   padding: 2px 8px;
-  font-size: 1.15rem;
+  font-size: 1.25rem;
   line-height: 1;
-  font-weight: 700;
-  min-width: 28px;
+  font-weight: 800;
+  min-width: 30px;
   text-align: center;
+  color: var(--c-accent-warm);
+  border-color: color-mix(in srgb, var(--c-accent-warm) 55%, transparent);
+  background: color-mix(in srgb, var(--c-accent-warm) 8%, transparent);
+}
+.btn--icon:hover:not(:disabled) {
+  color: #fff;
+  border-color: var(--c-accent-warm);
+  background: color-mix(in srgb, var(--c-accent-warm) 22%, transparent);
+}
+.struct-item .btn--icon {
+  padding: 2px 10px;
+  font-size: 1.2rem;
 }
 .struct-item__locked--icon {
-  font-size: 1.15rem;
-  font-weight: 700;
-  padding: 0 8px;
+  font-size: 1.2rem;
+  font-weight: 800;
+  padding: 0 10px;
+  color: color-mix(in srgb, var(--c-accent-warm) 45%, var(--c-text-faint));
 }
 .struct-item__cost--max {
   color: var(--c-text-faint);
