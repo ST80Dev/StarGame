@@ -296,7 +296,9 @@
       // spostando popolazione da una colonia sorgente — l'engine accetta
       // qualsiasi pop.total senza ribilanciare (la pop non guida i calcoli).
       colony.pop.total = 1;
-      colony.pop.classes.operai = colony.pop.total;
+      // Distribuisce la prima unità sulle classi proporzionalmente alla
+      // vocazione: senza strutture risulta tutta in operai (target di base).
+      addToBestClass(colony, 1);
       colony.stock = { met: 40, en: 30, food: 20, water: 20 };
       colony.colonizing = null;
       events.push({
@@ -419,13 +421,15 @@
     if (scar.famineI >= CFG.POP_FAMINE_AFTER) {
       const overflow = scar.famineI - CFG.POP_FAMINE_AFTER;
       if (overflow > 0 && (overflow % CFG.POP_FAMINE_RATE) === 0 && pop.total > 1) {
+        const oldTotal = pop.total;
         pop.total--;
-        // togli dalle classi proporzionalmente (dalla più numerosa)
-        let maxK = null, maxV = -1;
+        /* Classi in float: scala TUTTE proporzionalmente per mantenere il
+           mix corrente (niente più "tolgo 1 dalla più numerosa", che con i
+           float lascerebbe scorie inaspettate). */
+        const ratio = pop.total / oldTotal;
         Object.keys(pop.classes).forEach(function (k) {
-          if (pop.classes[k] > maxV) { maxV = pop.classes[k]; maxK = k; }
+          pop.classes[k] = (pop.classes[k] || 0) * ratio;
         });
-        if (maxK) pop.classes[maxK] = Math.max(0, pop.classes[maxK] - 1);
         events.push({
           kind: 'pop-loss', colony: colony, planet: planet, impulso: game.timeImpulsi
         });
@@ -522,30 +526,36 @@
     return w;
   }
 
-  function addToBestClass(colony) {
+  /* Distribuisce una nuova unità (o frazione di unità) sulla popolazione
+     proporzionalmente al target. Con classi FRAZIONARIE l'unità non è
+     "un singolo lavoratore" ma una porzione del corpo sociale: a target
+     57/21/21 una nuova unità diventa operai+=0.57, militari+=0.21,
+     tecnici+=0.21. Risultato: il mix mostrato segue subito la vocazione,
+     anche a pop bassa (niente più oscillazione tra una classe e l'altra). */
+  function addToBestClass(colony, amount) {
+    amount = (amount == null) ? 1 : amount;
     const target = targetClassWeights(colony);
-    // sceglie la classe in cui c'è il "deficit" più grande rispetto al target
-    const total = Math.max(1, colony.pop.total);
     let totalW = 0;
     Object.keys(target).forEach(function (k) { totalW += target[k]; });
-    if (totalW <= 0) { colony.pop.classes.operai++; return; }
-    let bestK = 'operai', bestGap = -Infinity;
+    if (totalW <= 0) {
+      colony.pop.classes.operai = (colony.pop.classes.operai || 0) + amount;
+      return;
+    }
     Object.keys(target).forEach(function (k) {
-      const want = (target[k] / totalW) * total;
-      const have = colony.pop.classes[k] || 0;
-      const gap = want - have;
-      if (gap > bestGap) { bestGap = gap; bestK = k; }
+      colony.pop.classes[k] = (colony.pop.classes[k] || 0) + (target[k] / totalW) * amount;
     });
-    colony.pop.classes[bestK] = (colony.pop.classes[bestK] || 0) + 1;
   }
 
+  /* Riallinea continuamente il mix di classi verso la vocazione dedotta
+     dalle strutture. Classi in float → spostiamo direttamente la frazione,
+     niente più accumulatore intero (che a pop bassa faceva oscillare il mix
+     tra una classe e l'altra ogni ~60 Ι, dando l'impressione di un bug). */
   function shiftClassMix(colony) {
     const target = targetClassWeights(colony);
     let totalW = 0;
     Object.keys(target).forEach(function (k) { totalW += target[k]; });
     if (totalW <= 0 || colony.pop.total <= 0) return;
     const total = colony.pop.total;
-    // trova la classe più "in eccesso" e quella più "in difetto"
     let overK = null, overGap = 0, underK = null, underGap = 0;
     Object.keys(target).forEach(function (k) {
       const want = (target[k] / totalW) * total;
@@ -555,25 +565,12 @@
       if (-gap > underGap) { underGap = -gap; underK = k; }
     });
     if (!overK || !underK || overK === underK) return;
-    /* Tasso di shift: a popolazione alta è LENTO per design (recovery-friendly,
-       decisione #22). A pop bassa (≤ 5 unità) il gap massimo è frazionario
-       (es. con total=1 over=0.79, under=0.57 → 0.0085/Ι, accum=1 in ~120 Ι):
-       la "Vocazione a regime" nel pannello apparirebbe disattesa per ore.
-       Scaliamo lo shift inversamente con la pop fino a un cap (×5) così a
-       1-5 unità il mix si riallinea in pochi Ι, sopra resta lento come prima. */
+    /* Tasso di shift: lento per design (recovery-friendly, decisione #22),
+       ma accelerato a pop bassa così la vocazione è visibile da subito. */
     const speedMul = Math.max(1, 5 / Math.max(1, total));
     const move = Math.min(overGap, underGap) * CFG.POP_CLASS_SHIFT * speedMul;
-    // accumulatore per spostamenti frazionari
-    colony._classAccum = colony._classAccum || {};
-    const key = overK + '>' + underK;
-    colony._classAccum[key] = (colony._classAccum[key] || 0) + move;
-    if (colony._classAccum[key] >= 1) {
-      const n = Math.floor(colony._classAccum[key]);
-      colony._classAccum[key] -= n;
-      const moved = Math.min(n, colony.pop.classes[overK] || 0);
-      colony.pop.classes[overK] -= moved;
-      colony.pop.classes[underK] = (colony.pop.classes[underK] || 0) + moved;
-    }
+    colony.pop.classes[overK] = Math.max(0, (colony.pop.classes[overK] || 0) - move);
+    colony.pop.classes[underK] = (colony.pop.classes[underK] || 0) + move;
   }
 
   /* 6b) M07 — code asset (scafi Hangar / equipaggi Accademia).
