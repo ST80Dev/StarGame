@@ -2346,6 +2346,7 @@ select.main-menu__input { cursor: pointer; }
 .cantieri-row__counter { font-size: 0.88em; color: var(--c-text, #d8def0); }
 .cantieri-row__build {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
@@ -2353,6 +2354,15 @@ select.main-menu__input { cursor: pointer; }
 }
 .cantieri-row__cost { font-size: 0.85em; color: var(--c-muted, #8a93b8); }
 .cantieri-row__base { color: var(--c-muted, #8a93b8); opacity: 0.65; font-size: 0.88em; }
+/* M08 Fase A: il dropdown classe nave prende l'intera prima riga del
+   build-row e il pulsante "+ Costruisci" non si comprime — evitiamo
+   troncature del label nel pannello stretto a destra. Le altre righe
+   (Accademia, senza dropdown) restano col comportamento di default. */
+.cantieri-row__build .cantieri-row__select { flex: 1 1 100%; }
+.cantieri-row__build:has(.cantieri-row__select) .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 
 /* Decisione #41: capacità Hangar (cantieri + attracchi) + chip tecnici */
 .cantieri-row__caps {
