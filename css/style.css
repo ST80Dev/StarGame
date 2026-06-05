@@ -2495,6 +2495,78 @@ select.main-menu__input { cursor: pointer; }
 .crew-roster__status--rest { color: #9fd0a8; }
 .crew-roster__status--away { color: #e6b878; }
 
+/* Comandanti nominati (decisione #43, M07 → gancio M14): roster figure
+   con nome/rango/specializzazione/tratto. Stile sobrio, accento ambra
+   per distinguersi dal viola degli equipaggi anonimi. */
+.commander-row {
+  background: rgba(220, 170, 90, 0.04);
+  border: 1px solid rgba(220, 170, 90, 0.18);
+}
+.commander-row__hint {
+  margin: 6px 0 0;
+  font-size: 0.78em;
+  color: var(--c-muted, #8a93b8);
+  font-style: italic;
+}
+.commander-roster {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.commander-roster__item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px 8px;
+  background: rgba(220, 170, 90, 0.07);
+  border: 1px solid rgba(220, 170, 90, 0.22);
+  border-radius: 8px;
+  font-size: 0.85em;
+}
+.commander-roster__rank {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.74em;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 9px;
+  background: rgba(230, 180, 90, 0.20);
+  color: #f0d8a0;
+}
+.commander-roster__name {
+  color: var(--c-text, #d8def0);
+  font-weight: 600;
+  font-family: var(--font-display, var(--font-mono, monospace));
+  letter-spacing: 0.02em;
+}
+.commander-roster__spec {
+  font-size: 0.78em;
+  padding: 1px 7px;
+  background: rgba(120, 200, 140, 0.14);
+  border: 1px solid rgba(120, 200, 140, 0.32);
+  border-radius: 9px;
+  color: #aee6c0;
+}
+.commander-roster__trait {
+  font-size: 0.78em;
+  padding: 1px 7px;
+  background: rgba(140, 110, 230, 0.14);
+  border: 1px solid rgba(140, 110, 230, 0.30);
+  border-radius: 9px;
+  color: #c8b6ff;
+  font-style: italic;
+}
+.commander-roster__status {
+  margin-left: auto;
+  font-size: 0.78em;
+  color: var(--c-muted, #8a93b8);
+}
+.commander-roster__status--idle { color: #c8b6ff; }
+
 /* xp chip viola */
 .xp-chip {
   display: inline-block;

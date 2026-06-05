@@ -443,10 +443,30 @@
         if (colony) {
           if (!colony.crews) colony.crews = { explorer: [] };
           if (!Array.isArray(colony.crews.explorer)) colony.crews.explorer = [];
-          colony.crews.explorer.push({
+          var newCrew = {
             id: 'crew-' + (game.timeImpulsi || 0) + '-' + (++_expCounter),
             xp: (exp.crewXp || 0) + 1
-          });
+          };
+          colony.crews.explorer.push(newCrew);
+          /* Decisione #43: se l'equipaggio raggiunge la soglia 'asso'
+             (xp ≥ 5), un Comandante emerge dal gruppo. La figura eredita
+             la xp, l'equipaggio resta nel roster ma con xp resettata a 0
+             (scelta utente: i crew sono "più persone", il capitano si
+             stacca, il gruppo si riforma sotto il vuoto lasciato). */
+          var promotedCmd = null;
+          var C = root.ORION && root.ORION.commander;
+          if (C && C.isPromotable(newCrew.xp)) {
+            promotedCmd = C.promote(game, colony, newCrew, newCrew.xp, exp.originColonyKey);
+            if (promotedCmd) {
+              events.push({
+                kind: 'commander-promoted',
+                commander: promotedCmd,
+                colony: colony,
+                fromCrewId: newCrew.id,
+                impulso: game.timeImpulsi
+              });
+            }
+          }
           /* Scafo restituito solo se non perso. Decisione #41: la nave
              torna comunque al counter (recovery-friendly #22), ma se il
              porto è saturo emettiamo un evento informativo "in orbita

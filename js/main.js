@@ -1716,7 +1716,12 @@ function crewShortLabel(id) {
 function renderCantieriSection(colony, planet) {
   const hasHangar = !!(colony.structures && colony.structures['cantiere-navale']);
   const hasAcademy = !!(colony.structures && colony.structures['accademia-militare']);
-  if (!hasHangar && !hasAcademy) return '';
+  /* Decisione #43: i Comandanti nascono dagli equipaggi M07 ma vivono
+     anche se Accademia/Hangar venissero demoliti — mostriamo la sezione
+     comunque per non perdere figure storiche. */
+  const commanders = (ORION.commander && ORION.commander.listOf(colony)) || [];
+  const hasCommanders = commanders.length > 0;
+  if (!hasHangar && !hasAcademy && !hasCommanders) return '';
   const E = (ORION.expedition && ORION.expedition.CFG) || {};
   const shipCost = E.SHIP_COST || { met: 25, en: 12 };
   const shipTime = E.SHIP_TIME || 10;
@@ -1737,6 +1742,36 @@ function renderCantieriSection(colony, planet) {
 
   let html = '<div class="cantieri-section">' +
     '<p class="sysinfo__sub">Cantieri & Squadre <span class="cantieri-section__hint">(esplorazione)</span></p>';
+
+  /* Decisione #43: Comandanti nominati emersi dagli equipaggi veterani.
+     Per ora "in panchina" (status:'idle') — M08 li aggancerà alle navi. */
+  if (hasCommanders) {
+    html += '<div class="cantieri-row commander-row">' +
+      '<div class="cantieri-row__head">' +
+        '<span class="cantieri-row__glyph" aria-hidden="true">★</span>' +
+        '<span class="cantieri-row__name">Comandanti</span>' +
+        '<span class="cantieri-row__counter">In organico: <strong>' + commanders.length + '</strong></span>' +
+      '</div>' +
+      '<ul class="commander-roster">';
+    commanders.forEach(function (c) {
+      const statusLabel = c.status === 'idle'
+        ? 'in panchina'
+        : escapeHtml(c.status || '—');
+      html += '<li class="commander-roster__item">' +
+        '<span class="commander-roster__rank">' + escapeHtml(c.rank || 'Comandante') + '</span>' +
+        '<span class="commander-roster__name">' + escapeHtml(c.name || '—') + '</span>' +
+        '<span class="commander-roster__spec" title="' + escapeHtml((ORION.commander.SPEC_POOL.find(function (s) { return s.id === c.specialization; }) || {}).hint || '') + '">' +
+          escapeHtml(c.specializationLabel || c.specialization || '—') +
+        '</span>' +
+        '<span class="commander-roster__trait" title="Tratto">' + escapeHtml(c.traitLabel || c.trait || '—') + '</span>' +
+        '<span class="xp-chip" title="Esperienza ereditata dall\'equipaggio">xp ' + (c.xp | 0) + '</span>' +
+        '<span class="commander-roster__status commander-roster__status--' + escapeHtml(c.status || 'idle') + '">' + statusLabel + '</span>' +
+      '</li>';
+    });
+    html += '</ul>' +
+      '<p class="commander-row__hint">Le navi evolute (corvette, fregate, incrociatori) potranno essere comandate da queste figure — disponibili con il modulo Flotta.</p>' +
+    '</div>';
+  }
 
   if (hasHangar) {
     /* M08 Fase A (decisione #42): counter di TUTTE le classi navi note. */
@@ -2762,7 +2797,10 @@ const DEFAULT_AUTOPAUSE = {
      fortuita auto-pausano (esiti notevoli). Il launch è azione utente,
      non sorpresa. Hop intermedi mai. */
   'fleet-arrived': true, 'fleet-route-complete': true, 'fleet-discovery': true,
-  'fleet-launched': false, 'fleet-leg-hop': false
+  'fleet-launched': false, 'fleet-leg-hop': false,
+  /* Decisione #43 (M07.2): nascita di un Comandante nominato — evento
+     narrativo forte (nuova figura giocabile), auto-pausa di default. */
+  'commander-promoted': true
 };
 
 ORION.timer = {
@@ -2969,7 +3007,8 @@ function showEventOverlay(events) {
     'fleet-route-complete': 'Flotta: rotta completata',
     'fleet-discovery': 'Flotta: sistema esplorato',
     'fleet-launched': 'Flotta: salto iperspaziale',
-    'fleet-leg-hop': 'Flotta: hop intermedio'
+    'fleet-leg-hop': 'Flotta: hop intermedio',
+    'commander-promoted': 'Nuovo Comandante nominato'
   };
   /* Raggruppa per kind: una checkbox per categoria, una sola voce di sintesi. */
   const byKind = {};
@@ -3106,6 +3145,12 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — Nuova <strong>' + scls.name + '</strong> pronta al varo su ' + pname + ptag + '.', 'planet');
   } else if (ev.kind === 'crew-formed') {
     pushChronicle(ds + ' — Nuovo <strong>equipaggio esploratore</strong> brevettato dall\'Accademia di ' + pname + ptag + '.', 'planet');
+  } else if (ev.kind === 'commander-promoted') {
+    /* Decisione #43: la promozione di una figura Comandante è il
+       "punto di nascita" dei soggetti militari nominati (gancio M14). */
+    const c = ev.commander;
+    pushChronicle(ds + ' — <strong>' + escapeHtml(c.rank) + ' ' + escapeHtml(c.name) + '</strong> emerge dall\'equipaggio veterano su ' + pname + ptag + ' · specializzazione <em>' + escapeHtml(c.specializationLabel) + '</em> · tratto <em>' + escapeHtml(c.traitLabel) + '</em>.', 'figure');
+    if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('commander-promoted');
   } else if (ev.kind === 'expedition-arrived') {
     const sys = ORION.game.galaxy.systems[ev.systemId];
     const tag = ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
