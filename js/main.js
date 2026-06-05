@@ -1269,7 +1269,7 @@ function renderPlanetRisorseTab(host, planet, colony) {
 function renderPlanetStruttureTab(host, planet, colony) {
   const S = ORION.structures;
   const used = Object.keys(colony.structures).reduce(function (a, id) {
-    const d = S.get(id); return a + ((d && d.slots) || 1);
+    const d = S.get(id); return a + S.slotFootprint(d, colony.structures[id].level || 1);
   }, 0);
   const inQueue = colony.queue.reduce(function (a, q) {
     const d = S.get(q.id); return a + ((d && d.slots) || 1);
@@ -1286,15 +1286,33 @@ function renderPlanetStruttureTab(host, planet, colony) {
     builtIds.forEach(function (id) {
       const def = S.get(id);
       const ent = colony.structures[id];
+      const lvl = ent.level || 1;
+      const maxL = def.maxLevel || 1;
+      const slotInfo = (def.slots && def.slots > 1)
+        ? (lvl * def.slots) + ' slot'
+        : lvl + (lvl > 1 ? ' moduli' : ' modulo');
       const demoCheck = ORION.planet.canDemolish(colony, planet, id);
       const demoBtn = demoCheck.ok
         ? '<button class="btn btn--mini struct-item__demolish" data-demolish="' + id + '" type="button" title="Smantella (rimborso 50% · 70% sulla colonia natale · morale −0,10 per 30 Ι)">🗑</button>'
         : '<span class="struct-item__locked is-busy" title="' + demoCheck.reason + '">🗑</span>';
+      // Decisione #38: bottone "+ Espandi" (aggiunge un modulo = +slot, costo escalante)
+      let upBtn;
+      if (lvl >= maxL) {
+        upBtn = '<span class="struct-item__locked" title="Livello massimo (' + maxL + ')">max</span>';
+      } else {
+        const up = ORION.planet.canBuild(colony, planet, id);
+        const nextCost = S.stepCost(def, lvl + 1);
+        const costStr = Object.keys(nextCost).map(function (k) { return resGlyph(k) + nextCost[k]; }).join(' ');
+        if (up.ok) {
+          upBtn = '<button class="btn btn--mini" data-build="' + id + '" type="button" title="Espandi a ×' + (lvl + 1) + ' (+' + (def.slots || 1) + ' slot · ' + costStr + ')">+ Espandi</button>';
+        } else {
+          upBtn = '<span class="struct-item__locked" title="' + escapeHtml(up.reason) + '">+ Espandi</span>';
+        }
+      }
       html += '<li class="struct-item is-built">' +
         '<span class="struct-item__glyph">' + def.glyph + '</span>' +
-        '<span class="struct-item__name">' + def.name + ' <span class="struct-item__lvl">lvl ' + (ent.level || 1) + '</span></span>' +
-        '<span class="struct-item__cat">' + S.CATEGORIES[def.cat].label + '</span>' +
-        demoBtn +
+        '<span class="struct-item__name">' + def.name + ' <span class="struct-item__lvl">×' + lvl + '</span> <span class="struct-item__cat">' + slotInfo + '</span></span>' +
+        upBtn + demoBtn +
       '</li>';
     });
     html += '</ul>';
@@ -1340,8 +1358,11 @@ function renderPlanetStruttureTab(host, planet, colony) {
       '</div>';
   }
 
-  // costruibili
-  const available = S.buildableOn(planet.type);
+  // costruibili — solo strutture NON ancora presenti (decisione #38: quelle
+  // già costruite si potenziano dal bottone "+ Espandi" in "Costruite").
+  const available = S.buildableOn(planet.type).filter(function (def) {
+    return !colony.structures[def.id];
+  });
   html += '<p class="sysinfo__sub">Costruibili</p>';
   const byCat = {};
   available.forEach(function (def) { (byCat[def.cat] = byCat[def.cat] || []).push(def); });
@@ -1484,8 +1505,27 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
   const CFG = ORION.time.CFG;
   const scar = colony._scar;
   const settling = colony.phase === 'settling';
-  const canGrow = !settling && total < cap && colony.stock.food > 0 && colony.stock.water > 0
-    && (!scar || (scar.food.state !== 'crit' && scar.water.state !== 'crit'));
+
+  // Capacità di carico locale (decisione #37): il consumo pro-capite è una
+  // RICHIESTA sulla produzione di cibo/acqua, non un drenaggio dello stock.
+  // La popolazione cresce finché produzione > consumo e si stabilizza in
+  // plateau quando si pareggiano — senza carestia. Legge del minimo.
+  const out = ORION.planet.structureOutput(colony, planet);
+  const foodNet = (out.rates.food || 0) - (out.upkeep.food || 0);
+  const waterNet = (out.rates.water || 0) - (out.upkeep.water || 0);
+  const sustFood = CFG.POP_FOOD_PER_UNIT > 0 ? foodNet / CFG.POP_FOOD_PER_UNIT : 0;
+  const sustWater = CFG.POP_WATER_PER_UNIT > 0 ? waterNet / CFG.POP_WATER_PER_UNIT : 0;
+  let sustainable = Math.min(sustFood, sustWater);
+  if (sustainable < 0) sustainable = 0;
+  if (sustainable > cap) sustainable = cap;
+  const limitRes = sustWater <= sustFood ? 'acqua' : 'cibo';
+  const foodSurplus = foodNet - total * CFG.POP_FOOD_PER_UNIT;
+  const waterSurplus = waterNet - total * CFG.POP_WATER_PER_UNIT;
+  const surplus = Math.min(foodSurplus, waterSurplus);
+  const supplyFactor = surplus <= 0 ? 0 : Math.min(1, surplus / CFG.POP_SUPPLY_REF);
+
+  const critFW = scar && (scar.food.state === 'crit' || scar.water.state === 'crit');
+  const canGrow = !settling && total < cap && supplyFactor > 0 && !critFW;
   // Morale: calcolato sempre (anche se la crescita è bloccata) per dare
   // visibilità della leva §9.3. Breakdown dei contributi mostrato sotto.
   const moraleParts = [];
@@ -1506,25 +1546,43 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
     morale *= 0.6;
     moraleParts.push('×0.6 carenza cibo/acqua');
   }
+  // Sovraffollamento: segnale implicito (decisione #37bis). La morale cala
+  // se la popolazione supera la capacità abitativa → spinge il giocatore a
+  // sviluppare l'habitat senza dirglielo esplicitamente.
+  const hospLvl = (colony.structures['ospedale'] && colony.structures['ospedale'].level) || 0;
+  const Sm = ORION.structures;
+  const housingCap = CFG.POP_HOUSING_BASE
+    + (habit > 0 ? Sm.moduleSum(habit) : 0) * CFG.POP_HOUSING_PER_LEVEL
+    + (hospLvl > 0 ? Sm.moduleSum(hospLvl) : 0) * CFG.POP_HOSPITAL_HOUSING;
+  const crowd = housingCap > 0 ? total / housingCap : 99;
+  if (crowd > CFG.POP_CROWD_START) {
+    const crowdPen = Math.max(0.05, 1 - (crowd - CFG.POP_CROWD_START) * CFG.POP_CROWD_SLOPE);
+    morale *= crowdPen;
+    moraleParts.push('×' + crowdPen.toFixed(2) + ' sovraffollamento');
+  }
   let growthEst = 0;
   if (canGrow) {
-    growthEst = CFG.POP_GROWTH_BASE * morale;
+    growthEst = CFG.POP_GROWTH_BASE * morale * supplyFactor;
     if (colony.structures['ospedale']) growthEst *= (1 + CFG.POP_GROWTH_HOSPITAL);
   }
-  // Crescita in PERSONE/Impulso: pendenza della curva nel punto attuale ×
-  // crescita in unità/I. Cresce man mano che la colonia si sviluppa (effetto
-  // demografico esponenziale), coerente col display in persone.
+  // Crescita in PERSONE/Impulso: pendenza della curva × crescita in unità/I,
+  // diviso il costo del livello (freno temporale: ogni livello costa di più).
   let growthStr;
   if (canGrow) {
     const M = ORION.planet.popCeiling(planet);
     const refCap = Math.max(2, planet.popCap || 2);
     const slope = M > 0 ? Math.log(M / ORION.planet.POP_FLOOR) / (refCap - 1) : 0;
-    const marginal = peopleNow * slope * growthEst;
+    const unitCost = 1 + CFG.POP_LEVEL_COST * (total - 1);
+    const marginal = peopleNow * slope * growthEst / Math.max(1, unitCost);
     growthStr = '+' + ORION.planet.formatPeople(marginal) + ' / Impulso';
   } else if (settling) {
     growthStr = 'ferma (Insediamento)';
+  } else if (total >= cap) {
+    growthStr = 'al cap del pianeta';
+  } else if (critFW) {
+    growthStr = 'ferma (carenza critica)';
   } else {
-    growthStr = (total >= cap ? 'al cap' : 'ferma (carestia)');
+    growthStr = 'plateau · ' + limitRes + ' locale al limite';
   }
 
   // Target classi suggerito dalle strutture
@@ -1543,14 +1601,20 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
     '<div class="sysinfo">' +
       '<dl class="sysinfo__list">' +
         row('Popolazione', popRangePeople(colony, planet)) +
+        row('Sostenibile (locale)', '~' + Math.floor(sustainable) + ' / ' + cap + ' unità · ' +
+            ORION.planet.formatPeople(ORION.planet.peopleAt(sustainable, planet)) +
+            ' <span class="pop-limit">(limite: ' + limitRes + ')</span>') +
         row('Morale', morale.toFixed(2) + ' / ' + CFG.POP_MORALE_MAX.toFixed(2)) +
         row('Crescita', '<span class="rate ' + (canGrow ? 'rate--pos' : 'rate--neg') + '">' + growthStr + '</span>') +
       '</dl>' +
       '<p class="panel__note">Morale: ' + moraleParts.join(' · ') + '. Moltiplica la crescita pop §9.3.</p>' +
+      '<p class="panel__note">La crescita si ferma in <strong>plateau</strong> (senza carestia) quando l\'ambiente non regge più popolazione. Entrano in gioco più fattori — risorse, energia, <strong>morale</strong> — e una città che cresce ne mette alla prova di nuovi. Osserva cosa cala e adatta la colonia.</p>' +
       '<p class="sysinfo__sub">Classi funzionali</p>' +
       bars +
       targetHtml +
     '</div>';
+
+  if (ORION.tutorial) ORION.tutorial.fire('population');
 }
 
 /* --- helper: barre dei potenziali e altre UI atomiche --- */

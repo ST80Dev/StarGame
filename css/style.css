@@ -527,6 +527,11 @@ button { font-family: inherit; }
 /* Decisione #26 — tag di appartenenza (sigla regione / sistema) accanto
    ai nomi propri dei corpi celesti. Visivamente discreto, font display per
    richiamare la sensazione "etichetta di catalogo astronomico". */
+.pop-limit {
+  font-size: 0.82em;
+  color: var(--c-text-soft, #b3bee0);
+  letter-spacing: 0.02em;
+}
 .name-tag {
   display: inline-block;
   font-family: var(--font-display);
