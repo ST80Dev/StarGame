@@ -1513,7 +1513,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
       let statusCell;
       let extraClass = check.ok ? '' : ' is-locked';
       if (check.ok) {
-        statusCell = '<button class="btn btn--mini" data-build="' + def.id + '" type="button">Costruisci</button>';
+        statusCell = '<button class="btn btn--mini btn--icon" data-build="' + def.id + '" type="button" title="Costruisci ' + escapeHtml(def.name) + '" aria-label="Costruisci ' + escapeHtml(def.name) + '">+</button>';
       } else if (check.code === 'building') {
         const qEntry = colony.queue.find(function (q) { return q.id === def.id; });
         const total = def.time || 1;
