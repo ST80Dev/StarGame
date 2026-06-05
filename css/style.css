@@ -1053,6 +1053,28 @@ button { font-family: inherit; }
   font-weight: 600;
   margin-right: 4px;
 }
+.struct-item__cost-item {
+  display: inline-block;
+  margin-right: 6px;
+  white-space: nowrap;
+}
+.struct-item__cost-time {
+  color: var(--c-text-faint);
+  margin-left: 2px;
+}
+.btn--icon {
+  padding: 2px 8px;
+  font-size: 1.15rem;
+  line-height: 1;
+  font-weight: 700;
+  min-width: 28px;
+  text-align: center;
+}
+.struct-item__locked--icon {
+  font-size: 1.15rem;
+  font-weight: 700;
+  padding: 0 8px;
+}
 .struct-item__cost--max {
   color: var(--c-text-faint);
   font-style: italic;

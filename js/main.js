@@ -1066,7 +1066,7 @@ function renderPlanetPanel(title, content) {
         const meta = {
           colonia:      { icon: '⚑', label: 'Colonia',  full: 'Colonia' },
           risorse:      { icon: '⛁', label: 'Risorse',  full: 'Risorse' },
-          strutture:    { icon: '⌂', label: 'Strutt.',  full: 'Strutture' },
+          strutture:    { icon: '⚒', label: 'Strutt.',  full: 'Strutture' },
           popolazione:  { icon: '♟', label: 'Pop.',     full: 'Popolazione' },
           esplorazione: { icon: '✦', label: 'Esplor.',  full: 'Esplorazione' }
         }[t];
@@ -1430,14 +1430,14 @@ function renderPlanetStruttureTab(host, planet, colony) {
         const up = ORION.planet.canBuild(colony, planet, id);
         const nextCost = S.stepCost(def, lvl + 1);
         const nextTime = S.stepTime(def, lvl + 1);
-        const costStr = Object.keys(nextCost).map(function (k) { return resGlyph(k) + nextCost[k]; }).join(' · ');
+        const costStr = Object.keys(nextCost).map(function (k) { return '<span class="struct-item__cost-item">' + resGlyph(k) + nextCost[k] + '</span>'; }).join(' ');
         const balance = deltaBalanceHtml(marginalNet(colony, planet, id));
         if (up.ok) {
-          upBtn = '<button class="btn btn--mini" data-build="' + id + '" type="button" title="Espandi a ×' + (lvl + 1) + ' (+' + (def.slots || 1) + ' slot)">+ Espandi</button>';
+          upBtn = '<button class="btn btn--mini btn--icon" data-build="' + id + '" type="button" title="Espandi a ×' + (lvl + 1) + ' (+' + (def.slots || 1) + ' slot)" aria-label="Espandi">+</button>';
         } else {
-          upBtn = '<span class="struct-item__locked" title="' + escapeHtml(up.reason) + '">+ Espandi</span>';
+          upBtn = '<span class="struct-item__locked struct-item__locked--icon" title="' + escapeHtml(up.reason) + '" aria-label="Espandi (bloccato)">+</span>';
         }
-        infoLine = '<div class="struct-item__cost"><span class="struct-item__cost-label">×' + (lvl + 1) + '</span> ' + costStr + ' · ' + nextTime + ' I' + (balance ? ' ' + balance : '') + '</div>';
+        infoLine = '<div class="struct-item__cost"><span class="struct-item__cost-label">×' + (lvl + 1) + '</span> ' + costStr + ' <span class="struct-item__cost-time">' + nextTime + ' I</span>' + (balance ? ' ' + balance : '') + '</div>';
       }
       html += '<li class="struct-item is-built">' +
         '<span class="struct-item__glyph">' + def.glyph + '</span>' +
@@ -1509,7 +1509,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
     list.forEach(function (def) {
       const check = ORION.planet.canBuild(colony, planet, def.id);
       const cost = def.cost || {};
-      const costStr = Object.keys(cost).map(function (k) { return resGlyph(k) + cost[k]; }).join(' · ');
+      const costStr = Object.keys(cost).map(function (k) { return '<span class="struct-item__cost-item">' + resGlyph(k) + cost[k] + '</span>'; }).join(' ');
       const balance = deltaBalanceHtml(marginalNet(colony, planet, def.id));
       let statusCell;
       let extraClass = check.ok ? '' : ' is-locked';
