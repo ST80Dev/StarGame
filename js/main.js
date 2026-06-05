@@ -13,13 +13,13 @@
 
 const ORION = window.ORION || (window.ORION = {});
 
-ORION.version = '0.6.6-M06.6';
+ORION.version = '0.6.6';
 
 /* Etichette provvisorie del viewport per le viste non ancora implementate. */
 ORION.viewLabels = {
-  fleet:     { caption: 'VISTA FLOTTA',     hint: 'La gestione della flotta arriverà nel modulo M08.' },
-  research:  { caption: 'VISTA RICERCA',    hint: "L'albero tecnologico arriverà nel modulo M13." },
-  diplomacy: { caption: 'VISTA DIPLOMAZIA', hint: 'La diplomazia arriverà nel modulo M11.' }
+  fleet:     { caption: 'VISTA FLOTTA',     hint: 'La gestione della flotta arriverà più avanti nello sviluppo.' },
+  research:  { caption: 'VISTA RICERCA',    hint: "L'albero tecnologico arriverà più avanti nello sviluppo." },
+  diplomacy: { caption: 'VISTA DIPLOMAZIA', hint: 'La diplomazia arriverà più avanti nello sviluppo.' }
 };
 
 /* Stato di partita corrente (in memoria). Il salvataggio è M06. */
@@ -626,7 +626,7 @@ function renderSystemPanel(title, content, id) {
     content.innerHTML =
       '<div class="sysinfo">' +
         '<p class="sysinfo__fog">Posizione rilevata, dettagli ignoti.<br>' +
-          'Richiede esplorazione (modulo M07).</p>' +
+          'Richiede esplorazione.</p>' +
       '</div>';
     return;
   }
@@ -644,7 +644,7 @@ function renderSystemPanel(title, content, id) {
           '<span class="danger-badge ' + tierClass + '">' + sys.danger + ' · ' + sys.dangerTier + '</span>') +
       '</dl>' +
       '<button class="btn btn--mini btn--enter" data-action="enter-system" type="button">◉ Apri sistema ▸</button>' +
-      '<p class="panel__note">Vista interna: stella/e, corpi celesti in orbita e anomalie (M03). Doppio click sul nodo per entrare.</p>' +
+      '<p class="panel__note">Vista interna: stella/e, corpi celesti in orbita e anomalie. Doppio click sul nodo per entrare.</p>' +
     '</div>';
 
   const enter = content.querySelector('[data-action="enter-system"]');
@@ -766,7 +766,7 @@ function renderSystemInteriorPanel(title, content, system, disc) {
   if (!known) {
     content.innerHTML =
       '<div class="sysinfo"><p class="sysinfo__fog">Posizione rilevata, interno ignoto.<br>' +
-        'Richiede esplorazione (modulo M07).</p></div>';
+        'Richiede esplorazione.</p></div>';
     return;
   }
 
@@ -810,7 +810,7 @@ function renderSystemInteriorPanel(title, content, system, disc) {
     }
   } else {
     detail = '<p class="panel__note">Sistema rilevato ma non scansionato: <strong>' + bodyCount +
-      '</strong> corpi celesti individuati. Dettagli, tipi e anomalie richiedono l\'esplorazione (modulo M07).</p>';
+      '</strong> corpi celesti individuati. Dettagli, tipi e anomalie richiedono l\'esplorazione.</p>';
   }
 
   content.innerHTML =
@@ -823,7 +823,7 @@ function renderSystemInteriorPanel(title, content, system, disc) {
         row('Pericolo', '<span class="danger-badge ' + tierClass + '">' + system.danger + ' · ' + system.dangerTier + '</span>') +
       '</dl>' +
       detail +
-      '<p class="panel__note">Clicca un oggetto per i dati base · doppio click per inquadrarlo. Colonizzazione e gestione: modulo M04.</p>' +
+      '<p class="panel__note">Clicca un oggetto per i dati base · doppio click per inquadrarlo.</p>' +
     '</div>';
 
   content.querySelectorAll('[data-body]').forEach((btn) => {
@@ -876,7 +876,7 @@ function renderBodyPanel(title, content, system, body) {
       '</dl>' +
       (def.cat !== 'belt'
         ? '<button class="btn btn--mini btn--enter" data-action="enter-planet" type="button">○ Apri pianeta ▸</button>' +
-          '<p class="panel__note">Vista pianeta: sfera procedurale, risorse, strutture, popolazione (M04).</p>'
+          '<p class="panel__note">Vista pianeta: sfera procedurale, risorse, strutture, popolazione.</p>'
         : '') +
     '</div>';
 
@@ -1349,11 +1349,45 @@ function renderPlanetRisorseTab(host, planet, colony) {
       potentialBars(planet) +
       '<p class="sysinfo__sub">Scorte in colonia</p>' +
       '<dl class="sysinfo__list">' + stockRows + '</dl>' +
-      '<p class="sysinfo__sub">Produzione potenziale per Impulso (M05)</p>' +
+      '<p class="sysinfo__sub">Produzione potenziale per Impulso</p>' +
       rateGrid(out.rates, out.upkeep) +
       '<p class="sysinfo__sub">Risorse avanzate</p>' +
       advancedHtml +
     '</div>';
+}
+
+/* Saldo netto per Impulso che si otterrebbe espandendo (o costruendo)
+   una struttura: produzione − consumo, dopo − prima. Tiene conto dei
+   modificatori (es. fonderia che amplifica le miniere). */
+function marginalNet(colony, planet, structId) {
+  const before = ORION.planet.structureOutput(colony, planet);
+  const cur = colony.structures[structId];
+  const curLvl = cur ? (cur.level || 0) : 0;
+  const clonedStructures = Object.assign({}, colony.structures);
+  clonedStructures[structId] = { level: curLvl + 1, hp: cur ? cur.hp : 100 };
+  const clonedColony = Object.assign({}, colony, { structures: clonedStructures });
+  const after = ORION.planet.structureOutput(clonedColony, planet);
+  const delta = {};
+  ['met', 'en', 'food', 'water'].forEach(function (k) {
+    const beforeNet = (before.rates[k] || 0) - (before.upkeep[k] || 0);
+    const afterNet  = (after.rates[k]  || 0) - (after.upkeep[k]  || 0);
+    delta[k] = afterNet - beforeNet;
+  });
+  return delta;
+}
+
+function deltaBalanceHtml(delta) {
+  const parts = [];
+  ['met', 'en', 'food', 'water'].forEach(function (k) {
+    const v = delta[k] || 0;
+    if (Math.abs(v) < 0.01) return;
+    const sign = v > 0 ? '+' : '−';
+    const val = Math.round(Math.abs(v) * 100) / 100;
+    const cls = v > 0 ? 'struct-item__d--pos' : 'struct-item__d--neg';
+    parts.push('<span class="' + cls + '">' + sign + val + ' ' + resGlyph(k) + '</span>');
+  });
+  if (!parts.length) return '';
+  return '<span class="struct-item__delta" title="Saldo netto per Impulso se costruita">' + parts.join(' ') + '</span>';
 }
 
 /* --- Tab Strutture --- */
@@ -1388,21 +1422,29 @@ function renderPlanetStruttureTab(host, planet, colony) {
         : '<span class="struct-item__locked is-busy" title="' + demoCheck.reason + '">🗑</span>';
       // Decisione #38: bottone "+ Espandi" (aggiunge un modulo = +slot, costo escalante)
       let upBtn;
+      let infoLine;
       if (lvl >= maxL) {
         upBtn = '<span class="struct-item__locked" title="Livello massimo (' + maxL + ')">max</span>';
+        infoLine = '<div class="struct-item__cost struct-item__cost--max">Livello massimo</div>';
       } else {
         const up = ORION.planet.canBuild(colony, planet, id);
         const nextCost = S.stepCost(def, lvl + 1);
-        const costStr = Object.keys(nextCost).map(function (k) { return resGlyph(k) + nextCost[k]; }).join(' ');
+        const nextTime = S.stepTime(def, lvl + 1);
+        const costStr = Object.keys(nextCost).map(function (k) { return resGlyph(k) + nextCost[k]; }).join(' · ');
+        const balance = deltaBalanceHtml(marginalNet(colony, planet, id));
         if (up.ok) {
-          upBtn = '<button class="btn btn--mini" data-build="' + id + '" type="button" title="Espandi a ×' + (lvl + 1) + ' (+' + (def.slots || 1) + ' slot · ' + costStr + ')">+ Espandi</button>';
+          upBtn = '<button class="btn btn--mini" data-build="' + id + '" type="button" title="Espandi a ×' + (lvl + 1) + ' (+' + (def.slots || 1) + ' slot)">+ Espandi</button>';
         } else {
           upBtn = '<span class="struct-item__locked" title="' + escapeHtml(up.reason) + '">+ Espandi</span>';
         }
+        infoLine = '<div class="struct-item__cost"><span class="struct-item__cost-label">×' + (lvl + 1) + '</span> ' + costStr + ' · ' + nextTime + ' I' + (balance ? ' ' + balance : '') + '</div>';
       }
       html += '<li class="struct-item is-built">' +
         '<span class="struct-item__glyph">' + def.glyph + '</span>' +
-        '<span class="struct-item__name">' + def.name + ' <span class="struct-item__lvl">×' + lvl + '</span> <span class="struct-item__cat">' + slotInfo + '</span></span>' +
+        '<div class="struct-item__main">' +
+          '<div class="struct-item__name">' + def.name + ' <span class="struct-item__lvl">×' + lvl + '</span> <span class="struct-item__cat">' + slotInfo + '</span></div>' +
+          infoLine +
+        '</div>' +
         upBtn + demoBtn +
       '</li>';
     });
@@ -1468,6 +1510,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
       const check = ORION.planet.canBuild(colony, planet, def.id);
       const cost = def.cost || {};
       const costStr = Object.keys(cost).map(function (k) { return resGlyph(k) + cost[k]; }).join(' · ');
+      const balance = deltaBalanceHtml(marginalNet(colony, planet, def.id));
       let statusCell;
       let extraClass = check.ok ? '' : ' is-locked';
       if (check.ok) {
@@ -1493,7 +1536,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
         '<span class="struct-item__glyph">' + def.glyph + '</span>' +
         '<div class="struct-item__main">' +
           '<div class="struct-item__name">' + def.name + ' <span class="struct-item__cat">' + def.time + ' I</span></div>' +
-          '<div class="struct-item__cost">' + costStr + '</div>' +
+          '<div class="struct-item__cost">' + costStr + (balance ? ' ' + balance : '') + '</div>' +
         '</div>' +
         '<button class="btn btn--mini struct-item__info" data-info="' + def.id + '" type="button" title="Cosa fa, bonus/malus, concatenazioni" aria-label="Informazioni su ' + def.name + '">i</button>' +
         statusCell +
@@ -1612,7 +1655,7 @@ function renderCantieriSection(colony, planet) {
   }
 
   let html = '<div class="cantieri-section">' +
-    '<p class="sysinfo__sub">Cantieri & Squadre <span class="cantieri-section__hint">(M07 — esplorazione)</span></p>';
+    '<p class="sysinfo__sub">Cantieri & Squadre <span class="cantieri-section__hint">(esplorazione)</span></p>';
 
   if (hasHangar) {
     const sShips = colony.ships && colony.ships.explorer || 0;
@@ -1790,7 +1833,7 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
       listHtml +
       '<p class="panel__note">Costruisci scafi nell\'<em>Hangar di costruzione</em> e forma equipaggi nell\'<em>Accademia militare</em>. ' +
         'Ogni missione completata restituisce l\'equipaggio con +1 xp; gli scafi accumulano usura. ' +
-        'I tre tier di <em>iperguida</em> (M13) ridurranno i tempi di salto iperspaziale.</p>' +
+        'I tre tier di <em>iperguida</em> ridurranno i tempi di salto iperspaziale.</p>' +
     '</div>';
 
   const btn = host.querySelector('[data-action="exp-organize"]');
@@ -2020,7 +2063,7 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
         row('Morale', morale.toFixed(2) + ' / ' + CFG.POP_MORALE_MAX.toFixed(2)) +
         row('Crescita', '<span class="rate ' + (canGrow ? 'rate--pos' : 'rate--neg') + '">' + growthStr + '</span>') +
       '</dl>' +
-      '<p class="panel__note">Morale: ' + moraleParts.join(' · ') + '. Moltiplica la crescita pop §9.3.</p>' +
+      '<p class="panel__note">Morale: ' + moraleParts.join(' · ') + '. Moltiplica la crescita della popolazione.</p>' +
       '<p class="panel__note">La crescita si ferma in <strong>plateau</strong> (senza carestia) quando l\'ambiente non regge più popolazione. Entrano in gioco più fattori — risorse, energia, <strong>morale</strong> — e una città che cresce ne mette alla prova di nuovi. Osserva cosa cala e adatta la colonia.</p>' +
       '<p class="sysinfo__sub">Classi funzionali</p>' +
       bars +
@@ -2043,11 +2086,12 @@ function potentialBars(planet) {
 }
 
 function rateGrid(rates, upkeep) {
-  function fmt(v) { return (v >= 0 ? '+' : '') + (Math.round(v * 100) / 100); }
+  function fmtNet(v) { return (v >= 0 ? '+' : '−') + (Math.round(Math.abs(v) * 100) / 100); }
+  function fmtAbs(v) { return Math.round(Math.abs(v) * 100) / 100; }
   const items = [];
   ['met', 'en', 'food', 'water'].forEach(function (k) {
     const r = rates[k] || 0; const u = upkeep[k] || 0; const net = r - u;
-    if (r || u) items.push(row(resLabel(k), '<span class="rate ' + (net >= 0 ? 'rate--pos' : 'rate--neg') + '">' + fmt(net) + ' / I</span> <span class="rate-aux">(+' + fmt(r) + ' / −' + fmt(u) + ')</span>'));
+    if (r || u) items.push(row(resLabel(k), '<span class="rate ' + (net >= 0 ? 'rate--pos' : 'rate--neg') + '">' + fmtNet(net) + ' / I</span> <span class="rate-aux">(+' + fmtAbs(r) + ' / −' + fmtAbs(u) + ')</span>'));
   });
   if (rates.research) items.push(row('Ricerca', '<span class="rate rate--pos">+' + (Math.round(rates.research * 100) / 100) + ' / I</span>'));
   if (rates.scan) items.push(row('Scansione', '<span class="rate rate--pos">+' + rates.scan + ' / I</span>'));
@@ -2434,7 +2478,7 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — ' + pname + ptag + ': la popolazione cala per la carestia prolungata.', 'system');
   } else if (ev.kind === 'victory') {
     const label = (ORION.victory && ORION.victory.TRACK_LABELS[ev.track]) || ev.track;
-    pushChronicle(ds + ' — <strong>Pista chiusa</strong>: ' + label + ' (M20 attiverà la schermata di vittoria).', 'explore');
+    pushChronicle(ds + ' — <strong>Pista chiusa</strong>: ' + label + '.', 'explore');
   } else if (ev.kind === 'settle-stage') {
     /* M06.5 (decisione #27): voci scriptate della fase Insediamento. */
     const stage = ev.stage;
@@ -2631,7 +2675,7 @@ function chronicleSystemEntry(system, disc) {
       n + ' corpi rilevati, interno da scansionare.';
     mod = 'system';
   } else {
-    text = ds + ' — Rotta verso un sistema ignoto · richiede esplorazione (M07).';
+    text = ds + ' — Rotta verso un sistema ignoto · richiede esplorazione.';
     mod = 'system';
   }
   pushChronicle(text, mod);
@@ -2702,7 +2746,7 @@ function renderSaveModal() {
   } else {
     html += '<section class="save-section">' +
       '<h3 class="save-section__title">Slot manuali</h3>' +
-      '<p class="save-empty">Modalità Ironman: solo autosave + export/import .json (decisione #23).</p>' +
+      '<p class="save-empty">Modalità Ironman: solo autosave + export/import .json.</p>' +
       '</section>';
   }
 
@@ -3018,12 +3062,12 @@ function renderMainMenuNew(body) {
             'value="' + escapeHtml(ORION.menuForm.seed) + '" maxlength="32" autocomplete="off">' +
           '<button type="button" class="btn btn--mini" data-action="menu-seed-new" title="Genera un nuovo seed">⟳ Genera</button>' +
         '</div>' +
-        '<span class="main-menu__field-hint">Il seed cristallizza la galassia (decisione #5). Sarà visibile in partita ma non rigenerabile.</span>' +
+        '<span class="main-menu__field-hint">Il seed cristallizza la galassia. Sarà visibile in partita ma non rigenerabile.</span>' +
       '</label>' +
       '<label class="main-menu__field">' +
         '<span class="main-menu__field-label">Preset</span>' +
         '<select class="main-menu__input" data-bind="menu-preset">' + presetOpts + '</select>' +
-        '<span class="main-menu__field-hint">Le piste di vittoria restano in parallelo (decisione #23). M20 esporrà i modificatori liberi.</span>' +
+        '<span class="main-menu__field-hint">Le piste di vittoria restano in parallelo: il preset dà solo enfasi narrativa.</span>' +
       '</label>' +
       '<label class="main-menu__field main-menu__field--row">' +
         '<input type="checkbox" data-bind="menu-ironman"' + (ironman ? ' checked' : '') +

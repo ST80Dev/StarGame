@@ -1040,12 +1040,30 @@ button { font-family: inherit; }
   margin-left: 4px;
 }
 .struct-item__cost {
-  font-size: 0.66rem;
-  color: var(--c-text-faint);
+  font-size: 0.74rem;
+  color: var(--c-text-soft);
+  font-family: var(--font-data);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  margin-top: 2px;
 }
+.struct-item__cost-label {
+  color: var(--c-accent-warm);
+  font-weight: 600;
+  margin-right: 4px;
+}
+.struct-item__cost--max {
+  color: var(--c-text-faint);
+  font-style: italic;
+}
+.struct-item__delta {
+  margin-left: 6px;
+  padding-left: 8px;
+  border-left: 1px solid var(--c-border-soft);
+}
+.struct-item__d--pos { color: var(--c-good); font-weight: 600; }
+.struct-item__d--neg { color: var(--c-bad);  font-weight: 600; }
 .struct-item.is-built {
   background: rgba(47, 230, 224, 0.06);
   border-color: rgba(47, 230, 224, 0.20);
