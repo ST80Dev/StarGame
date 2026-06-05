@@ -555,8 +555,14 @@
       if (-gap > underGap) { underGap = -gap; underK = k; }
     });
     if (!overK || !underK || overK === underK) return;
-    // sposta una frazione (lentamente)
-    const move = Math.min(overGap, underGap) * CFG.POP_CLASS_SHIFT;
+    /* Tasso di shift: a popolazione alta è LENTO per design (recovery-friendly,
+       decisione #22). A pop bassa (≤ 5 unità) il gap massimo è frazionario
+       (es. con total=1 over=0.79, under=0.57 → 0.0085/Ι, accum=1 in ~120 Ι):
+       la "Vocazione a regime" nel pannello apparirebbe disattesa per ore.
+       Scaliamo lo shift inversamente con la pop fino a un cap (×5) così a
+       1-5 unità il mix si riallinea in pochi Ι, sopra resta lento come prima. */
+    const speedMul = Math.max(1, 5 / Math.max(1, total));
+    const move = Math.min(overGap, underGap) * CFG.POP_CLASS_SHIFT * speedMul;
     // accumulatore per spostamenti frazionari
     colony._classAccum = colony._classAccum || {};
     const key = overK + '>' + underK;

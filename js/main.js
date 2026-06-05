@@ -2049,7 +2049,7 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
       const pct = Math.round((tw[k] || 0) / twSum * 100);
       return pct > 0 ? labels[k] + ' ' + pct + '%' : '';
     }).filter(Boolean).join(' · ');
-    targetHtml = '<p class="panel__note">Mix tendenziale: ' + targetBits + '</p>';
+    targetHtml = '<p class="panel__note panel__note--target">Vocazione a regime: ' + targetBits + '</p>';
   }
 
   host.innerHTML =
@@ -2059,11 +2059,10 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
         row('Sostenibile (locale)', '~' + Math.floor(sustainable) + ' / ' + cap + ' unità · ' +
             ORION.planet.formatPeople(ORION.planet.peopleAt(sustainable, planet)) +
             ' <span class="pop-limit">(limite: ' + limitRes + ')</span>') +
-        row('Morale', morale.toFixed(2) + ' / ' + CFG.POP_MORALE_MAX.toFixed(2)) +
+        row('Morale', morale.toFixed(2) + ' / ' + CFG.POP_MORALE_MAX.toFixed(2) +
+            ' <span class="rate-aux" title="' + escapeHtml(moraleParts.join(' · ')) + '">(dettagli)</span>') +
         row('Crescita', '<span class="rate ' + (canGrow ? 'rate--pos' : 'rate--neg') + '">' + growthStr + '</span>') +
       '</dl>' +
-      '<p class="panel__note">Morale: ' + moraleParts.join(' · ') + '. Moltiplica la crescita della popolazione.</p>' +
-      '<p class="panel__note">La crescita si ferma in <strong>plateau</strong> (senza carestia) quando l\'ambiente non regge più popolazione. Entrano in gioco più fattori — risorse, energia, <strong>morale</strong> — e una città che cresce ne mette alla prova di nuovi. Osserva cosa cala e adatta la colonia.</p>' +
       '<p class="sysinfo__sub">Classi funzionali</p>' +
       bars +
       targetHtml +
