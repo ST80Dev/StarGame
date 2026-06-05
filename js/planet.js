@@ -45,17 +45,20 @@
      Mondi piccoli (ghiacciato/luna/gassoso/cintura) +1 rispetto al baseline
      iniziale per dare spazio a una specializzazione minima (3-4 estrattive
      base + qualcosa). Decisione di sessione post-M06.7. */
-  /* Decisione #38: col modello a moduli (livello = slot) gli slot diventano
-     la leva strategica. Dimensionati a simulazione perché i mondi-giardino
-     (terrestre/oceanico/forestale) raggiungano ~¾ del cap-popolazione in
-     autosufficienza CON margine per economia/militare (~7-8 slot liberi a
-     pop-max); il cap pieno (win-goal) resta da import M12. I mondi-fabbrica
-     (deserto/vulcanico/ghiacciato) hanno slot per una specializzazione vera
-     (estrazione/energia/esotici), non per la popolazione. + varianza #36. */
+  /* Decisione #38 (+ riserva difese/avanzate): col modello a moduli (livello =
+     slot) gli slot sono la leva strategica. Dimensionati a simulazione perché i
+     mondi-giardino raggiungano ~¾ del cap-popolazione in autosufficienza CON
+     margine per economia/militare (top pieno = import M12). In più si tiene una
+     RISERVA esplicita di slot per le strutture indispensabili dei moduli futuri:
+     difese planetarie (M09), stazioni/piattaforme orbitali (M15/M16), strutture
+     tech avanzate (M13) — perché un mondo ricco e popoloso sarà il bersaglio più
+     ambito e dovrà potersi difendere senza sacrificare la propria vocazione.
+     Mondi-giardino +2, mondi-fabbrica/piccoli +1 rispetto al primo dimensionamento.
+     + varianza #36 (`+0..+2`). */
   const BASE_SLOTS = {
-    terrestre: 19, desertico:  9, oceanico: 19,
-    ghiacciato: 9, vulcanico:  9, forestale: 18,
-    gassoso:    7, cintura:    7, luna:      7
+    terrestre: 21, desertico: 10, oceanico: 21,
+    ghiacciato: 10, vulcanico: 10, forestale: 20,
+    gassoso:    8, cintura:    8, luna:      8
   };
 
   /* Popolazione massima (in "unità popolazione", §9). 0 = non abitabile. */
