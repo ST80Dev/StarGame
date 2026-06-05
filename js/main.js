@@ -13,13 +13,13 @@
 
 const ORION = window.ORION || (window.ORION = {});
 
-ORION.version = '0.6.6-M06.6';
+ORION.version = '0.6.6';
 
 /* Etichette provvisorie del viewport per le viste non ancora implementate. */
 ORION.viewLabels = {
-  fleet:     { caption: 'VISTA FLOTTA',     hint: 'La gestione della flotta arriverà nel modulo M08.' },
-  research:  { caption: 'VISTA RICERCA',    hint: "L'albero tecnologico arriverà nel modulo M13." },
-  diplomacy: { caption: 'VISTA DIPLOMAZIA', hint: 'La diplomazia arriverà nel modulo M11.' }
+  fleet:     { caption: 'VISTA FLOTTA',     hint: 'La gestione della flotta arriverà più avanti nello sviluppo.' },
+  research:  { caption: 'VISTA RICERCA',    hint: "L'albero tecnologico arriverà più avanti nello sviluppo." },
+  diplomacy: { caption: 'VISTA DIPLOMAZIA', hint: 'La diplomazia arriverà più avanti nello sviluppo.' }
 };
 
 /* Stato di partita corrente (in memoria). Il salvataggio è M06. */
@@ -626,7 +626,7 @@ function renderSystemPanel(title, content, id) {
     content.innerHTML =
       '<div class="sysinfo">' +
         '<p class="sysinfo__fog">Posizione rilevata, dettagli ignoti.<br>' +
-          'Richiede esplorazione (modulo M07).</p>' +
+          'Richiede esplorazione.</p>' +
       '</div>';
     return;
   }
@@ -644,7 +644,7 @@ function renderSystemPanel(title, content, id) {
           '<span class="danger-badge ' + tierClass + '">' + sys.danger + ' · ' + sys.dangerTier + '</span>') +
       '</dl>' +
       '<button class="btn btn--mini btn--enter" data-action="enter-system" type="button">◉ Apri sistema ▸</button>' +
-      '<p class="panel__note">Vista interna: stella/e, corpi celesti in orbita e anomalie (M03). Doppio click sul nodo per entrare.</p>' +
+      '<p class="panel__note">Vista interna: stella/e, corpi celesti in orbita e anomalie. Doppio click sul nodo per entrare.</p>' +
     '</div>';
 
   const enter = content.querySelector('[data-action="enter-system"]');
@@ -766,7 +766,7 @@ function renderSystemInteriorPanel(title, content, system, disc) {
   if (!known) {
     content.innerHTML =
       '<div class="sysinfo"><p class="sysinfo__fog">Posizione rilevata, interno ignoto.<br>' +
-        'Richiede esplorazione (modulo M07).</p></div>';
+        'Richiede esplorazione.</p></div>';
     return;
   }
 
@@ -810,7 +810,7 @@ function renderSystemInteriorPanel(title, content, system, disc) {
     }
   } else {
     detail = '<p class="panel__note">Sistema rilevato ma non scansionato: <strong>' + bodyCount +
-      '</strong> corpi celesti individuati. Dettagli, tipi e anomalie richiedono l\'esplorazione (modulo M07).</p>';
+      '</strong> corpi celesti individuati. Dettagli, tipi e anomalie richiedono l\'esplorazione.</p>';
   }
 
   content.innerHTML =
@@ -823,7 +823,7 @@ function renderSystemInteriorPanel(title, content, system, disc) {
         row('Pericolo', '<span class="danger-badge ' + tierClass + '">' + system.danger + ' · ' + system.dangerTier + '</span>') +
       '</dl>' +
       detail +
-      '<p class="panel__note">Clicca un oggetto per i dati base · doppio click per inquadrarlo. Colonizzazione e gestione: modulo M04.</p>' +
+      '<p class="panel__note">Clicca un oggetto per i dati base · doppio click per inquadrarlo.</p>' +
     '</div>';
 
   content.querySelectorAll('[data-body]').forEach((btn) => {
@@ -876,7 +876,7 @@ function renderBodyPanel(title, content, system, body) {
       '</dl>' +
       (def.cat !== 'belt'
         ? '<button class="btn btn--mini btn--enter" data-action="enter-planet" type="button">○ Apri pianeta ▸</button>' +
-          '<p class="panel__note">Vista pianeta: sfera procedurale, risorse, strutture, popolazione (M04).</p>'
+          '<p class="panel__note">Vista pianeta: sfera procedurale, risorse, strutture, popolazione.</p>'
         : '') +
     '</div>';
 
@@ -1287,7 +1287,7 @@ function renderPlanetRisorseTab(host, planet, colony) {
       potentialBars(planet) +
       '<p class="sysinfo__sub">Scorte in colonia</p>' +
       '<dl class="sysinfo__list">' + stockRows + '</dl>' +
-      '<p class="sysinfo__sub">Produzione potenziale per Impulso (M05)</p>' +
+      '<p class="sysinfo__sub">Produzione potenziale per Impulso</p>' +
       rateGrid(out.rates, out.upkeep) +
       '<p class="sysinfo__sub">Risorse avanzate</p>' +
       advancedHtml +
@@ -1550,7 +1550,7 @@ function renderCantieriSection(colony, planet) {
   }
 
   let html = '<div class="cantieri-section">' +
-    '<p class="sysinfo__sub">Cantieri & Squadre <span class="cantieri-section__hint">(M07 — esplorazione)</span></p>';
+    '<p class="sysinfo__sub">Cantieri & Squadre <span class="cantieri-section__hint">(esplorazione)</span></p>';
 
   if (hasHangar) {
     const sShips = colony.ships && colony.ships.explorer || 0;
@@ -1728,7 +1728,7 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
       listHtml +
       '<p class="panel__note">Costruisci scafi nell\'<em>Hangar di costruzione</em> e forma equipaggi nell\'<em>Accademia militare</em>. ' +
         'Ogni missione completata restituisce l\'equipaggio con +1 xp; gli scafi accumulano usura. ' +
-        'I tre tier di <em>iperguida</em> (M13) ridurranno i tempi di salto iperspaziale.</p>' +
+        'I tre tier di <em>iperguida</em> ridurranno i tempi di salto iperspaziale.</p>' +
     '</div>';
 
   const btn = host.querySelector('[data-action="exp-organize"]');
@@ -1958,7 +1958,7 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
         row('Morale', morale.toFixed(2) + ' / ' + CFG.POP_MORALE_MAX.toFixed(2)) +
         row('Crescita', '<span class="rate ' + (canGrow ? 'rate--pos' : 'rate--neg') + '">' + growthStr + '</span>') +
       '</dl>' +
-      '<p class="panel__note">Morale: ' + moraleParts.join(' · ') + '. Moltiplica la crescita pop §9.3.</p>' +
+      '<p class="panel__note">Morale: ' + moraleParts.join(' · ') + '. Moltiplica la crescita della popolazione.</p>' +
       '<p class="panel__note">La crescita si ferma in <strong>plateau</strong> (senza carestia) quando l\'ambiente non regge più popolazione. Entrano in gioco più fattori — risorse, energia, <strong>morale</strong> — e una città che cresce ne mette alla prova di nuovi. Osserva cosa cala e adatta la colonia.</p>' +
       '<p class="sysinfo__sub">Classi funzionali</p>' +
       bars +
@@ -2360,7 +2360,7 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — ' + pname + ptag + ': la popolazione cala per la carestia prolungata.', 'system');
   } else if (ev.kind === 'victory') {
     const label = (ORION.victory && ORION.victory.TRACK_LABELS[ev.track]) || ev.track;
-    pushChronicle(ds + ' — <strong>Pista chiusa</strong>: ' + label + ' (M20 attiverà la schermata di vittoria).', 'explore');
+    pushChronicle(ds + ' — <strong>Pista chiusa</strong>: ' + label + '.', 'explore');
   } else if (ev.kind === 'settle-stage') {
     /* M06.5 (decisione #27): voci scriptate della fase Insediamento. */
     const stage = ev.stage;
@@ -2541,7 +2541,7 @@ function chronicleSystemEntry(system, disc) {
       n + ' corpi rilevati, interno da scansionare.';
     mod = 'system';
   } else {
-    text = ds + ' — Rotta verso un sistema ignoto · richiede esplorazione (M07).';
+    text = ds + ' — Rotta verso un sistema ignoto · richiede esplorazione.';
     mod = 'system';
   }
   pushChronicle(text, mod);
@@ -2612,7 +2612,7 @@ function renderSaveModal() {
   } else {
     html += '<section class="save-section">' +
       '<h3 class="save-section__title">Slot manuali</h3>' +
-      '<p class="save-empty">Modalità Ironman: solo autosave + export/import .json (decisione #23).</p>' +
+      '<p class="save-empty">Modalità Ironman: solo autosave + export/import .json.</p>' +
       '</section>';
   }
 
@@ -2928,12 +2928,12 @@ function renderMainMenuNew(body) {
             'value="' + escapeHtml(ORION.menuForm.seed) + '" maxlength="32" autocomplete="off">' +
           '<button type="button" class="btn btn--mini" data-action="menu-seed-new" title="Genera un nuovo seed">⟳ Genera</button>' +
         '</div>' +
-        '<span class="main-menu__field-hint">Il seed cristallizza la galassia (decisione #5). Sarà visibile in partita ma non rigenerabile.</span>' +
+        '<span class="main-menu__field-hint">Il seed cristallizza la galassia. Sarà visibile in partita ma non rigenerabile.</span>' +
       '</label>' +
       '<label class="main-menu__field">' +
         '<span class="main-menu__field-label">Preset</span>' +
         '<select class="main-menu__input" data-bind="menu-preset">' + presetOpts + '</select>' +
-        '<span class="main-menu__field-hint">Le piste di vittoria restano in parallelo (decisione #23). M20 esporrà i modificatori liberi.</span>' +
+        '<span class="main-menu__field-hint">Le piste di vittoria restano in parallelo: il preset dà solo enfasi narrativa.</span>' +
       '</label>' +
       '<label class="main-menu__field main-menu__field--row">' +
         '<input type="checkbox" data-bind="menu-ironman"' + (ironman ? ' checked' : '') +
