@@ -166,6 +166,21 @@
         'capire <strong>cosa manca</strong>: più fattorie/impianti idrici, o (futuro) rifornimenti via rotte commerciali.</p>'
     },
     {
+      id: 'waste',
+      tag: 'Pianeta',
+      title: 'Rifiuti e gestione',
+      body:
+        '<p>Popolazione e industria producono <strong>rifiuti</strong> in continuazione. Non sono una crisi: sono una ' +
+        '<strong>leva</strong>. Si accumulano in un contenimento di colonia; la <strong>saturazione</strong> (accumulo / capacità) ' +
+        'è ciò che conta.</p>' +
+        '<p>Oltre il <strong>70%</strong> di saturazione la produzione inizia a <strong>deperire</strong> in modo progressivo ' +
+        '(fino a −25% in overflow). Non è mai un fail-state (recovery-friendly): basta agire.</p>' +
+        '<p>La leva principale è l\'<strong>Impianto di riciclo</strong>: tratta i rifiuti, ne <strong>recupera energia</strong> ' +
+        'e <strong>alza la capacità</strong> di contenimento. Pochi moduli invertono la rotta.</p>' +
+        '<p><strong>In arrivo:</strong> esportare i rifiuti alle civiltà AI (commercio) e dedicare i mondi ostili a ' +
+        '<em>colonie riciclanti</em>, trasformando una zavorra in infrastruttura d\'impero.</p>'
+    },
+    {
       id: 'advanced',
       tag: 'Pianeta',
       title: 'Risorse avanzate',
@@ -336,6 +351,19 @@
         '<p>Oggi non produce nulla visibile. Costruirlo è un investimento per quando saranno attivi gli scambi tra colonie ' +
         '(produzione specializzata + trasferimento risorse).</p>' +
         '<p><strong>Pista vittoria:</strong> contribuirà all\'<em>Egemone economico</em>.</p>'
+    },
+    {
+      id: 'struct:impianto-riciclo', tag: 'Strutture · ♻', title: 'Impianto di riciclo',
+      body:
+        '<p>Tratta i <strong>rifiuti</strong> generati da popolazione e industria: ne <strong>recupera energia</strong> ' +
+        '(≈0.25 en per unità trattata) e <strong>alza la capacità</strong> di contenimento (+150 per modulo). Upkeep 1 en/I.</p>' +
+        '<p><strong>Perché conta:</strong> sopra il 70% di saturazione la produzione della colonia inizia a deperire ' +
+        '(fino a −25%). Un solo impianto a livello 1 tratta 3 rifiuti/Ι; espandendolo (rendimento crescente dei moduli) ' +
+        'porti il netto in negativo e <strong>svuoti</strong> l\'accumulo.</p>' +
+        '<p><strong>Sinergia:</strong> più popolazione e più industria → più rifiuti. Su colonie grandi e mature è una ' +
+        'struttura quasi obbligata; su mondi piccoli può bastare un modulo.</p>' +
+        '<p><strong>In arrivo:</strong> con le rotte commerciali potrai <em>esportare</em> i rifiuti, e i mondi ostili ' +
+        'diventeranno <em>colonie riciclanti</em> dedicate.</p>'
     },
     {
       id: 'struct:impianto-esotico', tag: 'Strutture · ✦', title: 'Impianto esotico',

@@ -1713,6 +1713,31 @@ button { font-family: inherit; }
 .scar--low  { color: #ffb000; background: rgba(255, 176, 0, 0.10); }
 .scar--crit { color: #ff6f5c; background: rgba(255, 111, 92, 0.14); }
 
+/* Decisione #48 (Fase 0 — rifiuti): tag saturazione, barra colorata, hint. */
+.waste-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  font-family: var(--font-data);
+  font-size: 0.80rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+.waste--ok   { color: #7fd6a0; background: rgba(127, 214, 160, 0.10); }
+.waste--low  { color: #ffb000; background: rgba(255, 176, 0, 0.10); }
+.waste--crit { color: #ff6f5c; background: rgba(255, 111, 92, 0.14); }
+.waste-fill--ok   { background: linear-gradient(90deg, #4fae7c, #7fd6a0) !important; }
+.waste-fill--low  { background: linear-gradient(90deg, #d99400, #ffb000) !important; }
+.waste-fill--crit { background: linear-gradient(90deg, #d6442f, #ff6f5c) !important; }
+.waste-hint {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--c-text-dim, rgba(255,255,255,0.7));
+}
+
 /* Progress bar generica per code (costruzione, scansione, colonizzazione) */
 .progress-bar {
   height: 9px;

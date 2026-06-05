@@ -80,6 +80,26 @@
     POP_CROWD_START:       0.8,   // rapporto pop/capacità oltre cui inizia il malus
     POP_CROWD_SLOPE:       2.5,   // ripidità del crollo morale da sovraffollamento
 
+    /* Gestione rifiuti — Fase 0 (decisione #48). Modello IBRIDO: i rifiuti
+       sono una QUANTITÀ accumulata (`colony.waste.stock`) e una SATURAZIONE
+       (stock/capacità) che genera pressione. Popolazione e industria li
+       producono; gli impianti di riciclo li trattano (→ energia) e ne alzano
+       la capacità. Oltre la soglia di guardia la saturazione abbatte la
+       produzione in modo PROGRESSIVO — il "deperimento" del pianeta — ma
+       sempre recuperabile (decisione #22: mai fail-state; basta 1 impianto
+       di riciclo per invertire la rotta). Numeri tarati perché in Fase 0 la
+       pressione si avverta solo nel lungo periodo su colonie sviluppate. */
+    WASTE_PER_POP:       0.15,   // rifiuti / unità pop / Ι
+    WASTE_BY_CAT: {              // rifiuti / modulo / Ι per categoria struttura
+      estrattiva: 0.30, produttiva: 0.60, militare: 0.30,
+      ricerca:    0.10, civile:    0.10, avanzata:  0.25
+    },
+    WASTE_BASE_CAPACITY: 500,    // contenimento di base della colonia
+    WASTE_ENERGY_YIELD:  0.25,   // energia recuperata per unità di rifiuto trattato
+    WASTE_SAT_WARN:      0.70,   // saturazione oltre cui inizia il malus (stato 'saturo')
+    WASTE_MALUS_SAT:     0.10,   // malus produzione a saturazione = 1.0
+    WASTE_MALUS_CRIT:    0.25,   // malus massimo (saturazione ≥ 2.0, overflow ignorato)
+
     /* Osservatorio §7.3 */
     SCAN_OBSERVATION_I: 10,     // I di osservazione dopo completamento
 
@@ -109,6 +129,7 @@
     'centro-abitativo':  { operai: 1, tecnici: 1, mercanti: 1 },
     'ospedale':          { scienziati: 1, tecnici: 1 },
     'mercato':           { mercanti: 3 },
+    'impianto-riciclo':  { operai: 1, tecnici: 1 },
     'impianto-esotico':  { scienziati: 2, tecnici: 1 }
   };
 
@@ -196,6 +217,59 @@
   function ensureGrowth(colony) {
     if (colony.pop.accum == null) colony.pop.accum = 0;
     return colony.pop;
+  }
+
+  /* Stato rifiuti (decisione #48) — lazy init, NESSUN bump di schema:
+     `colony.waste` (senza underscore) viene auto-serializzato come parte
+     di game.colonies, i save vecchi caricano con waste undefined e lo
+     ricreano al primo tick (pattern già usato per governor/commanders). */
+  function ensureWaste(colony) {
+    if (!colony.waste) {
+      colony.waste = { stock: 0, saturation: 0, capacity: 0, net: 0, state: 'ok', announced: {} };
+    }
+    return colony.waste;
+  }
+
+  /* Capacità di contenimento rifiuti: base + moduli impianto di riciclo. */
+  function wasteCapacity(colony) {
+    let cap = CFG.WASTE_BASE_CAPACITY;
+    const S = root.ORION.structures;
+    Object.keys(colony.structures || {}).forEach(function (id) {
+      const def = S.get(id);
+      if (def && def.wasteCapacity) {
+        cap += def.wasteCapacity * S.moduleSum(colony.structures[id].level || 1);
+      }
+    });
+    return cap;
+  }
+
+  /* Malus di produzione da rifiuti — PROGRESSIVO (il "deperimento"):
+     0 fino alla soglia di guardia, poi cresce linearmente fino a
+     WASTE_MALUS_SAT a saturazione 1.0, e oltre (overflow) fino a
+     WASTE_MALUS_CRIT a saturazione 2.0. Cappato: mai oltre il crit,
+     mai un fail-state (decisione #22). */
+  function wasteMalus(waste) {
+    if (!waste) return 1;
+    const sat = waste.saturation || 0;
+    if (sat <= CFG.WASTE_SAT_WARN) return 1;
+    if (sat < 1.0) {
+      const t = (sat - CFG.WASTE_SAT_WARN) / (1.0 - CFG.WASTE_SAT_WARN);
+      return 1 - CFG.WASTE_MALUS_SAT * t;
+    }
+    const over = Math.min(1, sat - 1.0);   // overflow: 0→1 da sat 1.0 a 2.0
+    return 1 - (CFG.WASTE_MALUS_SAT + (CFG.WASTE_MALUS_CRIT - CFG.WASTE_MALUS_SAT) * over);
+  }
+
+  /* Helper di lettura per la UI (robusto anche prima del primo tick:
+     ricalcola la capacità sullo stato corrente). */
+  function wasteStatus(colony) {
+    const w = colony.waste || { stock: 0, net: 0 };
+    const cap = wasteCapacity(colony);
+    const sat = cap > 0 ? (w.stock || 0) / cap : 0;
+    let state = 'ok';
+    if (sat >= 1.0) state = 'critico';
+    else if (sat >= CFG.WASTE_SAT_WARN) state = 'saturo';
+    return { stock: w.stock || 0, net: w.net || 0, capacity: cap, saturation: sat, state: state };
   }
 
   /* Calcola il malus globale di produzione in base alla scarsità.
@@ -323,6 +397,9 @@
     if (!colony.colonized) return null;
     const out = root.ORION.planet.structureOutput(colony, planet, game, colonyKey);
     const malus = scarcityMalus(scar);
+    /* Decisione #48: la saturazione di rifiuti del tick precedente abbatte
+       la produzione in modo progressivo (recovery-friendly, mai fail-state). */
+    const wMalus = wasteMalus(colony.waste);
     const settling = (colony.phase === 'settling') ? 0.5 : 1.0;
     const stock = colony.stock;
     const pop = colony.pop || { total: 0 };
@@ -333,7 +410,7 @@
     const popWaterDemand = (colony.phase !== 'settling') ? (pop.total || 0) * CFG.POP_WATER_PER_UNIT : 0;
     const net = {};
     ['met', 'en', 'food', 'water'].forEach(function (k) {
-      const r = (out.rates[k] || 0) * malus * settling;
+      const r = (out.rates[k] || 0) * malus * wMalus * settling;
       const u = out.upkeep[k] || 0;
       let n = r - u;
       if (k === 'food')  n -= popFoodDemand;
@@ -586,6 +663,63 @@
     colony.pop.classes[underK] = (colony.pop.classes[underK] || 0) + move;
   }
 
+  /* 5b) Rifiuti (decisione #48, Fase 0). Eseguito DOPO la produzione/pop:
+     genera rifiuti da popolazione + industria, li tratta con gli impianti di
+     riciclo (recuperando energia), aggiorna stock/saturazione/stato e
+     accumula i rifiuti non trattati. Niente durante l'Insediamento (pop
+     bloccata, attività ridotta). Determinismo: zero RNG. */
+  function processWaste(game, colony, planet, events) {
+    if (!colony.colonized) return;
+    if (colony.phase === 'settling') return;
+    const waste = ensureWaste(colony);
+    const S = root.ORION.structures;
+
+    // 1) Generazione (popolazione) + 2) industria/trattamento in un solo giro
+    let gen = (colony.pop.total || 0) * CFG.WASTE_PER_POP;
+    let process = 0;
+    Object.keys(colony.structures || {}).forEach(function (id) {
+      const def = S.get(id);
+      if (!def) return;
+      const msum = S.moduleSum(colony.structures[id].level || 1);
+      const wcat = CFG.WASTE_BY_CAT[def.cat];
+      if (wcat) gen += wcat * msum;
+      if (def.wasteProcess) process += def.wasteProcess * msum;
+    });
+
+    const before = waste.stock || 0;
+    let after = before + gen - process;
+    if (after < 0) after = 0;
+    // energia recuperata = rifiuti EFFETTIVAMENTE trattati × resa
+    const processed = Math.max(0, (before + gen) - after);
+    if (processed > 0 && CFG.WASTE_ENERGY_YIELD > 0) {
+      colony.stock.en = (colony.stock.en || 0) + processed * CFG.WASTE_ENERGY_YIELD;
+    }
+    waste.stock = after;
+    waste.net = gen - process;
+
+    // 3) Saturazione → stato (progressivo, recovery-friendly)
+    const cap = wasteCapacity(colony);
+    waste.capacity = cap;
+    const sat = cap > 0 ? after / cap : 0;
+    waste.saturation = sat;
+    const prev = waste.state;
+    let state = 'ok';
+    if (sat >= 1.0) state = 'critico';
+    else if (sat >= CFG.WASTE_SAT_WARN) state = 'saturo';
+    waste.state = state;
+
+    // eventi (anti-spam come la scarsità)
+    if (!waste.announced) waste.announced = {};
+    if (state !== 'ok' && state !== prev && !waste.announced[state]) {
+      waste.announced[state] = true;
+      events.push({ kind: 'waste', sev: state, colony: colony, planet: planet, impulso: game.timeImpulsi });
+    }
+    if (state === 'ok' && prev !== 'ok') {
+      waste.announced = {};
+      events.push({ kind: 'waste-recover', from: prev, colony: colony, planet: planet, impulso: game.timeImpulsi });
+    }
+  }
+
   /* 6b) M07 — code asset (scafi Hangar / equipaggi Accademia).
         Decisione #37: counter scafi e array equipaggi separati dalla
         coda strutture; produzione 1/Ι (no malus scarsità — il loop le
@@ -723,9 +857,11 @@
       if (!colony.colonized) continue;
 
       const scar = ensureScarcity(colony);
+      ensureWaste(colony);
       const prod = processProduction(colony, planet, scar, game, keys[i]);
       processScarcity(game, colony, planet, prod, events);
       processPopulation(game, colony, planet, prod, events);
+      processWaste(game, colony, planet, events);
       processObservatory(game, colony, planet, events);
       processAssets(game, colony, planet, events);
       processSettling(game, colony, planet, events);
@@ -867,6 +1003,21 @@
         const rem = end - (game.timeImpulsi || 0);
         if (rem > 0 && rem < best) best = rem;
       }
+      // Decisione #48: rifiuti in accumulo verso la prossima soglia
+      // (guardia o overflow), così "Prossimo evento" si ferma prima del
+      // deperimento. Solo se i rifiuti stanno effettivamente salendo.
+      if (c.colonized && c.phase !== 'settling' && c.waste && c.waste.net > 0 && c.waste.capacity > 0) {
+        const cap = c.waste.capacity;
+        const warn = cap * CFG.WASTE_SAT_WARN;
+        const st = c.waste.stock || 0;
+        let tgt = null;
+        if (st < warn) tgt = warn;
+        else if (st < cap) tgt = cap;
+        if (tgt != null) {
+          const rem = Math.ceil((tgt - st) / c.waste.net);
+          if (rem > 0 && rem < best) best = rem;
+        }
+      }
       // M07: scafi/equipaggi in costruzione
       if (c.assets) {
         const sq = c.assets.shipQueue || [];
@@ -929,6 +1080,11 @@
     nextSeqId: nextSeqId,
     nextCrewId: nextCrewId,
     targetClassWeights: targetClassWeights,
-    ensureScarcity: ensureScarcity
+    ensureScarcity: ensureScarcity,
+    /* Decisione #48 — gestione rifiuti (Fase 0) */
+    ensureWaste: ensureWaste,
+    wasteCapacity: wasteCapacity,
+    wasteMalus: wasteMalus,
+    wasteStatus: wasteStatus
   };
 })(typeof window !== 'undefined' ? window : this);
