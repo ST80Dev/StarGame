@@ -3687,6 +3687,73 @@ select.main-menu__input { cursor: pointer; }
   padding: 3px 6px;
   font-family: inherit;
 }
+/* Fase B: overlay rotta a tappe e pattuglia ciclica. */
+.fleet-order-block--route { border-left: 2px solid var(--c-cyan, #2fe6e0); padding-left: 8px; }
+.fleet-order-block--route h3 { color: var(--c-cyan, #2fe6e0); }
+.fleet-order-flag {
+  font-size: 0.85em;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-right: 8px;
+  color: var(--c-muted, #8a93b8);
+  cursor: pointer;
+}
+.fleet-order-flag input { margin: 0; }
+.fleet-route-list {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.fleet-route-empty {
+  font-size: 0.82em;
+  color: var(--c-muted, #8a93b8);
+  font-style: italic;
+  padding: 4px 6px;
+}
+.fleet-route-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  background: rgba(47, 230, 224, 0.05);
+  border-radius: 3px;
+  font-size: 0.88em;
+}
+.fleet-route-item__n {
+  flex: 0 0 auto;
+  color: var(--c-cyan, #2fe6e0);
+  font-family: var(--font-display, sans-serif);
+  font-weight: 600;
+  min-width: 18px;
+}
+.fleet-route-item__name { flex: 1; }
+.fleet-route-item__dwell {
+  flex: 0 0 auto;
+  color: var(--c-muted, #8a93b8);
+  font-size: 0.85em;
+}
+.fleet-route-add {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+.fleet-route-add input[type="number"] {
+  width: 56px;
+  background: rgba(20, 24, 38, 0.85);
+  color: var(--c-text, #e9ecf6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  padding: 3px 6px;
+}
 .fleet-manage-table {
   width: 100%;
   border-collapse: collapse;

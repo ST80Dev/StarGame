@@ -404,6 +404,72 @@
       return { ok: true };
     }
 
+    /* Fase B (decisione #67): rotta multi-tappa.
+       order = {
+         type: 'move-route',
+         waypoints: [sysId, ...],          // 1+ tappe in sequenza
+         dwell?:    [I, ...],              // pause orbitali a ogni tappa (0 default)
+         exploreEach?: bool,               // se true, rivela ogni tappa all'arrivo
+         returnHome?: bool                 // se true, dopo l'ultima ritorna alla colonia
+       }
+       La flotta non rientra automaticamente: si ferma sull'ultima tappa
+       a meno che returnHome=true. Le pause permettono di "vagare" tra
+       i sistemi favorevoli (gancio narrativo M10/M11/M16). */
+    if (type === 'move-route') {
+      const wp = Array.isArray(order.waypoints) ? order.waypoints.slice() : null;
+      if (!wp || wp.length === 0) return { ok: false, reason: 'Nessuna tappa indicata' };
+      /* Tutte le tappe devono essere raggiungibili in catena dalla posizione
+         corrente — costruiamo la rotta concatenando i BFS leg-per-leg. */
+      const validation = buildChainedRoute(game.galaxy, fleet.location.systemId, wp);
+      if (!validation.ok) return validation;
+      const dwell = Array.isArray(order.dwell) ? order.dwell.slice(0, wp.length) : [];
+      while (dwell.length < wp.length) dwell.push(0);
+      fleet.orders = {
+        type: 'move-route',
+        waypoints: wp,
+        dwell: dwell,
+        exploreEach: !!order.exploreEach,
+        returnHome: !!order.returnHome,
+        wpIdx: 0,
+        dwellLeft: 0
+      };
+      /* Iniziamo la prima sotto-rotta verso la prima tappa. */
+      fleet.route = validation.legs[0];
+      fleet.routeIdx = 0;
+      fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
+      return { ok: true };
+    }
+
+    /* Fase B (decisione #67): pattuglia su N sistemi in loop.
+       order = {
+         type: 'patrol-loop',
+         loop: [sysId, sysId, sysId, ...],   // ≥ 2 sistemi
+         dwell?: [I, ...]                    // pause orbitali per nodo
+       }
+       Sostituisce `patrol{A,B}` quando il giocatore vuole una pattuglia
+       circolare più articolata. Il vecchio `patrol` resta per back-compat
+       coi save schema 6 in volo. */
+    if (type === 'patrol-loop') {
+      const loop = Array.isArray(order.loop) ? order.loop.slice() : null;
+      if (!loop || loop.length < 2) return { ok: false, reason: 'La pattuglia richiede almeno 2 sistemi' };
+      /* Validiamo che ciascuna tappa sia raggiungibile dalla precedente. */
+      const v = buildChainedRoute(game.galaxy, fleet.location.systemId, loop);
+      if (!v.ok) return v;
+      const dwell = Array.isArray(order.dwell) ? order.dwell.slice(0, loop.length) : [];
+      while (dwell.length < loop.length) dwell.push(0);
+      fleet.orders = {
+        type: 'patrol-loop',
+        loop: loop,
+        dwell: dwell,
+        loopIdx: 0,
+        dwellLeft: 0
+      };
+      fleet.route = v.legs[0];
+      fleet.routeIdx = 0;
+      fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
+      return { ok: true };
+    }
+
     if (type === 'return') {
       const colony = game.colonies && game.colonies[fleet.ownerColonyKey];
       if (!colony) return { ok: false, reason: 'Colonia origine non più esistente' };
@@ -417,6 +483,40 @@
     }
 
     return { ok: false, reason: 'Tipo ordine sconosciuto' };
+  }
+
+  /* buildChainedRoute — verifica che una sequenza di waypoint sia
+     raggiungibile da `from` e ritorna i singoli sub-percorsi BFS:
+       legs[0] = from  → wp[0]
+       legs[1] = wp[0] → wp[1]
+       ...
+     Ritorna { ok:false, reason } al primo tratto non risolvibile.
+     Coerente con seed+delta (decisione #5): le rotte vivono nel grafo
+     immutabile della galassia, sono deterministiche per (from, wp[]). */
+  function buildChainedRoute(galaxy, from, waypoints) {
+    if (!Array.isArray(waypoints) || !waypoints.length) {
+      return { ok: false, reason: 'Nessuna tappa indicata' };
+    }
+    const legs = [];
+    let prev = from;
+    for (let i = 0; i < waypoints.length; i++) {
+      const wp = waypoints[i];
+      if (wp == null || !galaxy.systems[wp]) {
+        return { ok: false, reason: 'Tappa ' + (i + 1) + ' non valida' };
+      }
+      if (wp === prev) {
+        /* Tappa che coincide con il punto corrente: leg lungo 1 (no movimento). */
+        legs.push([prev]);
+        continue;
+      }
+      const path = computePath(galaxy, prev, wp);
+      if (!path) {
+        return { ok: false, reason: 'Tappa ' + (i + 1) + ' non raggiungibile' };
+      }
+      legs.push(path);
+      prev = wp;
+    }
+    return { ok: true, legs: legs };
   }
 
   /* Imposta lo stato di transito per il prossimo leg della rotta corrente.
@@ -447,9 +547,20 @@
   function tick(game, fleet, events) {
     if (!fleet || !fleet.orders) return;
     if (fleet.orders.type === 'idle') return;
+
+    /* Fase B: per i nuovi ordini con dwell, il countdown di sosta avviene
+       qui mentre la flotta è `orbiting`. */
+    if (fleet.location.status === 'orbiting' && (fleet.orders.dwellLeft || 0) > 0) {
+      fleet.orders.dwellLeft = (fleet.orders.dwellLeft || 0) - 1;
+      if (fleet.orders.dwellLeft <= 0) {
+        advanceCompoundOrder(game, fleet, events);
+      }
+      return;
+    }
+
     if (fleet.location.status !== 'in-transit') {
-      /* docked o orbiting: nulla da avanzare; gli ordini "arrived" sono
-         gestiti immediatamente da setOrder o dal completamento del leg. */
+      /* docked o orbiting senza dwell: nulla da avanzare; gli ordini "arrived"
+         sono gestiti immediatamente da setOrder o dal completamento del leg. */
       return;
     }
     fleet.etaImpulsi = (fleet.etaImpulsi || 0) - 1;
@@ -575,6 +686,137 @@
       }
       return;
     }
+
+    /* Fase B (decisione #67): rotta multi-tappa. La sotto-rotta verso la
+       tappa corrente (wpIdx) è appena terminata. */
+    if (order.type === 'move-route') {
+      const wpReached = order.waypoints[order.wpIdx];
+      events.push({
+        kind: 'fleet-waypoint-reached',
+        fleetId: fleet.id, fleetName: fleet.name,
+        systemId: wpReached,
+        wpIdx: order.wpIdx, wpTotal: order.waypoints.length,
+        impulso: game.timeImpulsi
+      });
+      if (order.exploreEach && ORION.galaxy && ORION.galaxy.revealSystem) {
+        const revealed = ORION.galaxy.revealSystem(game.galaxy, wpReached, game.state);
+        if (revealed) {
+          events.push({
+            kind: 'fleet-discovery',
+            fleetId: fleet.id, fleetName: fleet.name,
+            systemId: wpReached,
+            impulso: game.timeImpulsi
+          });
+        }
+      }
+      /* Imposta orbita + dwell della tappa raggiunta. */
+      fleet.location.status = 'orbiting';
+      fleet.etaImpulsi = 0;
+      fleet.route = [arrivedAt];
+      fleet.routeIdx = 0;
+      const dwell = (order.dwell && order.dwell[order.wpIdx]) || 0;
+      order.dwellLeft = dwell;
+      /* Se non c'è dwell, avanza subito al prossimo waypoint. */
+      if (dwell <= 0) advanceCompoundOrder(game, fleet, events);
+      return;
+    }
+
+    /* Fase B (decisione #67): pattuglia su N sistemi in loop. */
+    if (order.type === 'patrol-loop') {
+      const sysReached = order.loop[order.loopIdx];
+      events.push({
+        kind: 'fleet-waypoint-reached',
+        fleetId: fleet.id, fleetName: fleet.name,
+        systemId: sysReached,
+        wpIdx: order.loopIdx, wpTotal: order.loop.length,
+        impulso: game.timeImpulsi
+      });
+      fleet.location.status = 'orbiting';
+      fleet.etaImpulsi = 0;
+      fleet.route = [arrivedAt];
+      fleet.routeIdx = 0;
+      const dwell = (order.dwell && order.dwell[order.loopIdx]) || 0;
+      order.dwellLeft = dwell;
+      if (dwell <= 0) advanceCompoundOrder(game, fleet, events);
+      return;
+    }
+  }
+
+  /* advanceCompoundOrder — dopo aver "consumato" una tappa di un ordine
+     compound (move-route o patrol-loop) e l'eventuale dwell, programma
+     la prossima sotto-rotta. Estratto in una funzione per essere
+     chiamabile sia dal completamento della rotta che dalla scadenza
+     dello dwell (in orbiting). */
+  function advanceCompoundOrder(game, fleet, events) {
+    const order = fleet.orders;
+    if (!order) return;
+
+    if (order.type === 'move-route') {
+      order.wpIdx++;
+      if (order.wpIdx < order.waypoints.length) {
+        const next = order.waypoints[order.wpIdx];
+        const path = computePath(game.galaxy, fleet.location.systemId, next);
+        if (path) {
+          fleet.route = path;
+          fleet.routeIdx = 0;
+          fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
+        } else {
+          /* Tappa diventata irraggiungibile: termina l'ordine in orbita. */
+          finishCompound(game, fleet, events, 'route-broken');
+        }
+        return;
+      }
+      /* Fine catena: opzionalmente rientro a casa. */
+      if (order.returnHome) {
+        const colony = game.colonies && game.colonies[fleet.ownerColonyKey];
+        if (colony && colony.systemId !== fleet.location.systemId) {
+          const back = computePath(game.galaxy, fleet.location.systemId, colony.systemId);
+          if (back) {
+            fleet.orders = { type: 'return' };
+            fleet.route = back;
+            fleet.routeIdx = 0;
+            fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
+            return;
+          }
+        }
+      }
+      finishCompound(game, fleet, events, 'route-complete');
+      return;
+    }
+
+    if (order.type === 'patrol-loop') {
+      order.loopIdx = (order.loopIdx + 1) % order.loop.length;
+      const next = order.loop[order.loopIdx];
+      const path = computePath(game.galaxy, fleet.location.systemId, next);
+      if (path && path.length > 1) {
+        fleet.route = path;
+        fleet.routeIdx = 0;
+        fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
+      } else if (path && path.length === 1) {
+        /* Già lì: ricomincia subito col dwell della tappa. */
+        const dwell = (order.dwell && order.dwell[order.loopIdx]) || 0;
+        order.dwellLeft = dwell;
+        if (dwell <= 0) advanceCompoundOrder(game, fleet, events);
+      } else {
+        finishCompound(game, fleet, events, 'route-broken');
+      }
+      return;
+    }
+  }
+
+  function finishCompound(game, fleet, events, reason) {
+    fleet.location.status = 'orbiting';
+    fleet.etaImpulsi = 0;
+    fleet.route = [fleet.location.systemId];
+    fleet.routeIdx = 0;
+    fleet.orders = { type: 'idle' };
+    events.push({
+      kind: 'fleet-route-complete',
+      fleetId: fleet.id, fleetName: fleet.name,
+      systemId: fleet.location.systemId,
+      reason: reason,
+      impulso: game.timeImpulsi
+    });
   }
 
   /* Stub upkeep — Fase A non applica costi di mantenimento. Lo
@@ -598,6 +840,7 @@
     classList: classList,
     getClass: getClass,
     computePath: computePath,
+    buildChainedRoute: buildChainedRoute,
     tempoLeg: tempoLeg,
     fleetMinSpeed: fleetMinSpeed,
     fleetCrewRequired: fleetCrewRequired,

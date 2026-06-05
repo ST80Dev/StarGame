@@ -2753,6 +2753,33 @@ function openFleetOrdersOverlay(fleetId) {
         '<select data-bind="fleet-order-pat-b">' + optsMove + '</select>' +
         '<button class="btn btn--mini" data-action="fleet-order-patrol" type="button">Imposta</button>' +
       '</section>' +
+      /* Fase B (decisione #67): rotta multi-tappa e pattuglia su N sistemi.
+         Il giocatore costruisce la lista delle tappe (gancio per "vagare"
+         tra sistemi favorevoli; AI/rifugi neutrali verranno con M10-M11). */
+      '<section class="fleet-order-block fleet-order-block--route">' +
+        '<h3>Rotta a tappe (move-route)</h3>' +
+        '<p class="panel__note">Catena di sistemi. Per ogni tappa puoi impostare una sosta orbitale in Ι. ' +
+          '<label class="fleet-order-flag"><input type="checkbox" data-bind="fleet-route-explore"> Esplora ogni tappa</label> ' +
+          '<label class="fleet-order-flag"><input type="checkbox" data-bind="fleet-route-return"> Rientra alla base alla fine</label></p>' +
+        '<ul class="fleet-route-list" data-bind="fleet-route-list"></ul>' +
+        '<div class="fleet-route-add">' +
+          '<select data-bind="fleet-route-pick">' + optsMove + '</select>' +
+          '<input type="number" data-bind="fleet-route-dwell" min="0" max="200" step="1" value="0" title="Sosta orbitale in Ι"> Ι' +
+          '<button class="btn btn--mini" data-action="fleet-route-add" type="button">+ Aggiungi tappa</button>' +
+        '</div>' +
+        '<button class="btn btn--mini" data-action="fleet-order-route" type="button">Imposta rotta</button>' +
+      '</section>' +
+      '<section class="fleet-order-block fleet-order-block--route">' +
+        '<h3>Pattuglia su N sistemi (patrol-loop)</h3>' +
+        '<p class="panel__note">Loop circolare su 2+ sistemi. La pattuglia riparte automaticamente.</p>' +
+        '<ul class="fleet-route-list" data-bind="fleet-loop-list"></ul>' +
+        '<div class="fleet-route-add">' +
+          '<select data-bind="fleet-loop-pick">' + optsMove + '</select>' +
+          '<input type="number" data-bind="fleet-loop-dwell" min="0" max="200" step="1" value="0" title="Sosta orbitale in Ι"> Ι' +
+          '<button class="btn btn--mini" data-action="fleet-loop-add" type="button">+ Aggiungi nodo</button>' +
+        '</div>' +
+        '<button class="btn btn--mini" data-action="fleet-order-patrol-loop" type="button">Imposta pattuglia</button>' +
+      '</section>' +
       '<section class="fleet-order-block">' +
         '<h3>Rientro alla base (return)</h3>' +
         '<button class="btn btn--mini" data-action="fleet-order-return" type="button">Imposta</button>' +
@@ -2771,10 +2798,20 @@ function openFleetOrdersOverlay(fleetId) {
     const r = ORION.fleet.setOrder(g, fleet, order);
     if (!r.ok) { showToast(r.reason); return; }
     if (order.type !== 'idle') {
-      const target = (order.type === 'patrol') ? order.sysA :
-                     (order.type === 'return') ? (g.colonies[fleet.ownerColonyKey] || {}).systemId :
-                     order.toSysId;
-      pushChronicle(ORION.time.currentDS(g) + ' — <strong>' + escapeHtml(fleet.name) + '</strong>: ordine "' + order.type + '" verso ' + escapeHtml(g.galaxy.systems[target].name) + '.', 'explore');
+      let label;
+      if (order.type === 'move-route') {
+        const tappe = order.waypoints.map(function (id) { return g.galaxy.systems[id].name; }).join(' → ');
+        label = 'rotta a tappe: ' + tappe + (order.returnHome ? ' → rientro' : '');
+      } else if (order.type === 'patrol-loop') {
+        const nodi = order.loop.map(function (id) { return g.galaxy.systems[id].name; }).join(' ↻ ');
+        label = 'pattuglia ciclica: ' + nodi;
+      } else {
+        const target = (order.type === 'patrol') ? order.sysA :
+                       (order.type === 'return') ? (g.colonies[fleet.ownerColonyKey] || {}).systemId :
+                       order.toSysId;
+        label = 'ordine "' + order.type + '" verso ' + g.galaxy.systems[target].name;
+      }
+      pushChronicle(ORION.time.currentDS(g) + ' — <strong>' + escapeHtml(fleet.name) + '</strong>: ' + escapeHtml(label) + '.', 'explore');
     }
     persistGame(g);
     closeFleetOverlay();
@@ -2799,6 +2836,83 @@ function openFleetOrdersOverlay(fleetId) {
     if (a.value === b.value) { showToast('A e B devono essere diversi'); return; }
     dispatch({ type: 'patrol', sysA: Number(a.value), sysB: Number(b.value) });
   });
+  /* Fase B: stato locale dei costruttori rotta/loop (vive solo finché
+     l'overlay è aperto — non serve persistere). Il rendering è delegato
+     a una funzione che si chiama ad ogni mutazione. */
+  const route = { wps: [], dwell: [] };
+  const loop  = { wps: [], dwell: [] };
+
+  function sysShort(id) {
+    const s = g.galaxy.systems[id];
+    return s ? s.name : ('#' + id);
+  }
+  function renderWpList(targetSel, store, removeAction) {
+    const ul = host.querySelector(targetSel);
+    if (!ul) return;
+    if (store.wps.length === 0) {
+      ul.innerHTML = '<li class="fleet-route-empty">Nessuna tappa.</li>';
+      return;
+    }
+    ul.innerHTML = store.wps.map(function (sid, i) {
+      return '<li class="fleet-route-item">' +
+        '<span class="fleet-route-item__n">' + (i + 1) + '.</span>' +
+        '<span class="fleet-route-item__name">' + escapeHtml(sysShort(sid)) + '</span>' +
+        '<span class="fleet-route-item__dwell">' + (store.dwell[i] || 0) + ' Ι</span>' +
+        '<button class="btn btn--mini" data-action="' + removeAction + '" data-idx="' + i + '" type="button" title="Rimuovi tappa">×</button>' +
+      '</li>';
+    }).join('');
+    ul.querySelectorAll('[data-action="' + removeAction + '"]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        const idx = Number(b.dataset.idx);
+        store.wps.splice(idx, 1);
+        store.dwell.splice(idx, 1);
+        renderWpList(targetSel, store, removeAction);
+      });
+    });
+  }
+  renderWpList('[data-bind="fleet-route-list"]', route, 'fleet-route-rm');
+  renderWpList('[data-bind="fleet-loop-list"]', loop, 'fleet-loop-rm');
+
+  const routeAddBtn = host.querySelector('[data-action="fleet-route-add"]');
+  if (routeAddBtn) routeAddBtn.addEventListener('click', function () {
+    const pick = host.querySelector('[data-bind="fleet-route-pick"]');
+    const dw = host.querySelector('[data-bind="fleet-route-dwell"]');
+    if (!pick || !pick.value) { showToast('Seleziona un sistema'); return; }
+    route.wps.push(Number(pick.value));
+    route.dwell.push(Math.max(0, parseInt(dw.value || '0', 10) || 0));
+    renderWpList('[data-bind="fleet-route-list"]', route, 'fleet-route-rm');
+  });
+  const loopAddBtn = host.querySelector('[data-action="fleet-loop-add"]');
+  if (loopAddBtn) loopAddBtn.addEventListener('click', function () {
+    const pick = host.querySelector('[data-bind="fleet-loop-pick"]');
+    const dw = host.querySelector('[data-bind="fleet-loop-dwell"]');
+    if (!pick || !pick.value) { showToast('Seleziona un sistema'); return; }
+    loop.wps.push(Number(pick.value));
+    loop.dwell.push(Math.max(0, parseInt(dw.value || '0', 10) || 0));
+    renderWpList('[data-bind="fleet-loop-list"]', loop, 'fleet-loop-rm');
+  });
+
+  host.querySelector('[data-action="fleet-order-route"]').addEventListener('click', function () {
+    if (!route.wps.length) { showToast('Aggiungi almeno una tappa'); return; }
+    const expFlag = host.querySelector('[data-bind="fleet-route-explore"]');
+    const retFlag = host.querySelector('[data-bind="fleet-route-return"]');
+    dispatch({
+      type: 'move-route',
+      waypoints: route.wps.slice(),
+      dwell: route.dwell.slice(),
+      exploreEach: !!(expFlag && expFlag.checked),
+      returnHome:  !!(retFlag && retFlag.checked)
+    });
+  });
+  host.querySelector('[data-action="fleet-order-patrol-loop"]').addEventListener('click', function () {
+    if (loop.wps.length < 2) { showToast('Servono almeno 2 nodi per la pattuglia'); return; }
+    dispatch({
+      type: 'patrol-loop',
+      loop: loop.wps.slice(),
+      dwell: loop.dwell.slice()
+    });
+  });
+
   host.querySelector('[data-action="fleet-order-return"]').addEventListener('click', function () {
     dispatch({ type: 'return' });
   });
@@ -3050,6 +3164,10 @@ const DEFAULT_AUTOPAUSE = {
      non sorpresa. Hop intermedi mai. */
   'fleet-arrived': true, 'fleet-route-complete': true, 'fleet-discovery': true,
   'fleet-launched': false, 'fleet-leg-hop': false,
+  /* Fase B (decisione #67): tappa intermedia raggiunta. Default OFF —
+     non interrompiamo a ogni waypoint, può essere una rotta lunga. L'arrivo
+     finale e la `route-complete` continuano a fermare il tempo. */
+  'fleet-waypoint-reached': false,
   /* Decisione #43 (M07.2): nascita di un Comandante nominato — evento
      narrativo forte (nuova figura giocabile), auto-pausa di default. */
   'commander-promoted': true,
@@ -3264,6 +3382,7 @@ function showEventOverlay(events) {
     'fleet-discovery': 'Flotta: sistema esplorato',
     'fleet-launched': 'Flotta: salto iperspaziale',
     'fleet-leg-hop': 'Flotta: hop intermedio',
+    'fleet-waypoint-reached': 'Flotta: tappa raggiunta',
     'commander-promoted': 'Nuovo Comandante nominato',
     'capital-declared': 'Capitale di gruppo dichiarata',
     'capital-transition-end': 'Capitale entrata in carica',
@@ -3466,6 +3585,19 @@ function chronicleEvent(ev) {
     const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
     pushChronicle(ds + ' — <strong>' + escapeHtml(fname) + '</strong>: sistema <strong>' +
       (sys ? sys.name : '—') + '</strong>' + stag + ' esplorato.', 'explore');
+    if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+  } else if (ev.kind === 'fleet-waypoint-reached') {
+    /* Fase B (decisione #67): cronaca breve per ogni tappa. La voce è
+       silenziata dal log se si chiude la prima tappa di un singolo move
+       (già coperta da `fleet-arrived`); qui interessa solo nella catena
+       multi-tappa. */
+    const fname = ev.fleetName || '—';
+    const sys = ORION.game.galaxy.systems[ev.systemId];
+    const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
+    if (ev.wpTotal > 1) {
+      pushChronicle(ds + ' — <strong>' + escapeHtml(fname) + '</strong>: tappa ' + (ev.wpIdx + 1) + '/' + ev.wpTotal +
+        ' raggiunta presso <strong>' + (sys ? sys.name : '—') + '</strong>' + stag + '.', 'explore');
+    }
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
   } else if (ev.kind === 'gov-queue-empty') {
     pushChronicle(ds + ' — <strong>Governatore di ' + pname + ptag + '</strong>: la coda di costruzione è ferma — i cantieri attendono ordini.', 'planet');
