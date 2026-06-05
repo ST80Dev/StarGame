@@ -36,7 +36,7 @@
      - M06.6 aggiunge game.tutorial = { enabled, seenLessons }
      Sub-migrazioni componibili: v1→v2 (victory), v2→v3 (chronicle), v3→v4
      (homeWorld:null + colonia operational + tutorial vuoto, retro-compat). */
-  const SCHEMA_VERSION = 4;
+  const SCHEMA_VERSION = 5;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -90,7 +90,10 @@
          esplicitamente per non doverla rideterminare al runtime. */
       homeWorld: game.homeWorld || null,
       /* M06.6 (decisione #28): stato tutorial contestuale. */
-      tutorial: game.tutorial || { enabled: false, seenLessons: [] }
+      tutorial: game.tutorial || { enabled: false, seenLessons: [] },
+      /* M07 (decisione #37): spedizioni in corso. Le colonie già contengono
+         ships/crews/assets quindi vengono auto-serializzate via game.colonies. */
+      expeditions: Array.isArray(game.expeditions) ? game.expeditions : []
     };
   }
 
@@ -142,6 +145,24 @@
         payload.tutorial.seenLessons = [];
       }
       payload.schema = 4;
+    }
+    /* v4 → v5 (M07, decisione #37): aggiungi expeditions[] e i campi
+       ships/crews/assets ad ogni colonia, se mancanti. Retro-compat:
+       save vecchi caricano con 0 scafi, 0 equipaggi, nessuna spedizione. */
+    if ((payload.schema || 4) < 5) {
+      if (!Array.isArray(payload.expeditions)) payload.expeditions = [];
+      if (payload.colonies && typeof payload.colonies === 'object') {
+        Object.keys(payload.colonies).forEach(function (k) {
+          const c = payload.colonies[k];
+          if (!c) return;
+          if (!c.ships) c.ships = { explorer: 0 };
+          if (!c.crews) c.crews = { explorer: [] };
+          if (!c.assets) c.assets = { shipQueue: [], crewQueue: [] };
+          if (!Array.isArray(c.assets.shipQueue)) c.assets.shipQueue = [];
+          if (!Array.isArray(c.assets.crewQueue)) c.assets.crewQueue = [];
+        });
+      }
+      payload.schema = 5;
     }
     return payload;
   }

@@ -2259,3 +2259,182 @@ select.main-menu__input { cursor: pointer; }
   gap: 8px;
   justify-content: flex-end;
 }
+
+/* =====================================================================
+   M07 — Esplorazione (decisione #37)
+   ===================================================================== */
+.cantieri-section {
+  margin: 12px 0 8px;
+  padding: 10px;
+  background: rgba(110, 90, 200, 0.06);
+  border: 1px solid rgba(125, 110, 220, 0.18);
+  border-radius: 8px;
+}
+.cantieri-section__hint {
+  color: var(--c-muted, #8a93b8);
+  font-size: 0.85em;
+  font-weight: 400;
+}
+.cantieri-row + .cantieri-row { margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(125, 110, 220, 0.18); }
+.cantieri-row__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.cantieri-row__glyph { font-size: 1.1em; color: #b39cff; }
+.cantieri-row__name { flex: 1; font-weight: 600; }
+.cantieri-row__counter { font-size: 0.88em; color: var(--c-text, #d8def0); }
+.cantieri-row__build {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+.cantieri-row__cost { font-size: 0.85em; color: var(--c-muted, #8a93b8); }
+
+/* xp chip viola */
+.xp-chip {
+  display: inline-block;
+  padding: 1px 6px;
+  background: rgba(140, 110, 230, 0.18);
+  color: #c8b6ff;
+  border: 1px solid rgba(140, 110, 230, 0.35);
+  border-radius: 10px;
+  font-size: 0.78em;
+  font-family: var(--font-mono, monospace);
+}
+
+/* Wear bar ambra → rossa */
+.wear-bar {
+  position: relative;
+  flex: 1;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 175, 60, 0.25);
+  border-radius: 4px;
+  overflow: hidden;
+  min-width: 90px;
+}
+.wear-bar__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, #ffae5c, #ff6f5c);
+  transition: width 0.25s ease;
+}
+.wear-bar__label {
+  position: relative;
+  z-index: 1;
+  display: block;
+  font-size: 0.72em;
+  line-height: 14px;
+  text-align: center;
+  color: #fff;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.7);
+}
+
+/* Lista spedizioni attive */
+.expedition-list {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.expedition-item {
+  padding: 8px 10px;
+  background: rgba(80, 110, 200, 0.06);
+  border: 1px solid rgba(120, 150, 220, 0.18);
+  border-radius: 6px;
+}
+.expedition-item__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.expedition-item__status {
+  font-size: 0.74em;
+  padding: 1px 6px;
+  border-radius: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: var(--font-display, sans-serif);
+}
+.expedition-status--outbound { background: rgba(47, 230, 224, 0.18); color: #6deae3; }
+.expedition-status--returning { background: rgba(255, 175, 60, 0.18); color: #ffc080; }
+.expedition-item__target { flex: 1; font-weight: 600; }
+.expedition-item__eta { font-family: var(--font-mono, monospace); font-size: 0.85em; color: var(--c-muted, #8a93b8); }
+.expedition-item__bars {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.expedition-item__inc {
+  color: #ffae5c;
+  font-size: 0.85em;
+}
+
+/* Overlay scelta sistema target */
+.expedition-pick-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 350;
+  background: rgba(8, 11, 24, 0.78);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.expedition-pick-overlay[hidden] { display: none; }
+.expedition-pick-overlay__panel {
+  width: min(720px, 100%);
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  padding: 20px 24px;
+  background: rgba(18, 22, 38, 0.96);
+  border: 1px solid rgba(140, 110, 230, 0.35);
+  border-radius: 10px;
+}
+.expedition-pick-overlay__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.expedition-pick-overlay__title {
+  font-family: var(--font-display, sans-serif);
+  font-size: 1.15em;
+  letter-spacing: 0.04em;
+  margin: 0;
+}
+.expedition-pick-overlay__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.expedition-card {
+  padding: 10px 12px;
+  background: rgba(80, 110, 200, 0.08);
+  border: 1px solid rgba(120, 150, 220, 0.2);
+  border-radius: 6px;
+}
+.expedition-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.expedition-card__name { flex: 1; font-weight: 600; }
+.expedition-card__actions {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Tab "Esplorazione" — riusa lo stile planet-tab esistente */
+.planet-tab[data-tab="esplorazione"].is-active { color: #b39cff; }
