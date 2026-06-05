@@ -1351,9 +1351,6 @@ function renderPlanetStruttureTab(host, planet, colony) {
       const ent = colony.structures[id];
       const lvl = ent.level || 1;
       const maxL = def.maxLevel || 1;
-      const slotInfo = (def.slots && def.slots > 1)
-        ? (lvl * def.slots) + ' slot'
-        : lvl + (lvl > 1 ? ' moduli' : ' modulo');
       const demoCheck = ORION.planet.canDemolish(colony, planet, id);
       const demoBtn = demoCheck.ok
         ? '<button class="btn btn--mini struct-item__demolish" data-demolish="' + id + '" type="button" title="Smantella (rimborso 50% · 70% sulla colonia natale · morale −0,10 per 30 Ι)">🗑</button>'
@@ -1361,6 +1358,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
       // Decisione #38: bottone "+ Espandi" (aggiunge un modulo = +slot, costo escalante)
       let upBtn;
       let infoLine;
+      let timeChip = '';
       if (lvl >= maxL) {
         upBtn = '<span class="struct-item__locked" title="Livello massimo (' + maxL + ')">max</span>';
         infoLine = '<div class="struct-item__cost struct-item__cost--max">Livello massimo</div>';
@@ -1375,12 +1373,13 @@ function renderPlanetStruttureTab(host, planet, colony) {
         } else {
           upBtn = '<span class="struct-item__locked struct-item__locked--icon" title="' + escapeHtml(up.reason) + '" aria-label="Espandi (bloccato)">+</span>';
         }
-        infoLine = '<div class="struct-item__cost"><span class="struct-item__cost-label">×' + (lvl + 1) + '</span> ' + costStr + ' <span class="struct-item__cost-time">' + nextTime + ' I</span>' + (balance ? ' ' + balance : '') + '</div>';
+        timeChip = ' <span class="struct-item__cat">' + nextTime + ' I</span>';
+        infoLine = '<div class="struct-item__cost"><span class="struct-item__cost-label">×' + (lvl + 1) + '</span> ' + costStr + (balance ? ' ' + balance : '') + '</div>';
       }
       html += '<li class="struct-item is-built">' +
         '<span class="struct-item__glyph">' + def.glyph + '</span>' +
         '<div class="struct-item__main">' +
-          '<div class="struct-item__name">' + def.name + ' <span class="struct-item__lvl">×' + lvl + '</span> <span class="struct-item__cat">' + slotInfo + '</span></div>' +
+          '<div class="struct-item__name">' + def.name + ' <span class="struct-item__lvl">×' + lvl + '</span>' + timeChip + '</div>' +
           infoLine +
         '</div>' +
         upBtn + demoBtn +
