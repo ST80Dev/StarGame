@@ -134,12 +134,21 @@
     // ===== Militari (2) =====
     {
       id: 'cantiere-navale', name: 'Hangar di costruzione', cat: 'militare', glyph: '▱',
-      desc: 'Necessario per costruire astronavi. Funzione attiva nei moduli flotta (M08+).',
+      desc: 'Necessario per costruire astronavi. Offre cantieri (build paralleli) e attracchi (porto a terra). Cresce coi livelli.',
       cost: { met: 120, en: 40 }, time: 50,
       upkeep: { en: 4, met: 1 },
       rates: {},
-      slots: 2, maxLevel: 3,
+      slots: 2, maxLevel: 5,
       bodyTypes: HABITABLE,
+      /* Decisione #41: capacità a doppia funzione.
+         - buildSlots[L-1] = navi costruibili in parallelo a quel livello
+         - docks[L-1]      = posti d'attracco a terra (porto planetario)
+         Sono cumulativi sulla colonia (più Hangar = somma capacità).
+         I porti stellari in orbita (M16) daranno cap molto più ampia. */
+      hangarCapacity: {
+        buildSlots: [2, 3, 4, 5, 7],
+        docks:      [4, 8, 13, 18, 25]
+      },
       hooks: ['fleet']            // gancio M08/M15
     },
     {

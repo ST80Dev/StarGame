@@ -95,6 +95,102 @@
     return (colony.crews.explorer || []).slice();
   }
 
+  /* ------------------------------------------------------------------
+     Capacità Hangar (decisione #41)
+     Il Hangar di costruzione fornisce due cap distinte, cumulative su
+     tutti gli hangar costruiti sulla colonia:
+       - cantieri (build paralleli)
+       - attracchi (porto planetario a terra)
+     I valori vivono in structures.js → cantiere-navale.hangarCapacity.
+     I porti stellari in orbita (M16) daranno cap molto più alta.
+     ------------------------------------------------------------------ */
+  function hangarCapTable(kind) {
+    const S = root.ORION && root.ORION.structures;
+    const def = S && S.get('cantiere-navale');
+    const hc = def && def.hangarCapacity;
+    if (hc && Array.isArray(hc[kind])) return hc[kind];
+    // fallback per test headless senza catalogo caricato
+    return kind === 'buildSlots' ? [2, 3, 4, 5, 7] : [4, 8, 13, 18, 25];
+  }
+  function _capForLevel(table, level) {
+    const L = Math.max(1, level | 0);
+    return table[Math.min(L, table.length) - 1] || 0;
+  }
+  function hangarBuildSlots(colony) {
+    const ent = colony && colony.structures && colony.structures['cantiere-navale'];
+    if (!ent) return 0;
+    return _capForLevel(hangarCapTable('buildSlots'), ent.level || 1);
+  }
+  function hangarDockCapacity(colony) {
+    const ent = colony && colony.structures && colony.structures['cantiere-navale'];
+    if (!ent) return 0;
+    return _capForLevel(hangarCapTable('docks'), ent.level || 1);
+  }
+  function activeShipBuilds(colony) {
+    return (colony && colony.assets && Array.isArray(colony.assets.shipQueue))
+      ? colony.assets.shipQueue.length : 0;
+  }
+  function shipsOnExpedition(game, originColonyKey) {
+    if (!game || !Array.isArray(game.expeditions)) return 0;
+    let n = 0;
+    for (let i = 0; i < game.expeditions.length; i++) {
+      const e = game.expeditions[i];
+      if (e.status !== 'done' && e.originColonyKey === originColonyKey) n++;
+    }
+    return n;
+  }
+  /* Navi totali "afferenti" alla colonia: docked + in coda + in spedizione.
+     Le in spedizione hanno lasciato il porto ma occupano una matricola
+     della colonia → tornando dovranno trovare posto (#41). */
+  function totalShipsBound(game, colony, colonyKey) {
+    const docked = availableShips(colony);                 // contatore a terra
+    const queued = activeShipBuilds(colony);               // in costruzione (occupano cantiere ma non porto)
+    const flying = shipsOnExpedition(game, colonyKey);     // in viaggio
+    return { docked: docked, queued: queued, flying: flying, total: docked + queued + flying };
+  }
+
+  /* Bonus tecnici (decisione #41).
+     I tecnici riducono il tempo di assemblaggio scafi/equipaggi: −2.5%
+     per tecnico oltre la soglia 2, cap −30%. Soft amplifier, mai un gate.
+     Lavora sulle unità logiche di pop.classes.tecnici (decimali consentiti
+     dal mix lento §9.2, vedi time.js — qui Math.floor per stabilità UI). */
+  const TECH_BASE = 2;            // soglia "operativi": il primo bonus parte da T = 3
+  const TECH_STEP = 0.025;        // −2.5% per tecnico extra
+  const TECH_CAP  = 0.30;         // cap totale
+  function techCountOf(colony) {
+    const cl = colony && colony.pop && colony.pop.classes;
+    return cl ? Math.max(0, Math.floor(cl.tecnici || 0)) : 0;
+  }
+  function techSpeedBonus(colony) {
+    const t = techCountOf(colony);
+    if (t <= TECH_BASE) return 0;
+    return Math.min(TECH_CAP, (t - TECH_BASE) * TECH_STEP);
+  }
+  function applyTechSpeed(time, colony) {
+    const b = techSpeedBonus(colony);
+    if (b <= 0) return time;
+    return Math.max(1, Math.round(time * (1 - b)));
+  }
+
+  /* canBuildShip — verifica preliminare per startShipBuild (decisione #41).
+     Recovery-friendly: ritorna {ok:false, reason} con motivo umano. */
+  function canBuildShip(game, colony, colonyKey) {
+    if (!colony) return { ok: false, reason: 'Colonia inesistente' };
+    const ent = colony.structures && colony.structures['cantiere-navale'];
+    if (!ent) return { ok: false, reason: 'Hangar di costruzione non costruito' };
+    const slots = hangarBuildSlots(colony);
+    const active = activeShipBuilds(colony);
+    if (active >= slots) {
+      return { ok: false, reason: 'Cantieri saturi (' + active + '/' + slots + '). Espandi l\'Hangar o attendi.' };
+    }
+    const docks = hangarDockCapacity(colony);
+    const bound = totalShipsBound(game, colony, colonyKey).total;
+    if (bound >= docks) {
+      return { ok: false, reason: 'Porto saturo (' + bound + '/' + docks + ' navi). Espandi l\'Hangar o lancia spedizioni per liberare attracchi.' };
+    }
+    return { ok: true };
+  }
+
   /* Riduzione durata per xp (cap a XP_DURATION_CAP). */
   function durationXpScale(xp) {
     const r = Math.min(CFG.XP_DURATION_CAP, (xp || 0) * CFG.XP_DURATION_REDUCTION);
@@ -351,10 +447,25 @@
             id: 'crew-' + (game.timeImpulsi || 0) + '-' + (++_expCounter),
             xp: (exp.crewXp || 0) + 1
           });
-          /* Scafo restituito solo se non perso. */
+          /* Scafo restituito solo se non perso. Decisione #41: la nave
+             torna comunque al counter (recovery-friendly #22), ma se il
+             porto è saturo emettiamo un evento informativo "in orbita
+             parcheggio" — niente penalità meccanica oggi (sarà M09:
+             esposte a cattura/attacco). */
           if (!shipLost) {
             colony.ships = colony.ships || { explorer: 0 };
             colony.ships.explorer = (colony.ships.explorer || 0) + 1;
+            const docks = hangarDockCapacity(colony);
+            const bound = totalShipsBound(game, colony, exp.originColonyKey).total;
+            if (docks > 0 && bound > docks) {
+              events.push({
+                kind: 'expedition-dock-overflow',
+                expedition: exp,
+                docks: docks,
+                bound: bound,
+                impulso: game.timeImpulsi
+              });
+            }
           }
         }
         if (shipLost) {
@@ -405,6 +516,16 @@
     enrichmentForXp: enrichmentForXp,
     reachableTargets: reachableTargets,
     isReachable: isReachable,
-    dangerNorm: dangerNorm
+    dangerNorm: dangerNorm,
+    /* M07 estensione (decisione #41) — capacità Hangar */
+    hangarBuildSlots: hangarBuildSlots,
+    hangarDockCapacity: hangarDockCapacity,
+    activeShipBuilds: activeShipBuilds,
+    shipsOnExpedition: shipsOnExpedition,
+    totalShipsBound: totalShipsBound,
+    canBuildShip: canBuildShip,
+    techCountOf: techCountOf,
+    techSpeedBonus: techSpeedBonus,
+    applyTechSpeed: applyTechSpeed
   };
 })(typeof window !== 'undefined' ? window : this);

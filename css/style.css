@@ -2352,6 +2352,37 @@ select.main-menu__input { cursor: pointer; }
   margin-top: 6px;
 }
 .cantieri-row__cost { font-size: 0.85em; color: var(--c-muted, #8a93b8); }
+.cantieri-row__base { color: var(--c-muted, #8a93b8); opacity: 0.65; font-size: 0.88em; }
+
+/* Decisione #41: capacità Hangar (cantieri + attracchi) + chip tecnici */
+.cantieri-row__caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin: 2px 0 8px;
+  font-size: 0.85em;
+}
+.cantieri-cap {
+  padding: 1px 8px;
+  background: rgba(110, 90, 200, 0.10);
+  border: 1px solid rgba(125, 110, 220, 0.28);
+  border-radius: 10px;
+  color: var(--c-text, #d8def0);
+  font-family: var(--font-mono, monospace);
+}
+.cantieri-cap--full {
+  background: rgba(220, 110, 70, 0.16);
+  border-color: rgba(220, 110, 70, 0.45);
+  color: #f0c8a8;
+}
+.cantieri-tech-chip {
+  padding: 1px 8px;
+  background: rgba(80, 160, 220, 0.14);
+  border: 1px solid rgba(80, 160, 220, 0.35);
+  border-radius: 10px;
+  color: #a8d4ee;
+  font-family: var(--font-mono, monospace);
+}
 
 /* xp chip viola */
 .xp-chip {
