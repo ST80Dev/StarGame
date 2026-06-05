@@ -343,6 +343,27 @@
         '<p><strong>Strategia:</strong> tieni gli equipaggi vivi e mandali in missione ripetutamente per costruire ' +
         '<em>veterani</em>. Uno scafo logoro al 100% va in pensione: niente fail-state, costruisci il prossimo.</p>' +
         '<p><strong>Ganci futuri:</strong> nuove classi di navi (caccia, fregata, incrociatore) e l\'iperguida sono in arrivo.</p>'
+    },
+    {
+      id: 'governor', tag: 'Colonia · ⚙', title: 'Governatore coloniale',
+      body:
+        '<p>Quando il tuo impero supera <strong>3 colonie operative</strong>, in ogni scheda Colonia puoi attivare un ' +
+        '<strong>Governatore (Tier 1 · Vigile)</strong>: non agisce mai, ma <strong>segnala in cronaca</strong> ' +
+        'situazioni che meritano attenzione su quella colonia, così non sei costretto a ispezionare ogni pianeta a turno.</p>' +
+        '<p>Il Tier 1 sorveglia 5 condizioni:</p>' +
+        '<ul>' +
+          '<li><strong>Coda ferma</strong> da troppo tempo (cantieri inutilizzati)</li>' +
+          '<li><strong>Slot liberi</strong> e nessun progetto in coda (potenziale sprecato)</li>' +
+          '<li><strong>Popolazione</strong> ≥ 90% del tetto abitativo (è ora di espandere l\'habitat)</li>' +
+          '<li><strong>Scorte di cibo/acqua in calo</strong> per più Impulsi consecutivi (carenza imminente)</li>' +
+          '<li><strong>Veterani disponibili</strong> senza spedizione in corso (forza esperta ferma)</li>' +
+        '</ul>' +
+        '<p>Le 2 segnalazioni più urgenti (carenze in arrivo, coda ferma) fanno <strong>auto-pausa</strong>; ' +
+        'le altre restano in cronaca senza interrompere il gioco. Puoi spegnere ogni tipo dall\'overlay di pausa.</p>' +
+        '<p><strong>Tier futuri:</strong> il Tier 2 <em>Operativo</em> gestirà in autonomia la coda secondo una ' +
+        '<em>vocazione</em> scelta da te (estrattiva, agricola, militare, ricerca); il Tier 3 <em>Autonomo</em> ' +
+        'estenderà la delega ad asset, difese e rotte commerciali. Richiederanno tech dedicati e una <em>figura ' +
+        'Governatore</em> da assegnare alla colonia.</p>'
     }
   ];
 

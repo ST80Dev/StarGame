@@ -1173,7 +1173,9 @@ function renderPlanetColoniaTab(host, planet, colony) {
         '<p class="sysinfo__sub">Riepilogo produzione (/Impulso)</p>' +
         rateGrid(out.rates, out.upkeep) +
         scarRow +
+        renderGovernorSection(colony, planet) +
       '</div>';
+    bindGovernorHandlers(host, planet, colony);
     return;
   }
 
@@ -1241,6 +1243,66 @@ function renderPlanetColoniaTab(host, planet, colony) {
 
   const btn = host.querySelector('[data-action="colonize"]');
   if (btn) btn.addEventListener('click', function () { tryColonize(planet); });
+}
+
+/* --- M07.1 (decisione #40): Governatore coloniale, sezione tab Colonia ---
+   Tier 1 "Vigile": solo notifiche, mai agisce. Sblocco ≥ 3 colonie
+   operative (`ORION.governor.isAvailable`). Opt-in per colonia. */
+function renderGovernorSection(colony, planet) {
+  const g = ORION.game;
+  if (!g || !ORION.governor) return '';
+  if (colony.phase === 'settling') return '';
+  if (!ORION.governor.isAvailable(g)) return '';
+  const gov = ORION.governor.ensureState(colony);
+  const enabled = !!gov.enabled;
+  const recent = Array.isArray(gov.recent) ? gov.recent : [];
+  const ALERT_LABEL = {
+    'gov-queue-empty':    'Coda di costruzione ferma',
+    'gov-slots-idle':     'Slot inutilizzati',
+    'gov-pop-near-cap':   'Popolazione vicina al tetto',
+    'gov-supply-falling': 'Stock in calo',
+    'gov-veterans-idle':  'Veterani disponibili'
+  };
+  const recentHtml = recent.length
+    ? '<ul class="gov-log">' + recent.slice(0, 5).map(function (a) {
+        const ds = ORION.time.format((g.startEpochOrbita || 0) * 100 + a.impulso, 'compact');
+        const sub = (a.kind === 'gov-supply-falling' && a.sub)
+          ? ' · ' + (a.sub === 'food' ? 'cibo' : 'acqua') : '';
+        return '<li class="gov-log__item"><span class="gov-log__ds">' + ds + '</span>' +
+               '<span class="gov-log__msg">' + (ALERT_LABEL[a.kind] || a.kind) + sub + '</span></li>';
+      }).join('') + '</ul>'
+    : '<p class="panel__note gov-log__empty">Nessuna segnalazione recente.</p>';
+  return '<div class="gov-section" data-bind="gov-section">' +
+    '<div class="gov-section__head">' +
+      '<p class="sysinfo__sub gov-section__title">' +
+        '<span class="gov-section__glyph" aria-hidden="true">⚙</span> ' +
+        'Governatore <em>(Tier 1 · Vigile)</em>' +
+      '</p>' +
+      '<label class="gov-toggle">' +
+        '<input type="checkbox" data-action="gov-toggle"' + (enabled ? ' checked' : '') + '>' +
+        '<span>' + (enabled ? 'Attivo' : 'Inattivo') + '</span>' +
+      '</label>' +
+    '</div>' +
+    '<p class="panel__note gov-section__hint">' +
+      (enabled
+        ? 'Sorveglia coda, slot, popolazione, scorte e veterani — segnala in cronaca, non agisce.'
+        : 'Attiva per ricevere segnalazioni contestuali su questa colonia.') +
+    '</p>' +
+    (enabled ? recentHtml : '') +
+  '</div>';
+}
+function bindGovernorHandlers(host, planet, colony) {
+  if (!host) return;
+  const toggle = host.querySelector('[data-action="gov-toggle"]');
+  if (!toggle) return;
+  toggle.addEventListener('change', function (e) {
+    if (!ORION.governor) return;
+    ORION.governor.setEnabled(colony, e.target.checked);
+    if (e.target.checked && ORION.tutorial) ORION.tutorial.fire('governor');
+    if (ORION.save && ORION.save.autosave && ORION.game) ORION.save.autosave(ORION.game);
+    /* Ri-render del tab corrente (mostra/nasconde il log recenti). */
+    renderPlanetColoniaTab(host, planet, colony);
+  });
 }
 
 function tryColonize(planet) {
@@ -2089,7 +2151,14 @@ const DEFAULT_AUTOPAUSE = {
   'victory': true, 'settle-stage': true, 'settle-done': true,
   /* M07 (decisione #37): pausa solo su esiti notevoli. Non su launch
      (azione utente), né su ship-built/crew-formed (frequenti). */
-  'expedition-arrived': true, 'expedition-ship-lost': true, 'expedition-discovery': true
+  'expedition-arrived': true, 'expedition-ship-lost': true, 'expedition-discovery': true,
+  /* M07.1 (decisione #40): le 2 segnalazioni urgenti del Governatore
+     si auto-pausano (carenze in arrivo e coda ferma da troppo); le 3
+     strategiche (slot liberi, pop vicina al tetto, veterani inattivi)
+     restano in cronaca senza interrompere il gioco. L'utente può
+     spegnere ognuna dall'overlay di pausa. */
+  'gov-supply-falling': true, 'gov-queue-empty': true,
+  'gov-slots-idle': false, 'gov-pop-near-cap': false, 'gov-veterans-idle': false
 };
 
 ORION.timer = {
@@ -2285,7 +2354,12 @@ function showEventOverlay(events) {
     'settle-done': 'Insediamento completato',
     'expedition-arrived': 'Spedizione: sistema esplorato',
     'expedition-ship-lost': 'Spedizione: scafo perso',
-    'expedition-discovery': 'Spedizione: scoperta fortuita'
+    'expedition-discovery': 'Spedizione: scoperta fortuita',
+    'gov-queue-empty': 'Governatore: coda di costruzione ferma',
+    'gov-slots-idle': 'Governatore: slot inutilizzati',
+    'gov-pop-near-cap': 'Governatore: popolazione vicina al tetto',
+    'gov-supply-falling': 'Governatore: stock in calo',
+    'gov-veterans-idle': 'Governatore: veterani disponibili'
   };
   /* Raggruppa per kind: una checkbox per categoria, una sola voce di sintesi. */
   const byKind = {};
@@ -2444,6 +2518,22 @@ function chronicleEvent(ev) {
       (ev.shipLost ? ' · scafo perso' : ' · equipaggio promosso (+1 xp)') + '.', 'explore');
   } else if (ev.kind === 'expedition-discovery') {
     pushChronicle(ds + ' — <strong>Scoperta fortuita</strong>: l\'equipaggio porta in patria osservazioni inattese.', 'explore');
+  } else if (ev.kind === 'gov-queue-empty') {
+    pushChronicle(ds + ' — <strong>Governatore di ' + pname + ptag + '</strong>: la coda di costruzione è ferma — i cantieri attendono ordini.', 'planet');
+    if (ORION.tutorial) ORION.tutorial.fire('governor');
+  } else if (ev.kind === 'gov-slots-idle') {
+    pushChronicle(ds + ' — <strong>Governatore di ' + pname + ptag + '</strong>: ' + (ev.free || 0) + ' slot di costruzione liberi, nessun progetto in coda.', 'planet');
+    if (ORION.tutorial) ORION.tutorial.fire('governor');
+  } else if (ev.kind === 'gov-pop-near-cap') {
+    pushChronicle(ds + ' — <strong>Governatore di ' + pname + ptag + '</strong>: popolazione al ' + (ev.ratio || '—') + '% del tetto abitativo — è ora di espandere l\'habitat.', 'planet');
+    if (ORION.tutorial) ORION.tutorial.fire('governor');
+  } else if (ev.kind === 'gov-supply-falling') {
+    const RES = { food: 'cibo', water: 'acqua' };
+    pushChronicle(ds + ' — <strong>Governatore di ' + pname + ptag + '</strong>: scorte di <strong>' + RES[ev.res] + '</strong> in calo costante — carenza imminente se non si interviene.', 'system');
+    if (ORION.tutorial) ORION.tutorial.fire('governor');
+  } else if (ev.kind === 'gov-veterans-idle') {
+    pushChronicle(ds + ' — <strong>Governatore di ' + pname + ptag + '</strong>: ' + (ev.count || 1) + ' equipaggio/i veterano/i disponibile/i, nessuna spedizione in corso.', 'explore');
+    if (ORION.tutorial) ORION.tutorial.fire('governor');
   }
 }
 

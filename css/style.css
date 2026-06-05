@@ -2461,3 +2461,81 @@ select.main-menu__input { cursor: pointer; }
 
 /* Tab "Esplorazione" — riusa lo stile planet-tab esistente */
 .planet-tab[data-tab="esplorazione"].is-active { color: #b39cff; }
+
+/* =====================================================================
+   M07.1 — Governatore coloniale (decisione #40)
+   Sezione opt-in nella tab Colonia: toggle + log delle ultime segnalazioni.
+   ===================================================================== */
+.gov-section {
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: rgba(179, 156, 255, 0.05);
+  border: 1px solid rgba(179, 156, 255, 0.18);
+  border-radius: 6px;
+}
+.gov-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.gov-section__title {
+  margin: 0;
+  color: #b39cff;
+  flex: 1;
+}
+.gov-section__title em {
+  font-style: normal;
+  opacity: 0.7;
+  font-weight: 400;
+  font-size: 0.85em;
+}
+.gov-section__glyph {
+  display: inline-block;
+  width: 1.2em;
+  text-align: center;
+}
+.gov-section__hint {
+  margin: 6px 0 8px;
+  font-size: 0.85em;
+  opacity: 0.75;
+}
+.gov-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85em;
+  cursor: pointer;
+  user-select: none;
+}
+.gov-toggle input { cursor: pointer; }
+.gov-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gov-log__item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 6px;
+  background: rgba(0, 0, 0, 0.18);
+  border-left: 2px solid rgba(179, 156, 255, 0.6);
+  border-radius: 3px;
+  font-size: 0.85em;
+}
+.gov-log__ds {
+  font-family: var(--font-mono, monospace);
+  opacity: 0.6;
+  white-space: nowrap;
+}
+.gov-log__msg { flex: 1; }
+.gov-log__empty {
+  margin: 0;
+  font-style: italic;
+  opacity: 0.6;
+}
