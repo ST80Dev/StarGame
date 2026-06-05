@@ -1537,7 +1537,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
             upBtn = '<span class="struct-item__locked struct-item__locked--icon" title="' + escapeHtml(up.reason) + '" aria-label="Espandi (bloccato)">+</span>';
           }
           timeChip = ' <span class="struct-item__cat">' + nextTime + ' I</span>';
-          infoLine = '<div class="struct-item__cost"><span class="struct-item__cost-label">Prossimo · L' + (lvl + 1) + '</span> ' + costStr + (balance ? ' ' + balance : '') + '</div>';
+          infoLine = '<div class="struct-item__cost"><span class="struct-item__cost-label">L' + (lvl + 1) + '</span> ' + costStr + (balance ? ' ' + balance : '') + '</div>';
         }
         html += '<li class="struct-item is-built">' +
           '<span class="struct-item__glyph">' + def.glyph + '</span>' +
