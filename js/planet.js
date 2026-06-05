@@ -296,8 +296,12 @@
       /* M07 (decisione #37): scafi e equipaggi prodotti dall'Hangar e
          dall'Accademia. Scafi sono counter (intercambiabili), equipaggi
          sono entità con xp persistente. Le code dedicate (assets.*) sono
-         separate da `queue` (strutture). */
-      ships:  { explorer: 0 },                      // counter
+         separate da `queue` (strutture).
+         M08 Fase A (decisione #42): il counter scafi è esteso a tutte
+         le 5 classi note (explorer/caccia/intercettore/corvetta/fregata).
+         I save schema 5 senza i nuovi kind vengono normalizzati nella
+         sub-migrazione v5→v6 e lazy via ORION.fleet.ensureColonyShipKinds. */
+      ships:  { explorer: 0, caccia: 0, intercettore: 0, corvetta: 0, fregata: 0 },
       crews:  { explorer: [] },                     // [{ id, xp }]
       assets: { shipQueue: [], crewQueue: [] }      // [{ kind, duration }]
     };
@@ -598,6 +602,13 @@
 
   function ensureAssets(colony) {
     if (!colony.ships) colony.ships = { explorer: 0 };
+    /* M08 Fase A: assicura che tutte le 5 classi note abbiano un counter
+       (lazy, idempotente). Save vecchi caricano senza modifiche. */
+    if (root.ORION && root.ORION.fleet && root.ORION.fleet.ensureColonyShipKinds) {
+      root.ORION.fleet.ensureColonyShipKinds(colony);
+    } else if (colony.ships.explorer == null) {
+      colony.ships.explorer = 0;
+    }
     if (!colony.crews) colony.crews = { explorer: [] };
     if (!colony.assets) colony.assets = { shipQueue: [], crewQueue: [] };
     if (!Array.isArray(colony.assets.shipQueue)) colony.assets.shipQueue = [];
@@ -622,7 +633,7 @@
     });
   }
 
-  function startShipBuild(colony, planet, game, colonyKey) {
+  function startShipBuild(colony, planet, game, colonyKey, kind) {
     ensureAssets(colony);
     /* Decisione #41: check di capacità hangar (cantieri + attracchi).
        Se ORION.expedition è caricato, deleghiamo a canBuildShip; altrimenti
@@ -634,12 +645,31 @@
     } else if (!hasStructLevel(colony, 'cantiere-navale', 1)) {
       return { ok: false, reason: 'Hangar di costruzione non costruito' };
     }
-    const cost = expCfg('SHIP_COST', { met: 25, en: 12 });
-    let time = expCfg('SHIP_TIME', 10);
+    /* M08 Fase A (decisione #42): la classe nave viene dal catalogo
+       ORION.fleet.CLASSES. Costo/tempo/livello-hangar dipendono dalla
+       classe scelta. Default 'explorer' per retro-compat con i chiamanti
+       M07 (che non passavano `kind`). */
+    kind = kind || 'explorer';
+    const F = root.ORION && root.ORION.fleet;
+    const cls = F && F.getClass ? F.getClass(kind) : null;
+    let cost, time, reqLvl;
+    if (cls) {
+      cost = cls.cost;
+      time = cls.time;
+      reqLvl = cls.hangarLvl || 1;
+    } else {
+      /* Fallback test headless: comportamento M07 originale. */
+      cost = expCfg('SHIP_COST', { met: 25, en: 12 });
+      time = expCfg('SHIP_TIME', 10);
+      reqLvl = 1;
+    }
+    if (!hasStructLevel(colony, 'cantiere-navale', reqLvl)) {
+      return { ok: false, reason: 'Hangar di costruzione lvl ' + reqLvl + ' richiesto per ' + (cls ? cls.name : kind) };
+    }
     if (E && E.applyTechSpeed) time = E.applyTechSpeed(time, colony);
     if (!canPay(colony, cost)) return { ok: false, reason: 'Risorse insufficienti' };
     pay(colony, cost);
-    colony.assets.shipQueue.push({ kind: 'explorer', duration: time, totalTime: time });
+    colony.assets.shipQueue.push({ kind: kind, duration: time, totalTime: time });
     return { ok: true };
   }
 
@@ -663,9 +693,11 @@
   function cancelShipBuild(colony, idx) {
     ensureAssets(colony);
     if (idx < 0 || idx >= colony.assets.shipQueue.length) return { ok: false };
-    colony.assets.shipQueue.splice(idx, 1);
-    /* Rimborso 50% (recovery-friendly, decisione #22). */
-    const cost = expCfg('SHIP_COST', { met: 25, en: 12 });
+    const entry = colony.assets.shipQueue.splice(idx, 1)[0];
+    /* M08 Fase A: rimborso per il KIND corretto (50%, recovery-friendly). */
+    const F = root.ORION && root.ORION.fleet;
+    const cls = (entry && entry.kind && F && F.getClass) ? F.getClass(entry.kind) : null;
+    const cost = (cls && cls.cost) ? cls.cost : expCfg('SHIP_COST', { met: 25, en: 12 });
     Object.keys(cost).forEach(function (k) {
       colony.stock[k] = (colony.stock[k] || 0) + Math.floor(cost[k] * 0.5);
     });
