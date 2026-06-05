@@ -40,7 +40,7 @@
       tag: 'Inizio',
       title: 'Benvenuto in Orion Empires',
       body:
-        '<p>4X strategico spaziale a pannelli. Non ci sono turni: il tempo scorre in <strong>Impulsi (I)</strong> ' +
+        '<p>4X strategico spaziale a pannelli. Non ci sono turni: il tempo scorre in <strong>Impulsi (<span class="ds-unit">Ι</span>)</strong> ' +
         'del Tempo Standard Galattico — sei tu a decidere quando avanzare coi bottoni in alto a destra.</p>' +
         '<p>Esistono <strong>7 piste di vittoria in parallelo</strong> (esplorazione, colonizzazione, dominio economico, ' +
         'ascensione tech, pace, oppressione, sopravvivenza alla crisi). Vince chi chiude per primo una qualsiasi pista. ' +
@@ -93,7 +93,7 @@
         '<strong>costo cresce</strong> a ogni livello: espandere all\'infinito non conviene.</p>' +
         '<p>Le <strong>estrattive</strong> coprono il fabbisogno; le <strong>produttive</strong> (fonderia, raffineria) ' +
         '<strong>moltiplicano</strong> la resa delle estrattive. Con slot limitati devi <strong>scegliere la vocazione</strong> ' +
-        'del pianeta: non puoi avere tutto al massimo. L\'<strong>osservatorio</strong> rivela le risorse avanzate dopo ~10 I.</p>'
+        'del pianeta: non puoi avere tutto al massimo. L\'<strong>osservatorio</strong> rivela le risorse avanzate dopo ~10 <span class="ds-unit">Ι</span>.</p>'
     },
     {
       id: 'advance',
@@ -123,7 +123,7 @@
         '<p>Con stock ≤ 20 e netto negativo la colonia entra in <strong>allerta</strong> (−10% produzione globale); ' +
         'a zero diventa <strong>critica</strong> (−30%). Bastano <strong>3 Impulsi</strong> di netto ≥ 0 per uscirne.</p>' +
         '<p>Nessuna carenza è un fail-state: la popolazione cala solo dopo 30 Impulsi consecutivi di fame o sete, ' +
-        'e poi di 1 unità ogni 30 I. Hai sempre il tempo di riassestare la coda, costruire ciò che manca, o spostarti.</p>'
+        'e poi di 1 unità ogni 30 <span class="ds-unit">Ι</span>. Hai sempre il tempo di riassestare la coda, costruire ciò che manca, o spostarti.</p>'
     },
     {
       id: 'specialization',
@@ -215,7 +215,7 @@
         '<p>Produce <strong>acqua</strong>: ~4/I al livello 1, modulata dal potenziale water. Upkeep 1 en/I.</p>' +
         '<p><strong>Concatenazione critica:</strong> la <em>Fattoria</em> consuma 1 acqua/I, l\'<em>Ospedale</em> 0 ma ne fa indirettamente bisogno via pop, ' +
         'e tutte le abitazioni richiedono 1 acqua/I. Se l\'acqua va in <strong>crit</strong> (zero stock), parte un timer di tolleranza: ' +
-        'dopo 30 I consecutivi di sete la popolazione cala 1 unità ogni 30 I.</p>'
+        'dopo 30 <span class="ds-unit">Ι</span> consecutivi di sete la popolazione cala 1 unità ogni 30 <span class="ds-unit">Ι</span>.</p>'
     },
     {
       id: 'struct:fattoria', tag: 'Strutture · ❖', title: 'Fattoria idroponica',
@@ -223,7 +223,7 @@
         '<p>Produce <strong>cibo</strong>: ~4/I al livello 1, modulata dal potenziale food. Upkeep 1 en + <strong>1 acqua/I</strong>.</p>' +
         '<p><strong>Concatenazione:</strong> dipende dall\'acqua. Se l\'impianto idrico è in difficoltà, le fattorie soffrono per prime ' +
         '→ cala il cibo → carenza popolazione. Pianta più impianti idrici prima delle fattorie.</p>' +
-        '<p><strong>Salute della popolazione:</strong> cibo + acqua sono i due requisiti vitali. Cibo a zero per 30 I consecutivi → −1 pop ogni 30 I (recovery-friendly).</p>'
+        '<p><strong>Salute della popolazione:</strong> cibo + acqua sono i due requisiti vitali. Cibo a zero per 30 <span class="ds-unit">Ι</span> consecutivi → −1 pop ogni 30 <span class="ds-unit">Ι</span> (recovery-friendly).</p>'
     },
     {
       id: 'struct:fonderia', tag: 'Strutture · 🜂', title: 'Fonderia',
@@ -256,7 +256,7 @@
       body:
         '<p>Scansiona il corpo per <strong>rivelare le identità delle risorse avanzate</strong> (cristalli, esotici, biomassa, ' +
         'gas nobili, dati, reliquie). Visibile il numero da subito; identità mascherate fino a fine scansione.</p>' +
-        '<p><strong>Timeline:</strong> 14 I per costruirlo + ~10 I di scansione effettiva. Livello 2 dimezza il tempo di scansione.</p>' +
+        '<p><strong>Timeline:</strong> 14 <span class="ds-unit">Ι</span> per costruirlo + ~10 <span class="ds-unit">Ι</span> di scansione effettiva. Livello 2 dimezza il tempo di scansione.</p>' +
         '<p><strong>Prerequisito implicito</strong> per l\'<em>Impianto esotico</em>: senza scansione completata non si conosce ' +
         'la risorsa rara da sfruttare.</p>'
     },
@@ -303,10 +303,10 @@
       id: 'struct:ospedale', tag: 'Strutture · ✚', title: 'Ospedale',
       body:
         '<p><strong>Accelera la crescita pop</strong>: ×1.6 (cioè +60%) sulla velocità base di 0.018 unità/I × morale.</p>' +
-        '<p><strong>Esempio concreto:</strong> da popCap 3 a popCap 15 senza ospedale ≈ 500 I (5 Orbite); con ospedale ≈ 310 I. ' +
+        '<p><strong>Esempio concreto:</strong> da popCap 3 a popCap 15 senza ospedale ≈ 500 <span class="ds-unit">Ι</span> (5 Orbite); con ospedale ≈ 310 <span class="ds-unit">Ι</span>. ' +
         'Conviene se prevedi tante abitazioni.</p>' +
-        '<p><strong>Non protegge dalla carenza vitale:</strong> se cibo o acqua restano a zero per 30 I, la pop cala comunque ' +
-        '(1 unità ogni 30 I, recovery-friendly).</p>'
+        '<p><strong>Non protegge dalla carenza vitale:</strong> se cibo o acqua restano a zero per 30 <span class="ds-unit">Ι</span>, la pop cala comunque ' +
+        '(1 unità ogni 30 <span class="ds-unit">Ι</span>, recovery-friendly).</p>'
     },
     {
       id: 'struct:mercato', tag: 'Strutture · ⇄', title: 'Mercato',

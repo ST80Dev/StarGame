@@ -443,8 +443,16 @@
         if (colony) {
           if (!colony.crews) colony.crews = { explorer: [] };
           if (!Array.isArray(colony.crews.explorer)) colony.crews.explorer = [];
+          /* Counter persistente: vedi nota in time.js → nextCrewId.
+             Prima usavamo _expCounter (module-local) che si resettava al
+             reload del save → ID collidevano con quelli formati
+             dall'Accademia e il roster mostrava "Equipaggio 1" duplicato. */
+          var T = root.ORION && root.ORION.time;
+          var crewId = (T && T.nextCrewId)
+            ? T.nextCrewId(game)
+            : 'crew-' + (game.timeImpulsi || 0) + '-' + (++_expCounter);
           var newCrew = {
-            id: 'crew-' + (game.timeImpulsi || 0) + '-' + (++_expCounter),
+            id: crewId,
             xp: (exp.crewXp || 0) + 1
           };
           colony.crews.explorer.push(newCrew);

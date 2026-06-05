@@ -206,6 +206,13 @@ button { font-family: inherit; }
   white-space: nowrap;
 }
 .resource__icon { color: var(--c-accent); font-size: 1rem; text-shadow: 0 0 6px rgba(47,230,224,0.35); }
+/* Coloring tematico per-risorsa nell'HUD top — coerente con i glifi
+   `.res-icon--*` usati nei costi/produzione (vedi sotto). Uniforma lo
+   "standard visivo" del progetto: ogni risorsa ha il suo colore ovunque. */
+.resource[data-resource="metalli"] .resource__icon { color: #c8d2e4; text-shadow: 0 0 6px rgba(180,200,220,0.45); }
+.resource[data-resource="energia"] .resource__icon { color: #f0d670; text-shadow: 0 0 6px rgba(240,210,100,0.45); }
+.resource[data-resource="cibo"]    .resource__icon { color: #9fd0a8; text-shadow: 0 0 6px rgba(140,210,150,0.40); }
+.resource[data-resource="acqua"]   .resource__icon { color: #80c8e6; text-shadow: 0 0 6px rgba(120,200,230,0.40); }
 .resource__label {
   font-family: var(--font-display);
   font-size: 0.66rem;
@@ -2645,6 +2652,47 @@ select.main-menu__input { cursor: pointer; }
   color: var(--c-muted, #8a93b8);
 }
 .commander-roster__status--idle { color: #c8b6ff; }
+
+/* Icone risorsa con colore tematico (helper resIcon(k) in main.js).
+   Risolve l'incoerenza per cui ⛭/⚡/❖/≈ avevano colore solo nell'HUD top
+   (tutto ciano) e nei contesti di costo/produzione/potenziali erano plain
+   text. Standard visivo coerente col tema NASA/Visions (decisione #8):
+   metalli=acciaio cromato, energia=oro elettrico, cibo=verde foglia,
+   acqua=azzurro polare. */
+.res-icon {
+  display: inline-block;
+  margin-right: 2px;
+  font-variant-emoji: text;
+  line-height: 1;
+}
+.res-icon--met   { color: #c8d2e4; text-shadow: 0 0 4px rgba(180,200,220,0.45); }
+.res-icon--en    { color: #f0d670; text-shadow: 0 0 4px rgba(240,210,100,0.45); }
+.res-icon--food  { color: #9fd0a8; text-shadow: 0 0 4px rgba(140,210,150,0.40); }
+.res-icon--water { color: #80c8e6; text-shadow: 0 0 4px rgba(120,200,230,0.40); }
+
+/* Sigle del Calendario del Faro (decisione #30): badge tipografico
+   che rende Ι/Κ/Φ/Ω visivamente distinte da numeri/numerali. Le sigle
+   greche restano nel testo per coerenza del "linguaggio del Faro",
+   ma vivono dentro un piccolo capsule ambra a font display — l'occhio
+   le riconosce subito come unità temporali, non più come "I" latina
+   o numerali romani. */
+.ds-unit {
+  display: inline-block;
+  min-width: 1.1em;
+  padding: 0 5px;
+  margin-left: 1px;
+  background: rgba(220, 170, 90, 0.16);
+  border: 1px solid rgba(220, 170, 90, 0.34);
+  border-radius: 4px;
+  color: #f0d8a0;
+  font-family: var(--font-display, var(--font-mono, monospace));
+  font-size: 0.78em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+  text-align: center;
+  vertical-align: baseline;
+}
 
 /* xp chip viola */
 .xp-chip {

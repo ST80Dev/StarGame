@@ -577,7 +577,21 @@
         Decisione #37: counter scafi e array equipaggi separati dalla
         coda strutture; produzione 1/Ι (no malus scarsità — il loop le
         considera prodotti di "qualità", non risorse di flusso). */
-  let _assetCounter = 0;
+  /* Counter monotono persistente per gli id "umani" delle entità
+     (equipaggi, scafi, ecc.). Vive in `game.idSeq` come delta — lazy
+     init, NESSUN bump di schema. Sostituisce i counter module-level
+     `_assetCounter`/`_expCounter` che, essendo runtime-local, si
+     resettavano a 0 ad ogni reload del save → collisione di ID e
+     duplicati visivi "Equipaggio 1" nel roster. */
+  function nextSeqId(game, prefix) {
+    if (!game.idSeq) game.idSeq = {};
+    const cur = (game.idSeq[prefix] | 0) + 1;
+    game.idSeq[prefix] = cur;
+    return prefix + '-' + cur;
+  }
+  /* Helper esposto: condiviso con expedition.js (vedi root.ORION.time). */
+  function nextCrewId(game) { return nextSeqId(game, 'crew'); }
+
   function processAssets(game, colony, planet, events) {
     if (!colony.assets) return;
     /* Scafi */
@@ -615,9 +629,8 @@
         if (q.duration <= 0) {
           colony.crews = colony.crews || { explorer: [] };
           if (!Array.isArray(colony.crews.explorer)) colony.crews.explorer = [];
-          _assetCounter++;
           colony.crews.explorer.push({
-            id: 'crew-' + (game.timeImpulsi || 0) + '-' + _assetCounter,
+            id: nextCrewId(game),
             xp: 0
           });
           events.push({
@@ -881,6 +894,8 @@
     advance: advance,
     advanceToNextEvent: advanceToNextEvent,
     nextEventImpulsi: nextEventImpulsi,
+    nextSeqId: nextSeqId,
+    nextCrewId: nextCrewId,
     targetClassWeights: targetClassWeights,
     ensureScarcity: ensureScarcity
   };
