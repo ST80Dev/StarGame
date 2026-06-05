@@ -33,6 +33,7 @@ ORION.currentSystem = null;
 
 /* Vista pianeta (M04): istanza attiva + chiave del corpo aperto. */
 ORION.planetView = null;
+ORION.colonyDeck = null;        // M07.2 (decisione #42): Plancia di Colonia
 ORION.openPlanetKey = null;     // "<sysId>:<bodyKey>"
 ORION.currentPlanet = null;
 ORION.planetTab = 'colonia';    // 'colonia' | 'risorse' | 'strutture' | 'popolazione' | 'esplorazione' (M07)
@@ -308,6 +309,7 @@ function renderView(stage, view) {
 
   // Altre viste: smonta tutto e mostra il placeholder.
   if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; }
+  if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
   if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
   if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
   renderViewPlaceholder(stage, view);
@@ -328,6 +330,7 @@ function renderViewPlaceholder(stage, view) {
    --------------------------------------------------------------------- */
 function renderGalaxyView(stage) {
   if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; }
+  if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
   ORION.openPlanetKey = null;
   ORION.currentPlanet = null;
   if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; }
@@ -345,6 +348,7 @@ function renderGalaxyView(stage) {
       '<div class="galaxy-holder"></div>' +
       '<div class="system-holder" data-system-holder hidden></div>' +
       '<div class="planet-holder" data-planet-holder hidden></div>' +
+      '<div class="colony-deck" data-colony-deck hidden aria-label="Plancia di colonia"></div>' +
       '<nav class="galaxy-breadcrumb" data-breadcrumb aria-label="Percorso di navigazione"></nav>' +
       '<button class="seed-chip" data-action="copy-seed" type="button" ' +
         'title="Copia il seed negli appunti">' +
@@ -927,6 +931,11 @@ function openPlanet(sysId, bodyKey) {
     onExit: function () { closePlanet(); }
   });
 
+  /* M07.2 (decisione #42): Plancia di Colonia — overlay DOM con widget
+     a cardinali (top-bar, risorse XXL, strutture costruite con "+Espandi",
+     coda, popolazione, cronaca filtrata). Sincronia con la sidebar. */
+  mountColonyDeck(planet, colony, body);
+
   setNavActive('planet');
   setGalaxyHint('planet');
   updatePlanetUI();
@@ -939,14 +948,17 @@ function openPlanet(sysId, bodyKey) {
 
 function closePlanet() {
   if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; }
+  if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
   ORION.openPlanetKey = null;
   ORION.currentPlanet = null;
   const root = document.querySelector('.galaxy-root');
   if (root) {
     const planetHolder = root.querySelector('[data-planet-holder]');
     const sysHolder = root.querySelector('[data-system-holder]');
+    const deckHolder = root.querySelector('[data-colony-deck]');
     if (planetHolder) planetHolder.hidden = true;
     if (sysHolder) sysHolder.style.visibility = '';
+    if (deckHolder) deckHolder.hidden = true;
   }
   setNavActive('system');
   setGalaxyHint('system');
@@ -956,12 +968,56 @@ function closePlanet() {
 
 function updatePlanetUI() {
   renderPlanetBreadcrumb();
+  /* M07.2: la Plancia di Colonia esiste solo se il corpo è colonizzato.
+     Va creata "lazy" se la colonizzazione si completa mentre la vista
+     pianeta è già aperta (caso più frequente: arrivi sul corpo NON
+     colonizzato, lo colonizzi, il loop chiude colony.colonizing).      */
+  const colony = ORION.openPlanetKey ? ORION.game.colonies[ORION.openPlanetKey] : null;
+  if (colony && colony.colonized && ORION.currentPlanet) {
+    if (!ORION.colonyDeck) {
+      const body = ORION.system.findBody(ORION.currentSystem, ORION.currentPlanet.bodyKey);
+      mountColonyDeck(ORION.currentPlanet, colony, body);
+    } else {
+      ORION.colonyDeck.refresh(ORION.currentPlanet, colony);
+    }
+  } else if (ORION.colonyDeck) {
+    /* Non più colonizzato (es. test/edge) o nessuna colonia: smonta. */
+    ORION.colonyDeck.destroy();
+    ORION.colonyDeck = null;
+    const deckHolder = document.querySelector('[data-colony-deck]');
+    if (deckHolder) deckHolder.hidden = true;
+  }
   const panel = document.querySelector('.panel--right');
   if (!panel) return;
   const title = panel.querySelector('.panel__title');
   const content = panel.querySelector('.panel__content');
   if (!title || !content) return;
   renderPlanetPanel(title, content);
+}
+
+/* M07.2 (decisione #42): monta la Plancia di Colonia.
+   Le azioni del deck delegano alle stesse funzioni della sidebar
+   (tryBuild / tryCancel / tutorial.openLesson) — sincronia totale. */
+function mountColonyDeck(planet, colony, body) {
+  if (!colony || !colony.colonized || !ORION.ColonyDeck) return;
+  const root = document.querySelector('.galaxy-root');
+  if (!root) return;
+  const deckHolder = root.querySelector('[data-colony-deck]');
+  if (!deckHolder) return;
+  if (ORION.colonyDeck) ORION.colonyDeck.destroy();
+  ORION.colonyDeck = new ORION.ColonyDeck().mount(deckHolder, planet, colony, body, {
+    onBuild: function (id) { tryBuild(id); },
+    onCancel: function (idx) { tryCancel(idx); },
+    onInfo: function (id) {
+      if (ORION.tutorial && ORION.tutorial.openLesson) {
+        ORION.tutorial.openLesson('struct:' + id);
+      }
+    },
+    onOpenTab: function (tabId) {
+      ORION.planetTab = tabId;
+      updatePlanetUI();
+    }
+  });
 }
 
 function renderPlanetBreadcrumb() {
@@ -2966,6 +3022,7 @@ function loadPayloadAsGame(payload) {
    - load slot / import .json dal pannello save */
 function enterGame() {
   if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; }
+  if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
   if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
   if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
   hideMainMenu();
