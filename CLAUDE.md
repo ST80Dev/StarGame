@@ -20,24 +20,34 @@
 
 > Regole di processo cui attenersi **prima** di toccare il codice in ogni sessione. Non riguardano il design del gioco — riguardano *come* si lavora sul repo.
 
-### R1 — Branch nuovo se quello corrente è già mergiato
+### R1 — Quando aprire un branch nuovo e quando riusare quello corrente
 
-**Prima di iniziare nuove modifiche** (anche all'interno della stessa sessione, subito dopo aver mergiato una PR appena confermata) **verificare sempre** che il branch di lavoro corrente non corrisponda a una PR già mergiata in `main`. Se lo è, **aprire un nuovo branch** dedicato alle nuove modifiche e lasciare all'utente di consolidarlo successivamente in una PR.
+**Prima di iniziare nuove modifiche** (anche all'interno della stessa sessione, dopo merge o dopo l'apertura di una PR appena prima) **verificare sempre** lo stato del branch corrente *e* della sua PR. Solo dopo il check si scrive la prima riga di codice.
 
-**Perché**: riusare un branch già chiuso sovrascriverebbe la cronologia chiara "1 PR = 1 modulo / 1 decisione" e renderebbe ambigua la storia (commit nuovi appesi a una PR già chiusa non riaprono la PR, restano orfani sul branch finché qualcuno non se ne accorge).
+**Decisione in due casi (mutuamente esclusivi):**
 
-**Come verificare in pratica** (sequenza tipica a inizio sessione, prima del primo edit):
-1. `git branch --show-current` — vedi il branch corrente.
-2. `git fetch origin main` + `git log origin/main..HEAD --oneline` — se ritorna **vuoto**, il branch è già stato interamente mergiato in main ⇒ serve un branch nuovo.
-3. In dubbio, controlla lo stato della PR associata via MCP github (`mcp__github__list_pull_requests` o `get_pull_request` sul numero): se `merged: true` ⇒ branch nuovo obbligatorio.
-4. Apri il nuovo branch a partire da main aggiornato:
+- **Caso A — il branch corrente ha una PR ancora APERTA (non mergiata).** ⇒ **Si continua a committare su quel branch.** I push successivi aggiornano automaticamente la stessa PR. Non aprire branch ulteriori "per correggere": è esattamente lo scenario per cui una PR esiste prima del merge. Anche se la nuova modifica è un fix, un polish o un'aggiunta a quanto già fatto, **resta nello stesso branch / nella stessa PR**. Niente moltiplicazione di branch durante la review.
+  - *Eccezione interna al Caso A*: se l'utente chiede esplicitamente uno scope completamente diverso (es. "intanto che aspetti la review, fai questa altra cosa scollegata"), allora si può aprire un secondo branch — ma va dichiarato all'utente che diventerà **una PR distinta**, non un secondo branch da fondere nel primo. Default: stesso branch.
+
+- **Caso B — il branch corrente corrisponde a una PR già MERGIATA in `main`** (o si è su un branch chiuso senza merge che non va riaperto). ⇒ **Aprire un nuovo branch** dedicato alle nuove modifiche, partendo da `main` aggiornato, e lasciare all'utente di consolidarlo successivamente in una PR.
+
+**Perché la distinzione conta**: commit nuovi appesi a una PR **già mergiata** non riaprono la PR, restano orfani sul branch finché qualcuno non se ne accorge → serve un branch nuovo. Commit nuovi appesi a una PR **ancora aperta** invece aggiornano la PR esistente → moltiplicare i branch in questa fase frammenta inutilmente la review e rompe la convenzione "1 PR = 1 modulo / 1 decisione".
+
+**Come verificare in pratica** (sequenza tipica a inizio sessione o prima del primo edit dopo un'azione importante):
+1. `git branch --show-current` — il branch corrente.
+2. `git fetch origin main` + `git log origin/main..HEAD --oneline` — se ritorna **vuoto**, il branch è già interamente in main (Caso B).
+3. Stato della PR associata via MCP github (`mcp__github__list_pull_requests` con `head: <branch>` o `get_pull_request` sul numero):
+   - PR esiste e `state: 'open'`, `merged: false` ⇒ **Caso A** (continua sullo stesso branch).
+   - PR esiste e `merged: true` ⇒ **Caso B** (branch nuovo obbligatorio).
+   - Nessuna PR aperta + nessuna PR mergiata che copre i commit attuali ⇒ il branch è "nuovo non ancora pubblicato": si continua a lavorare lì (è di fatto un Caso A senza PR ancora).
+4. Solo nel Caso B, apri il nuovo branch a partire da main aggiornato:
    ```
    git checkout main && git pull origin main
    git checkout -b claude/<nome-nuovo>
    ```
    Il nome rispetta la convenzione del task corrente (`claude/<slug>` come da istruzioni di sessione).
 
-**Eccezione**: se il branch corrente esiste ma la sua PR è **ancora aperta** (non mergiata) e le nuove modifiche sono coerenti col suo scope, si può continuare a committare lì. La regola scatta solo su PR **mergiate** (o chiuse senza merge che non vanno riaperte).
+**Anti-pattern da evitare esplicitamente**: aprire un secondo branch "per la correzione" quando il primo ha una PR appena aperta ma non ancora mergiata. La correzione va sullo **stesso** branch e aggiorna la **stessa** PR.
 
 ---
 
