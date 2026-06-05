@@ -126,6 +126,17 @@
     return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
   }
 
+  /* Hash leggero usato per offset deterministico dei marker flotta sulla
+     mappa (M08 Fase B). Stesso id → stesso offset, niente RNG. */
+  function hashStr(s) {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = (h + ((h << 1) >>> 0) + ((h << 4) >>> 0) + ((h << 7) >>> 0) + ((h << 8) >>> 0) + ((h << 24) >>> 0)) >>> 0;
+    }
+    return h >>> 0;
+  }
+
   function starColor(galaxy, starId) {
     const t = galaxy.starTypes.find(function (s) { return s.id === starId; });
     return t ? t.color : '#ffffff';
@@ -788,6 +799,9 @@
       if (reveal > 0.01) {
         this._drawEdges(ctx, reveal);
         this._drawNodes(ctx, reveal);
+        /* M08 Fase B (decisione #46): markers flotte + rotte in transito.
+           Visualizzazione read-only: il drag&drop ordini è polish successivo. */
+        this._drawFleets(ctx, reveal);
       }
 
       this._emitContext(false);
@@ -1106,6 +1120,139 @@
         }
       }
       ctx.globalAlpha = 1;
+    }
+
+    /* M08 Fase B (decisione #46): rendering delle flotte sulla mappa.
+       - flotte `orbiting`/`docked`: piccolo glifo accanto al sistema (offset
+         deterministico per fleet.id per non sovrapporre);
+       - flotte `in-transit`: posizione interpolata lungo il leg corrente
+         + linea tratteggiata della rotta pianificata.
+       Niente RNG, tutto derivato dal delta — replay-safe. */
+    _drawFleets(ctx, reveal) {
+      const game = root.ORION && root.ORION.game;
+      if (!game || !Array.isArray(game.fleets) || !game.fleets.length) return;
+      const g = this.galaxy;
+      const fleetsAlpha = clamp(reveal, 0, 1);
+      if (fleetsAlpha < 0.05) return;
+
+      ctx.save();
+      ctx.globalAlpha = fleetsAlpha;
+
+      for (let i = 0; i < game.fleets.length; i++) {
+        const f = game.fleets[i];
+        if (!f || !f.location) continue;
+        const curSysId = f.location.systemId;
+        const curSys = g.systems[curSysId];
+        if (!curSys) continue;
+
+        const inTransit = f.location.status === 'in-transit'
+                       && Array.isArray(f.route) && f.routeIdx + 1 < f.route.length;
+        let pos;
+        if (inTransit) {
+          const fromId = f.route[f.routeIdx];
+          const toId   = f.route[f.routeIdx + 1];
+          const fromS = g.systems[fromId];
+          const toS   = g.systems[toId];
+          if (!fromS || !toS) continue;
+          /* Interpolazione lineare tra i due sistemi sulla base del progresso
+             del leg corrente. Il tempo totale del leg lo deriviamo dalla
+             velocità della flotta (stessa formula tempoLeg). */
+          const minSpd = (root.ORION.fleet && root.ORION.fleet.fleetMinSpeed)
+                       ? root.ORION.fleet.fleetMinSpeed(f) : 1;
+          const total = (root.ORION.fleet && root.ORION.fleet.tempoLeg)
+                      ? root.ORION.fleet.tempoLeg(g, fromId, toId, minSpd)
+                      : 60;
+          const remain = Math.max(0, f.etaImpulsi || 0);
+          const t = total > 0 ? clamp(1 - remain / total, 0, 1) : 1;
+          const wx = fromS.x + (toS.x - fromS.x) * t;
+          const wy = fromS.y + (toS.y - fromS.y) * t;
+          const wz = (fromS.z || 0) + ((toS.z || 0) - (fromS.z || 0)) * t;
+          pos = this.project(wx, wy, wz);
+          /* Linea piena dietro la nave (già percorso), tratteggiata davanti. */
+          this._drawFleetRoute(ctx, f, fromId, toId, t);
+        } else {
+          /* Statica: offset deterministico in pixel basato sull'id della flotta
+             (semplice hash → angolo + raggio). Così navi diverse stesso sys
+             non si sovrappongono visivamente. */
+          const p = this.project(curSys.x, curSys.y, curSys.z || 0);
+          const hash = hashStr(f.id || ('f' + i));
+          const ang  = (hash % 360) * Math.PI / 180;
+          const rad  = 14 + ((hash >> 8) % 6);
+          pos = { x: p.x + Math.cos(ang) * rad, y: p.y + Math.sin(ang) * rad,
+                  depth: p.depth, parallax: p.parallax };
+        }
+        this._drawFleetMarker(ctx, pos, f);
+      }
+      ctx.restore();
+    }
+
+    _drawFleetRoute(ctx, fleet, fromId, toId, progress) {
+      const g = this.galaxy;
+      const fromS = g.systems[fromId], toS = g.systems[toId];
+      if (!fromS || !toS) return;
+      const pf = this.project(fromS.x, fromS.y, fromS.z || 0);
+      const pt = this.project(toS.x, toS.y, toS.z || 0);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(110, 220, 255, 0.55)';
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.moveTo(pf.x, pf.y);
+      ctx.lineTo(pt.x, pt.y);
+      ctx.stroke();
+      /* Tratto già percorso, più solido */
+      const midX = pf.x + (pt.x - pf.x) * progress;
+      const midY = pf.y + (pt.y - pf.y) * progress;
+      ctx.setLineDash([]);
+      ctx.strokeStyle = 'rgba(110, 220, 255, 0.85)';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(pf.x, pf.y);
+      ctx.lineTo(midX, midY);
+      ctx.stroke();
+      ctx.restore();
+
+      /* Rotta pianificata oltre il prossimo hop (waypoint successivi) */
+      if (Array.isArray(fleet.route) && fleet.route.length > fleet.routeIdx + 2) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(110, 220, 255, 0.30)';
+        ctx.lineWidth = 1.0;
+        ctx.setLineDash([3, 5]);
+        ctx.beginPath();
+        const pNext = this.project(toS.x, toS.y, toS.z || 0);
+        ctx.moveTo(pNext.x, pNext.y);
+        for (let k = fleet.routeIdx + 2; k < fleet.route.length; k++) {
+          const s = g.systems[fleet.route[k]];
+          if (!s) break;
+          const pp = this.project(s.x, s.y, s.z || 0);
+          ctx.lineTo(pp.x, pp.y);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    _drawFleetMarker(ctx, pos, fleet) {
+      const inTransit = fleet.location.status === 'in-transit';
+      const color = inTransit ? '#5cd0ff'
+                  : fleet.location.status === 'docked' ? '#7fe6a0'
+                  : '#ffae5c';   /* orbiting */
+      const r = 4.5;
+      /* corpo */
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      /* contorno */
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = 'rgba(8,12,22,0.85)';
+      ctx.stroke();
+      /* alone tenue */
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, r + 3, 0, Math.PI * 2);
+      ctx.strokeStyle = hexA(color, 0.35);
+      ctx.lineWidth = 1;
+      ctx.stroke();
     }
 
     _ring(ctx, p, radius, color, width) {

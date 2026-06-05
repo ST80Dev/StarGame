@@ -434,6 +434,57 @@
         'subisce <strong>−10% produzione</strong>, la nuova ha <strong>0 bonus</strong> finché non si stabilizza. ' +
         'Un cambio è quindi una scelta strategica seria.</p>' +
         '<p><strong>Ganci futuri:</strong> le capitali saranno bersagli politici/militari più ambiti (M09 difese, M11 diplomazia, M18 reputazione).</p>'
+    },
+
+    /* ==================================================================
+       M08 — Flotta base (decisione #42 + decisione #46 Fase B)
+       ================================================================== */
+    {
+      id: 'fleet-overview',
+      tag: 'M08 · Flotta',
+      title: 'Flotte e ordini',
+      body:
+        '<p>La <strong>flotta</strong> è un\'unità mobile composta da navi (entità individuali con <em>hp</em> e <em>usura</em>) ' +
+        'e dall\'equipaggio che le opera. La crei dalla <em>vista Flotta</em> partendo da una colonia, ' +
+        'le assegni navi dal counter dell\'Hangar e equipaggi dall\'Accademia, poi le dai ordini.</p>' +
+        '<p>Ordini disponibili: <strong>idle</strong> (ferma) · <strong>move</strong> (rotta verso un sistema) · ' +
+        '<strong>explore</strong> (rivela il sistema target e rientra) · <strong>patrol</strong> (A↔B continuo) · ' +
+        '<strong>return</strong> (rientra alla base) · <strong>rotta a tappe</strong> (multi-waypoint con sosta opzionale) · ' +
+        '<strong>pattuglia su N sistemi</strong> (loop ciclico).</p>' +
+        '<p>La flotta viaggia alla velocità della <strong>nave più lenta</strong>. M13 introdurrà i 3 tier di <em>iperguida</em> ' +
+        'che ridurranno drasticamente i tempi di salto iperspaziale.</p>'
+    },
+    {
+      id: 'fleet-classes',
+      tag: 'M08 · Classi',
+      title: 'Cinque classi navi',
+      body:
+        '<p>Trade-off di base: velocità ↔ corazza ↔ fuoco. Le classi pesanti richiedono Hangar di livello superiore.</p>' +
+        '<ul>' +
+          '<li><strong>✦ Esploratore</strong> — hp 20, fp 0, spd 1.1 · ricognizione, nessun combattimento.</li>' +
+          '<li><strong>∢ Caccia stellare</strong> — hp 30, fp 5, spd 1.2 · economico, anti-caccia.</li>' +
+          '<li><strong>➤ Intercettore</strong> — hp 45, fp 8, spd 1.4 · classe più veloce, eccellente in inseguimento.</li>' +
+          '<li><strong>◅ Corvetta</strong> — hp 80, fp 12, spd 1.0 · scorta multiruolo, equilibrata.</li>' +
+          '<li><strong>◣ Fregata</strong> — hp 160, fp 25, spd 0.85 · linea di battaglia, lenta ma cara da abbattere.</li>' +
+        '</ul>' +
+        '<p>Le grandi navi (incrociatore/dreadnought/ammiraglia) arriveranno con M15 + Bacino orbitale (M16).</p>'
+    },
+    {
+      id: 'fleet-orders',
+      tag: 'M08 · Rotte',
+      title: 'Rotte a tappe e pattuglie',
+      body:
+        '<p>Dalla finestra <strong>Ordini</strong> di una flotta puoi pianificare due ordini composti:</p>' +
+        '<ul>' +
+          '<li><strong>Rotta a tappe (move-route)</strong>: una catena di sistemi visitati in sequenza. ' +
+            'Per ogni tappa puoi impostare una <em>sosta orbitale</em> in Ι. Opzioni: <em>Esplora ogni tappa</em> ' +
+            '(rivela ogni sistema all\'arrivo) · <em>Rientra alla base alla fine</em>.</li>' +
+          '<li><strong>Pattuglia su N sistemi (patrol-loop)</strong>: come <em>patrol</em>, ma su 2+ nodi in loop. ' +
+            'La pattuglia non si ferma — perfetta per presidiare un confine.</li>' +
+        '</ul>' +
+        '<p>Senza consumo né upkeep, una flotta può <strong>vagare a lungo</strong> tra i sistemi favorevoli. ' +
+        'I rifugi presso popoli terzi (recupero/rifornimento) arriveranno con <strong>M10 Civiltà AI</strong> + ' +
+        '<strong>M11 Diplomazia</strong> (diritto di passaggio/d\'attracco) + <strong>M16 Stazioni orbitali</strong>.</p>'
     }
   ];
 
