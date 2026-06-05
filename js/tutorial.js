@@ -37,7 +37,7 @@
   const LESSONS = [
     {
       id: 'welcome',
-      tag: 'M01',
+      tag: 'Inizio',
       title: 'Benvenuto in Orion Empires',
       body:
         '<p>4X strategico spaziale a pannelli. Non ci sono turni: il tempo scorre in <strong>Impulsi (I)</strong> ' +
@@ -49,7 +49,7 @@
     },
     {
       id: 'galaxy',
-      tag: 'M02',
+      tag: 'Galassia',
       title: 'Mappa galattica',
       body:
         '<p>La galassia è gerarchica: <strong>Regione → Sistema → Pianeta</strong>. Al massimo zoom vedi le regioni ' +
@@ -60,7 +60,7 @@
     },
     {
       id: 'system',
-      tag: 'M03',
+      tag: 'Sistema',
       title: 'Sistema stellare',
       body:
         '<p>Ogni sistema ha 4-7 corpi celesti — talvolta con lune o <strong>anomalie</strong> (campi di detriti, ' +
@@ -72,7 +72,7 @@
     },
     {
       id: 'planet',
-      tag: 'M04',
+      tag: 'Pianeta',
       title: 'Vista pianeta',
       body:
         '<p>Ogni corpo ha <strong>potenziali risorse</strong> (metalli, energia, cibo, acqua) e un numero di ' +
@@ -82,7 +82,7 @@
     },
     {
       id: 'build',
-      tag: 'M04',
+      tag: 'Strutture',
       title: 'Strutture, slot ed espansione',
       body:
         '<p>Ogni struttura occupa <strong>slot</strong> e si costruisce in <strong>Impulsi</strong> (non è istantanea: ' +
@@ -97,7 +97,7 @@
     },
     {
       id: 'advance',
-      tag: 'M05',
+      tag: 'Tempo',
       title: 'Calendario del Faro · scorrere del tempo',
       body:
         '<p>Il tempo è ancorato a una pulsar (il <em>Faro di Orion</em>) e si misura su 4 unità:</p>' +
@@ -117,7 +117,7 @@
     },
     {
       id: 'scarcity',
-      tag: 'M05',
+      tag: 'Tempo',
       title: 'Carenza risorse',
       body:
         '<p>Con stock ≤ 20 e netto negativo la colonia entra in <strong>allerta</strong> (−10% produzione globale); ' +
@@ -127,7 +127,7 @@
     },
     {
       id: 'specialization',
-      tag: 'M04',
+      tag: 'Strutture',
       title: 'Specializzazione planetaria',
       body:
         '<p>Un pianeta ha pochi <strong>slot</strong> (5-9 a seconda del tipo): non puoi metterci tutto. ' +
@@ -135,19 +135,19 @@
         '<p>Ogni colonia ha la <strong>propria contabilità</strong> di risorse: costruisce e si mantiene con ciò che ' +
         'produce in loco. L\'HUD in alto mostra il <strong>totale dell\'impero</strong> come quadro d\'insieme, ma per ' +
         'spostare risorse tra colonie (es. portare cibo a un mondo molto popoloso) serviranno le ' +
-        '<strong>rotte commerciali</strong> (M12).</p>' +
+        '<strong>rotte commerciali</strong> (in arrivo).</p>' +
         '<p><strong>Esempi di vocazione:</strong></p>' +
         '<ul>' +
           '<li><strong>Pianeta natale</strong> (terrestre, 8 slot) → polivalente: 4 estrattive base + abitativo + ospedale + ricerca.</li>' +
           '<li><strong>Mineraria</strong> (vulcanico/cintura) → 3-4 miniere + 1 fonderia (+40%/lvl) + 1 centrale. Pompa metalli.</li>' +
           '<li><strong>Agricola</strong> (forestale/oceanico) → 3-4 fattorie + 2 impianti idrici + abitativo. Pompa cibo e acqua.</li>' +
-          '<li><strong>Militare</strong> (terrestre) → hangar + accademia + 4 estrattive base. Costruisce flotte (M08+).</li>' +
+          '<li><strong>Militare</strong> (terrestre) → hangar + accademia + 4 estrattive base. Costruirà flotte (in arrivo).</li>' +
         '</ul>' +
         '<p>Le strutture <strong>moltiplicative</strong> (fonderia, raffineria) hanno senso solo se hai 2-3 strutture base della stessa categoria — su un pianeta polivalente con 1 sola miniera, la fonderia spreca slot.</p>'
     },
     {
       id: 'population',
-      tag: '§9',
+      tag: 'Popolazione',
       title: 'Popolazione e capacità di carico',
       body:
         '<p>La popolazione è in <strong>unità</strong> (mostrate come abitanti reali) e cresce <strong>lentamente, di lungo ' +
@@ -158,11 +158,11 @@
         'scheda Popolazione: <strong>cosa è calato?</strong> Adatta la colonia di conseguenza e la crescita riprende.</p>' +
         '<p>I mondi grandi e ospitali possono arrivare a <strong>miliardi</strong> di abitanti, ma è un ' +
         '<strong>obiettivo di lungo periodo</strong>: richiede una colonia molto sviluppata e, per i mondi più affamati ' +
-        '(deserti, lune), rifornimenti via rotte commerciali (M12).</p>'
+        '(deserti, lune), rifornimenti via rotte commerciali (in arrivo).</p>'
     },
     {
       id: 'advanced',
-      tag: 'M04',
+      tag: 'Pianeta',
       title: 'Risorse avanzate',
       body:
         '<p>Oltre alle 4 risorse base, ogni corpo può ospitare 0-3 <strong>risorse avanzate</strong> ' +
@@ -174,7 +174,7 @@
     },
     {
       id: 'save',
-      tag: 'M06',
+      tag: 'Salvataggi',
       title: 'Salvataggi e trasferimento',
       body:
         '<p>L\'<strong>autosave</strong> rotante si aggiorna dopo ogni azione importante (avanzamento, costruzione, ' +
@@ -192,16 +192,16 @@
        al primo "Costruisci" di quel tipo. Id stabile: 'struct:<id>'.
        ================================================================ */
     {
-      id: 'struct:miniera', tag: 'M04 · ⛏', title: 'Miniera',
+      id: 'struct:miniera', tag: 'Strutture · ⛏', title: 'Miniera',
       body:
-        '<p>Estrae <strong>metalli</strong>: ~4/I al livello 1, modulata dal <em>potenziale §7.1</em> del corpo ' +
+        '<p>Estrae <strong>metalli</strong>: ~4/I al livello 1, modulata dal <em>potenziale</em> del corpo ' +
         '(potenziale 60 = resa piena; 30 = metà). Upkeep 1 energia/I.</p>' +
         '<p><strong>Sinergia:</strong> la <em>Fonderia</em> moltiplica la resa di tutte le miniere del pianeta ' +
         'di +40% per livello (×1.40 / ×1.80 / ×2.20). Conviene avere almeno 2 miniere prima della fonderia.</p>' +
         '<p><strong>Attenzione:</strong> consuma energia. Senza centrali sufficienti vai in carenza globale (−10/−30%).</p>'
     },
     {
-      id: 'struct:centrale-solare', tag: 'M04 · ⚡', title: 'Centrale solare',
+      id: 'struct:centrale-solare', tag: 'Strutture · ⚡', title: 'Centrale solare',
       body:
         '<p>Produce <strong>energia</strong>: ~4/I al livello 1, modulata dal potenziale en. Nessun upkeep — è la struttura ' +
         '"pulita" dell\'economia.</p>' +
@@ -210,23 +210,23 @@
         '<p><strong>Concatenazione:</strong> energia è risorsa-pilastro. Tutte le altre strutture la consumano: tienila in surplus.</p>'
     },
     {
-      id: 'struct:impianto-idrico', tag: 'M04 · ≈', title: 'Impianto idrico',
+      id: 'struct:impianto-idrico', tag: 'Strutture · ≈', title: 'Impianto idrico',
       body:
         '<p>Produce <strong>acqua</strong>: ~4/I al livello 1, modulata dal potenziale water. Upkeep 1 en/I.</p>' +
         '<p><strong>Concatenazione critica:</strong> la <em>Fattoria</em> consuma 1 acqua/I, l\'<em>Ospedale</em> 0 ma ne fa indirettamente bisogno via pop, ' +
-        'e tutte le abitazioni richiedono 1 acqua/I. Se l\'acqua va in <strong>crit</strong> (zero stock), parte il timer §7.4: ' +
+        'e tutte le abitazioni richiedono 1 acqua/I. Se l\'acqua va in <strong>crit</strong> (zero stock), parte un timer di tolleranza: ' +
         'dopo 30 I consecutivi di sete la popolazione cala 1 unità ogni 30 I.</p>'
     },
     {
-      id: 'struct:fattoria', tag: 'M04 · ❖', title: 'Fattoria idroponica',
+      id: 'struct:fattoria', tag: 'Strutture · ❖', title: 'Fattoria idroponica',
       body:
         '<p>Produce <strong>cibo</strong>: ~4/I al livello 1, modulata dal potenziale food. Upkeep 1 en + <strong>1 acqua/I</strong>.</p>' +
         '<p><strong>Concatenazione:</strong> dipende dall\'acqua. Se l\'impianto idrico è in difficoltà, le fattorie soffrono per prime ' +
         '→ cala il cibo → carenza popolazione. Pianta più impianti idrici prima delle fattorie.</p>' +
-        '<p><strong>Salute pop §9.3:</strong> cibo + acqua sono i due requisiti vitali. Cibo a zero per 30 I consecutivi → −1 pop ogni 30 I (recovery-friendly).</p>'
+        '<p><strong>Salute della popolazione:</strong> cibo + acqua sono i due requisiti vitali. Cibo a zero per 30 I consecutivi → −1 pop ogni 30 I (recovery-friendly).</p>'
     },
     {
-      id: 'struct:fonderia', tag: 'M04 · 🜂', title: 'Fonderia',
+      id: 'struct:fonderia', tag: 'Strutture · 🜂', title: 'Fonderia',
       body:
         '<p><strong>Non produce direttamente:</strong> moltiplica tutte le miniere del pianeta di <strong>+40% per livello</strong> ' +
         '(lvl 1 → ×1.40, lvl 3 → ×2.20). Upkeep 3 en/I.</p>' +
@@ -235,7 +235,7 @@
         '<p><strong>Prerequisito:</strong> almeno una miniera già costruita sul pianeta.</p>'
     },
     {
-      id: 'struct:raffineria', tag: 'M04 · ⚛', title: 'Raffineria energetica',
+      id: 'struct:raffineria', tag: 'Strutture · ⚛', title: 'Raffineria energetica',
       body:
         '<p><strong>Effetto doppio:</strong> produce 2 en/I diretti <em>e</em> moltiplica tutte le centrali del pianeta di ' +
         '<strong>+40% per livello</strong>. Upkeep 2 acqua/I (attenzione alla concatenazione idrica).</p>' +
@@ -244,51 +244,51 @@
         '<p><strong>Prerequisito:</strong> almeno una centrale solare già costruita.</p>'
     },
     {
-      id: 'struct:laboratorio', tag: 'M04 · ⌬', title: 'Laboratorio',
+      id: 'struct:laboratorio', tag: 'Strutture · ⌬', title: 'Laboratorio',
       body:
         '<p>Produce <strong>ricerca</strong> distribuita: 3/I a livello 1. Upkeep 2 en/I.</p>' +
-        '<p><strong>Gancio M13:</strong> oggi i punti ricerca si accumulano ma l\'albero tecnologico vero arriverà col modulo M13. ' +
-        'Costruire laboratori adesso è un investimento — quando M13 sarà attivo, i tech che richiedono <code>tech:&lt;id&gt;</code> si sbloccheranno.</p>' +
-        '<p><strong>Pista vittoria:</strong> contribuisce all\'<em>Ascensione tech</em> (#23).</p>'
+        '<p>Oggi i punti ricerca si accumulano ma l\'albero tecnologico vero arriverà più avanti nello sviluppo. ' +
+        'Costruire laboratori adesso è un investimento — quando la ricerca sarà attiva, le tecnologie si sbloccheranno via via.</p>' +
+        '<p><strong>Pista vittoria:</strong> contribuisce all\'<em>Ascensione tech</em>.</p>'
     },
     {
-      id: 'struct:osservatorio', tag: 'M04 · ◎', title: 'Osservatorio planetario',
+      id: 'struct:osservatorio', tag: 'Strutture · ◎', title: 'Osservatorio planetario',
       body:
-        '<p>Scansiona il corpo per <strong>rivelare le identità delle risorse avanzate §7.2</strong> (cristalli, esotici, biomassa, ' +
+        '<p>Scansiona il corpo per <strong>rivelare le identità delle risorse avanzate</strong> (cristalli, esotici, biomassa, ' +
         'gas nobili, dati, reliquie). Visibile il numero da subito; identità mascherate fino a fine scansione.</p>' +
         '<p><strong>Timeline:</strong> 14 I per costruirlo + ~10 I di scansione effettiva. Livello 2 dimezza il tempo di scansione.</p>' +
         '<p><strong>Prerequisito implicito</strong> per l\'<em>Impianto esotico</em>: senza scansione completata non si conosce ' +
         'la risorsa rara da sfruttare.</p>'
     },
     {
-      id: 'struct:cantiere-navale', tag: 'M04 · ▱', title: 'Hangar di costruzione',
+      id: 'struct:cantiere-navale', tag: 'Strutture · ▱', title: 'Hangar di costruzione',
       body:
-        '<p><strong>Gancio M08+:</strong> serve a costruire astronavi, grandi astronavi e stazioni. Oggi non produce nulla di visibile, ' +
+        '<p>Servirà a costruire astronavi, grandi astronavi e stazioni. Oggi non produce nulla di visibile, ' +
         'ma <strong>occupa 2 slot</strong> (struttura grossa) e ha upkeep alto (4 en + 1 met/I).</p>' +
         '<p><strong>Pianificazione:</strong> non costruirlo sul pianeta natale se hai solo 7-8 slot — meglio dedicarlo ' +
-        'a una colonia "militare" specializzata quando arriverà M08.</p>' +
-        '<p><strong>Concatenazione:</strong> l\'<em>Accademia militare</em> (M14) e questa formano insieme il polo militare.</p>'
+        'a una colonia "militare" specializzata.</p>' +
+        '<p><strong>Concatenazione:</strong> l\'<em>Accademia militare</em> e questa formano insieme il polo militare.</p>'
     },
     {
-      id: 'struct:accademia-militare', tag: 'M04 · ⚔', title: 'Accademia militare',
+      id: 'struct:accademia-militare', tag: 'Strutture · ⚔', title: 'Accademia militare',
       body:
-        '<p><strong>Gancio M14:</strong> forma quadri militari, ufficiali e veterani (figure speciali). Oggi nessun effetto visibile. ' +
+        '<p>Forma quadri militari, ufficiali e veterani (figure speciali). Oggi nessun effetto visibile. ' +
         'Upkeep moderato (2 en + 1 food/I).</p>' +
         '<p><strong>Sinergia futura:</strong> con l\'<em>Hangar di costruzione</em> alimenta una colonia a vocazione militare. ' +
-        'In partite a vocazione <em>Tiranno</em> (#23) sarà struttura-chiave.</p>'
+        'In partite a vocazione <em>Tiranno</em> sarà struttura-chiave.</p>'
     },
     {
-      id: 'struct:centro-abitativo', tag: 'M04 · ⌂', title: 'Centro abitativo',
+      id: 'struct:centro-abitativo', tag: 'Strutture · ⌂', title: 'Centro abitativo',
       body:
         '<p>Aumenta la <strong>capacità di popolazione (popCap)</strong> di +2 per livello e dà <strong>+0.05 morale</strong> ' +
         '(cap 1.35, il pianeta base parte già a 1.15). Upkeep 1 en + 1 food + 1 water /I.</p>' +
-        '<p><strong>Morale:</strong> moltiplica la crescita pop §9.3 (base 0.018 unità/I × morale). Più centri → ' +
+        '<p><strong>Morale:</strong> moltiplica la crescita della popolazione (base 0.018 unità/I × morale). Più centri → ' +
         'più tetto demografico e crescita più rapida, ma anche più consumi vitali.</p>' +
         '<p><strong>Concatenazione critica:</strong> ogni centro consuma cibo + acqua. Non costruire centri se le filiere ' +
         'cibo/acqua non sono solide.</p>'
     },
     {
-      id: 'struct:ospedale', tag: 'M04 · ✚', title: 'Ospedale',
+      id: 'struct:ospedale', tag: 'Strutture · ✚', title: 'Ospedale',
       body:
         '<p><strong>Accelera la crescita pop</strong>: ×1.6 (cioè +60%) sulla velocità base di 0.018 unità/I × morale.</p>' +
         '<p><strong>Esempio concreto:</strong> da popCap 3 a popCap 15 senza ospedale ≈ 500 I (5 Orbite); con ospedale ≈ 310 I. ' +
@@ -297,22 +297,22 @@
         '(1 unità ogni 30 I, recovery-friendly).</p>'
     },
     {
-      id: 'struct:mercato', tag: 'M04 · ⇄', title: 'Mercato',
+      id: 'struct:mercato', tag: 'Strutture · ⇄', title: 'Mercato',
       body:
-        '<p><strong>Gancio M12:</strong> hub per le rotte commerciali interne all\'impero e per le <em>valute regionali</em> ' +
-        'previste in §13 (decisione #13 — ogni regione ha una sua moneta a tema).</p>' +
-        '<p>Oggi non produce nulla visibile. Costruirlo è un investimento per quando M12 attiverà gli scambi tra colonie ' +
+        '<p>Hub per le rotte commerciali interne all\'impero e per le <em>valute regionali</em> ' +
+        '(ogni regione avrà una sua moneta a tema).</p>' +
+        '<p>Oggi non produce nulla visibile. Costruirlo è un investimento per quando saranno attivi gli scambi tra colonie ' +
         '(produzione specializzata + trasferimento risorse).</p>' +
-        '<p><strong>Pista vittoria:</strong> contribuirà all\'<em>Egemone economico</em> (#23).</p>'
+        '<p><strong>Pista vittoria:</strong> contribuirà all\'<em>Egemone economico</em>.</p>'
     },
     {
-      id: 'struct:impianto-esotico', tag: 'M04 · ✦', title: 'Impianto esotico',
+      id: 'struct:impianto-esotico', tag: 'Strutture · ✦', title: 'Impianto esotico',
       body:
-        '<p>Struttura <strong>avanzata</strong>: sfrutta una risorsa avanzata §7.2 per dare <strong>moltiplicatori globali</strong> ' +
+        '<p>Struttura <strong>avanzata</strong>: sfrutta una risorsa avanzata per dare <strong>moltiplicatori globali</strong> ' +
         'a tutta la civiltà (effetto cumulativo tra colonie). Upkeep 5 en/I, occupa 2 slot.</p>' +
         '<p><strong>Doppio prerequisito:</strong> (1) <em>scansione completata</em> sul pianeta (osservatorio), ' +
-        '(2) tech <code>tech:esotici</code> sbloccato (gancio M13 — oggi resta locked).</p>' +
-        '<p><strong>Pista vittoria:</strong> chiave per l\'<em>Ascensione tech</em>; è la struttura più "endgame" del catalogo M04.</p>'
+        '(2) tecnologia degli esotici sbloccata (oggi resta locked, in arrivo).</p>' +
+        '<p><strong>Pista vittoria:</strong> chiave per l\'<em>Ascensione tech</em>; è la struttura più "endgame" del catalogo.</p>'
     },
 
     /* ================================================================
@@ -321,20 +321,20 @@
          expedition-launch — al primo lancio riuscito
        ================================================================ */
     {
-      id: 'exploration', tag: 'M07 · ✦', title: 'Esplorare la galassia',
+      id: 'exploration', tag: 'Esplorazione · ✦', title: 'Esplorare la galassia',
       body:
         '<p>I sistemi non noti vivono in <strong>nebbia di guerra</strong>: <em>UNKNOWN → DETECTED → EXPLORED</em>. ' +
         'Per scoprire l\'interno di un sistema rilevato (o ignorato) ti serve una <strong>spedizione</strong>.</p>' +
         '<p>Una spedizione consuma <strong>1 scafo esploratore</strong> (Hangar di costruzione) + ' +
         '<strong>1 equipaggio esploratore</strong> (Accademia militare). Gli equipaggi accumulano <strong>xp</strong> ad ogni rientro: ' +
         'più xp = viaggi più rapidi e meno incidenti (cap −15% durata, −20% incidenti).</p>' +
-        '<p>Il <em>pericolo §5.3</em> del sistema target modula la durata del salto iperspaziale (40-80 Ι base) ' +
+        '<p>Il <em>pericolo</em> del sistema target modula la durata del salto iperspaziale (40-80 Ι base) ' +
         'e la probabilità di incidente (5% sicuro → 30% letale). ' +
-        '<strong>Recovery-friendly</strong> (#22): nel peggiore dei casi perdi lo scafo, l\'equipaggio si salva sempre.</p>' +
-        '<p>I tre tier di <em>iperguida</em> (M13, decisione #32) ridurranno drasticamente le durate (×3, ×8, ×20).</p>'
+        '<strong>Recovery-friendly</strong>: nel peggiore dei casi perdi lo scafo, l\'equipaggio si salva sempre.</p>' +
+        '<p>I tre tier di <em>iperguida</em> (in arrivo) ridurranno drasticamente le durate (×3, ×8, ×20).</p>'
     },
     {
-      id: 'expedition-launch', tag: 'M07 · ✦', title: 'Primo salto iperspaziale',
+      id: 'expedition-launch', tag: 'Esplorazione · ✦', title: 'Primo salto iperspaziale',
       body:
         '<p>La spedizione viaggia verso il sistema target, rivela il suo interno (passa a EXPLORED, ' +
         'i suoi vicini ignoti diventano DETECTED), poi rientra alla colonia d\'origine.</p>' +
@@ -342,8 +342,7 @@
         '(scafo perso, equipaggio in fuga — solo su pericolo > 50), scoperta fortuita (raro, positivo).</p>' +
         '<p><strong>Strategia:</strong> tieni gli equipaggi vivi e mandali in missione ripetutamente per costruire ' +
         '<em>veterani</em>. Uno scafo logoro al 100% va in pensione: niente fail-state, costruisci il prossimo.</p>' +
-        '<p><strong>Ganci futuri:</strong> M08 introdurrà classi navi vere (caccia, fregata, incrociatore — ' +
-        'decisione #34); M13 attiverà l\'iperguida.</p>'
+        '<p><strong>Ganci futuri:</strong> nuove classi di navi (caccia, fregata, incrociatore) e l\'iperguida sono in arrivo.</p>'
     }
   ];
 
@@ -520,7 +519,7 @@
     host.innerHTML =
       '<div class="tutorial-card tutorial-card--index" role="document">' +
         '<header class="tutorial-card__head">' +
-          '<span class="tutorial-card__tag">M06.6</span>' +
+          '<span class="tutorial-card__tag">Tutorial</span>' +
           '<h2 class="tutorial-card__title">Tutorial — indice</h2>' +
           '<button class="btn btn--mini tutorial-card__close" data-action="tut-close" type="button" aria-label="Chiudi">✕</button>' +
         '</header>' +
