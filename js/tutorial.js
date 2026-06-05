@@ -128,9 +128,10 @@
       body:
         '<p>Un pianeta ha pochi <strong>slot</strong> (5-9 a seconda del tipo): non puoi metterci tutto. ' +
         'L\'idea del 4X è <strong>specializzare</strong> ogni colonia su una vocazione.</p>' +
-        '<p>Le 4 risorse base in alto nell\'HUD sono il <strong>pool comune di tutto l\'impero</strong>: ' +
-        'sommano automaticamente quello che producono tutte le tue colonie. ' +
-        'Una colonia mineraria contribuisce ai metalli globali, una agricola al cibo — senza bisogno di trasporti manuali.</p>' +
+        '<p>Ogni colonia ha la <strong>propria contabilità</strong> di risorse: costruisce e si mantiene con ciò che ' +
+        'produce in loco. L\'HUD in alto mostra il <strong>totale dell\'impero</strong> come quadro d\'insieme, ma per ' +
+        'spostare risorse tra colonie (es. portare cibo a un mondo molto popoloso) serviranno le ' +
+        '<strong>rotte commerciali</strong> (M12).</p>' +
         '<p><strong>Esempi di vocazione:</strong></p>' +
         '<ul>' +
           '<li><strong>Pianeta natale</strong> (terrestre, 8 slot) → polivalente: 4 estrattive base + abitativo + ospedale + ricerca.</li>' +
@@ -139,6 +140,21 @@
           '<li><strong>Militare</strong> (terrestre) → hangar + accademia + 4 estrattive base. Costruisce flotte (M08+).</li>' +
         '</ul>' +
         '<p>Le strutture <strong>moltiplicative</strong> (fonderia, raffineria) hanno senso solo se hai 2-3 strutture base della stessa categoria — su un pianeta polivalente con 1 sola miniera, la fonderia spreca slot.</p>'
+    },
+    {
+      id: 'population',
+      tag: '§9',
+      title: 'Popolazione e capacità di carico',
+      body:
+        '<p>La popolazione è in <strong>unità</strong> (mostrate come abitanti reali). Ogni unità <strong>consuma cibo e ' +
+        'acqua</strong>: la colonia cresce finché la sua <strong>produzione locale</strong> supera il consumo, poi si ferma ' +
+        'in <strong>plateau</strong> — un equilibrio stabile, <strong>senza carestia</strong>.</p>' +
+        '<p>Per alzare il tetto costruisci più <strong>fattorie</strong> e <strong>impianti idrici</strong> (conta il più ' +
+        'scarso dei due — legge del minimo). Ogni livello in più costa progressivamente più tempo: <strong>salire è sempre ' +
+        'più lento</strong>, anche con risorse in abbondanza.</p>' +
+        '<p>I mondi grandi e ospitali possono arrivare a <strong>miliardi</strong> di abitanti, ma la sola agricoltura ' +
+        'locale non basta: saturarli del tutto è un <strong>obiettivo di lungo periodo</strong> che richiederà import via ' +
+        'rotte commerciali (M12). I mondi aridi e le lune restano piccoli finché non li rifornisci.</p>'
     },
     {
       id: 'advanced',
