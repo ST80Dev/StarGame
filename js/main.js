@@ -1184,7 +1184,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
           '<p class="settle-banner__title">⏳ Insediamento in corso</p>' +
           '<p class="settle-banner__hint">Produzione al 50% · +50% velocità prima struttura · crescita pop bloccata.</p>' +
           '<dl class="sysinfo__list">' +
-            row('Restanti', remain + ' I') +
+            row('Restanti', remain + ' ' + iU()) +
             row('Avanzamento', pct + '%') +
           '</dl>' +
           '<div class="progress-bar"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
@@ -1219,7 +1219,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
         '<p class="sysinfo__home">◌ Spedizione coloniale in viaggio</p>' +
         '<dl class="sysinfo__list">' +
           row('Partenza',  colony.colonizing.startedAt || '—') +
-          row('Restanti', remain + ' I') +
+          row('Restanti', remain + ' ' + iU()) +
           row('Avanzamento', pct + '%') +
         '</dl>' +
         '<div class="progress-bar"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
@@ -1358,7 +1358,7 @@ function tryColonize(planet) {
     startedAt: ORION.time.currentDS(g),
     duration: cost.impulsi
   };
-  pushChronicle(ORION.time.currentDS(g) + ' — Spedizione coloniale in viaggio verso <strong>' + planet.name + '</strong>' + bodyTagHtml(planet.systemId) + ' (' + cost.impulsi + ' I).', 'planet');
+  pushChronicle(ORION.time.currentDS(g) + ' — Spedizione coloniale in viaggio verso <strong>' + planet.name + '</strong>' + bodyTagHtml(planet.systemId) + ' (' + cost.impulsi + ' ' + iU() + ').', 'planet');
   if (ORION.tutorial) ORION.tutorial.fire('specialization');
   persistGame(g);
   updateGlobalResourceHud();
@@ -1414,7 +1414,7 @@ function deltaBalanceHtml(delta) {
     const sign = v > 0 ? '+' : '−';
     const val = Math.round(Math.abs(v) * 100) / 100;
     const cls = v > 0 ? 'struct-item__d--pos' : 'struct-item__d--neg';
-    parts.push('<span class="' + cls + '">' + sign + val + ' ' + resGlyph(k) + '</span>');
+    parts.push('<span class="' + cls + '">' + sign + val + ' ' + resIcon(k) + '</span>');
   });
   if (!parts.length) return '';
   return '<span class="struct-item__delta" title="Saldo netto per Impulso se costruita">' + parts.join(' ') + '</span>';
@@ -1469,7 +1469,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
       html += '<li class="struct-item is-queue' + (isDemo ? ' is-demolish' : '') + '">' +
         '<span class="struct-item__glyph">' + def.glyph + '</span>' +
         '<div class="struct-item__main">' +
-          '<div class="struct-item__name">' + label + ' <span class="struct-item__cat">' + remain + ' / ' + total + ' I</span></div>' +
+          '<div class="struct-item__name">' + label + ' <span class="struct-item__cat">' + remain + ' / ' + total + '</span> ' + iU() + '</div>' +
           '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
         '</div>' +
         '<button class="btn btn--mini struct-item__cancel" data-cancel="' + idx + '" type="button" title="' + cancelTitle + '">×</button>' +
@@ -1489,7 +1489,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
       '<div class="struct-item is-queue">' +
         '<span class="struct-item__glyph">◎</span>' +
         '<div class="struct-item__main">' +
-          '<div class="struct-item__name">Mappatura risorse avanzate <span class="struct-item__cat">' + remain + ' I</span></div>' +
+          '<div class="struct-item__name">Mappatura risorse avanzate <span class="struct-item__cat">' + remain + '</span> ' + iU() + '</div>' +
           '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
         '</div>' +
       '</div>';
@@ -1529,14 +1529,14 @@ function renderPlanetStruttureTab(host, planet, colony) {
           const up = ORION.planet.canBuild(colony, planet, def.id);
           const nextCost = S.stepCost(def, lvl + 1);
           const nextTime = S.stepTime(def, lvl + 1);
-          const costStr = Object.keys(nextCost).map(function (k) { return '<span class="struct-item__cost-item">' + resGlyph(k) + nextCost[k] + '</span>'; }).join(' ');
+          const costStr = Object.keys(nextCost).map(function (k) { return '<span class="struct-item__cost-item">' + resIcon(k) + nextCost[k] + '</span>'; }).join(' ');
           const balance = deltaBalanceHtml(marginalNet(colony, planet, def.id));
           if (up.ok) {
             upBtn = '<button class="btn btn--mini btn--icon" data-build="' + def.id + '" type="button" title="Espandi a L' + (lvl + 1) + ' (+' + (def.slots || 1) + ' slot)" aria-label="Espandi">+</button>';
           } else {
             upBtn = '<span class="struct-item__locked struct-item__locked--icon" title="' + escapeHtml(up.reason) + '" aria-label="Espandi (bloccato)">+</span>';
           }
-          timeChip = ' <span class="struct-item__cat">' + nextTime + ' I</span>';
+          timeChip = ' <span class="struct-item__cat">' + nextTime + '</span> ' + iU();
           infoLine = '<div class="struct-item__cost"><span class="struct-item__cost-label">L' + (lvl + 1) + '</span> ' + costStr + (balance ? ' ' + balance : '') + '</div>';
         }
         html += '<li class="struct-item is-built">' +
@@ -1552,7 +1552,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
         // === NON COSTRUITA ===
         const check = ORION.planet.canBuild(colony, planet, def.id);
         const cost = def.cost || {};
-        const costStr = Object.keys(cost).map(function (k) { return '<span class="struct-item__cost-item">' + resGlyph(k) + cost[k] + '</span>'; }).join(' ');
+        const costStr = Object.keys(cost).map(function (k) { return '<span class="struct-item__cost-item">' + resIcon(k) + cost[k] + '</span>'; }).join(' ');
         const balance = deltaBalanceHtml(marginalNet(colony, planet, def.id));
         let statusCell;
         let extraClass = check.ok ? '' : ' is-locked';
@@ -1562,13 +1562,13 @@ function renderPlanetStruttureTab(host, planet, colony) {
           const qEntry = colony.queue.find(function (q) { return q.id === def.id; });
           const total = def.time || 1;
           const remain = qEntry ? Math.max(0, qEntry.duration | 0) : total;
-          statusCell = '<span class="struct-item__locked is-building" title="In costruzione (' + remain + ' / ' + total + ' I)">▶ In costruzione · ' + remain + '/' + total + ' I</span>';
+          statusCell = '<span class="struct-item__locked is-building" title="In costruzione (' + remain + ' / ' + total + ' Ι)">▶ In costruzione · ' + remain + '/' + total + ' ' + iU() + '</span>';
           extraClass += ' is-building';
         } else if (check.code === 'demolishing') {
           const qEntry = colony.queue.find(function (q) { return q.id === def.id; });
           const total = Math.max(1, Math.round((def.time || 2) / 2));
           const remain = qEntry ? Math.max(0, qEntry.duration | 0) : total;
-          statusCell = '<span class="struct-item__locked is-demolish" title="In smantellamento (' + remain + ' / ' + total + ' I)">🛠 Smantellamento · ' + remain + '/' + total + ' I</span>';
+          statusCell = '<span class="struct-item__locked is-demolish" title="In smantellamento (' + remain + ' / ' + total + ' Ι)">🛠 Smantellamento · ' + remain + '/' + total + ' ' + iU() + '</span>';
           extraClass += ' is-building';
         } else if (check.code === 'busy') {
           statusCell = '<span class="struct-item__locked is-busy" title="' + check.reason + '">⏳ Occupato</span>';
@@ -1578,7 +1578,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
         html += '<li class="struct-item' + extraClass + '" title="' + def.desc + '">' +
           '<span class="struct-item__glyph">' + def.glyph + '</span>' +
           '<div class="struct-item__main">' +
-            '<div class="struct-item__name">' + def.name + ' <span class="struct-item__cat">' + def.time + ' I</span></div>' +
+            '<div class="struct-item__name">' + def.name + ' <span class="struct-item__cat">' + def.time + '</span> ' + iU() + '</div>' +
             '<div class="struct-item__cost">' + costStr + (balance ? ' ' + balance : '') + '</div>' +
           '</div>' +
           '<button class="btn btn--mini struct-item__info" data-info="' + def.id + '" type="button" title="Cosa fa, bonus/malus, concatenazioni" aria-label="Informazioni su ' + def.name + '">i</button>' +
@@ -1623,7 +1623,7 @@ function tryBuild(id) {
   const r = ORION.planet.startBuild(colony, planet, id, ORION.time.currentDS(g));
   if (!r.ok) { console.info('Costruzione rifiutata:', r.reason); return; }
   const def = ORION.structures.get(id);
-  pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione: <strong>' + def.name + '</strong> su ' + planet.name + bodyTagHtml(planet.systemId) + ' (' + def.time + ' I).', 'planet');
+  pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione: <strong>' + def.name + '</strong> su ' + planet.name + bodyTagHtml(planet.systemId) + ' (' + def.time + ' ' + iU() + ').', 'planet');
   /* M06.7: alla prima costruzione di un certo tipo, mostra la scheda
      tutorial dedicata (rispetta isEnabled + isSeen — niente spam). */
   if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('struct:' + id);
@@ -1706,12 +1706,32 @@ function renderPlanetForzeTab(host, planet, colony) {
    dalla tab Forze (M07.x).
    ===================================================================== */
 /* Etichetta breve e leggibile per un equipaggio a partire dal suo id
-   tecnico (`crew-<impulso>-<counter>`) → "Equipaggio 7". Fallback: id grezzo. */
+   tecnico. Formato nuovo: `crew-<seq>` (counter persistente, vedi
+   time.nextCrewId) → "Equipaggio 7". Formato legacy: `crew-<imp>-<n>`
+   → estrae l'ultimo gruppo numerico (migrato a lazy da
+   migrateLegacyCrewIds). Fallback: id grezzo. */
 function crewShortLabel(id) {
   if (!id) return 'Equipaggio';
   const m = /-(\d+)$/.exec(String(id));
   return m ? ('Equipaggio ' + m[1]) : String(id);
 }
+
+/* Helper HTML per le sigle del Calendario del Faro (decisione #30).
+   La sigla Ι (iota greca) è visivamente indistinguibile dalla I latina
+   maiuscola e dal numerale romano nei font sans → confonde la lettura
+   delle durate ("10 I" sembra "decimo I" o un divisorio). Le wrappiamo
+   in un piccolo badge ambra (.ds-unit) che le rende immediatamente
+   identificabili come unità temporali, coerentemente col tema
+   NASA/Visions (decisione #8). Restano i caratteri greci sotto perché
+   sono il "linguaggio del Faro" della decisione #30 — il CSS le rende
+   distintive senza cambiare la grammatica. */
+function dsUnit(letter) {
+  return '<span class="ds-unit" aria-hidden="true">' + letter + '</span>';
+}
+function iU() { return dsUnit('Ι'); }      /* Impulso */
+function kU() { return dsUnit('Κ'); }      /* Ciclo di nutazione */
+function phU() { return dsUnit('Φ'); }     /* Fase di precessione */
+function omU() { return dsUnit('Ω'); }     /* Eone */
 
 function renderCantieriSection(colony, planet) {
   const hasHangar = !!(colony.structures && colony.structures['cantiere-navale']);
@@ -1730,7 +1750,7 @@ function renderCantieriSection(colony, planet) {
   ORION.planet.ensureAssets(colony);
 
   function costStr(c) {
-    return Object.keys(c).map(function (k) { return resGlyph(k) + c[k]; }).join(' · ');
+    return Object.keys(c).map(function (k) { return resIcon(k) + c[k]; }).join(' · ');
   }
   function canPay(c) {
     const ks = Object.keys(c);
@@ -1844,7 +1864,7 @@ function renderCantieriSection(colony, planet) {
       html += '<div class="struct-item is-queue">' +
         '<span class="struct-item__glyph">' + qCls.glyph + '</span>' +
         '<div class="struct-item__main">' +
-          '<div class="struct-item__name">' + escapeHtml(qCls.name) + ' <span class="struct-item__cat">' + remain + ' / ' + total + ' I</span></div>' +
+          '<div class="struct-item__name">' + escapeHtml(qCls.name) + ' <span class="struct-item__cat">' + remain + ' / ' + total + '</span> ' + iU() + '</div>' +
           '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
         '</div>' +
         '<button class="btn btn--mini struct-item__cancel" data-cancel-ship="' + idx + '" type="button" title="Annulla (rimborso 50%)">×</button>' +
@@ -1864,7 +1884,7 @@ function renderCantieriSection(colony, planet) {
     const buildAttrs = buildEnabled ? '' : (' disabled title="' + escapeHtml(blockReason) + '"');
     html += '<div class="cantieri-row__build">' +
       '<select class="cantieri-row__select" data-ship-kind aria-label="Classe nave">' + options + '</select>' +
-      '<span class="cantieri-row__cost">' + costStr(pickedCls.cost) + ' · ' + effShipTime + ' I' + (techBonus > 0 ? ' <span class="cantieri-row__base">(' + pickedCls.time + ' base)</span>' : '') + '</span>' +
+      '<span class="cantieri-row__cost">' + costStr(pickedCls.cost) + ' · ' + effShipTime + ' ' + iU() + (techBonus > 0 ? ' <span class="cantieri-row__base">(' + pickedCls.time + ' base)</span>' : '') + '</span>' +
       '<button class="btn btn--mini" data-build-ship type="button"' + buildAttrs + '>+ Costruisci</button>' +
     '</div></div>';
   }
@@ -1922,14 +1942,14 @@ function renderCantieriSection(colony, planet) {
       html += '<div class="struct-item is-queue">' +
         '<span class="struct-item__glyph">⚔</span>' +
         '<div class="struct-item__main">' +
-          '<div class="struct-item__name">Equipaggio esploratore <span class="struct-item__cat">' + remain + ' / ' + total + ' I</span></div>' +
+          '<div class="struct-item__name">Equipaggio esploratore <span class="struct-item__cat">' + remain + ' / ' + total + '</span> ' + iU() + '</div>' +
           '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
         '</div>' +
         '<button class="btn btn--mini struct-item__cancel" data-cancel-crew="' + idx + '" type="button" title="Annulla (rimborso 50%)">×</button>' +
       '</div>';
     });
     html += '<div class="cantieri-row__build">' +
-      '<span class="cantieri-row__cost">' + costStr(crewCost) + ' · ' + effCrewTime + ' I' + (techBonus2 > 0 ? ' <span class="cantieri-row__base">(' + crewTime + ' base)</span>' : '') + '</span>' +
+      '<span class="cantieri-row__cost">' + costStr(crewCost) + ' · ' + effCrewTime + ' ' + iU() + (techBonus2 > 0 ? ' <span class="cantieri-row__base">(' + crewTime + ' base)</span>' : '') + '</span>' +
       '<button class="btn btn--mini" data-build-crew type="button"' + (payOk ? '' : ' disabled') + '>+ Equipaggio esploratore</button>' +
     '</div></div>';
   }
@@ -2015,7 +2035,7 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
         '<div class="expedition-item__head">' +
           '<span class="expedition-item__status expedition-status--' + status + '">' + statusLabel + '</span>' +
           '<span class="expedition-item__target">' + escapeHtml(targetName) + tag + '</span>' +
-          '<span class="expedition-item__eta">ETA ' + rem + ' I</span>' +
+          '<span class="expedition-item__eta">ETA ' + rem + ' ' + iU() + '</span>' +
         '</div>' +
         '<div class="expedition-item__bars">' +
           '<div class="wear-bar" title="Usura scafo ' + wear + '%">' +
@@ -2096,7 +2116,7 @@ function openExpeditionPicker(colony) {
       '</div>' +
       '<dl class="save-card__meta">' +
         '<div><dt>Stato</dt><dd>' + discLabel + '</dd></div>' +
-        '<div><dt>Durata viaggio</dt><dd>' + dur + ' I (a/r)</dd></div>' +
+        '<div><dt>Durata viaggio</dt><dd>' + dur + ' ' + iU() + ' (a/r)</dd></div>' +
         '<div><dt>Rischio incidente</dt><dd>' + Math.round(chance * 100) + '%</dd></div>' +
       '</dl>' +
       '<div class="expedition-card__actions">' +
@@ -2146,7 +2166,7 @@ function doLaunchExpedition(colony, targetSystemId) {
   const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
   pushChronicle(ORION.time.currentDS(g) + ' — Spedizione partita verso <strong>' +
     (sys ? sys.name : 'sistema ignoto') + '</strong>' + tag +
-    ' · salto iperspaziale, durata stimata ' + r.expedition.durationOut + ' I.', 'explore');
+    ' · salto iperspaziale, durata stimata ' + r.expedition.durationOut + ' ' + iU() + '.', 'explore');
   if (ORION.tutorial) ORION.tutorial.fire('expedition-launch');
   closeExpeditionPicker();
   persistGame(g);
@@ -2173,7 +2193,7 @@ function renderFleetView(stage) {
   function fleetStatusLabel(f) {
     if (!f || !f.location) return '—';
     if (f.location.status === 'docked') return 'all\'attracco';
-    if (f.location.status === 'in-transit') return 'in transito (ETA ' + (f.etaImpulsi | 0) + ' I)';
+    if (f.location.status === 'in-transit') return 'in transito (ETA ' + (f.etaImpulsi | 0) + ' ' + iU() + ')';
     return 'in orbita';
   }
   function orderLabel(f) {
@@ -2709,7 +2729,7 @@ function potentialBars(planet) {
   const labels = { met: 'Metalli', en: 'Energia', food: 'Cibo', water: 'Acqua' };
   return '<ul class="pot-list">' + keys.map(function (k) {
     const v = planet.potentials[k] || 0;
-    return '<li class="pot-item"><span class="pot-item__label">' + resGlyph(k) + ' ' + labels[k] + '</span>' +
+    return '<li class="pot-item"><span class="pot-item__label">' + resIcon(k) + ' ' + labels[k] + '</span>' +
       '<div class="pot-item__bar"><div class="pot-item__fill pot--' + k + '" style="width:' + v + '%"></div></div>' +
       '<span class="pot-item__val">' + v + '</span></li>';
   }).join('') + '</ul>';
@@ -2721,10 +2741,10 @@ function rateGrid(rates, upkeep) {
   const items = [];
   ['met', 'en', 'food', 'water'].forEach(function (k) {
     const r = rates[k] || 0; const u = upkeep[k] || 0; const net = r - u;
-    if (r || u) items.push(row(resLabel(k), '<span class="rate ' + (net >= 0 ? 'rate--pos' : 'rate--neg') + '">' + fmtNet(net) + ' / I</span> <span class="rate-aux">(+' + fmtAbs(r) + ' / −' + fmtAbs(u) + ')</span>'));
+    if (r || u) items.push(row(resLabel(k), '<span class="rate ' + (net >= 0 ? 'rate--pos' : 'rate--neg') + '">' + fmtNet(net) + '</span> / ' + iU() + ' <span class="rate-aux">(+' + fmtAbs(r) + ' / −' + fmtAbs(u) + ')</span>'));
   });
-  if (rates.research) items.push(row('Ricerca', '<span class="rate rate--pos">+' + (Math.round(rates.research * 100) / 100) + ' / I</span>'));
-  if (rates.scan) items.push(row('Scansione', '<span class="rate rate--pos">+' + rates.scan + ' / I</span>'));
+  if (rates.research) items.push(row('Ricerca', '<span class="rate rate--pos">+' + (Math.round(rates.research * 100) / 100) + '</span> / ' + iU()));
+  if (rates.scan) items.push(row('Scansione', '<span class="rate rate--pos">+' + rates.scan + '</span> / ' + iU()));
   if (!items.length) return '<p class="panel__note">Nessuna produzione: costruisci strutture estrattive.</p>';
   return '<dl class="sysinfo__list">' + items.join('') + '</dl>';
 }
@@ -2753,6 +2773,16 @@ function bodyKindDem(planet) { return bodyIsMoon(planet) ? 'questa luna' : 'ques
 
 function resLabel(k) { return { met: 'Metalli', en: 'Energia', food: 'Cibo', water: 'Acqua' }[k] || k; }
 function resGlyph(k) { return { met: '⛭', en: '⚡', food: '❖', water: '≈' }[k] || '·'; }
+/* Versione HTML con colore tematico per risorsa — usata in tutti i punti
+   UI dove il glifo accompagna un valore (costi struttura/scafo/equipaggio,
+   produzione, potenziali). Risolve l'incoerenza per cui ⛭ nello HUD top
+   è ciano-accentuato mentre nei costi era plain text. Coerente col tema
+   NASA/Visions (decisione #8): metalli=acciaio, energia=oro, cibo=verde,
+   acqua=azzurro. */
+function resIcon(k) {
+  const g = resGlyph(k);
+  return '<span class="res-icon res-icon--' + k + '" aria-hidden="true">' + g + '</span>';
+}
 
 /* Colore del pallino di un corpo per le chip della sidebar. */
 function bodyDotColor(b) {
@@ -3586,10 +3616,35 @@ function loadPayloadAsGame(payload) {
 /* Entra in partita (lascia il main menu, monta la mappa). Usato da:
    - Continua / Inizia / Carica dal main menu
    - load slot / import .json dal pannello save */
+/* Migrazione lazy degli ID equipaggio legacy → counter monotono
+   persistente. I save antecedenti al fix (formato `crew-<imp>-<n>` con
+   counter module-local resettato a ogni reload) potevano contenere ID
+   collidenti che il roster mostrava come "Equipaggio 1" duplicato.
+   Idempotente: scorre ogni save e rinomina solo i crew col formato
+   vecchio in `crew-<N>` con N preso dal counter persistente di game. */
+function migrateLegacyCrewIds(game) {
+  if (!game || !game.colonies) return;
+  const T = ORION.time;
+  const LEGACY = /^crew-\d+-\d+$/;
+  Object.keys(game.colonies).forEach(function (k) {
+    const col = game.colonies[k];
+    const list = col && col.crews && col.crews.explorer;
+    if (!Array.isArray(list)) return;
+    list.forEach(function (c) {
+      if (c && typeof c.id === 'string' && LEGACY.test(c.id)) {
+        c.id = T && T.nextCrewId ? T.nextCrewId(game)
+                                 : ('crew-' + ((game.idSeq = game.idSeq || {}).crew = (game.idSeq.crew | 0) + 1));
+      }
+    });
+  });
+}
+
 function enterGame() {
   if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; }
   if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
   if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
+  /* Una tantum per ogni boot: rinomina i crew con ID legacy collidente. */
+  migrateLegacyCrewIds(ORION.game);
   hideMainMenu();
   const stage = document.querySelector('[data-view-stage]');
   if (stage) renderGalaxyView(stage);
