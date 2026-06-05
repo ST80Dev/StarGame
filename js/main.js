@@ -362,11 +362,6 @@ function renderGalaxyView(stage) {
       '<div class="planet-holder" data-planet-holder hidden></div>' +
       '<div class="colony-deck" data-colony-deck hidden aria-label="Plancia di colonia"></div>' +
       '<nav class="galaxy-breadcrumb" data-breadcrumb aria-label="Percorso di navigazione"></nav>' +
-      '<button class="seed-chip" data-action="copy-seed" type="button" ' +
-        'title="Copia il seed negli appunti">' +
-        '<span class="seed-chip__label">SEED</span>' +
-        '<code class="seed-chip__value" data-bind="seed">' + g.seed + '</code>' +
-      '</button>' +
       '<div class="galaxy-hint">Trascina · zoom rotella/pinch · <kbd>Shift</kbd>+trascina = ruota libera · <kbd>Alt</kbd>+trascina = roll · pinch a 2 dita ruota su touch</div>' +
     '</div>';
 
@@ -1040,14 +1035,47 @@ function renderPlanetBreadcrumb() {
   const grp = findGroup(g.galaxy.systems[sys.id].cluster);
   const planet = ORION.currentPlanet;
   const body = ORION.system.findBody(sys, planet.bodyKey);
+  const colKey = sys.id + ':' + planet.bodyKey;
+  const colony = g.colonies && g.colonies[colKey];
+
+  /* M07.2 polish (decisione #44): la breadcrumb del livello pianeta
+     unifica anche le info che prima vivevano nella top-bar del deck e
+     nel titleBadge del canvas (nome+tipo+chip fase/base). Stile dedicato
+     `.crumb--body` per il nome pianeta (Orbitron grande). Info ausiliarie
+     (tipo + chip) sulla destra in `.breadcrumb__info`. */
   const crumbs = ['<button class="crumb" data-crumb="galaxy" type="button">Galassia</button>'];
   if (grp) crumbs.push('<span class="crumb__sep">›</span>' +
     '<button class="crumb" data-crumb="group" data-id="' + grp.id + '" type="button">' + grp.name + '</button>');
   crumbs.push('<span class="crumb__sep">›</span>' +
     '<button class="crumb" data-crumb="system" type="button">' + sys.name + '</button>');
   crumbs.push('<span class="crumb__sep">›</span>' +
-    '<span class="crumb is-current">' + body.name + '</span>');
-  el.innerHTML = crumbs.join('');
+    '<span class="crumb crumb--body is-current">' + escapeHtml(body.name) + '</span>');
+
+  const bodyDef = ORION.system.BODY_TYPES[planet.type];
+  const typeLabel = bodyDef ? (bodyDef.label || planet.type) : planet.type;
+  let phaseChip = '';
+  if (colony && colony.phase === 'settling' && colony.settlingStart != null) {
+    const dur = colony.settlingDuration || 60;
+    const elapsed = Math.max(0, (g.timeImpulsi || 0) - colony.settlingStart);
+    const pct = Math.min(100, Math.round((elapsed / dur) * 100));
+    phaseChip = '<span class="crumb-chip crumb-chip--phase">⏳ Insediamento · ' + pct + '%</span>';
+  } else if (colony && colony.colonizing) {
+    phaseChip = '<span class="crumb-chip crumb-chip--phase">◌ Coloniale in viaggio</span>';
+  } else if (colony && colony.isHomeBase) {
+    phaseChip = '<span class="crumb-chip crumb-chip--home">★ Pianeta base · +20%</span>';
+  } else if (colony && colony.colonized) {
+    phaseChip = '<span class="crumb-chip">◉ Operativa</span>';
+  }
+
+  const infoHtml =
+    '<div class="breadcrumb__info">' +
+      '<span class="breadcrumb__type">' + escapeHtml(typeLabel) + '</span>' +
+      phaseChip +
+    '</div>';
+
+  el.innerHTML =
+    '<div class="breadcrumb__crumbs">' + crumbs.join('') + '</div>' +
+    infoHtml;
 
   el.querySelectorAll('[data-crumb]').forEach(function (btn) {
     btn.addEventListener('click', function () {
