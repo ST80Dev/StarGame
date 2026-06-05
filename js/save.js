@@ -36,7 +36,7 @@
      - M06.6 aggiunge game.tutorial = { enabled, seenLessons }
      Sub-migrazioni componibili: v1→v2 (victory), v2→v3 (chronicle), v3→v4
      (homeWorld:null + colonia operational + tutorial vuoto, retro-compat). */
-  const SCHEMA_VERSION = 5;
+  const SCHEMA_VERSION = 6;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -93,7 +93,10 @@
       tutorial: game.tutorial || { enabled: false, seenLessons: [] },
       /* M07 (decisione #37): spedizioni in corso. Le colonie già contengono
          ships/crews/assets quindi vengono auto-serializzate via game.colonies. */
-      expeditions: Array.isArray(game.expeditions) ? game.expeditions : []
+      expeditions: Array.isArray(game.expeditions) ? game.expeditions : [],
+      /* M08 Fase A (decisione #42): flotte mobili. Counter scafi per
+         classe vive in colony.ships e viene auto-serializzato. */
+      fleets: Array.isArray(game.fleets) ? game.fleets : []
     };
   }
 
@@ -163,6 +166,29 @@
         });
       }
       payload.schema = 5;
+    }
+    /* v5 → v6 (M08 Fase A, decisione #42): aggiungi fleets[] e i counter
+       per le 5 classi note in ogni colonia. Default kind='explorer' su
+       shipQueue legacy senza campo `kind`. Retro-compat: save M07 caricano
+       con 0 flotte e tutti i counter ship a 0 (tranne `explorer` se già
+       presente). */
+    if ((payload.schema || 5) < 6) {
+      if (!Array.isArray(payload.fleets)) payload.fleets = [];
+      const KINDS = ['explorer', 'caccia', 'intercettore', 'corvetta', 'fregata'];
+      if (payload.colonies && typeof payload.colonies === 'object') {
+        Object.keys(payload.colonies).forEach(function (k) {
+          const c = payload.colonies[k];
+          if (!c) return;
+          if (!c.ships) c.ships = {};
+          KINDS.forEach(function (kk) { if (c.ships[kk] == null) c.ships[kk] = 0; });
+          if (c.assets && Array.isArray(c.assets.shipQueue)) {
+            for (let i = 0; i < c.assets.shipQueue.length; i++) {
+              if (!c.assets.shipQueue[i].kind) c.assets.shipQueue[i].kind = 'explorer';
+            }
+          }
+        });
+      }
+      payload.schema = 6;
     }
     return payload;
   }

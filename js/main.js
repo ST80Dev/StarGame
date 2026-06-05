@@ -17,7 +17,6 @@ ORION.version = '0.6.6';
 
 /* Etichette provvisorie del viewport per le viste non ancora implementate. */
 ORION.viewLabels = {
-  fleet:     { caption: 'VISTA FLOTTA',     hint: 'La gestione della flotta arriverà più avanti nello sviluppo.' },
   research:  { caption: 'VISTA RICERCA',    hint: "L'albero tecnologico arriverà più avanti nello sviluppo." },
   diplomacy: { caption: 'VISTA DIPLOMAZIA', hint: 'La diplomazia arriverà più avanti nello sviluppo.' }
 };
@@ -129,7 +128,9 @@ function newGame(seed, opts) {
     /* M06.6: stato tutorial (decisione #28). Persistito nel save (schema 4). */
     tutorial: { enabled: tutorialEnabled, seenLessons: [] },
     /* M07 (decisione #37): spedizioni di esplorazione in viaggio. */
-    expeditions: []
+    expeditions: [],
+    /* M08 Fase A (decisione #42): flotte mobili. */
+    fleets: []
   };
   // startDS = Data Stellare INIZIALE (epoca .00), fissa per la partita.
   ORION.game.startDS = ORION.time.format(startOrbita * 100);
@@ -150,6 +151,7 @@ function newGame(seed, opts) {
     if (saved.victoryTracks) ORION.game.victoryTracks = saved.victoryTracks;
     if (saved.eventSchedule) ORION.game.eventSchedule = saved.eventSchedule;
     if (Array.isArray(saved.expeditions)) ORION.game.expeditions = saved.expeditions.slice();
+    if (Array.isArray(saved.fleets)) ORION.game.fleets = saved.fleets.slice();
     if (Array.isArray(saved.chronicle)) ORION.game.chronicle = saved.chronicle.slice();
     /* Tutorial: rispetta lo stato del payload se presente. */
     if (saved.tutorial && typeof saved.tutorial === 'object') {
@@ -303,6 +305,16 @@ function renderView(stage, view) {
     } else if (ORION.openSystemId >= 0) {
       closeSystem();
     }
+    return;
+  }
+
+  // M08 Fase A: vista Flotta dedicata (lista + ordini). La mappa attiva
+  // sui canvas è Fase B.
+  if (view === 'fleet') {
+    if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; }
+    if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
+    if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
+    renderFleetView(stage);
     return;
   }
 
@@ -1663,6 +1675,15 @@ function renderPlanetForzeTab(host, planet, colony) {
   host.querySelectorAll('[data-cancel-crew]').forEach(function (btn) {
     btn.addEventListener('click', function () { tryCancelCrew(Number(btn.dataset.cancelCrew)); });
   });
+  /* M08 Fase A: dropdown classe nave. La scelta è ricordata per-colonia
+     in ORION.cantieriPickedKind (vive in memoria, non nel save). */
+  host.querySelectorAll('[data-ship-kind]').forEach(function (sel) {
+    sel.addEventListener('change', function () {
+      if (!ORION.cantieriPickedKind) ORION.cantieriPickedKind = {};
+      ORION.cantieriPickedKind[ORION.openPlanetKey || ''] = sel.value;
+      updatePlanetUI();
+    });
+  });
 }
 
 /* =====================================================================
@@ -1695,7 +1716,12 @@ function renderCantieriSection(colony, planet) {
     '<p class="sysinfo__sub">Cantieri & Squadre <span class="cantieri-section__hint">(esplorazione)</span></p>';
 
   if (hasHangar) {
-    const sShips = colony.ships && colony.ships.explorer || 0;
+    /* M08 Fase A (decisione #42): counter di TUTTE le classi navi note. */
+    const F = ORION.fleet || {};
+    const classes = (F.classList ? F.classList() : []);
+    ORION.fleet && ORION.fleet.ensureColonyShipKinds && ORION.fleet.ensureColonyShipKinds(colony);
+    let sShips = 0;
+    classes.forEach(function (cls) { sShips += (colony.ships && colony.ships[cls.id]) || 0; });
     const queue = colony.assets.shipQueue || [];
     /* Decisione #41: cantieri (build paralleli) + attracchi (porto a terra). */
     const E = ORION.expedition || {};
@@ -1705,20 +1731,45 @@ function renderCantieriSection(colony, planet) {
     const flying = E.shipsOnExpedition ? E.shipsOnExpedition(ORION.game, ORION.openPlanetKey) : 0;
     const bound = sShips + active + flying;
     const techBonus = E.techSpeedBonus ? E.techSpeedBonus(colony) : 0;
-    const effShipTime = E.applyTechSpeed ? E.applyTechSpeed(shipTime, colony) : shipTime;
     const cantieriCls = active >= buildSlots ? ' cantieri-cap--full' : '';
     const portCls = bound >= docks ? ' cantieri-cap--full' : '';
     const techHtml = techBonus > 0
       ? ' <span class="cantieri-tech-chip" title="Bonus tecnici: ' + (E.techCountOf ? E.techCountOf(colony) : 0) + ' tecnici → −' + Math.round(techBonus * 100) + '% tempo costruzione">⚙ −' + Math.round(techBonus * 100) + '%</span>'
       : '';
-    const check = E.canBuildShip ? E.canBuildShip(ORION.game, colony, ORION.openPlanetKey) : { ok: payOk };
-    const buildEnabled = payOk && check.ok;
-    const blockReason = !check.ok ? check.reason : (!payOk ? 'Risorse insufficienti' : '');
+    const hangarLvl = (colony.structures['cantiere-navale'] && colony.structures['cantiere-navale'].level) || 1;
+
+    /* Selezione classe corrente (persistente per-colonia in memoria). */
+    if (!ORION.cantieriPickedKind) ORION.cantieriPickedKind = {};
+    const colKey = ORION.openPlanetKey || '';
+    let pickedKind = ORION.cantieriPickedKind[colKey] || 'explorer';
+    /* Se la classe selezionata è sopra il livello dell'Hangar, scendi a
+       una compatibile. */
+    if ((F.getClass && (F.getClass(pickedKind) || {}).hangarLvl || 1) > hangarLvl) {
+      pickedKind = 'explorer';
+      ORION.cantieriPickedKind[colKey] = pickedKind;
+    }
+    const pickedCls = (F.getClass && F.getClass(pickedKind)) || { cost: shipCost, time: shipTime, hangarLvl: 1, name: 'Scafo esploratore' };
+    const effShipTime = E.applyTechSpeed ? E.applyTechSpeed(pickedCls.time, colony) : pickedCls.time;
+    const payOkShip = canPay(pickedCls.cost);
+    const check = E.canBuildShip ? E.canBuildShip(ORION.game, colony, ORION.openPlanetKey) : { ok: true };
+    const buildEnabled = payOkShip && check.ok;
+    const blockReason = !check.ok ? check.reason : (!payOkShip ? 'Risorse insufficienti' : '');
+
+    /* Counter per-classe (riepilogo compatto). */
+    const counterParts = classes.map(function (cls) {
+      const n = (colony.ships && colony.ships[cls.id]) || 0;
+      if (!n) return null;
+      return '<span title="' + escapeHtml(cls.name) + '">' + cls.glyph + ' ' + n + '</span>';
+    }).filter(Boolean);
+    const counterHtml = counterParts.length
+      ? counterParts.join(' · ')
+      : '<span class="cantieri-row__base">nessuna nave</span>';
+
     html += '<div class="cantieri-row">' +
       '<div class="cantieri-row__head">' +
         '<span class="cantieri-row__glyph" aria-hidden="true">▱</span>' +
-        '<span class="cantieri-row__name">Hangar di costruzione</span>' +
-        '<span class="cantieri-row__counter">Scafi: <strong>' + sShips + '</strong></span>' +
+        '<span class="cantieri-row__name">Hangar di costruzione <span class="cantieri-row__base">lvl ' + hangarLvl + '</span></span>' +
+        '<span class="cantieri-row__counter">Scafi: <strong>' + sShips + '</strong> ' + counterHtml + '</span>' +
       '</div>' +
       '<div class="cantieri-row__caps">' +
         '<span class="cantieri-cap' + cantieriCls + '" title="Build paralleli abilitati dal livello dell\'Hangar">Cantieri <strong>' + active + ' / ' + buildSlots + '</strong></span>' +
@@ -1726,22 +1777,36 @@ function renderCantieriSection(colony, planet) {
         techHtml +
       '</div>';
     queue.forEach(function (q, idx) {
+      const qKind = q.kind || 'explorer';
+      const qCls = (F.getClass && F.getClass(qKind)) || { name: 'Scafo esploratore', glyph: '▱' };
       const total = q.totalTime || effShipTime;
       const remain = Math.max(0, q.duration | 0);
       const pct = Math.round(((total - remain) / total) * 100);
       html += '<div class="struct-item is-queue">' +
-        '<span class="struct-item__glyph">▱</span>' +
+        '<span class="struct-item__glyph">' + qCls.glyph + '</span>' +
         '<div class="struct-item__main">' +
-          '<div class="struct-item__name">Scafo esploratore <span class="struct-item__cat">' + remain + ' / ' + total + ' I</span></div>' +
+          '<div class="struct-item__name">' + escapeHtml(qCls.name) + ' <span class="struct-item__cat">' + remain + ' / ' + total + ' I</span></div>' +
           '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
         '</div>' +
         '<button class="btn btn--mini struct-item__cancel" data-cancel-ship="' + idx + '" type="button" title="Annulla (rimborso 50%)">×</button>' +
       '</div>';
     });
+
+    /* Dropdown classi: opzioni disabilitate se l'Hangar non è di livello
+       adeguato (M08 Fase A, decisione #42). */
+    const options = classes.map(function (cls) {
+      const lockedByHangar = (cls.hangarLvl || 1) > hangarLvl;
+      const label = cls.glyph + ' ' + cls.name + (lockedByHangar ? ' — Hangar lvl ' + cls.hangarLvl : '');
+      const sel = (cls.id === pickedKind) ? ' selected' : '';
+      const dis = lockedByHangar ? ' disabled' : '';
+      return '<option value="' + cls.id + '"' + sel + dis + '>' + escapeHtml(label) + '</option>';
+    }).join('');
+
     const buildAttrs = buildEnabled ? '' : (' disabled title="' + escapeHtml(blockReason) + '"');
     html += '<div class="cantieri-row__build">' +
-      '<span class="cantieri-row__cost">' + costStr(shipCost) + ' · ' + effShipTime + ' I' + (techBonus > 0 ? ' <span class="cantieri-row__base">(' + shipTime + ' base)</span>' : '') + '</span>' +
-      '<button class="btn btn--mini" data-build-ship type="button"' + buildAttrs + '>+ Scafo esploratore</button>' +
+      '<select class="cantieri-row__select" data-ship-kind aria-label="Classe nave">' + options + '</select>' +
+      '<span class="cantieri-row__cost">' + costStr(pickedCls.cost) + ' · ' + effShipTime + ' I' + (techBonus > 0 ? ' <span class="cantieri-row__base">(' + pickedCls.time + ' base)</span>' : '') + '</span>' +
+      '<button class="btn btn--mini" data-build-ship type="button"' + buildAttrs + '>+ Costruisci</button>' +
     '</div></div>';
   }
 
@@ -1788,9 +1853,12 @@ function tryBuildShip() {
   const g = ORION.game;
   const colony = g.colonies[ORION.openPlanetKey];
   const planet = ORION.currentPlanet;
-  const r = ORION.planet.startShipBuild(colony, planet, g, ORION.openPlanetKey);
+  /* M08 Fase A: la classe nave viene dal dropdown (default explorer). */
+  const kind = (ORION.cantieriPickedKind && ORION.cantieriPickedKind[ORION.openPlanetKey]) || 'explorer';
+  const r = ORION.planet.startShipBuild(colony, planet, g, ORION.openPlanetKey, kind);
   if (!r.ok) { console.info('Costruzione scafo rifiutata:', r.reason); showToast(r.reason); return; }
-  pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione di uno <strong>scafo esploratore</strong> su ' + planet.name + bodyTagHtml(planet.systemId) + '.', 'planet');
+  const cls = (ORION.fleet && ORION.fleet.getClass(kind)) || { name: 'Scafo esploratore' };
+  pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione di una <strong>' + cls.name + '</strong> su ' + planet.name + bodyTagHtml(planet.systemId) + '.', 'planet');
   persistGame(g);
   updateGlobalResourceHud();
   updatePlanetUI();
@@ -1994,6 +2062,418 @@ function doLaunchExpedition(colony, targetSystemId) {
   closeExpeditionPicker();
   persistGame(g);
   updatePlanetUI();
+}
+
+/* =====================================================================
+   M08 Fase A — Vista FLOTTE (decisione #42)
+   Lista flotte + overlay "Crea flotta" + overlay "Ordini" + bottone
+   "Dissolvi". UI volutamente minima: la mappa attiva (drag-and-drop su
+   sistemi) arriva in Fase B.
+   ===================================================================== */
+function renderFleetView(stage) {
+  if (!stage) return;
+  const g = ORION.game;
+  if (!g) return;
+  if (!Array.isArray(g.fleets)) g.fleets = [];
+
+  /* Helpers locali */
+  function sysName(id) {
+    const s = g.galaxy.systems[id];
+    return s ? s.name : '—';
+  }
+  function fleetStatusLabel(f) {
+    if (!f || !f.location) return '—';
+    if (f.location.status === 'docked') return 'all\'attracco';
+    if (f.location.status === 'in-transit') return 'in transito (ETA ' + (f.etaImpulsi | 0) + ' I)';
+    return 'in orbita';
+  }
+  function orderLabel(f) {
+    const o = f && f.orders;
+    if (!o) return 'idle';
+    if (o.type === 'idle') return 'in attesa';
+    if (o.type === 'move') return 'rotta verso ' + sysName(o.toSysId);
+    if (o.type === 'explore') return 'esplorazione di ' + sysName(o.toSysId);
+    if (o.type === 'return') return 'rientro alla base';
+    if (o.type === 'patrol') return 'pattuglia ' + sysName(o.sysA) + ' ↔ ' + sysName(o.sysB);
+    return o.type;
+  }
+  function colonyName(key) {
+    const parts = (key || '').split(':');
+    if (parts.length < 2) return '—';
+    const sid = Number(parts[0]);
+    const sys = g.galaxy.systems[sid];
+    return sys ? sys.name : ('Sistema ' + sid);
+  }
+
+  /* Colonie che possono creare una flotta: colonizzate + con Hangar lvl ≥ 1. */
+  const eligibleColonies = [];
+  Object.keys(g.colonies).forEach(function (k) {
+    const c = g.colonies[k];
+    if (!c || !c.colonized) return;
+    if (!c.structures || !c.structures['cantiere-navale']) return;
+    eligibleColonies.push({ key: k, colony: c });
+  });
+
+  /* Lista flotte */
+  let listHtml;
+  if (g.fleets.length === 0) {
+    listHtml = '<p class="panel__note">Nessuna flotta attiva. Costruisci scafi in un Hangar e crea una flotta per ' +
+      'poter eseguire ordini di movimento/esplorazione.</p>';
+  } else {
+    listHtml = '<ul class="fleet-list">' + g.fleets.map(function (f) {
+      const ships = f.ships || [];
+      const counter = {};
+      ships.forEach(function (s) { counter[s.kind] = (counter[s.kind] || 0) + 1; });
+      const counterHtml = Object.keys(counter).map(function (k) {
+        const cls = (ORION.fleet && ORION.fleet.getClass(k)) || { glyph: '?', name: k };
+        return '<span title="' + escapeHtml(cls.name) + '">' + cls.glyph + ' ' + counter[k] + '</span>';
+      }).join(' · ') || '<span class="cantieri-row__base">flotta vuota</span>';
+      const sysTag = (f.location && f.location.systemId >= 0) ? systemTagHtml(f.location.systemId) : '';
+      const status = fleetStatusLabel(f);
+      const statusCls = (f.location && f.location.status) || 'idle';
+      return '<li class="fleet-item" data-fleet-id="' + escapeHtml(f.id) + '">' +
+        '<div class="fleet-item__head">' +
+          '<span class="fleet-item__name"><strong>' + escapeHtml(f.name) + '</strong> ' +
+            '<span class="cantieri-row__base">(da ' + escapeHtml(colonyName(f.ownerColonyKey)) + ')</span></span>' +
+          '<span class="fleet-status fleet-status--' + statusCls + '">' + status + '</span>' +
+        '</div>' +
+        '<div class="fleet-item__row">' +
+          '<span class="fleet-item__loc">in <strong>' + escapeHtml(sysName(f.location.systemId)) + '</strong>' + sysTag + '</span>' +
+          '<span class="fleet-item__order">' + escapeHtml(orderLabel(f)) + '</span>' +
+        '</div>' +
+        '<div class="fleet-item__ships">' + counterHtml +
+          ' · <span class="cantieri-row__base">equipaggio ' + (f.crew ? f.crew.length : 0) + ' / ' +
+          (ORION.fleet ? ORION.fleet.fleetCrewRequired(f) : 0) + '</span></div>' +
+        '<div class="fleet-item__actions">' +
+          '<button class="btn btn--mini" data-action="fleet-orders" data-fleet="' + escapeHtml(f.id) + '" type="button">Ordini ▸</button>' +
+          '<button class="btn btn--mini" data-action="fleet-manage" data-fleet="' + escapeHtml(f.id) + '" type="button">Gestisci navi/eq.</button>' +
+          '<button class="btn btn--mini btn--danger" data-action="fleet-dissolve" data-fleet="' + escapeHtml(f.id) + '" type="button">Dissolvi</button>' +
+        '</div>' +
+      '</li>';
+    }).join('') + '</ul>';
+  }
+
+  const canCreate = eligibleColonies.length > 0;
+  stage.innerHTML =
+    '<div class="fleet-view">' +
+      '<header class="fleet-view__head">' +
+        '<h2 class="fleet-view__title">Flotte mobili <span class="fleet-view__sub">M08 · Fase A</span></h2>' +
+        '<button class="btn btn--primary" data-action="fleet-create" type="button"' +
+          (canCreate ? '' : ' disabled title="Serve una colonia con Hangar di costruzione"') + '>+ Crea flotta</button>' +
+      '</header>' +
+      '<p class="panel__note">Le flotte si compongono dalle navi a terra e dagli equipaggi della colonia origine. ' +
+        'Ordini base: rotta verso un sistema noto, esplorazione di un sistema rilevato/ignoto (auto-rientro), ' +
+        'pattuglia tra due sistemi, rientro alla base. ' +
+        'La mappa attiva (drag&drop) e i tutorial dedicati arriveranno in <em>Fase B</em>.</p>' +
+      listHtml +
+    '</div>';
+
+  /* Handlers */
+  stage.querySelectorAll('[data-action="fleet-create"]').forEach(function (b) {
+    b.addEventListener('click', function () { openFleetCreateOverlay(eligibleColonies); });
+  });
+  stage.querySelectorAll('[data-action="fleet-orders"]').forEach(function (b) {
+    b.addEventListener('click', function () { openFleetOrdersOverlay(b.dataset.fleet); });
+  });
+  stage.querySelectorAll('[data-action="fleet-manage"]').forEach(function (b) {
+    b.addEventListener('click', function () { openFleetManageOverlay(b.dataset.fleet); });
+  });
+  stage.querySelectorAll('[data-action="fleet-dissolve"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const fleet = findFleet(b.dataset.fleet);
+      if (!fleet) return;
+      const r = ORION.fleet.dissolveFleet(g, fleet);
+      if (!r.ok) { showToast(r.reason); return; }
+      pushChronicle(ORION.time.currentDS(g) + ' — Flotta <strong>' + escapeHtml(fleet.name) + '</strong> sciolta.', 'planet');
+      persistGame(g);
+      renderFleetView(stage);
+    });
+  });
+}
+
+function findFleet(id) {
+  const g = ORION.game;
+  if (!g || !Array.isArray(g.fleets)) return null;
+  for (let i = 0; i < g.fleets.length; i++) {
+    if (g.fleets[i].id === id) return g.fleets[i];
+  }
+  return null;
+}
+
+function closeFleetOverlay() {
+  const host = document.querySelector('[data-bind="fleet-overlay"]');
+  if (host) { host.hidden = true; host.innerHTML = ''; }
+}
+
+function ensureFleetOverlayHost(cls) {
+  let host = document.querySelector('[data-bind="fleet-overlay"]');
+  if (!host) {
+    host = document.createElement('div');
+    host.setAttribute('data-bind', 'fleet-overlay');
+    host.setAttribute('role', 'dialog');
+    host.setAttribute('aria-modal', 'true');
+    document.body.appendChild(host);
+  }
+  host.className = cls;
+  return host;
+}
+
+function openFleetCreateOverlay(eligibleColonies) {
+  const g = ORION.game;
+  const host = ensureFleetOverlayHost('fleet-create-overlay');
+  const colonyOptions = eligibleColonies.map(function (e) {
+    const sys = g.galaxy.systems[e.colony.systemId];
+    const lab = (sys ? sys.name : 'sistema') + ' · ' + e.key;
+    return '<option value="' + escapeHtml(e.key) + '">' + escapeHtml(lab) + '</option>';
+  }).join('');
+  host.innerHTML =
+    '<div class="fleet-create-overlay__panel" role="document">' +
+      '<header class="fleet-create-overlay__head">' +
+        '<h2>Crea flotta</h2>' +
+        '<button class="btn btn--mini" data-action="fleet-overlay-close" type="button" aria-label="Chiudi">✕</button>' +
+      '</header>' +
+      '<label class="fleet-field">Colonia origine' +
+        '<select data-bind="fleet-create-colony">' + colonyOptions + '</select>' +
+      '</label>' +
+      '<label class="fleet-field">Nome (opzionale)' +
+        '<input type="text" data-bind="fleet-create-name" placeholder="Squadrone X" maxlength="40">' +
+      '</label>' +
+      '<div class="fleet-create-overlay__actions">' +
+        '<button class="btn btn--mini" data-action="fleet-overlay-close" type="button">Annulla</button>' +
+        '<button class="btn btn--primary" data-action="fleet-create-confirm" type="button">Crea</button>' +
+      '</div>' +
+    '</div>';
+  host.hidden = false;
+  host.addEventListener('click', function (e) {
+    if (e.target === host || e.target.matches('[data-action="fleet-overlay-close"]')) closeFleetOverlay();
+  });
+  host.querySelector('[data-action="fleet-create-confirm"]').addEventListener('click', function () {
+    const colKey = host.querySelector('[data-bind="fleet-create-colony"]').value;
+    const name = host.querySelector('[data-bind="fleet-create-name"]').value;
+    const r = ORION.fleet.createFleet(g, colKey, name);
+    if (!r.ok) { showToast(r.reason); return; }
+    pushChronicle(ORION.time.currentDS(g) + ' — Nuova flotta <strong>' + escapeHtml(r.fleet.name) +
+      '</strong> formata su ' + escapeHtml(colonyName_(g, colKey)) + '.', 'planet');
+    persistGame(g);
+    closeFleetOverlay();
+    const stage = document.querySelector('[data-view-stage]');
+    if (stage) renderFleetView(stage);
+  });
+}
+
+function colonyName_(g, key) {
+  const parts = (key || '').split(':');
+  if (parts.length < 2) return '—';
+  const sid = Number(parts[0]);
+  const sys = g.galaxy && g.galaxy.systems && g.galaxy.systems[sid];
+  return sys ? sys.name : ('Sistema ' + sid);
+}
+
+function openFleetManageOverlay(fleetId) {
+  const g = ORION.game;
+  const fleet = findFleet(fleetId);
+  if (!fleet) return;
+  const colony = g.colonies[fleet.ownerColonyKey];
+  if (!colony) return;
+  ORION.fleet.ensureColonyShipKinds(colony);
+  const host = ensureFleetOverlayHost('fleet-create-overlay');
+
+  /* Tabella per-classe: counter colonia, counter flotta, +/-. */
+  const classes = ORION.fleet.classList();
+  let rowsHtml = '';
+  classes.forEach(function (cls) {
+    const inDock = colony.ships[cls.id] || 0;
+    let inFleet = 0;
+    fleet.ships.forEach(function (s) { if (s.kind === cls.id) inFleet++; });
+    rowsHtml +=
+      '<tr>' +
+        '<td>' + cls.glyph + ' ' + escapeHtml(cls.name) + '</td>' +
+        '<td>' + inDock + '</td>' +
+        '<td>' + inFleet + '</td>' +
+        '<td>' +
+          '<button class="btn btn--mini" data-action="fleet-add-ship" data-kind="' + cls.id + '" type="button"' +
+            (inDock <= 0 || fleet.location.status !== 'docked' || fleet.location.systemId !== colony.systemId ? ' disabled' : '') +
+            '>+1</button> ' +
+          '<button class="btn btn--mini" data-action="fleet-rem-ship" data-kind="' + cls.id + '" type="button"' +
+            (inFleet <= 0 || fleet.location.status !== 'docked' || fleet.location.systemId !== colony.systemId ? ' disabled' : '') +
+            '>−1</button>' +
+        '</td>' +
+      '</tr>';
+  });
+
+  const crewAvail = (colony.crews && colony.crews.explorer && colony.crews.explorer.length) || 0;
+  const crewInFleet = fleet.crew ? fleet.crew.length : 0;
+  const crewReq = ORION.fleet.fleetCrewRequired(fleet);
+
+  host.innerHTML =
+    '<div class="fleet-create-overlay__panel" role="document">' +
+      '<header class="fleet-create-overlay__head">' +
+        '<h2>Gestisci ' + escapeHtml(fleet.name) + '</h2>' +
+        '<button class="btn btn--mini" data-action="fleet-overlay-close" type="button" aria-label="Chiudi">✕</button>' +
+      '</header>' +
+      '<p class="panel__note">La flotta deve essere all\'attracco della colonia origine per assegnare/restituire navi. ' +
+        'Stato attuale: <strong>' + (fleet.location.status === 'docked' && fleet.location.systemId === colony.systemId
+          ? 'attraccata su ' + colonyName_(g, fleet.ownerColonyKey)
+          : 'fuori dalla base') + '</strong>.</p>' +
+      '<table class="fleet-manage-table">' +
+        '<thead><tr><th>Classe</th><th>A terra</th><th>In flotta</th><th>Azione</th></tr></thead>' +
+        '<tbody>' + rowsHtml + '</tbody>' +
+      '</table>' +
+      '<p class="sysinfo__sub">Equipaggi</p>' +
+      '<div class="fleet-crew-row">' +
+        '<span>Colonia: <strong>' + crewAvail + '</strong> · Flotta: <strong>' + crewInFleet + '</strong> ' +
+        '<span class="cantieri-row__base">(richiesti ' + crewReq + ')</span></span>' +
+        '<button class="btn btn--mini" data-action="fleet-add-crew" type="button"' +
+          (crewAvail <= 0 || fleet.location.status !== 'docked' || fleet.location.systemId !== colony.systemId ? ' disabled' : '') +
+          '>+ Equipaggio</button>' +
+        '<button class="btn btn--mini" data-action="fleet-rem-crew" type="button"' +
+          (crewInFleet <= 0 || fleet.location.status !== 'docked' || fleet.location.systemId !== colony.systemId ? ' disabled' : '') +
+          '>− Equipaggio</button>' +
+      '</div>' +
+      '<div class="fleet-create-overlay__actions">' +
+        '<button class="btn btn--primary" data-action="fleet-overlay-close" type="button">Chiudi</button>' +
+      '</div>' +
+    '</div>';
+  host.hidden = false;
+  host.addEventListener('click', function (e) {
+    if (e.target === host || e.target.matches('[data-action="fleet-overlay-close"]')) closeFleetOverlay();
+  });
+  host.querySelectorAll('[data-action="fleet-add-ship"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const r = ORION.fleet.assignShips(g, fleet, fleet.ownerColonyKey, b.dataset.kind, 1);
+      if (!r.ok) { showToast(r.reason); return; }
+      persistGame(g); openFleetManageOverlay(fleet.id);
+    });
+  });
+  host.querySelectorAll('[data-action="fleet-rem-ship"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const r = ORION.fleet.unassignShips(g, fleet, fleet.ownerColonyKey, b.dataset.kind, 1);
+      if (!r.ok) { showToast(r.reason); return; }
+      persistGame(g); openFleetManageOverlay(fleet.id);
+    });
+  });
+  host.querySelector('[data-action="fleet-add-crew"]').addEventListener('click', function () {
+    const r = ORION.fleet.assignCrew(g, fleet, fleet.ownerColonyKey, 1);
+    if (!r.ok) { showToast(r.reason); return; }
+    persistGame(g); openFleetManageOverlay(fleet.id);
+  });
+  host.querySelector('[data-action="fleet-rem-crew"]').addEventListener('click', function () {
+    const r = ORION.fleet.unassignCrew(g, fleet, fleet.ownerColonyKey, 1);
+    if (!r.ok) { showToast(r.reason); return; }
+    persistGame(g); openFleetManageOverlay(fleet.id);
+  });
+}
+
+function openFleetOrdersOverlay(fleetId) {
+  const g = ORION.game;
+  const fleet = findFleet(fleetId);
+  if (!fleet) return;
+  const host = ensureFleetOverlayHost('fleet-orders-overlay');
+
+  /* Sistemi raggiungibili (nebbia di guerra rispettata: mostriamo tutti
+     i sistemi con almeno una rotta dalla posizione corrente; per
+     `explore` quelli non ancora EXPLORED). */
+  const DISCOVERY = ORION.galaxy.DISCOVERY;
+  const allReachable = [];
+  for (let i = 0; i < g.galaxy.systems.length; i++) {
+    if (i === fleet.location.systemId) continue;
+    if (ORION.fleet.computePath(g.galaxy, fleet.location.systemId, i)) {
+      allReachable.push(i);
+    }
+  }
+  function sysOptionLabel(id) {
+    const s = g.galaxy.systems[id];
+    const disc = g.state.discovery[id];
+    const tag = (disc >= DISCOVERY.EXPLORED) ? 'esplorato' : (disc >= DISCOVERY.DETECTED) ? 'rilevato' : 'ignoto';
+    return s.name + ' · ' + tag;
+  }
+  const optsMove = allReachable.map(function (id) {
+    return '<option value="' + id + '">' + escapeHtml(sysOptionLabel(id)) + '</option>';
+  }).join('');
+  const optsExplore = allReachable
+    .filter(function (id) { return g.state.discovery[id] < DISCOVERY.EXPLORED; })
+    .map(function (id) {
+      return '<option value="' + id + '">' + escapeHtml(sysOptionLabel(id)) + '</option>';
+    }).join('');
+
+  host.innerHTML =
+    '<div class="fleet-orders-overlay__panel" role="document">' +
+      '<header class="fleet-orders-overlay__head">' +
+        '<h2>Ordini · ' + escapeHtml(fleet.name) + '</h2>' +
+        '<button class="btn btn--mini" data-action="fleet-overlay-close" type="button" aria-label="Chiudi">✕</button>' +
+      '</header>' +
+      '<p class="panel__note">Posizione: <strong>' + escapeHtml(g.galaxy.systems[fleet.location.systemId].name) + '</strong>. ' +
+        'Equipaggio: ' + fleet.crew.length + ' / ' + ORION.fleet.fleetCrewRequired(fleet) + ' richiesti. ' +
+        'Velocità minima: ' + ORION.fleet.fleetMinSpeed(fleet).toFixed(2) + '.</p>' +
+      '<section class="fleet-order-block">' +
+        '<h3>Rotta verso (move)</h3>' +
+        '<select data-bind="fleet-order-move">' + optsMove + '</select>' +
+        '<button class="btn btn--mini" data-action="fleet-order-move" type="button">Imposta</button>' +
+      '</section>' +
+      '<section class="fleet-order-block">' +
+        '<h3>Esplora (explore)</h3>' +
+        '<select data-bind="fleet-order-explore">' + (optsExplore || '<option value="" disabled>Nessun sistema inesplorato</option>') + '</select>' +
+        '<button class="btn btn--mini" data-action="fleet-order-explore" type="button"' +
+          (optsExplore ? '' : ' disabled') + '>Imposta</button>' +
+      '</section>' +
+      '<section class="fleet-order-block">' +
+        '<h3>Pattuglia A ↔ B (patrol)</h3>' +
+        '<select data-bind="fleet-order-pat-a">' + optsMove + '</select>' +
+        '<select data-bind="fleet-order-pat-b">' + optsMove + '</select>' +
+        '<button class="btn btn--mini" data-action="fleet-order-patrol" type="button">Imposta</button>' +
+      '</section>' +
+      '<section class="fleet-order-block">' +
+        '<h3>Rientro alla base (return)</h3>' +
+        '<button class="btn btn--mini" data-action="fleet-order-return" type="button">Imposta</button>' +
+      '</section>' +
+      '<section class="fleet-order-block">' +
+        '<h3>Idle</h3>' +
+        '<button class="btn btn--mini" data-action="fleet-order-idle" type="button">Imposta</button>' +
+      '</section>' +
+    '</div>';
+  host.hidden = false;
+  host.addEventListener('click', function (e) {
+    if (e.target === host || e.target.matches('[data-action="fleet-overlay-close"]')) closeFleetOverlay();
+  });
+
+  function dispatch(order) {
+    const r = ORION.fleet.setOrder(g, fleet, order);
+    if (!r.ok) { showToast(r.reason); return; }
+    if (order.type !== 'idle') {
+      const target = (order.type === 'patrol') ? order.sysA :
+                     (order.type === 'return') ? (g.colonies[fleet.ownerColonyKey] || {}).systemId :
+                     order.toSysId;
+      pushChronicle(ORION.time.currentDS(g) + ' — <strong>' + escapeHtml(fleet.name) + '</strong>: ordine "' + order.type + '" verso ' + escapeHtml(g.galaxy.systems[target].name) + '.', 'explore');
+    }
+    persistGame(g);
+    closeFleetOverlay();
+    const stage = document.querySelector('[data-view-stage]');
+    if (stage) renderFleetView(stage);
+  }
+  host.querySelector('[data-action="fleet-order-move"]').addEventListener('click', function () {
+    const sel = host.querySelector('[data-bind="fleet-order-move"]');
+    if (!sel || !sel.value) { showToast('Nessun sistema selezionato'); return; }
+    dispatch({ type: 'move', toSysId: Number(sel.value) });
+  });
+  const expBtn = host.querySelector('[data-action="fleet-order-explore"]');
+  if (expBtn) expBtn.addEventListener('click', function () {
+    const sel = host.querySelector('[data-bind="fleet-order-explore"]');
+    if (!sel || !sel.value) { showToast('Nessun sistema selezionato'); return; }
+    dispatch({ type: 'explore', toSysId: Number(sel.value) });
+  });
+  host.querySelector('[data-action="fleet-order-patrol"]').addEventListener('click', function () {
+    const a = host.querySelector('[data-bind="fleet-order-pat-a"]');
+    const b = host.querySelector('[data-bind="fleet-order-pat-b"]');
+    if (!a || !a.value || !b || !b.value) { showToast('Seleziona A e B'); return; }
+    if (a.value === b.value) { showToast('A e B devono essere diversi'); return; }
+    dispatch({ type: 'patrol', sysA: Number(a.value), sysB: Number(b.value) });
+  });
+  host.querySelector('[data-action="fleet-order-return"]').addEventListener('click', function () {
+    dispatch({ type: 'return' });
+  });
+  host.querySelector('[data-action="fleet-order-idle"]').addEventListener('click', function () {
+    dispatch({ type: 'idle' });
+  });
 }
 
 /* --- Tab Popolazione --- */
@@ -2223,7 +2703,12 @@ const DEFAULT_AUTOPAUSE = {
      restano in cronaca senza interrompere il gioco. L'utente può
      spegnere ognuna dall'overlay di pausa. */
   'gov-supply-falling': true, 'gov-queue-empty': true,
-  'gov-slots-idle': false, 'gov-pop-near-cap': false, 'gov-veterans-idle': false
+  'gov-slots-idle': false, 'gov-pop-near-cap': false, 'gov-veterans-idle': false,
+  /* M08 Fase A (decisione #42): arrivo flotta + rotta completata + scoperta
+     fortuita auto-pausano (esiti notevoli). Il launch è azione utente,
+     non sorpresa. Hop intermedi mai. */
+  'fleet-arrived': true, 'fleet-route-complete': true, 'fleet-discovery': true,
+  'fleet-launched': false, 'fleet-leg-hop': false
 };
 
 ORION.timer = {
@@ -2425,7 +2910,12 @@ function showEventOverlay(events) {
     'gov-slots-idle': 'Governatore: slot inutilizzati',
     'gov-pop-near-cap': 'Governatore: popolazione vicina al tetto',
     'gov-supply-falling': 'Governatore: stock in calo',
-    'gov-veterans-idle': 'Governatore: veterani disponibili'
+    'gov-veterans-idle': 'Governatore: veterani disponibili',
+    'fleet-arrived': 'Flotta arrivata',
+    'fleet-route-complete': 'Flotta: rotta completata',
+    'fleet-discovery': 'Flotta: sistema esplorato',
+    'fleet-launched': 'Flotta: salto iperspaziale',
+    'fleet-leg-hop': 'Flotta: hop intermedio'
   };
   /* Raggruppa per kind: una checkbox per categoria, una sola voce di sintesi. */
   const byKind = {};
@@ -2556,7 +3046,10 @@ function chronicleEvent(ev) {
   } else if (ev.kind === 'settle-done') {
     pushChronicle(ds + ' — Insediamento completato — la colonia di <strong>' + pname + '</strong> è operativa.', 'planet');
   } else if (ev.kind === 'ship-built') {
-    pushChronicle(ds + ' — Nuovo <strong>scafo esploratore</strong> pronto al varo su ' + pname + ptag + '.', 'planet');
+    /* M08 Fase A: nome della classe dalla classe vera. */
+    const sk = ev.shipKind || 'explorer';
+    const scls = (ORION.fleet && ORION.fleet.getClass(sk)) || { name: 'scafo esploratore' };
+    pushChronicle(ds + ' — Nuova <strong>' + scls.name + '</strong> pronta al varo su ' + pname + ptag + '.', 'planet');
   } else if (ev.kind === 'crew-formed') {
     pushChronicle(ds + ' — Nuovo <strong>equipaggio esploratore</strong> brevettato dall\'Accademia di ' + pname + ptag + '.', 'planet');
   } else if (ev.kind === 'expedition-arrived') {
@@ -2586,6 +3079,36 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — <strong>Scoperta fortuita</strong>: l\'equipaggio porta in patria osservazioni inattese.', 'explore');
   } else if (ev.kind === 'expedition-dock-overflow') {
     pushChronicle(ds + ' — Porto saturo su ' + pname + ptag + ' (' + (ev.bound || '?') + '/' + (ev.docks || '?') + '): la nave rientrata resta in <strong>orbita parcheggio</strong> in attesa di un attracco libero.', 'planet');
+  } else if (ev.kind === 'fleet-launched') {
+    const fname = ev.fleetName || '—';
+    const sys = ORION.game.galaxy.systems[ev.systemId];
+    const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
+    pushChronicle(ds + ' — Salto iperspaziale: <strong>' + escapeHtml(fname) + '</strong> in rotta verso <strong>' +
+      (sys ? sys.name : '—') + '</strong>' + stag + '.', 'explore');
+  } else if (ev.kind === 'fleet-leg-hop') {
+    /* Cronaca silenziata su ogni leg per evitare spam: il "fine rotta"
+       e l'arrivo bastano. (Lasciamo l'evento perché potrebbe servire
+       all'auto-pausa o all'UI in futuro.) */
+  } else if (ev.kind === 'fleet-arrived') {
+    const fname = ev.fleetName || '—';
+    const sys = ORION.game.galaxy.systems[ev.systemId];
+    const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
+    pushChronicle(ds + ' — <strong>' + escapeHtml(fname) + '</strong> in orbita di <strong>' +
+      (sys ? sys.name : '—') + '</strong>' + stag + '.', 'explore');
+    if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+  } else if (ev.kind === 'fleet-route-complete') {
+    const fname = ev.fleetName || '—';
+    const sys = ORION.game.galaxy.systems[ev.systemId];
+    const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
+    pushChronicle(ds + ' — Rotta completata da <strong>' + escapeHtml(fname) + '</strong> presso <strong>' +
+      (sys ? sys.name : '—') + '</strong>' + stag + '.', 'explore');
+  } else if (ev.kind === 'fleet-discovery') {
+    const fname = ev.fleetName || '—';
+    const sys = ORION.game.galaxy.systems[ev.systemId];
+    const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
+    pushChronicle(ds + ' — <strong>' + escapeHtml(fname) + '</strong>: sistema <strong>' +
+      (sys ? sys.name : '—') + '</strong>' + stag + ' esplorato.', 'explore');
+    if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
   } else if (ev.kind === 'gov-queue-empty') {
     pushChronicle(ds + ' — <strong>Governatore di ' + pname + ptag + '</strong>: la coda di costruzione è ferma — i cantieri attendono ordini.', 'planet');
     if (ORION.tutorial) ORION.tutorial.fire('governor');

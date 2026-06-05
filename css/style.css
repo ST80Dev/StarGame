@@ -2606,3 +2606,203 @@ select.main-menu__input { cursor: pointer; }
   font-style: italic;
   opacity: 0.6;
 }
+
+/* =====================================================================
+   M08 Fase A — Vista Flotte + overlay (decisione #42)
+   ===================================================================== */
+.cantieri-row__select {
+  background: rgba(20, 24, 38, 0.85);
+  color: var(--c-text, #e9ecf6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-family: inherit;
+  font-size: 0.9em;
+  margin-right: 4px;
+}
+.cantieri-row__select:focus {
+  outline: 1px solid var(--c-cyan, #2fe6e0);
+}
+
+.fleet-view {
+  padding: 16px 20px;
+  color: var(--c-text, #e9ecf6);
+  height: 100%;
+  overflow-y: auto;
+}
+.fleet-view__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.fleet-view__title {
+  margin: 0;
+  font-family: var(--font-display, sans-serif);
+  font-size: 1.4em;
+  letter-spacing: 0.05em;
+}
+.fleet-view__sub {
+  font-size: 0.6em;
+  opacity: 0.6;
+  margin-left: 8px;
+  letter-spacing: 0.08em;
+}
+.fleet-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fleet-item {
+  background: rgba(20, 24, 38, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 10px 12px;
+}
+.fleet-item__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.fleet-item__name { flex: 1; }
+.fleet-status {
+  font-size: 0.85em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: var(--font-mono, monospace);
+  background: rgba(255, 255, 255, 0.06);
+}
+.fleet-status--docked   { color: var(--c-cyan, #2fe6e0); }
+.fleet-status--in-transit { color: var(--c-amber, #ffae5c); }
+.fleet-status--orbiting { color: #b993ff; }
+.fleet-item__row,
+.fleet-item__ships {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 0.9em;
+  opacity: 0.9;
+  margin: 2px 0;
+}
+.fleet-item__actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+/* Overlays creazione/ordini — riusa il pattern di expedition-pick-overlay. */
+.fleet-create-overlay,
+.fleet-orders-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 360;
+  background: rgba(2, 4, 12, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.fleet-create-overlay[hidden],
+.fleet-orders-overlay[hidden] { display: none; }
+.fleet-create-overlay__panel,
+.fleet-orders-overlay__panel {
+  background: rgba(14, 18, 32, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 18px 20px;
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  color: var(--c-text, #e9ecf6);
+}
+.fleet-create-overlay__head,
+.fleet-orders-overlay__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.fleet-create-overlay__head h2,
+.fleet-orders-overlay__head h2 {
+  margin: 0;
+  font-family: var(--font-display, sans-serif);
+  font-size: 1.2em;
+}
+.fleet-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+  font-size: 0.95em;
+}
+.fleet-field select,
+.fleet-field input[type="text"] {
+  background: rgba(20, 24, 38, 0.85);
+  color: var(--c-text, #e9ecf6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  padding: 4px 6px;
+  font-family: inherit;
+}
+.fleet-create-overlay__actions,
+.fleet-order-block {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.fleet-create-overlay__actions { justify-content: flex-end; }
+.fleet-order-block h3 {
+  margin: 0;
+  flex: 0 0 100%;
+  font-size: 0.95em;
+  letter-spacing: 0.04em;
+  font-family: var(--font-display, sans-serif);
+}
+.fleet-order-block select {
+  flex: 1;
+  min-width: 140px;
+  background: rgba(20, 24, 38, 0.85);
+  color: var(--c-text, #e9ecf6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-family: inherit;
+}
+.fleet-manage-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 0.9em;
+}
+.fleet-manage-table th,
+.fleet-manage-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  text-align: left;
+}
+.fleet-manage-table th {
+  font-family: var(--font-display, sans-serif);
+  letter-spacing: 0.04em;
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+.fleet-crew-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0 4px;
+  font-size: 0.95em;
+}
