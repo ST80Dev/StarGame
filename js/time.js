@@ -46,7 +46,7 @@
     RECOVERY_IMPULSI: 3,        // I di netto positivo per uscire dallo stato
 
     /* Popolazione §9.3 */
-    POP_GROWTH_BASE: 0.018,     // unità pop / Impulso a morale 1, no malus
+    POP_GROWTH_BASE: 0.007,     // unità pop / Impulso a morale 1, no malus (decisione #37: crescita lenta, di lungo periodo)
     POP_MORALE_HOMEBASE: 0.15,  // +morale pianeta base §8.1
     POP_MORALE_HABITATION: 0.05,// +morale per centro abitativo
     POP_MORALE_MAX: 1.35,
@@ -54,6 +54,31 @@
     POP_FAMINE_AFTER: 30,       // I di carestia/sete prima del decremento
     POP_FAMINE_RATE: 30,        // 1 unità ogni N I sotto carestia
     POP_CLASS_SHIFT: 0.015,     // velocità riallineamento mix classi/Impulso
+
+    /* Capacità di carico §9.3 (decisione #37) — consumo pro-capite + plateau.
+       La popolazione consuma cibo/acqua per unità: la crescita si ferma in
+       PLATEAU quando la produzione LOCALE eguaglia il consumo, SENZA carestia
+       (il netto resta ≈0, lo stock stabile). Per superare il plateau servono
+       più fattorie/impianti idrici o — per i mondi più capienti — import via
+       rotte commerciali (M12). Contabilità per-colonia (emenda decisione #35).
+       Il consumo si applica solo in fase `operational` (non durante settling). */
+    POP_FOOD_PER_UNIT:  2.5,    // cibo consumato per unità di pop / Impulso (decisione #38: ritarato sul modello a moduli)
+    POP_WATER_PER_UNIT: 2.0,    // acqua consumata per unità di pop / Impulso
+    POP_SUPPLY_REF:     3,      // surplus locale che dà crescita a velocità piena
+    POP_LEVEL_COST:     0.6,    // freno temporale: ogni livello costa 1+0.6·(pop−1) accumulo
+
+    /* Cancelli strutturali impliciti (decisione #37bis): oltre la "capacità
+       abitativa" della colonia il sovraffollamento abbatte la morale → la
+       crescita si ferma in plateau. Non c'è alcun avviso esplicito: il
+       giocatore vede la morale calare mentre la città cresce e deduce che
+       serve sviluppare l'habitat (centro abitativo, ospedale, e in futuro
+       strutture tech M13). Le risorse decidono un tetto, l'habitat un altro:
+       cresce solo chi soddisfa entrambi. Numeri qui, mai mostrati in UI. */
+    POP_HOUSING_BASE:      3.0,   // unità sostenibili dall'insediamento nudo
+    POP_HOUSING_PER_LEVEL: 4.5,   // capacità abitativa per resa-cumulata moduli centro abitativo
+    POP_HOSPITAL_HOUSING:  3.0,   // capacità extra per resa-cumulata moduli ospedale (densità/sanità)
+    POP_CROWD_START:       0.8,   // rapporto pop/capacità oltre cui inizia il malus
+    POP_CROWD_SLOPE:       2.5,   // ripidità del crollo morale da sovraffollamento
 
     /* Osservatorio §7.3 */
     SCAN_OBSERVATION_I: 10,     // I di osservazione dopo completamento
@@ -433,14 +458,49 @@
       // penalità "allerta" su cibo/acqua
       if (scar.food.state === 'low' || scar.water.state === 'low') morale *= 0.6;
 
+      /* Sovraffollamento (cancello strutturale implicito, decisione #37bis):
+         oltre la capacità abitativa la morale crolla → crescita in plateau.
+         Il giocatore lo deduce vedendo la morale calare; si rialza sviluppando
+         l'habitat (centro abitativo, ospedale, future strutture M13). */
+      const hosp = (colony.structures['ospedale'] && colony.structures['ospedale'].level) || 0;
+      const Sm = root.ORION.structures;
+      const housingCap = CFG.POP_HOUSING_BASE
+        + (habit > 0 ? Sm.moduleSum(habit) : 0) * CFG.POP_HOUSING_PER_LEVEL
+        + (hosp > 0 ? Sm.moduleSum(hosp) : 0) * CFG.POP_HOSPITAL_HOUSING;
+      const crowd = housingCap > 0 ? pop.total / housingCap : 99;
+      if (crowd > CFG.POP_CROWD_START) {
+        morale *= Math.max(0.05, 1 - (crowd - CFG.POP_CROWD_START) * CFG.POP_CROWD_SLOPE);
+      }
+
       let growth = CFG.POP_GROWTH_BASE * morale;
       if (colony.structures['ospedale']) growth *= (1 + CFG.POP_GROWTH_HOSPITAL);
+
+      /* Capacità di carico (decisione #37): il consumo pro-capite della
+         popolazione è una RICHIESTA sulla produzione (non un drenaggio dello
+         stock → niente carestia da popolazione). La crescita è alimentata dal
+         SURPLUS = produzione locale − consumo (legge del minimo: vince il più
+         scarso tra cibo e acqua). Quando il surplus → 0 la crescita → 0: la
+         popolazione si stabilizza in PLATEAU senza mai carestia né "low". Per
+         alzare il tetto: più fattorie/idrici o import via rotte (M12). */
+      const foodSurplus  = (prod.net.food  || 0) - pop.total * CFG.POP_FOOD_PER_UNIT;
+      const waterSurplus = (prod.net.water || 0) - pop.total * CFG.POP_WATER_PER_UNIT;
+      const surplus = Math.min(foodSurplus, waterSurplus);
+      const supplyFactor = surplus <= 0 ? 0 : Math.min(1, surplus / CFG.POP_SUPPLY_REF);
+
+      growth *= supplyFactor;
       pop.accum += growth;
-      while (pop.accum >= 1 && pop.total < pop.cap) {
+      /* Freno temporale (decisione #37): ogni livello costa più accumulo del
+         precedente — `1 + POP_LEVEL_COST·(pop−1)`. Salire è progressivamente
+         più lento anche con risorse abbondanti, ma NON impedisce di raggiungere
+         la capacità di carico: la regola decide il *tempo*, le risorse il *dove*.
+         Saturare il cap resta un obiettivo di lungo periodo (serve import). */
+      let unitCost = 1 + CFG.POP_LEVEL_COST * (pop.total - 1);
+      while (pop.accum >= unitCost && pop.total < pop.cap) {
         pop.total++;
-        pop.accum -= 1;
+        pop.accum -= unitCost;
         // nuovo individuo va nella classe più piccola con bias dalle strutture
         addToBestClass(colony);
+        unitCost = 1 + CFG.POP_LEVEL_COST * (pop.total - 1);
       }
     }
 

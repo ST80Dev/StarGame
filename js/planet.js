@@ -45,10 +45,20 @@
      Mondi piccoli (ghiacciato/luna/gassoso/cintura) +1 rispetto al baseline
      iniziale per dare spazio a una specializzazione minima (3-4 estrattive
      base + qualcosa). Decisione di sessione post-M06.7. */
+  /* Decisione #38 (+ riserva difese/avanzate): col modello a moduli (livello =
+     slot) gli slot sono la leva strategica. Dimensionati a simulazione perché i
+     mondi-giardino raggiungano ~¾ del cap-popolazione in autosufficienza CON
+     margine per economia/militare (top pieno = import M12). In più si tiene una
+     RISERVA esplicita di slot per le strutture indispensabili dei moduli futuri:
+     difese planetarie (M09), stazioni/piattaforme orbitali (M15/M16), strutture
+     tech avanzate (M13) — perché un mondo ricco e popoloso sarà il bersaglio più
+     ambito e dovrà potersi difendere senza sacrificare la propria vocazione.
+     Mondi-giardino +2, mondi-fabbrica/piccoli +1 rispetto al primo dimensionamento.
+     + varianza #36 (`+0..+2`). */
   const BASE_SLOTS = {
-    terrestre:  8, desertico:  6, oceanico:  6,
-    ghiacciato: 6, vulcanico:  6, forestale: 7,
-    gassoso:    4, cintura:    4, luna:      5
+    terrestre: 21, desertico: 10, oceanico: 21,
+    ghiacciato: 10, vulcanico: 10, forestale: 20,
+    gassoso:    8, cintura:    8, luna:      8
   };
 
   /* Popolazione massima (in "unità popolazione", §9). 0 = non abitabile. */
@@ -364,15 +374,16 @@
     const pot = planet.potentials;
     let slotsUsed = 0;
 
-    // mappa di moltiplicatori applicati dalle produttive (per id sorgente)
+    // mappa di moltiplicatori applicati dalle produttive (per id sorgente).
+    // Decisione #38: i modifiers scalano con la resa cumulata dei moduli.
     const mods = {};
     for (let i = 0; i < ids.length; i++) {
       const def = S.get(ids[i]);
       if (!def || !def.modifiers) continue;
       const lvl = colony.structures[ids[i]].level || 1;
-      const lscale = S.levelScale(lvl);
+      const msum = S.moduleSum(lvl);
       Object.keys(def.modifiers).forEach(function (k) {
-        mods[k] = (mods[k] || 0) + def.modifiers[k] * lscale;
+        mods[k] = (mods[k] || 0) + def.modifiers[k] * msum;
       });
     }
 
@@ -381,26 +392,28 @@
       if (!def) continue;
       const ent = colony.structures[ids[i]];
       const lvl = ent.level || 1;
-      const lscale = S.levelScale(lvl);
-      slotsUsed += (def.slots || 1);
+      // Decisione #38: PRODUZIONE = resa cumulata moduli (rendimento crescente),
+      // UPKEEP = lineare (×livello, ogni modulo consuma uguale), SLOT = ×livello.
+      const msum = S.moduleSum(lvl);
+      slotsUsed += S.slotFootprint(def, lvl);
 
       Object.keys(def.rates || {}).forEach(function (k) {
         // i tassi "risorsa base" sono modulati dal potenziale del pianeta
-        let base = def.rates[k] * lscale;
+        let base = def.rates[k] * msum;
         if (k === 'met')   base *= pot.met / 60;
         if (k === 'en')    base *= pot.en  / 60;
         if (k === 'food')  base *= pot.food / 60;
         if (k === 'water') base *= pot.water / 60;
         // bonus pianeta base §8.1
         if (colony.isHomeBase) base *= 1.20;
-        // modificatori da produttive (es. fonderia → +25% miniera)
+        // modificatori da produttive (es. fonderia → +40%/modulo miniera)
         const modKey = def.id + '.rates.' + k;
         if (mods[modKey]) base *= (1 + mods[modKey]);
         out[k] = (out[k] || 0) + base;
       });
 
       Object.keys(def.upkeep || {}).forEach(function (k) {
-        upkeep[k] = (upkeep[k] || 0) + def.upkeep[k] * lscale;
+        upkeep[k] = (upkeep[k] || 0) + def.upkeep[k] * lvl;
       });
     }
     return { rates: out, upkeep: upkeep, used: slotsUsed };
@@ -435,17 +448,23 @@
         return { ok: false, reason: isDemo ? 'In smantellamento' : 'In costruzione', code: isDemo ? 'demolishing' : 'building' };
       }
     }
-    // già costruita (M04: niente upgrade-in-coda multiplo; max una istanza
-    // per id, gli upgrade si fanno tramite livelli — gestione M05)
-    if (colony.structures[structId]) return { ok: false, reason: 'Già costruita (upgrade in M05)' };
-    // slot disponibili
+    // Decisione #38: una struttura esistente si POTENZIA (aggiunge un modulo)
+    // finché è sotto maxLevel. Ogni modulo occupa slot-base slot in più.
+    const S2 = root.ORION.structures;
+    const existing = colony.structures[structId];
+    const curLevel = existing ? (existing.level || 1) : 0;
+    if (existing && curLevel >= (def.maxLevel || 1)) {
+      return { ok: false, reason: 'Livello massimo raggiunto', code: 'maxlevel' };
+    }
+    const nextLevel = curLevel + 1;
+    // slot disponibili (footprint = slot-base × livello)
     const used = Object.keys(colony.structures).reduce(function (a, id) {
       const d = root.ORION.structures.get(id);
-      return a + ((d && d.slots) || 1);
+      return a + S2.slotFootprint(d, colony.structures[id].level || 1);
     }, 0);
     const inQueue = colony.queue.reduce(function (a, q) {
       const d = root.ORION.structures.get(q.id);
-      return a + ((d && d.slots) || 1);
+      return a + ((d && d.slots) || 1);   // ogni voce in coda = +1 modulo
     }, 0);
     if (used + inQueue + (def.slots || 1) > planet.slots) return { ok: false, reason: 'Slot insufficienti' };
     // prerequisiti gancio (decisione: in M04 solo segnaliamo,
@@ -465,8 +484,8 @@
         return { ok: false, reason: 'Richiede tecnologia (M13)' };
       }
     }
-    // risorse
-    const cost = def.cost || {};
+    // risorse: costo escalante del prossimo modulo (decisione #38)
+    const cost = S2.stepCost(def, nextLevel);
     const keys = Object.keys(cost);
     for (let i = 0; i < keys.length; i++) {
       if ((colony.stock[keys[i]] || 0) < cost[keys[i]]) {
@@ -479,7 +498,7 @@
     if (colony.queue.length >= 1) {
       return { ok: false, reason: 'Cantiere planetario occupato', code: 'busy' };
     }
-    return { ok: true };
+    return { ok: true, isUpgrade: !!existing, nextLevel: nextLevel };
   }
 
   /* Avvia una costruzione: sottrae il costo dallo stock e mette in coda.
@@ -487,14 +506,18 @@
   function startBuild(colony, planet, structId, startedAtDS) {
     const check = canBuild(colony, planet, structId);
     if (!check.ok) return check;
-    const def = root.ORION.structures.get(structId);
-    const cost = def.cost || {};
+    const S = root.ORION.structures;
+    const def = S.get(structId);
+    const nextLevel = check.nextLevel || 1;
+    // Decisione #38: costo/tempo del prossimo modulo escalano col livello.
+    const cost = S.stepCost(def, nextLevel);
     Object.keys(cost).forEach(function (k) { colony.stock[k] = (colony.stock[k] || 0) - cost[k]; });
     colony.queue.push({
       id: structId,
-      target: 'build',
+      target: check.isUpgrade ? 'upgrade' : 'build',
+      toLevel: nextLevel,
       startedAt: startedAtDS || null,
-      duration: def.time
+      duration: S.stepTime(def, nextLevel)
     });
     return { ok: true };
   }
@@ -508,8 +531,9 @@
     if (q.target === 'demolish') return { ok: true };
     const def = root.ORION.structures.get(q.id);
     if (def && def.cost) {
-      Object.keys(def.cost).forEach(function (k) {
-        colony.stock[k] = (colony.stock[k] || 0) + Math.floor(def.cost[k] * 0.8);
+      const refund = root.ORION.structures.stepCost(def, q.toLevel || 1);
+      Object.keys(refund).forEach(function (k) {
+        colony.stock[k] = (colony.stock[k] || 0) + Math.floor(refund[k] * 0.8);
       });
     }
     return { ok: true };
