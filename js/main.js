@@ -1420,6 +1420,26 @@ function deltaBalanceHtml(delta) {
   return '<span class="struct-item__delta" title="Saldo netto per Impulso se costruita">' + parts.join(' ') + '</span>';
 }
 
+/* Badge livello con gradiente coerente al progresso lvl/maxLevel.
+   - L1..L< quartile basso → ciano pallido (struttura appena seminata)
+   - quartile medio → ciano acceso
+   - quartile alto → ambra
+   - prossimo al max → arancio acceso
+   - lvl = maxLevel → oro con bagliore (apice). */
+function levelBadgeHtml(lvl, maxL) {
+  let cls;
+  if (lvl >= maxL) {
+    cls = 'lv-max';
+  } else {
+    const ratio = maxL > 1 ? (lvl - 1) / (maxL - 1) : 0;
+    if (ratio < 0.25) cls = 'lv-1';
+    else if (ratio < 0.50) cls = 'lv-2';
+    else if (ratio < 0.75) cls = 'lv-3';
+    else cls = 'lv-4';
+  }
+  return '<span class="struct-item__lvl-badge ' + cls + '" title="Livello ' + lvl + ' di ' + maxL + '">L' + lvl + '</span>';
+}
+
 /* --- Tab Strutture --- */
 function renderPlanetStruttureTab(host, planet, colony) {
   const S = ORION.structures;
@@ -1434,52 +1454,6 @@ function renderPlanetStruttureTab(host, planet, colony) {
   let html = '<div class="sysinfo">' +
     '<p class="planet-slots">Slot · <strong>' + (used + inQueue) + ' / ' + planet.slots + '</strong>' +
       (queueCount ? ' <span class="planet-slots__queue">(' + queueCount + ' ' + (queueCount === 1 ? 'progetto' : 'progetti') + ' in coda · ' + inQueue + ' slot)</span>' : '') + '</p>';
-
-  // costruite
-  const builtIds = Object.keys(colony.structures);
-  if (builtIds.length) {
-    html += '<p class="sysinfo__sub">Costruite</p><ul class="struct-list">';
-    builtIds.forEach(function (id) {
-      const def = S.get(id);
-      const ent = colony.structures[id];
-      const lvl = ent.level || 1;
-      const maxL = def.maxLevel || 1;
-      const demoCheck = ORION.planet.canDemolish(colony, planet, id);
-      const demoBtn = demoCheck.ok
-        ? '<button class="btn btn--mini struct-item__demolish" data-demolish="' + id + '" type="button" title="Smantella (rimborso 50% · 70% sulla colonia natale · morale −0,10 per 30 Ι)">🗑</button>'
-        : '<span class="struct-item__locked is-busy" title="' + demoCheck.reason + '">🗑</span>';
-      // Decisione #38: bottone "+ Espandi" (aggiunge un modulo = +slot, costo escalante)
-      let upBtn;
-      let infoLine;
-      let timeChip = '';
-      if (lvl >= maxL) {
-        upBtn = '<span class="struct-item__locked" title="Livello massimo (' + maxL + ')">max</span>';
-        infoLine = '<div class="struct-item__cost struct-item__cost--max">Livello massimo</div>';
-      } else {
-        const up = ORION.planet.canBuild(colony, planet, id);
-        const nextCost = S.stepCost(def, lvl + 1);
-        const nextTime = S.stepTime(def, lvl + 1);
-        const costStr = Object.keys(nextCost).map(function (k) { return '<span class="struct-item__cost-item">' + resGlyph(k) + nextCost[k] + '</span>'; }).join(' ');
-        const balance = deltaBalanceHtml(marginalNet(colony, planet, id));
-        if (up.ok) {
-          upBtn = '<button class="btn btn--mini btn--icon" data-build="' + id + '" type="button" title="Espandi a ×' + (lvl + 1) + ' (+' + (def.slots || 1) + ' slot)" aria-label="Espandi">+</button>';
-        } else {
-          upBtn = '<span class="struct-item__locked struct-item__locked--icon" title="' + escapeHtml(up.reason) + '" aria-label="Espandi (bloccato)">+</span>';
-        }
-        timeChip = ' <span class="struct-item__cat">' + nextTime + ' I</span>';
-        infoLine = '<div class="struct-item__cost"><span class="struct-item__cost-label">×' + (lvl + 1) + '</span> ' + costStr + (balance ? ' ' + balance : '') + '</div>';
-      }
-      html += '<li class="struct-item is-built">' +
-        '<span class="struct-item__glyph">' + def.glyph + '</span>' +
-        '<div class="struct-item__main">' +
-          '<div class="struct-item__name">' + def.name + ' <span class="struct-item__lvl">×' + lvl + '</span>' + timeChip + '</div>' +
-          infoLine +
-        '</div>' +
-        upBtn + demoBtn +
-      '</li>';
-    });
-    html += '</ul>';
-  }
 
   // in coda — con countdown e barra di avanzamento (M05)
   if (colony.queue.length) {
@@ -1524,52 +1498,93 @@ function renderPlanetStruttureTab(host, planet, colony) {
   // Cantieri & Squadre (M07) → spostati nella tab dedicata "Forze".
   // La tab si sblocca quando è costruita Hangar o Accademia.
 
-  // costruibili — solo strutture NON ancora presenti (decisione #38: quelle
-  // già costruite si potenziano dal bottone "+ Espandi" in "Costruite").
-  const available = S.buildableOn(planet.type).filter(function (def) {
-    return !colony.structures[def.id];
-  });
-  html += '<p class="sysinfo__sub">Costruibili</p>';
+  // Strutture — elenco unificato per categoria (decisione #42):
+  // ogni voce mostra il proprio stato (costruita L<n> con "+ Espandi" /
+  // costruibile con "+" / bloccata con motivo). Le code "In costruzione"
+  // e "Osservatorio · scansione" restano blocchi separati sopra.
+  const allDefs = S.buildableOn(planet.type);
   const byCat = {};
-  available.forEach(function (def) { (byCat[def.cat] = byCat[def.cat] || []).push(def); });
+  allDefs.forEach(function (def) { (byCat[def.cat] = byCat[def.cat] || []).push(def); });
+  html += '<p class="sysinfo__sub">Strutture</p>';
   Object.keys(S.CATEGORIES).forEach(function (cat) {
     const list = byCat[cat]; if (!list) return;
-    html += '<details class="struct-cat" open><summary>' + S.CATEGORIES[cat].glyph + ' ' + S.CATEGORIES[cat].label + '</summary><ul class="struct-list">';
+    const built = list.filter(function (d) { return !!colony.structures[d.id]; }).length;
+    const countChip = ' <span class="struct-cat__count">' + built + '/' + list.length + '</span>';
+    html += '<details class="struct-cat" open><summary>' + S.CATEGORIES[cat].glyph + ' ' + S.CATEGORIES[cat].label + countChip + '</summary><ul class="struct-list">';
     list.forEach(function (def) {
-      const check = ORION.planet.canBuild(colony, planet, def.id);
-      const cost = def.cost || {};
-      const costStr = Object.keys(cost).map(function (k) { return '<span class="struct-item__cost-item">' + resGlyph(k) + cost[k] + '</span>'; }).join(' ');
-      const balance = deltaBalanceHtml(marginalNet(colony, planet, def.id));
-      let statusCell;
-      let extraClass = check.ok ? '' : ' is-locked';
-      if (check.ok) {
-        statusCell = '<button class="btn btn--mini btn--icon" data-build="' + def.id + '" type="button" title="Costruisci ' + escapeHtml(def.name) + '" aria-label="Costruisci ' + escapeHtml(def.name) + '">+</button>';
-      } else if (check.code === 'building') {
-        const qEntry = colony.queue.find(function (q) { return q.id === def.id; });
-        const total = def.time || 1;
-        const remain = qEntry ? Math.max(0, qEntry.duration | 0) : total;
-        statusCell = '<span class="struct-item__locked is-building" title="In costruzione (' + remain + ' / ' + total + ' I)">▶ In costruzione · ' + remain + '/' + total + ' I</span>';
-        extraClass += ' is-building';
-      } else if (check.code === 'demolishing') {
-        const qEntry = colony.queue.find(function (q) { return q.id === def.id; });
-        const total = Math.max(1, Math.round((def.time || 2) / 2));
-        const remain = qEntry ? Math.max(0, qEntry.duration | 0) : total;
-        statusCell = '<span class="struct-item__locked is-demolish" title="In smantellamento (' + remain + ' / ' + total + ' I)">🛠 Smantellamento · ' + remain + '/' + total + ' I</span>';
-        extraClass += ' is-building';
-      } else if (check.code === 'busy') {
-        statusCell = '<span class="struct-item__locked is-busy" title="' + check.reason + '">⏳ Occupato</span>';
+      const ent = colony.structures[def.id];
+      if (ent) {
+        // === BUILT ===
+        const lvl = ent.level || 1;
+        const maxL = def.maxLevel || 1;
+        const demoCheck = ORION.planet.canDemolish(colony, planet, def.id);
+        const demoBtn = demoCheck.ok
+          ? '<button class="btn btn--mini struct-item__demolish" data-demolish="' + def.id + '" type="button" title="Smantella (rimborso 50% · 70% sulla colonia natale · morale −0,10 per 30 Ι)">🗑</button>'
+          : '<span class="struct-item__locked is-busy" title="' + demoCheck.reason + '">🗑</span>';
+        let upBtn, infoLine, timeChip = '';
+        if (lvl >= maxL) {
+          upBtn = '<span class="struct-item__locked" title="Livello massimo (' + maxL + ')">max</span>';
+          infoLine = '<div class="struct-item__cost struct-item__cost--max">Livello massimo</div>';
+        } else {
+          const up = ORION.planet.canBuild(colony, planet, def.id);
+          const nextCost = S.stepCost(def, lvl + 1);
+          const nextTime = S.stepTime(def, lvl + 1);
+          const costStr = Object.keys(nextCost).map(function (k) { return '<span class="struct-item__cost-item">' + resGlyph(k) + nextCost[k] + '</span>'; }).join(' ');
+          const balance = deltaBalanceHtml(marginalNet(colony, planet, def.id));
+          if (up.ok) {
+            upBtn = '<button class="btn btn--mini btn--icon" data-build="' + def.id + '" type="button" title="Espandi a L' + (lvl + 1) + ' (+' + (def.slots || 1) + ' slot)" aria-label="Espandi">+</button>';
+          } else {
+            upBtn = '<span class="struct-item__locked struct-item__locked--icon" title="' + escapeHtml(up.reason) + '" aria-label="Espandi (bloccato)">+</span>';
+          }
+          timeChip = ' <span class="struct-item__cat">' + nextTime + ' I</span>';
+          infoLine = '<div class="struct-item__cost"><span class="struct-item__cost-label">Prossimo · L' + (lvl + 1) + '</span> ' + costStr + (balance ? ' ' + balance : '') + '</div>';
+        }
+        html += '<li class="struct-item is-built">' +
+          '<span class="struct-item__glyph">' + def.glyph + '</span>' +
+          '<div class="struct-item__main">' +
+            '<div class="struct-item__name">' + levelBadgeHtml(lvl, maxL) + def.name + timeChip + '</div>' +
+            infoLine +
+          '</div>' +
+          '<button class="btn btn--mini struct-item__info" data-info="' + def.id + '" type="button" title="Cosa fa, bonus/malus, concatenazioni" aria-label="Informazioni su ' + def.name + '">i</button>' +
+          upBtn + demoBtn +
+        '</li>';
       } else {
-        statusCell = '<span class="struct-item__locked" title="' + check.reason + '">◌</span>';
+        // === NON COSTRUITA ===
+        const check = ORION.planet.canBuild(colony, planet, def.id);
+        const cost = def.cost || {};
+        const costStr = Object.keys(cost).map(function (k) { return '<span class="struct-item__cost-item">' + resGlyph(k) + cost[k] + '</span>'; }).join(' ');
+        const balance = deltaBalanceHtml(marginalNet(colony, planet, def.id));
+        let statusCell;
+        let extraClass = check.ok ? '' : ' is-locked';
+        if (check.ok) {
+          statusCell = '<button class="btn btn--mini btn--icon" data-build="' + def.id + '" type="button" title="Costruisci ' + escapeHtml(def.name) + '" aria-label="Costruisci ' + escapeHtml(def.name) + '">+</button>';
+        } else if (check.code === 'building') {
+          const qEntry = colony.queue.find(function (q) { return q.id === def.id; });
+          const total = def.time || 1;
+          const remain = qEntry ? Math.max(0, qEntry.duration | 0) : total;
+          statusCell = '<span class="struct-item__locked is-building" title="In costruzione (' + remain + ' / ' + total + ' I)">▶ In costruzione · ' + remain + '/' + total + ' I</span>';
+          extraClass += ' is-building';
+        } else if (check.code === 'demolishing') {
+          const qEntry = colony.queue.find(function (q) { return q.id === def.id; });
+          const total = Math.max(1, Math.round((def.time || 2) / 2));
+          const remain = qEntry ? Math.max(0, qEntry.duration | 0) : total;
+          statusCell = '<span class="struct-item__locked is-demolish" title="In smantellamento (' + remain + ' / ' + total + ' I)">🛠 Smantellamento · ' + remain + '/' + total + ' I</span>';
+          extraClass += ' is-building';
+        } else if (check.code === 'busy') {
+          statusCell = '<span class="struct-item__locked is-busy" title="' + check.reason + '">⏳ Occupato</span>';
+        } else {
+          statusCell = '<span class="struct-item__locked" title="' + check.reason + '">◌</span>';
+        }
+        html += '<li class="struct-item' + extraClass + '" title="' + def.desc + '">' +
+          '<span class="struct-item__glyph">' + def.glyph + '</span>' +
+          '<div class="struct-item__main">' +
+            '<div class="struct-item__name">' + def.name + ' <span class="struct-item__cat">' + def.time + ' I</span></div>' +
+            '<div class="struct-item__cost">' + costStr + (balance ? ' ' + balance : '') + '</div>' +
+          '</div>' +
+          '<button class="btn btn--mini struct-item__info" data-info="' + def.id + '" type="button" title="Cosa fa, bonus/malus, concatenazioni" aria-label="Informazioni su ' + def.name + '">i</button>' +
+          statusCell +
+        '</li>';
       }
-      html += '<li class="struct-item' + extraClass + '" title="' + def.desc + '">' +
-        '<span class="struct-item__glyph">' + def.glyph + '</span>' +
-        '<div class="struct-item__main">' +
-          '<div class="struct-item__name">' + def.name + ' <span class="struct-item__cat">' + def.time + ' I</span></div>' +
-          '<div class="struct-item__cost">' + costStr + (balance ? ' ' + balance : '') + '</div>' +
-        '</div>' +
-        '<button class="btn btn--mini struct-item__info" data-info="' + def.id + '" type="button" title="Cosa fa, bonus/malus, concatenazioni" aria-label="Informazioni su ' + def.name + '">i</button>' +
-        statusCell +
-      '</li>';
     });
     html += '</ul></details>';
   });
