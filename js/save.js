@@ -36,7 +36,9 @@
      - M06.6 aggiunge game.tutorial = { enabled, seenLessons }
      Sub-migrazioni componibili: v1→v2 (victory), v2→v3 (chronicle), v3→v4
      (homeWorld:null + colonia operational + tutorial vuoto, retro-compat). */
-  const SCHEMA_VERSION = 7;
+  /* Schema 8 (M10 Fase A, decisione #47): aggiunge lo stato delle civiltà
+     AI (game.civs), i pirati (game.piracy) e l'ICG (game.icg). */
+  const SCHEMA_VERSION = 8;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -100,7 +102,14 @@
       /* Decisione #45: mapping centrale gruppo→capitale. Lo stato
          capitalState delle singole colonie vive in game.colonies e
          viene auto-serializzato. */
-      capitals: (game.capitals && typeof game.capitals === 'object') ? game.capitals : {}
+      capitals: (game.capitals && typeof game.capitals === 'object') ? game.capitals : {},
+      /* M10 Fase A (decisione #47): civiltà AI + pirati + ICG come delta.
+         La struttura immutabile della galassia (sistemi, fasce, rotte) si
+         rigenera dal seed; qui salviamo solo lo stato mutevole (chi possiede
+         cosa, potenza, disposizione, ICG). */
+      civs: Array.isArray(game.civs) ? game.civs : [],
+      piracy: (game.piracy && typeof game.piracy === 'object') ? game.piracy : { nests: [] },
+      icg: (typeof game.icg === 'number') ? game.icg : null
     };
   }
 
@@ -203,6 +212,16 @@
         payload.capitals = {};
       }
       payload.schema = 7;
+    }
+    /* v7 → v8 (M10 Fase A, decisione #47): aggiungi civs/piracy/icg.
+       Lazy: vuoti qui, ORION.ai.ensure() li genera dal seed al caricamento
+       (idempotente). Save vecchi caricano e la galassia "prende vita" alla
+       prima apertura, coerente con seed+delta. */
+    if ((payload.schema || 7) < 8) {
+      if (!Array.isArray(payload.civs)) payload.civs = [];
+      if (!payload.piracy || typeof payload.piracy !== 'object') payload.piracy = { nests: [] };
+      if (payload.icg == null) payload.icg = null;
+      payload.schema = 8;
     }
     return payload;
   }

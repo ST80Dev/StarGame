@@ -1384,6 +1384,10 @@ button { font-family: inherit; }
 .chronicle__entry--system { color: var(--c-text-faint); font-style: italic; }
 .chronicle__entry--explore { color: var(--c-text); }
 .chronicle__entry--explore::before { color: var(--c-accent-warm); }
+/* M10 Fase A (decisione #47): voci sulle civiltà AI — accento freddo
+   distinto dal resto (geopolitica galattica). */
+.chronicle__entry--civ { color: var(--c-text); }
+.chronicle__entry--civ::before { color: #9d7bff; }
 
 /* --- Controllo del tempo (Tempo Standard Galattico) --- */
 .time-control {

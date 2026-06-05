@@ -309,6 +309,35 @@
     return 'letale';
   }
 
+  /* Fasce regionali (decisione #34 — lessico SW-flavor, gancio M10).
+     Categorizzano i gruppi stellari per POSIZIONE rispetto al centro
+     galattico (0.5,0.5): Nucleo (interno, civile) → Spazio Sconosciuto
+     (orlo estremo). Servono a M10 per distribuire le civiltà AI (imperi
+     consolidati nel Nucleo, arrampicatori sulla Frontiera/Orlo) e legano
+     densità AI + pericolo §5.3. Deterministiche dalla sola geometria →
+     vivono nella struttura immutabile, niente costo di salvataggio. */
+  const REGION_TIERS = [
+    { id: 'nucleo',      label: 'Nucleo' },
+    { id: 'colonie',     label: 'Colonie' },
+    { id: 'frontiera',   label: 'Frontiera' },
+    { id: 'orlo',        label: 'Orlo Esterno' },
+    { id: 'sconosciuto', label: 'Spazio Sconosciuto' }
+  ];
+  function assignRegionTiers(groups) {
+    const ranked = groups.map(function (gp) {
+      const dx = gp.cx - 0.5, dy = gp.cy - 0.5;
+      return { gp: gp, d: Math.sqrt(dx * dx + dy * dy) };
+    }).sort(function (a, b) { return a.d - b.d; });
+    const n = ranked.length;
+    ranked.forEach(function (r, rank) {
+      // mappa il rank (0 = più centrale) su una delle 5 fasce
+      const idx = n <= 1 ? 0 : Math.min(REGION_TIERS.length - 1,
+        Math.floor((rank / n) * REGION_TIERS.length));
+      r.gp.tier = REGION_TIERS[idx].id;
+      r.gp.tierLabel = REGION_TIERS[idx].label;
+    });
+  }
+
   /* Nome-base di un sistema, senza designazione di catalogo ("Rigel II" -> "Rigel"). */
   function baseName(name) {
     return name.replace(/\s+[IVX]+$/, '');
@@ -403,6 +432,9 @@
       gp.name = names[i];
       gp.dangerTier = dangerTier(gp.danger);
     });
+
+    // Fascia regionale (decisione #34): Nucleo → Spazio Sconosciuto.
+    assignRegionTiers(groups);
 
     // Sigla regione (decisione #26): 3 lettere dal nome del gruppo, con
     // gestione delle collisioni tra gruppi diversi (suffisso numerico

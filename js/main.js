@@ -134,7 +134,13 @@ function newGame(seed, opts) {
     fleets: [],
     /* Decisione #45: mapping centrale gruppo→capitale (lazy initFromHome
        dopo colonizeHomePlanet). */
-    capitals: {}
+    capitals: {},
+    /* M10 Fase A (decisione #47): civiltà AI, pirati e ICG. Generati dal
+       seed via ORION.ai.ensure() dopo la colonizzazione della home (idempotente:
+       restano vuoti se ripristinati da un payload). */
+    civs: [],
+    piracy: { nests: [] },
+    icg: null
   };
   // startDS = Data Stellare INIZIALE (epoca .00), fissa per la partita.
   ORION.game.startDS = ORION.time.format(startOrbita * 100);
@@ -167,6 +173,12 @@ function newGame(seed, opts) {
     if (saved.capitals && typeof saved.capitals === 'object') {
       ORION.game.capitals = Object.assign({}, saved.capitals);
     }
+    /* M10 Fase A (decisione #47): ripristina civiltà AI / pirati / ICG.
+       Se il payload è di uno schema < 8 questi sono vuoti → ORION.ai.ensure()
+       sotto li genera dal seed (la galassia preesiste, prende vita al load). */
+    if (Array.isArray(saved.civs)) ORION.game.civs = saved.civs.slice();
+    if (saved.piracy && typeof saved.piracy === 'object') ORION.game.piracy = saved.piracy;
+    if (typeof saved.icg === 'number') ORION.game.icg = saved.icg;
     /* Tutorial: rispetta lo stato del payload se presente. */
     if (saved.tutorial && typeof saved.tutorial === 'object') {
       ORION.game.tutorial = {
@@ -185,6 +197,13 @@ function newGame(seed, opts) {
      della home, non fa nulla. */
   if (ORION.capital && ORION.capital.initFromHome) {
     ORION.capital.initFromHome(ORION.game);
+  }
+  /* M10 Fase A (decisione #47): genera le civiltà AI dal seed se assenti
+     (partita nuova o save pre-schema-8). Idempotente: non rigenera se il
+     payload conteneva già game.civs. Va DOPO colonizeHomePlanet così i
+     sistemi del giocatore non vengono mai annessi alle AI. */
+  if (ORION.ai && ORION.ai.ensure) {
+    ORION.ai.ensure(ORION.game);
   }
 
   setHudDate(ORION.time.currentDS(ORION.game));
@@ -263,6 +282,22 @@ function updateGlobalResourceHud() {
   setVal('acqua', totals.water);
   const popEl = document.querySelector('[data-bind="popolazione"]');
   if (popEl) popEl.textContent = ORION.planet.formatPeople(people);
+  updateGlobalIndicesHud();
+}
+
+/* M10 Fase A (decisione #47): ICG §5.4 + Reputazione §14 come ANTEPRIMA.
+   I valori veri/sistematizzati arrivano con M18; qui mostriamo l'output
+   emergente dello strato AI (ICG dalle azioni delle civiltà maligne/buone,
+   Reputazione dalla media delle disposizioni delle civiltà contattate). */
+function updateGlobalIndicesHud() {
+  const g = ORION.game;
+  if (!g) return;
+  const icgEl = document.querySelector('[data-bind="icg"]');
+  if (icgEl && typeof g.icg === 'number') icgEl.textContent = Math.round(g.icg).toString();
+  const repEl = document.querySelector('[data-bind="reputazione"]');
+  if (repEl && ORION.ai && ORION.ai.reputationPreview) {
+    repEl.textContent = ORION.ai.reputationPreview(g).toString();
+  }
 }
 
 /* ---------------------------------------------------------------------
@@ -3188,7 +3223,16 @@ const DEFAULT_AUTOPAUSE = {
   /* Decisione #45: eventi rari capitale di gruppo, sempre notevoli. */
   'capital-declared': true,
   'capital-transition-end': true,
-  'capital-decommissioned': true
+  'capital-decommissioned': true,
+  /* M10 Fase A (decisione #47): primo contatto, caduta e nascita di una
+     civiltà sono notevoli → auto-pausa ON. Espansioni/guerre/razzie sono
+     "voci di cronaca" atmosferiche e frequenti → OFF (niente interruzioni). */
+  'civ-contact': true,
+  'civ-fallen': true,
+  'civ-emerged': true,
+  'civ-expand': false,
+  'civ-war': false,
+  'pirate-raid': false
 };
 
 ORION.timer = {
@@ -3400,7 +3444,13 @@ function showEventOverlay(events) {
     'commander-promoted': 'Nuovo Comandante nominato',
     'capital-declared': 'Capitale di gruppo dichiarata',
     'capital-transition-end': 'Capitale entrata in carica',
-    'capital-decommissioned': 'Vecchia capitale decommissionata'
+    'capital-decommissioned': 'Vecchia capitale decommissionata',
+    'civ-contact': 'Primo contatto con una civiltà',
+    'civ-expand': 'Civiltà AI: espansione',
+    'civ-war': 'Guerra tra civiltà',
+    'civ-fallen': 'Civiltà caduta',
+    'civ-emerged': 'Nuova civiltà emersa',
+    'pirate-raid': 'Razzia pirata'
   };
   /* Raggruppa per kind: una checkbox per categoria, una sola voce di sintesi. */
   const byKind = {};
@@ -3637,6 +3687,23 @@ function chronicleEvent(ev) {
     if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('capital');
   } else if (ev.kind === 'capital-decommissioned') {
     pushChronicle(ds + ' — <strong>' + pname + ptag + '</strong> ha terminato il decommissioning · ritorno a regime normale.', 'planet');
+  } else if (ev.kind === 'civ-contact') {
+    /* M10 Fase A (decisione #47): primo contatto con una civiltà AI.
+       La scheda-dossier vera arriva in Fase B; qui è una voce di cronaca. */
+    pushChronicle(ds + ' — <strong>Primo contatto</strong> con <strong>' + escapeHtml(ev.civName) + '</strong> nel/nella ' + escapeHtml(ev.regionLabel) + ' · <em>' + escapeHtml(ev.traitLabel) + '</em>.', 'civ');
+    if (ORION.tutorial) ORION.tutorial.fire('civilizations');
+  } else if (ev.kind === 'civ-expand') {
+    /* Voce di cronaca "da lontano": effetto senza svelare la mappa. */
+    pushChronicle(ds + ' — Voci dal/dalla ' + escapeHtml(ev.regionLabel) + ': <strong>' + escapeHtml(ev.civName) + '</strong> ha annesso un nuovo sistema.', 'civ');
+  } else if (ev.kind === 'civ-war') {
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.winner) + '</strong> strappa un sistema a <strong>' + escapeHtml(ev.loser) + '</strong> nel/nella ' + escapeHtml(ev.regionLabel) + '.', 'civ');
+    if (ORION.tutorial) ORION.tutorial.fire('civilizations');
+  } else if (ev.kind === 'civ-fallen') {
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.civName) + '</strong> è caduta: ridotta a zero sistemi, assorbita da <strong>' + escapeHtml(ev.conqueror) + '</strong>.', 'civ');
+  } else if (ev.kind === 'civ-emerged') {
+    pushChronicle(ds + ' — Una nuova potenza emerge nel/nella ' + escapeHtml(ev.regionLabel) + ': <strong>' + escapeHtml(ev.civName) + '</strong>.', 'civ');
+  } else if (ev.kind === 'pirate-raid') {
+    pushChronicle(ds + ' — Predoni hanno colpito una rotta nel/nella ' + escapeHtml(ev.regionLabel) + '.', 'system');
   }
 }
 
