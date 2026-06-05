@@ -289,6 +289,7 @@ button { font-family: inherit; }
 }
 .panel__content { padding: 12px 14px; overflow-y: auto; flex: 1; }
 .panel__note { margin-top: 14px; font-size: 0.84rem; color: var(--c-text-soft); line-height: 1.55; }
+.panel__note--target { margin-top: 8px; font-size: 0.78rem; color: var(--c-text-faint); font-style: italic; }
 
 /* --- Lista di navigazione --- */
 .nav-list { display: flex; flex-direction: column; gap: 4px; }
