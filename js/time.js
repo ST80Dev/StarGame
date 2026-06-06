@@ -241,6 +241,23 @@
     return format(base + (game.timeImpulsi || 0), 'full');
   }
 
+  /* PR-H: versione HTML del formato compact con i 4 valori colorati
+     per unità del Faro (Ω·Φ·Κ·Ι). Tinte coerenti con .ds-unit:
+     Ω=viola · Φ=ambra · Κ=verde · Ι=ciano. Pensata per l'HUD DATA
+     dove ogni segmento ha significato posizionale fisso. */
+  function currentDSHtml(game) {
+    if (!game) return '—';
+    const base = (game.startEpochOrbita || 0) * 100;
+    const p = splitFaro(base + (game.timeImpulsi || 0));
+    return '<span class="ds-val ds-val--omega">' + p.O + '</span>' +
+      '<span class="ds-sep">·</span>' +
+      '<span class="ds-val ds-val--phi">' + p.F + '</span>' +
+      '<span class="ds-sep">·</span>' +
+      '<span class="ds-val ds-val--kappa">' + p.K + '</span>' +
+      '<span class="ds-sep">·</span>' +
+      '<span class="ds-val ds-val--iota">' + p.I + '</span>';
+  }
+
   /* Stato di scarsità di default (idempotente, creato lazy). */
   function ensureScarcity(colony) {
     if (!colony._scar) {
@@ -1785,6 +1802,7 @@
     format: format,
     currentDS: currentDS,
     currentDSFull: currentDSFull,
+    currentDSHtml: currentDSHtml,
     splitFaro: splitFaro,
     I_PER_K: I_PER_K, I_PER_PHI: I_PER_PHI, I_PER_OMEGA: I_PER_OMEGA,
     tick: tick,
