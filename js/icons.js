@@ -188,6 +188,47 @@
     spy: svg(
       '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>' +
       '<circle cx="12" cy="12" r="3"/>'
+    ),
+
+    /* Close — X per chiudere modali/overlay. */
+    close: svg(
+      '<line x1="6" y1="6" x2="18" y2="18"/>' +
+      '<line x1="18" y1="6" x2="6" y2="18"/>'
+    ),
+
+    /* Play — triangolo destro per riprendere/lanciare. */
+    play: svg(
+      '<polygon points="6,4 20,12 6,20" fill="currentColor" stroke="none"/>'
+    ),
+
+    /* ChevronRight — freccia compatta per "Avanza/Apri ▸". */
+    chevronRight: svg(
+      '<polyline points="9,6 15,12 9,18"/>'
+    ),
+
+    /* Send — aeroplano/paper-plane per "Invia spedizione". */
+    send: svg(
+      '<path d="M22 2L11 13"/>' +
+      '<polygon points="22,2 15,22 11,13 2,9 22,2"/>'
+    ),
+
+    /* Sword — gladio per battaglia/attacco. */
+    sword: svg(
+      '<polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/>' +
+      '<line x1="13" y1="19" x2="19" y2="13"/>' +
+      '<line x1="16" y1="16" x2="20" y2="20"/>' +
+      '<line x1="19" y1="21" x2="21" y2="19"/>'
+    ),
+
+    /* Trophy — coppa per vittoria. */
+    trophy: svg(
+      '<line x1="6" y1="9" x2="6" y2="6"/>' +
+      '<line x1="18" y1="9" x2="18" y2="6"/>' +
+      '<path d="M6 9a6 6 0 0 0 12 0"/>' +
+      '<path d="M10 21h4"/>' +
+      '<path d="M12 17v4"/>' +
+      '<path d="M2 6h4"/>' +
+      '<path d="M18 6h4"/>'
     )
   };
 

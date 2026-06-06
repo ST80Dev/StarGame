@@ -108,8 +108,13 @@
     <div class="save-modal" data-bind="save-modal" role="dialog" aria-modal="true" aria-label="Salvataggi" hidden>
       <div class="save-modal__panel">
         <header class="save-modal__header">
-          <h2 class="save-modal__title">Salvataggi</h2>
-          <button class="btn btn--mini" data-action="save-close" type="button" aria-label="Chiudi">✕</button>
+          <h2 class="save-modal__title">
+            <span class="ui-icon ui-icon--cyan save-modal__title-icon" data-icon="save" aria-hidden="true"></span>
+            <span>Salvataggi</span>
+          </h2>
+          <button class="btn btn--mini btn--icon-only" data-action="save-close" type="button" aria-label="Chiudi">
+            <span class="ui-icon" data-icon="close" aria-hidden="true"></span>
+          </button>
         </header>
         <div class="save-modal__body" data-bind="save-body"></div>
       </div>
