@@ -2619,6 +2619,7 @@ function renderFleetView(stage) {
     if (!o) return 'idle';
     if (o.type === 'idle') return 'in attesa';
     if (o.type === 'move') return 'rotta verso ' + sysName(o.toSysId);
+    if (o.type === 'attack') return '⚔ attacco a ' + sysName(o.toSysId);
     if (o.type === 'explore') return 'esplorazione di ' + sysName(o.toSysId);
     if (o.type === 'return') return 'rientro alla base';
     if (o.type === 'patrol') return 'pattuglia ' + sysName(o.sysA) + ' ↔ ' + sysName(o.sysB);
@@ -4911,7 +4912,14 @@ function renderContextActionBar(ctx) {
     } else if (isForeign) {
       buttons.push('<button class="actionbar__btn actionbar__btn--primary" data-action="ctx-civ-dossier" data-civ="' + escapeHtml(civ.id) + '">Apri dossier civiltà</button>');
       buttons.push('<button class="actionbar__btn" disabled title="Richiede M11 Diplomazia">⚑ Proponi accordo (M11)</button>');
-      buttons.push('<button class="actionbar__btn" disabled title="Richiede M09 Fase B">⚔ Attacca (M09 Fase B)</button>');
+      /* M09 (decisione #49): attacco offensivo. Abilitato se c'è almeno una
+         flotta armata che può raggiungere il sistema. */
+      const strikers = attackCapableFleets(g, sysId);
+      if (strikers.length) {
+        buttons.push('<button class="actionbar__btn actionbar__btn--danger" data-action="ctx-attack" data-sys="' + sysId + '" data-civ="' + escapeHtml(civ.id) + '" title="Ordina a una flotta armata di attaccare questo sistema">⚔ Attacca</button>');
+      } else {
+        buttons.push('<button class="actionbar__btn" disabled title="Serve una flotta armata che possa raggiungere il sistema">⚔ Attacca</button>');
+      }
       buttons.push('<button class="actionbar__btn" disabled title="Richiede M19 Spionaggio">🕵 Pianifica spionaggio (M19)</button>');
     }
   }
@@ -4926,6 +4934,80 @@ function renderContextActionBar(ctx) {
   });
   const dBtn = host.querySelector('[data-action="ctx-civ-dossier"]');
   if (dBtn) dBtn.addEventListener('click', function () { navigateView('civ'); });
+  const aBtn = host.querySelector('[data-action="ctx-attack"]');
+  if (aBtn) aBtn.addEventListener('click', function () {
+    openAttackPicker(parseInt(aBtn.dataset.sys, 10), aBtn.dataset.civ);
+  });
+}
+
+/* M09 (decisione #49): flotte armate (fp>0) che possono raggiungere `sysId`
+   da dove si trovano (docked/orbiting, non in volo). */
+function attackCapableFleets(g, sysId) {
+  const out = [];
+  const F = ORION.fleet;
+  if (!F) return out;
+  (g.fleets || []).forEach(function (f) {
+    if (!f || !f.location || f.location.status === 'in-transit') return;
+    const armed = (f.ships || []).some(function (s) {
+      const c = F.getClass(s.kind); return c && (c.fp || 0) > 0;
+    });
+    if (!armed) return;
+    if (F.computePath(g.galaxy, f.location.systemId, sysId)) out.push(f);
+  });
+  return out;
+}
+
+/* Overlay di scelta flotta per un attacco offensivo su un sistema AI. */
+function openAttackPicker(sysId, civId) {
+  const g = ORION.game;
+  const sys = g.galaxy.systems[sysId];
+  const civ = (g.civs || []).filter(function (c) { return c.id === civId; })[0];
+  const fleets = attackCapableFleets(g, sysId);
+  if (!fleets.length) { showToast('Nessuna flotta armata può raggiungere il sistema'); return; }
+  const aggressive = civ && civ.alignment !== 'male';   // verbo morale dark
+  const F = ORION.fleet;
+  const rows = fleets.map(function (f) {
+    const path = F.computePath(g.galaxy, f.location.systemId, sysId);
+    const hops = path ? path.length - 1 : 0;
+    const fp = (f.ships || []).reduce(function (a, s) { const c = F.getClass(s.kind); return a + (c ? c.fp || 0 : 0); }, 0);
+    return '<button class="attack-pick__row" data-fleet="' + escapeHtml(f.id) + '" type="button">' +
+      '<span class="attack-pick__name">' + escapeHtml(f.name) + '</span>' +
+      '<span class="attack-pick__meta">' + (f.ships || []).length + ' navi · fp ' + fp + ' · ' + hops + ' salti</span>' +
+    '</button>';
+  }).join('');
+  const html =
+    '<div class="attack-overlay" data-attack-overlay>' +
+      '<div class="attack-overlay__panel">' +
+        '<header class="attack-overlay__head"><h3>⚔ Attacca ' + escapeHtml(sys ? sys.name : 'sistema') + '</h3>' +
+          '<button class="attack-overlay__x" data-attack-close type="button" aria-label="Chiudi">✕</button></header>' +
+        '<p class="attack-overlay__sub">Bersaglio: <strong>' + escapeHtml(civ ? civ.name : '—') + '</strong>' +
+          (aggressive ? ' · <span class="attack-warn">aggressione contro una civiltà non ostile → reputazione oscura</span>' : ' · liberazione di un sistema maligno → reputazione luminosa') + '</p>' +
+        '<div class="attack-pick__list">' + rows + '</div>' +
+        '<p class="attack-overlay__hint">La flotta scelta partirà in rotta; lo scontro si risolve all\'arrivo nel sistema.</p>' +
+      '</div>' +
+    '</div>';
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  const node = wrap.firstChild;
+  document.body.appendChild(node);
+  function close() { if (node.parentNode) node.parentNode.removeChild(node); }
+  node.querySelector('[data-attack-close]').addEventListener('click', close);
+  node.addEventListener('click', function (e) { if (e.target === node) close(); });
+  node.querySelectorAll('[data-fleet]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const fleet = (g.fleets || []).filter(function (f) { return f.id === b.dataset.fleet; })[0];
+      if (!fleet) { close(); return; }
+      const r = ORION.fleet.setOrder(g, fleet, { type: 'attack', toSysId: sysId });
+      if (!r.ok) { showToast(r.reason || 'Ordine rifiutato'); return; }
+      pushChronicle(ORION.time.currentDS(g) + ' — Ordine d\'attacco: <strong>' + escapeHtml(fleet.name) +
+        '</strong> in rotta verso <strong>' + (sys ? sys.name : '—') + '</strong>' +
+        (sysId >= 0 ? systemTagHtml(sysId) : '') + ' (' + escapeHtml(civ ? civ.name : '—') + ').', 'system');
+      persistGame(g);
+      close();
+      if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+      showToast(fleet.name + ' in rotta d\'attacco');
+    });
+  });
 }
 
 /* =====================================================================

@@ -4488,3 +4488,38 @@ select.main-menu__input { cursor: pointer; }
   border-radius: var(--radius-sm);
   font-size: 0.8rem; color: var(--c-text-faint); font-style: italic;
 }
+
+/* M09 — azione "Attacca" dall'action bar (#49/#50) */
+.actionbar__btn--danger {
+  border-color: rgba(224, 85, 110, 0.55);
+  color: #f0a6b4;
+}
+.actionbar__btn--danger:hover:not([disabled]) {
+  background: rgba(224, 85, 110, 0.18);
+  border-color: rgba(224, 85, 110, 0.8);
+}
+.attack-overlay {
+  position: fixed; inset: 0; z-index: 360;
+  background: rgba(4, 6, 14, 0.66); backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center;
+}
+.attack-overlay__panel {
+  width: min(440px, 92vw); max-height: 80vh; overflow: auto;
+  background: var(--c-panel, #11151f); border: 1px solid rgba(224,85,110,0.4);
+  border-radius: 10px; padding: 16px 18px; box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+}
+.attack-overlay__head { display: flex; align-items: center; justify-content: space-between; margin: 0 0 6px; }
+.attack-overlay__head h3 { margin: 0; font-size: 1.02rem; }
+.attack-overlay__x { background: none; border: none; color: var(--c-text-faint); font-size: 1rem; cursor: pointer; }
+.attack-overlay__sub { font-size: 0.82rem; color: var(--c-text-dim); margin: 0 0 10px; }
+.attack-warn { color: #f0a6b4; }
+.attack-pick__list { display: flex; flex-direction: column; gap: 6px; }
+.attack-pick__row {
+  display: flex; flex-direction: column; gap: 2px; text-align: left;
+  padding: 8px 10px; border-radius: 6px; cursor: pointer;
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: inherit;
+}
+.attack-pick__row:hover { background: rgba(224,85,110,0.12); border-color: rgba(224,85,110,0.5); }
+.attack-pick__name { font-weight: 600; font-size: 0.9rem; }
+.attack-pick__meta { font-size: 0.74rem; color: var(--c-text-faint); }
+.attack-overlay__hint { font-size: 0.74rem; color: var(--c-text-faint); margin: 10px 0 0; }
