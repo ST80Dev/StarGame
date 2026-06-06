@@ -482,6 +482,11 @@
     /* --- Pirati: razzia atmosferica (voce di cronaca). --- */
     maybePirateRaid(game, grng, events);
 
+    /* --- M09 Fase A (decisione #49): incursione pirata "con denti" verso
+       una colonia del giocatore. Gated dalla pressione (catena di sconfitte
+       → più attacchi) + grazia iniziale: niente assedi a freddo. --- */
+    maybePirateIncursion(game, grng, events);
+
     /* --- ICG §5.4: applica i contributi dell'AI-tick + un decadimento
        dolce verso il basale "stabile" (20), così l'indice respira invece
        di salire monotòno. M18 sistematizzerà l'indice. --- */
@@ -631,6 +636,67 @@
     });
   }
 
+  /* M09 Fase A (decisione #49): un covo pirata lancia un'INCURSIONE inbound
+     verso la colonia raggiungibile più vicina. La probabilità sale con la
+     pressione (game.warState.pressure). Grazia iniziale (no assedi a freddo,
+     recovery-friendly #22) + una sola incursione/assedio per colonia. */
+  function incursionTargeting(game, sysId) {
+    const inc = game.incursions || [];
+    for (let i = 0; i < inc.length; i++) if (inc[i].targetSysId === sysId) return true;
+    return false;
+  }
+  function siegeActiveAt(game, sysId) {
+    const bs = game.battles || [];
+    for (let i = 0; i < bs.length; i++) {
+      if (bs[i].status === 'active' && bs[i].systemId === sysId) return true;
+    }
+    return false;
+  }
+  function maybePirateIncursion(game, rng, events) {
+    if ((game.timeImpulsi || 0) < 120) return;     // grazia iniziale
+    const nests = game.piracy && game.piracy.nests;
+    if (!nests || !nests.length) return;
+    const T = ORION.time, cfg = (T && T.CFG) || {};
+    const pressure = (game.warState && game.warState.pressure) || 0;
+    const base = (cfg.PIRATE_INCURSION_BASE != null ? cfg.PIRATE_INCURSION_BASE : 0.05);
+    const slope = (cfg.PIRATE_INCURSION_PRESSURE != null ? cfg.PIRATE_INCURSION_PRESSURE : 0.25);
+    const chance = base + pressure * slope;
+    const cols = [];
+    Object.keys(game.colonies || {}).forEach(function (k) {
+      const c = game.colonies[k];
+      if (c && c.colonized && c.phase !== 'settling') cols.push({ key: k, sysId: c.systemId });
+    });
+    if (!cols.length) return;
+    if (!Array.isArray(game.incursions)) game.incursions = [];
+    let spawned = 0;
+    for (let i = 0; i < nests.length; i++) {
+      const nest = nests[i];
+      if (!rng.chance(chance)) continue;
+      let best = null, bestHops = Infinity;
+      for (let c = 0; c < cols.length; c++) {
+        if (incursionTargeting(game, cols[c].sysId) || siegeActiveAt(game, cols[c].sysId)) continue;
+        const path = (ORION.fleet && ORION.fleet.computePath)
+          ? ORION.fleet.computePath(game.galaxy, nest.sysId, cols[c].sysId) : null;
+        if (!path) continue;
+        const hops = path.length - 1;
+        if (hops < bestHops) { bestHops = hops; best = cols[c]; }
+      }
+      if (!best) continue;
+      const eta = Math.max(20, Math.min(80, 20 + bestHops * 15));
+      const id = 'inc-' + (game.timeImpulsi || 0) + '-' + i + '-' + (spawned++);
+      game.incursions.push({
+        id: id, kind: 'pirate', fromSysId: nest.sysId,
+        targetSysId: best.sysId, targetColonyKey: best.key,
+        level: nest.level || 1, eta: eta, launchedAt: game.timeImpulsi || 0
+      });
+      events.push({
+        kind: 'incursion-inbound', incursionId: id,
+        targetColonyKey: best.key, targetSysId: best.sysId,
+        eta: eta, impulso: game.timeImpulsi
+      });
+    }
+  }
+
   function maybePirateRaid(game, rng, events) {
     const nests = game.piracy && game.piracy.nests;
     if (!nests || !nests.length) return;
@@ -731,9 +797,14 @@
       ships: []
     };
   }
-  function demobilize(/* game, civ, outcome */) {
-    /* Placeholder Fase A/B: la civiltà resta aggregata. M09 applicherà qui
-       l'esito dello scontro (perdite di potenza/sistemi) sullo stato civ. */
+  function demobilize(game, civ, outcome) {
+    /* M09 Fase A (decisione #49): applica l'esito di una scaramuccia sulla
+       potenza AGGREGATA della civiltà (niente perdita di sistemi in Fase A:
+       la conquista è Fase B). Se vince il giocatore la civiltà perde potenza;
+       se vince la civiltà, perde comunque un po' (ha speso forze). Bounded. */
+    if (!civ || !outcome) return true;
+    const loss = (outcome.winner === 'player') ? 12 : 5;
+    civ.power = Math.max(0, civ.power - loss);
     return true;
   }
 

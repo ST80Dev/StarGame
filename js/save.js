@@ -38,7 +38,12 @@
      (homeWorld:null + colonia operational + tutorial vuoto, retro-compat). */
   /* Schema 8 (M10 Fase A, decisione #47): aggiunge lo stato delle civiltà
      AI (game.civs), i pirati (game.piracy) e l'ICG (game.icg). */
-  const SCHEMA_VERSION = 8;
+  /* Schema 9 (M09 Fase A, decisione #49): aggiunge le incursioni pirata
+     inbound (game.incursions), gli assedi in corso (game.battles) e lo
+     stato di guerra d'impero morale/pressione (game.warState). La veteranità
+     delle navi vive dentro fleet.ships[*] (auto-serializzata via game.fleets);
+     l'hp delle strutture danneggiate vive in colony.structures (auto). */
+  const SCHEMA_VERSION = 9;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -109,7 +114,12 @@
          cosa, potenza, disposizione, ICG). */
       civs: Array.isArray(game.civs) ? game.civs : [],
       piracy: (game.piracy && typeof game.piracy === 'object') ? game.piracy : { nests: [] },
-      icg: (typeof game.icg === 'number') ? game.icg : null
+      icg: (typeof game.icg === 'number') ? game.icg : null,
+      /* M09 Fase A (decisione #49): incursioni inbound, assedi in corso,
+         stato di guerra d'impero (morale/pressione). */
+      incursions: Array.isArray(game.incursions) ? game.incursions : [],
+      battles: Array.isArray(game.battles) ? game.battles : [],
+      warState: (game.warState && typeof game.warState === 'object') ? game.warState : { morale: 1.0, pressure: 0 }
     };
   }
 
@@ -222,6 +232,18 @@
       if (!payload.piracy || typeof payload.piracy !== 'object') payload.piracy = { nests: [] };
       if (payload.icg == null) payload.icg = null;
       payload.schema = 8;
+    }
+    /* v8 → v9 (M09 Fase A, decisione #49): aggiungi incursions/battles/warState.
+       Lazy: vuoti qui. Save vecchi caricano senza combattimenti pendenti e con
+       morale d'impero pieno. La veteranità navi e l'hp strutture sono additivi
+       sui rispettivi entity → retro-compat 100%. */
+    if ((payload.schema || 8) < 9) {
+      if (!Array.isArray(payload.incursions)) payload.incursions = [];
+      if (!Array.isArray(payload.battles)) payload.battles = [];
+      if (!payload.warState || typeof payload.warState !== 'object') {
+        payload.warState = { morale: 1.0, pressure: 0 };
+      }
+      payload.schema = 9;
     }
     return payload;
   }

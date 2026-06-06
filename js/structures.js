@@ -161,6 +161,38 @@
       bodyTypes: HABITABLE,
       hooks: ['characters']       // gancio M14
     },
+    /* Decisione #49 (M09 Fase A): difese planetarie. Occupano gli slot
+       riservati dal dimensionamento BASE_SLOTS (#38/#45). Combattono quando
+       il sistema della colonia è teatro di una battaglia: ogni modulo
+       sintetizza un combattente difensivo (vedi combat.forceFromDefenses).
+       I campi `defense`/`defenseFp`/`defenseHp` sono letti dal motore di
+       combattimento; il danno in battaglia riduce `hp` della struttura
+       (riparabile nel tempo, §10.2). */
+    {
+      id: 'batteria-difesa', name: 'Batteria di difesa', cat: 'militare', glyph: '⊕',
+      desc: 'Torrette orbitali e cannoni planetari. Difende il sistema della colonia in battaglia. Cresce coi livelli (più moduli = più fuoco e corazza).',
+      cost: { met: 70, en: 25 }, time: 18,
+      upkeep: { en: 2 },
+      rates: {},
+      slots: 1, maxLevel: 5,
+      bodyTypes: HABITABLE.concat(ORBITAL),
+      defense: true,
+      defenseFp: 8,             // potenza di fuoco per modulo (× moduleSum)
+      defenseHp: 60             // corazza per modulo (× moduleSum)
+    },
+    {
+      id: 'scudo-planetario', name: 'Scudo planetario', cat: 'militare', glyph: '◈',
+      desc: 'Schermo deflettore ad alta energia: aggiunge corazza pura alla difesa del sistema. Richiede tecnologia degli scudi (M13).',
+      cost: { met: 140, en: 90, water: 20 }, time: 40,
+      upkeep: { en: 6 },
+      rates: {},
+      slots: 2, maxLevel: 2,
+      bodyTypes: HABITABLE,
+      requires: ['tech:scudi'],   // gancio M13
+      defense: true,
+      defenseFp: 2,             // lo scudo spara poco: è soprattutto corazza
+      defenseHp: 90
+    },
 
     // ===== Civili (4 — decisione #48 aggiunge l'impianto di riciclo) =====
     {

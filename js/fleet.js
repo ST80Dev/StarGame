@@ -201,7 +201,10 @@
       orders: { type: 'idle' },
       route: [],
       routeIdx: 0,
-      etaImpulsi: 0
+      etaImpulsi: 0,
+      /* M09 (decisione #49): formazione di combattimento — determina la
+         soglia di ritirata (aggressive 0% · balanced 30% · defensive 50%). */
+      formation: 'balanced'
     };
     game.fleets.push(fleet);
     return { ok: true, fleet: fleet };
@@ -825,6 +828,15 @@
     return {};
   }
 
+  /* M09 (decisione #49): imposta la formazione di combattimento. */
+  const FORMATIONS = ['aggressive', 'balanced', 'defensive'];
+  function setFormation(fleet, formation) {
+    if (!fleet) return { ok: false, reason: 'Flotta inesistente' };
+    if (FORMATIONS.indexOf(formation) < 0) return { ok: false, reason: 'Formazione sconosciuta' };
+    fleet.formation = formation;
+    return { ok: true };
+  }
+
   /* Helper esposti per UI e tutorial. */
   function classList() {
     return CLASS_ORDER.map(function (id) { return CLASSES[id]; });
@@ -854,6 +866,8 @@
     setOrder: setOrder,
     tick: tick,
     fleetUpkeep: fleetUpkeep,
-    ensureColonyShipKinds: ensureColonyShipKinds
+    ensureColonyShipKinds: ensureColonyShipKinds,
+    FORMATIONS: FORMATIONS,
+    setFormation: setFormation
   };
 })(typeof window !== 'undefined' ? window : this);
