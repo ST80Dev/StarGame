@@ -274,7 +274,7 @@
       id: 'struct:miniera', tag: 'Strutture · ⛏', title: 'Miniera',
       body:
         '<p>Estrae <strong>metalli</strong>: ~4/I al livello 1, modulata dal <em>potenziale</em> del corpo ' +
-        '(potenziale 60 = resa piena; 30 = metà). Upkeep 1 energia/I.</p>' +
+        '(potenziale 60 = resa piena; 30 = metà). Uso 1 energia/I.</p>' +
         '<p><strong>Sinergia:</strong> la <em>Fonderia</em> moltiplica la resa di tutte le miniere del pianeta ' +
         'di +40% per livello (×1.40 / ×1.80 / ×2.20). Conviene avere almeno 2 miniere prima della fonderia.</p>' +
         '<p><strong>Attenzione:</strong> consuma energia. Senza centrali sufficienti vai in carenza globale (−10/−30%).</p>'
@@ -282,7 +282,7 @@
     {
       id: 'struct:centrale-solare', tag: 'Strutture · ⚡', title: 'Centrale solare',
       body:
-        '<p>Produce <strong>energia</strong>: ~4/I al livello 1, modulata dal potenziale en. Nessun upkeep — è la struttura ' +
+        '<p>Produce <strong>energia</strong>: ~4/I al livello 1, modulata dal potenziale en. Nessun uso — è la struttura ' +
         '"pulita" dell\'economia.</p>' +
         '<p><strong>Sinergia:</strong> la <em>Raffineria energetica</em> moltiplica la resa di tutte le centrali di +40% per livello, ' +
         'e produce a sua volta 2 en/I diretti — l\'unica produttiva con effetto doppio.</p>' +
@@ -291,7 +291,7 @@
     {
       id: 'struct:impianto-idrico', tag: 'Strutture · ≈', title: 'Impianto idrico',
       body:
-        '<p>Produce <strong>acqua</strong>: ~4/I al livello 1, modulata dal potenziale water. Upkeep 1 en/I.</p>' +
+        '<p>Produce <strong>acqua</strong>: ~4/I al livello 1, modulata dal potenziale water. Uso 1 en/I.</p>' +
         '<p><strong>Concatenazione critica:</strong> la <em>Fattoria</em> consuma 1 acqua/I, l\'<em>Ospedale</em> 0 ma ne fa indirettamente bisogno via pop, ' +
         'e tutte le abitazioni richiedono 1 acqua/I. Se l\'acqua va in <strong>crit</strong> (zero stock), parte un timer di tolleranza: ' +
         'dopo 30 <span class="ds-unit">Ι</span> consecutivi di sete la popolazione cala 1 unità ogni 30 <span class="ds-unit">Ι</span>.</p>'
@@ -299,7 +299,7 @@
     {
       id: 'struct:fattoria', tag: 'Strutture · ❖', title: 'Fattoria idroponica',
       body:
-        '<p>Produce <strong>cibo</strong>: ~4/I al livello 1, modulata dal potenziale food. Upkeep 1 en + <strong>1 acqua/I</strong>.</p>' +
+        '<p>Produce <strong>cibo</strong>: ~4/I al livello 1, modulata dal potenziale food. Uso 1 en + <strong>1 acqua/I</strong>.</p>' +
         '<p><strong>Concatenazione:</strong> dipende dall\'acqua. Se l\'impianto idrico è in difficoltà, le fattorie soffrono per prime ' +
         '→ cala il cibo → carenza popolazione. Pianta più impianti idrici prima delle fattorie.</p>' +
         '<p><strong>Salute della popolazione:</strong> cibo + acqua sono i due requisiti vitali. Cibo a zero per 30 <span class="ds-unit">Ι</span> consecutivi → −1 pop ogni 30 <span class="ds-unit">Ι</span> (recovery-friendly).</p>'
@@ -308,16 +308,16 @@
       id: 'struct:fonderia', tag: 'Strutture · 🜂', title: 'Fonderia',
       body:
         '<p><strong>Non produce direttamente:</strong> moltiplica tutte le miniere del pianeta di <strong>+40% per livello</strong> ' +
-        '(lvl 1 → ×1.40, lvl 3 → ×2.20). Upkeep 3 en/I.</p>' +
+        '(lvl 1 → ×1.40, lvl 3 → ×2.20). Uso 3 en/I.</p>' +
         '<p><strong>Quando costruirla:</strong> almeno 2-3 miniere già operative, altrimenti il guadagno assoluto è basso ' +
-        'rispetto all\'upkeep. Esempio: 3 miniere lvl 1 = 12 met/I → con fonderia lvl 1 = 15 met/I.</p>' +
+        'rispetto all\'uso. Esempio: 3 miniere lvl 1 = 12 met/I → con fonderia lvl 1 = 15 met/I.</p>' +
         '<p><strong>Prerequisito:</strong> almeno una miniera già costruita sul pianeta.</p>'
     },
     {
       id: 'struct:raffineria', tag: 'Strutture · ⚛', title: 'Raffineria energetica',
       body:
         '<p><strong>Effetto doppio:</strong> produce 2 en/I diretti <em>e</em> moltiplica tutte le centrali del pianeta di ' +
-        '<strong>+40% per livello</strong>. Upkeep 2 acqua/I (attenzione alla concatenazione idrica).</p>' +
+        '<strong>+40% per livello</strong>. Uso 2 acqua/I (attenzione alla concatenazione idrica).</p>' +
         '<p><strong>Quando costruirla:</strong> dopo aver tappato il fabbisogno idrico — altrimenti il consumo extra di acqua ' +
         'può sbilanciare le fattorie.</p>' +
         '<p><strong>Prerequisito:</strong> almeno una centrale solare già costruita.</p>'
@@ -325,7 +325,7 @@
     {
       id: 'struct:laboratorio', tag: 'Strutture · ⌬', title: 'Laboratorio',
       body:
-        '<p>Produce <strong>ricerca</strong> distribuita: 3/I a livello 1. Upkeep 2 en/I.</p>' +
+        '<p>Produce <strong>ricerca</strong> distribuita: 3/I a livello 1. Uso 2 en/I.</p>' +
         '<p>Oggi i punti ricerca si accumulano ma l\'albero tecnologico vero arriverà più avanti nello sviluppo. ' +
         'Costruire laboratori adesso è un investimento — quando la ricerca sarà attiva, le tecnologie si sbloccheranno via via.</p>' +
         '<p><strong>Pista vittoria:</strong> contribuisce all\'<em>Ascensione tech</em>.</p>'
@@ -343,7 +343,7 @@
       id: 'struct:cantiere-navale', tag: 'Strutture · ▱', title: 'Hangar di costruzione',
       body:
         '<p>Cuore della tua flotta: <strong>costruisce astronavi</strong> e fa da <strong>porto a terra</strong> ' +
-        'per quelle a riposo. Occupa 2 slot per modulo (struttura grossa) e ha upkeep 4 en + 1 met/I.</p>' +
+        'per quelle a riposo. Occupa 2 slot per modulo (struttura grossa) e ha uso 4 en + 1 met/I.</p>' +
         '<p><strong>Doppia capacità (cresce col livello):</strong></p>' +
         '<ul style="margin: 4px 0 6px 18px; font-size: 0.92em;">' +
           '<li><strong>Cantieri</strong> (navi costruibili in parallelo): 2 · 3 · 4 · 5 · 7 ai livelli 1-5</li>' +
@@ -364,7 +364,7 @@
       id: 'struct:accademia-militare', tag: 'Strutture · ⚔', title: 'Accademia militare',
       body:
         '<p>Forma quadri militari, ufficiali e veterani (figure speciali). Oggi nessun effetto visibile. ' +
-        'Upkeep moderato (2 en + 1 food/I).</p>' +
+        'Uso moderato (2 en + 1 food/I).</p>' +
         '<p><strong>Sinergia futura:</strong> con l\'<em>Hangar di costruzione</em> alimenta una colonia a vocazione militare. ' +
         'In partite a vocazione <em>Tiranno</em> sarà struttura-chiave.</p>'
     },
@@ -390,7 +390,7 @@
       id: 'struct:centro-abitativo', tag: 'Strutture · ⌂', title: 'Centro abitativo',
       body:
         '<p>Aumenta la <strong>capacità di popolazione (popCap)</strong> di +2 per livello e dà <strong>+0.05 morale</strong> ' +
-        '(cap 1.35, il pianeta base parte già a 1.15). Upkeep 1 en + 1 food + 1 water /I.</p>' +
+        '(cap 1.35, il pianeta base parte già a 1.15). Uso 1 en + 1 food + 1 water /I.</p>' +
         '<p><strong>Morale:</strong> moltiplica la crescita della popolazione (base 0.018 unità/I × morale). Più centri → ' +
         'più tetto demografico e crescita più rapida, ma anche più consumi vitali.</p>' +
         '<p><strong>Concatenazione critica:</strong> ogni centro consuma cibo + acqua. Non costruire centri se le filiere ' +
@@ -418,7 +418,7 @@
       id: 'struct:impianto-riciclo', tag: 'Strutture · ♻', title: 'Impianto di riciclo',
       body:
         '<p>Tratta i <strong>rifiuti</strong> generati da popolazione e industria: ne <strong>recupera energia</strong> ' +
-        '(≈0.25 en per unità trattata) e <strong>alza la capacità</strong> di contenimento (+150 per modulo). Upkeep 1 en/I.</p>' +
+        '(≈0.25 en per unità trattata) e <strong>alza la capacità</strong> di contenimento (+150 per modulo). Uso 1 en/I.</p>' +
         '<p><strong>Perché conta:</strong> sopra il 70% di saturazione la produzione della colonia inizia a deperire ' +
         '(fino a −25%). Un solo impianto a livello 1 tratta 3 rifiuti/Ι; espandendolo (rendimento crescente dei moduli) ' +
         'porti il netto in negativo e <strong>svuoti</strong> l\'accumulo.</p>' +
@@ -431,7 +431,7 @@
       id: 'struct:impianto-esotico', tag: 'Strutture · ✦', title: 'Impianto esotico',
       body:
         '<p>Struttura <strong>avanzata</strong>: sfrutta una risorsa avanzata per dare <strong>moltiplicatori globali</strong> ' +
-        'a tutta la civiltà (effetto cumulativo tra colonie). Upkeep 5 en/I, occupa 2 slot.</p>' +
+        'a tutta la civiltà (effetto cumulativo tra colonie). Uso 5 en/I, occupa 2 slot.</p>' +
         '<p><strong>Doppio prerequisito:</strong> (1) <em>scansione completata</em> sul pianeta (osservatorio), ' +
         '(2) tecnologia degli esotici sbloccata (oggi resta locked, in arrivo).</p>' +
         '<p><strong>Pista vittoria:</strong> chiave per l\'<em>Ascensione tech</em>; è la struttura più "endgame" del catalogo.</p>'
@@ -587,7 +587,7 @@
           '<li><strong>Pattuglia su N sistemi (patrol-loop)</strong>: come <em>patrol</em>, ma su 2+ nodi in loop. ' +
             'La pattuglia non si ferma — perfetta per presidiare un confine.</li>' +
         '</ul>' +
-        '<p>Senza consumo né upkeep, una flotta può <strong>vagare a lungo</strong> tra i sistemi favorevoli. ' +
+        '<p>Senza consumo né uso, una flotta può <strong>vagare a lungo</strong> tra i sistemi favorevoli. ' +
         'I rifugi presso popoli terzi (recupero/rifornimento) arriveranno con <strong>M10 Civiltà AI</strong> + ' +
         '<strong>M11 Diplomazia</strong> (diritto di passaggio/d\'attracco) + <strong>M16 Stazioni orbitali</strong>.</p>'
     }

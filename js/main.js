@@ -3817,7 +3817,7 @@ function rateGrid(rates, upkeep, colony) {
     const popDrain = k === 'food' ? popFood : k === 'water' ? popWater : 0;
     const net = r - u - popDrain;
     if (!(r || u || popDrain)) return;
-    let aux = '+' + fmtAbs(r) + ' prod / −' + fmtAbs(u) + ' upkeep';
+    let aux = '+' + fmtAbs(r) + ' prod / −' + fmtAbs(u) + ' uso';
     if (popDrain > 0) aux += ' / −' + fmtAbs(popDrain) + ' pop';
     items.push(row(resLabel(k), '<span class="rate ' + (net >= 0 ? 'rate--pos' : 'rate--neg') + '">' + fmtNet(net) + '</span> / ' + iU() + ' <span class="rate-aux">(' + aux + ')</span>'));
   });
