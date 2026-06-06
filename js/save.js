@@ -46,7 +46,13 @@
   /* Schema 10 (M09 Fase B, decisione #49): aggiunge `defeated` (esilio/
      gameover) e `alignmentDeeds` (verbi morali → piste reputation). Le
      tregue AI (civ.truceUntil) vivono dentro game.civs (auto). */
-  const SCHEMA_VERSION = 10;
+  /* Schema 11 (fix): persiste game.state.discovery[] (nebbia di guerra).
+     Prima il delta della scoperta veniva perso al load → i sistemi
+     esplorati tornavano grigi. Retro-compat: i save vecchi caricano con
+     discovery ricostruita da createState (home EXPLORED + adiacenti
+     DETECTED) — l'esplorazione storica è persa, ma il nuovo gioco la
+     preserva. */
+  const SCHEMA_VERSION = 11;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -125,7 +131,12 @@
       warState: (game.warState && typeof game.warState === 'object') ? game.warState : { morale: 1.0, pressure: 0 },
       /* M09 Fase B (decisione #49): stato di sconfitta + verbi morali. */
       defeated: game.defeated || null,
-      alignmentDeeds: (game.alignmentDeeds && typeof game.alignmentDeeds === 'object') ? game.alignmentDeeds : { light: 0, dark: 0 }
+      alignmentDeeds: (game.alignmentDeeds && typeof game.alignmentDeeds === 'object') ? game.alignmentDeeds : { light: 0, dark: 0 },
+      /* Schema 11: nebbia di guerra (delta scoperta per sistema). Indice
+         = systemId, valore = livello DISCOVERY (UNKNOWN/DETECTED/EXPLORED).
+         Serializzato come array di interi (compatto in JSON). */
+      discovery: (game.state && Array.isArray(game.state.discovery)) ? game.state.discovery.slice() : null,
+      selectedId: (game.state && Number.isInteger(game.state.selectedId)) ? game.state.selectedId : null
     };
   }
 
@@ -263,6 +274,16 @@
         payload.mode.modifiers.gameOver = false;
       }
       payload.schema = 10;
+    }
+    /* v10 → v11 (fix nebbia di guerra): aggiunge discovery/selectedId al
+       payload. I save vecchi non hanno la nebbia persistita → resta null
+       e newGame ricostruisce da createState (home + adiacenti). Coerente
+       con seed+delta: l'esplorazione storica è persa solo per i save
+       pre-fix. */
+    if ((payload.schema || 10) < 11) {
+      if (payload.discovery === undefined) payload.discovery = null;
+      if (payload.selectedId === undefined) payload.selectedId = null;
+      payload.schema = 11;
     }
     return payload;
   }

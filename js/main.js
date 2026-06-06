@@ -292,6 +292,21 @@ function newGame(seed, opts) {
     /* M09 Fase B: sconfitta + verbi morali. */
     if (saved.defeated !== undefined) ORION.game.defeated = saved.defeated;
     if (saved.alignmentDeeds && typeof saved.alignmentDeeds === 'object') ORION.game.alignmentDeeds = saved.alignmentDeeds;
+    /* Schema 11: ripristina nebbia di guerra (sistemi esplorati/rilevati).
+       Prima del fix la scoperta veniva persa al load → i sistemi esplorati
+       tornavano grigi. Validazione difensiva: deve essere un array della
+       stessa lunghezza della galassia, altrimenti fallback su createState. */
+    if (Array.isArray(saved.discovery) && saved.discovery.length === ORION.game.state.discovery.length) {
+      for (let i = 0; i < saved.discovery.length; i++) {
+        const v = saved.discovery[i];
+        if (Number.isInteger(v) && v >= ORION.game.state.discovery[i]) {
+          ORION.game.state.discovery[i] = v;
+        }
+      }
+    }
+    if (Number.isInteger(saved.selectedId) && saved.selectedId >= 0 && saved.selectedId < ORION.game.state.discovery.length) {
+      ORION.game.state.selectedId = saved.selectedId;
+    }
     /* Tutorial: rispetta lo stato del payload se presente. */
     if (saved.tutorial && typeof saved.tutorial === 'object') {
       ORION.game.tutorial = {
