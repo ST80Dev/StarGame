@@ -1981,7 +1981,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
             '<div class="struct-item__name">' + levelBadgeHtml(lvl, maxL) + def.name + timeChip + '</div>' +
             infoLine +
           '</div>' +
-          '<button class="btn btn--mini struct-item__info" data-info="' + def.id + '" type="button" title="Cosa fa, bonus/malus, concatenazioni" aria-label="Informazioni su ' + def.name + '">i</button>' +
+          '<button class="btn btn--mini btn--icon-only struct-item__info" data-info="' + def.id + '" type="button" title="Cosa fa, bonus/malus, concatenazioni" aria-label="Informazioni su ' + def.name + '">' + uiIcon('info', 'violet') + '</button>' +
           upBtn + demoBtn +
         '</li>';
       } else {
@@ -2017,7 +2017,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
             '<div class="struct-item__name">' + def.name + ' <span class="struct-item__cat">' + def.time + '</span> ' + iU() + '</div>' +
             '<div class="struct-item__cost">' + costStr + (balance ? ' ' + balance : '') + '</div>' +
           '</div>' +
-          '<button class="btn btn--mini struct-item__info" data-info="' + def.id + '" type="button" title="Cosa fa, bonus/malus, concatenazioni" aria-label="Informazioni su ' + def.name + '">i</button>' +
+          '<button class="btn btn--mini btn--icon-only struct-item__info" data-info="' + def.id + '" type="button" title="Cosa fa, bonus/malus, concatenazioni" aria-label="Informazioni su ' + def.name + '">' + uiIcon('info', 'violet') + '</button>' +
           statusCell +
         '</li>';
       }

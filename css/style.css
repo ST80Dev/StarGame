@@ -1354,8 +1354,9 @@ button { font-family: inherit; }
   font-size: 0.66rem;
   letter-spacing: 0.06em;
 }
-/* M06.7: bottone "ⓘ" della scheda strutture — più piccolo, accento viola
-   per distinguerlo da "Costruisci" (azione vs informazione). */
+/* M06.7 + PR-I: bottone info ⓘ della scheda strutture — ora SVG icon
+   coerente con UI_GUIDE §3 e con il bottone tutorial in HUD. Niente
+   più border-radius/italic font weird "i" che sembrava una barra. */
 .struct-item .btn--mini.struct-item__info {
   display: inline-flex;
   align-items: center;
@@ -1364,21 +1365,18 @@ button { font-family: inherit; }
   height: 22px;
   min-width: 22px;
   padding: 0 !important;
-  border: 1.4px solid transparent !important;
-  border-radius: 50%;
-  color: var(--c-violet);
-  font-family: var(--font-display);
-  font-style: italic;
-  font-weight: 700;
+  border: none !important;
+  background: transparent;
+  color: #b89cff;
   font-size: 0.95rem;
   line-height: 1;
-  opacity: 0.85;
-  background: transparent;
+  opacity: 0.9;
 }
 .struct-item .btn--mini.struct-item__info:hover {
   opacity: 1;
-  background: color-mix(in srgb, var(--c-violet) 22%, transparent);
+  color: var(--c-text);
 }
+.struct-item .btn--mini.struct-item__info .ui-icon-svg { width: 1em; height: 1em; }
 
 /* btn--mini lite (riusa lo stile dei mini-pulsanti dell'overlay galassia) */
 
@@ -3359,19 +3357,34 @@ select.main-menu__input { cursor: pointer; }
 .deck-struct-list {
   list-style: none;
   margin: 0;
-  padding: 0 2px 0 0;       /* margine sx 2px per la scroll bar interna */
+  /* PR-I: padding-right 10px riserva spazio per la scrollbar verticale
+     così le 3 card per riga restano allineate anche quando appare. */
+  padding: 0 10px 0 0;
   display: grid;
-  /* PR-G: card più strette (min 135px) → 4-5 per riga, 2 righe fisse
-     per 9-10 strutture. Gap orizzontale moderato, verticale 5px. */
-  grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
-  gap: 5px;
-  /* Internal scroll quando la lista supera l'altezza disponibile:
-     ~2 righe (60px each + 5px gap + padding) ≈ 140-150px. Senza
-     altezza fissa il grid si espande; con questa max-height resta a
-     2 righe e fa scroll verticale solo se servono più di 10 card. */
-  max-height: 148px;
+  /* PR-I: 3 card per riga (era 4-5) — info più leggibili. minmax(190px)
+     consente max 3 colonne nella width tipica di .deck-structures e
+     gestisce gracefully larghezze diverse. Gap 6px. */
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 6px;
+  /* Internal scroll quando la lista supera 2 righe (era 148px troppo
+     stretto). Card ora 70px alte + 6px gap + 2px padding → ~150px per
+     2 righe. Più strutture → scroll verticale interno con scrollbar
+     riservata nel padding-right. */
+  max-height: 150px;
   overflow-y: auto;
   align-content: start;
+  /* Scrollbar sottile e tematica (NASA/Visions) */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 160, 255, 0.3) transparent;
+}
+.deck-struct-list::-webkit-scrollbar { width: 8px; }
+.deck-struct-list::-webkit-scrollbar-track { background: transparent; }
+.deck-struct-list::-webkit-scrollbar-thumb {
+  background: rgba(120, 160, 255, 0.3);
+  border-radius: 4px;
+}
+.deck-struct-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 160, 255, 0.5);
 }
 .deck-struct {
   position: relative;
@@ -3407,26 +3420,27 @@ select.main-menu__input { cursor: pointer; }
 
 /* PR-G: ⓘ inline nella riga superiore (a destra del livello), non più
    assoluto. Compatto: 14px circle, niente reserve nel padding card. */
+/* PR-I: ⓘ → SVG info icon coerente con UI_GUIDE §3 e con il bottone
+   tutorial in HUD top. Niente più bordo cerchiato disallineato. */
 .deck-struct__info {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   padding: 0;
-  flex: 0 0 16px;
+  flex: 0 0 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.75rem;
-  color: var(--c-violet);
+  font-size: 0.85rem;
+  color: #b89cff;
   background: transparent;
-  border: 1px solid rgba(138, 108, 255, 0.5);
-  border-radius: 50%;
+  border: none;
   cursor: pointer;
   line-height: 1;
 }
 .deck-struct__info:hover {
-  background: rgba(138, 108, 255, 0.15);
   color: var(--c-text);
 }
+.deck-struct__info .ui-icon-svg { width: 1em; height: 1em; }
 .deck-struct__glyph {
   font-size: 1.1rem;
   color: var(--c-text);
