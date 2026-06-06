@@ -191,8 +191,28 @@ stella dei sistemi ignoti.
 ### 6.1 Struttura di un sistema
 Ogni sistema contiene:
 - 1 stella (tipo: nana gialla, gigante rossa, nana bianca, binaria...)
-- 4-7 corpi celesti: pianeti rocciosi, giganti gassosi, lune, cinture asteroidali
+- **5-10 pianeti** + lune (sub-corpi di gassosi e rocciosi grandi) + cinture asteroidali
 - Anomalie opzionali: campo di detriti, nebulosa locale, reliquie antiche
+
+**Variabilità di configurazione (decisione #52):** i sistemi non seguono una distribuzione fissa "1 abitabile per fascia orbitale" come nel sistema solare terrestre. Le orbite indicano una **preferenza** del tipo planetario (interno → vulcanico/desertico al 70%, abitabile centrale al 70%, esterno → ghiacciato/gassoso al 70%) ma con un **30% di "anomalia fisica" ammessa** che produce configurazioni inaspettate (ghiacciati intrappolati vicino alla stella, gassosi innatamente interni, ecc.). Distribuzione globale tarata per dare ~1.4 abitabili per sistema in media:
+
+| Configurazione sistema | Frequenza | Note |
+|---|---|---|
+| **Standard single-prime** | ~45% | 1 abitabile prime + estrattivi + gassosi |
+| **Standard prime+marginale** | ~25% | 1 prime + 1 marginale (×0.75 slot/pop/potenziali) |
+| **Doppio prime** | ~8% | 2 abitabili distinti (es. terr+ocean) |
+| **Triplo prime** (raro) | ~2% | Sistema "paradiso", bersaglio strategico |
+| **Senza prime** | ~10% | Solo estrattivi/gassosi |
+| **Sistema metallifero anomalo** | ~5% | 4-6 vulcanici/desertici, niente abitabili, +50% potenziali metallo |
+| **Sistema delle nebbie / gassoso** | ~3% | 3-5 gassosi + lune, rifugio per fazioni orbitali |
+| **Stranezza fisica** | ~2% | Configurazione irregolare (es. tutti ghiacciati attorno a stella calda), eventi §17 gancio |
+
+I marginali (terrestre/oceanico/forestale "piccoli") hanno:
+- **Slot** ridotti a ×0.75 del prime (vedi §10.2 per slot base)
+- **Pop cap** ×0.75
+- **Potenziali §7.1** ×0.80 mediamente, con bilanciamenti **complementari** al prime (es. prime forte in cibo+metalli, marginale forte in acqua+energia)
+
+Effetto: la **coabitazione naturale** giocatore/AI in uno stesso sistema diventa plausibile (tu sul prime, una micro-AI sul marginale o su un vulcanico). Si veda §13.6 per le dinamiche di coesione.
 
 ### 6.2 Colonizzazione
 - **Tutti i corpi celesti sono colonizzabili** ma con caratteristiche molto diverse
@@ -448,38 +468,147 @@ Quando più flotte (proprie e/o alleate vs nemiche) convergono sullo stesso sist
 
 ## 13. CIVILTÀ AI
 
-### 13.1 Numero e caratteristiche
-4-5 civiltà AI per partita, ognuna con:
-- **Personalità marcata** ma con elemento di imprevedibilità
-- **Allineamento:** Bene / Male / Neutrale-Opportunista
-- **Caratteristica identificabile** al primo contatto
+> Questa sezione riflette la **rifondazione del motore AI** (decisione #52): galassia frammentata e organica, vocazioni persistenti come driver di comportamento, AI proattive ma differenziate, 4 fazioni fisse "di colore", federazioni emergenti, dinamiche imprevedibili ma controllate.
 
-### 13.2 Archetipi civiltà (esempi — generare proceduralmente con variazioni)
+### 13.1 Frammentazione iniziale (nessun monolite)
+La galassia parte come **arcipelago di popoli**, non come scacchiera spartita tra 4-5 imperi. Conteggio iniziale (deterministico dal seed, valori target):
 
-**Civiltà "Bene":**
-- *Confederazione di Aethon* — Diplomatici, commercio attivo, difensivi ma tenaci se attaccati. Cercano alleanze, aiutano civiltà sotto pressione.
-- *Ordine di Serenthal* — Tecnologicamente avanzati, isolazionisti ma non ostili. Condividono tech in cambio di pace duratura.
+| Componente | Numero | Note |
+|---|---|---|
+| **Imperi consolidati** | 2-4 | 5-12 pianeti ciascuno, presenza territoriale matura |
+| **Micro-civiltà** | 10-15 | 1-3 pianeti ciascuna, presenza minima ma viva |
+| **4 Costanti fisse** | 4 (sempre presenti) | Vedi §13.7 |
+| **Totale fazioni** | ~16-23 | A inizio partita |
 
-**Civiltà "Male":**
-- *Dominio Keth-Var* — Espansionisti aggressivi, saccheggio sistemi conquistati, tradiscono alleanze quando conviene. Aumentano ICG rapidamente.
-- *Sindacato Mekhari* — Ricatti, spionaggio, controllo rotte commerciali. Non sempre in guerra aperta ma sempre pericolosi.
+L'**occupazione iniziale di pianeti** target ~10% della galassia, con vincolo deterministico "spazio libero giocatore ≥ 65%" → il giocatore parte con **enorme margine di espansione**. Crescita AI calibrata (vedi §13.5) lascia ~75% libero anche a Ι 10000.
 
-**Civiltà Neutrale-Opportunista:**
-- *Lega di Vorthan* — Seguono chi vince. Commercianti prima di tutto, cambiano alleanze in base ai vantaggi. Imprevedibili.
+### 13.2 Vocazioni AI (driver di comportamento)
+Ogni AI nasce con una **vocazione persistente**, determinata dal seed, che ne plasma TUTTO il comportamento (espansione, diplomazia, guerra, commercio). Vocazione = carattere, non parametro.
 
-### 13.3 Comportamenti AI
-- Le AI si fanno guerra **tra loro** indipendentemente dal giocatore
-- Espandono, colonizzano, costruiscono flotte in background
-- Reagiscono alla reputazione del giocatore
-- Le civiltà maligne aumentano ICG attivamente
-- Le civiltà buone possono chiedere aiuto al giocatore tramite eventi
+| Vocazione | Peso generazione | Comportamento caratteristico |
+|---|---|---|
+| **Sedentari** | 25% | Si tengono 2-4 pianeti. Non espandono di iniziativa. Reattivi solo se attaccati. Proattivi diplomaticamente. |
+| **Mercantili** | 15% | Espansione lenta + focus alleanze + rotte. Propongono accordi commerciali. Ostili a chi rompe il commercio. |
+| **Espansionisti** | 15% | Classica crescita territoriale attiva. Guerre offensive ammesse. |
+| **Isolazionisti** | 12% | Chiudono confini, rifiutano dispacci, pattugliano. Attaccano chi entra senza permesso. |
+| **Predoni** | 10% | Poche colonie fisse + razzie sui vicini. Vivono di taglie e bottino. |
+| **Mistici** | 10% | "Convertono" piccoli vicini con dispacci diplomatici. Non militari. |
+| **Tecnocratici** | 8% | Focus tech, neutrali militarmente, alleati naturali di chi ha alta Reputazione. |
+| **Imperialisti** | 5% | Variante aggressiva degli espansionisti. Rari ma pericolosi. |
 
-### 13.4 Diplomazia
-**Stati base:**
-- Guerra / Tregua / Pace / Alleanza
+**Affinità planetaria** come tratto secondario (decisione #52 punto 6): ogni AI riceve anche un'**affinità di tipo planetario** che ne modula le scelte di colonizzazione — es. *Imperialista + Ferrigna* predilige vulcanici/desertici, *Sedentaria + Biotica* predilige forestali/oceanici. Peso ×2.0 sulla scelta di pianeti del tipo preferito, senza esclusività. Effetto: paesaggio diversificato, coabitazione naturale (tu sul prime, AI ferrigna sul vulcanico dello stesso sistema).
 
-**Transizioni:** Avvengono tramite eventi, azioni del giocatore, cambiamenti di reputazione  
-**Tradimenti:** Le civiltà maligne possono tradire alleanze — preavviso indiretto tramite segnali (cronaca galattica, spionaggio)
+### 13.3 Allineamento (asse morale)
+Indipendente dalla vocazione. Mix garantito alla generazione:
+- **Bene** (~35%): preferiscono pace, alleanze, aiuto agli alleati. Penalità Reputazione su aggressione verso di loro.
+- **Male** (~30%): preferiscono dominio, tradimenti, ICG attivo. Penalità Reputazione su alleanza con loro (sei "compromesso").
+- **Neutrale** (~35%): seguono convenienza. Risposte deterministiche al contesto.
+
+Allineamento × Vocazione = matrice di caratteri unica. Es. *Mercantile Bene* è equo e affidabile; *Mercantile Male* è il classico ricattatore; *Sedentario Bene* è il vicino fidato; *Predone Male* è la minaccia tipica.
+
+### 13.4 Fasi vitali (modulazione, non sostituzione)
+Ogni AI attraversa **fasi** che modulano la sua vocazione senza cambiarla. Una Sedentaria in declino cede sistemi ma resta Sedentaria.
+
+| Fase | Effetto |
+|---|---|
+| **growth** (default alla nascita) | Vocazione piena, espansione/azione attiva |
+| **rise** | ×1.5 azione caratteristica per 600-1000 Ι |
+| **stable** | ×0.5 espansione, guerre solo difensive |
+| **decline** | Espansione 0, perde 1 pianeta ogni ~250 Ι ai bordi, vulnerabile |
+| **collapse** | Perde 1 pianeta ogni ~80 Ι, terminale |
+
+Transizioni deterministiche (`seed:civ:<id>:phase`) con probabilità per-fase. Le fasi danno **ritmo** alla vocazione, generano voci narrative ("L'Impero X entra in declino"), creano **finestre di opportunità** per il giocatore.
+
+### 13.5 Calibrazione espansione (galassia "calma")
+Numeri tarati perché il giocatore abbia spazio decisionale (orizzonte realistico ~10000 Ι per maturare un impero competitivo):
+
+| Parametro | Valore | Effetto |
+|---|---|---|
+| **Warmup iniziale** | 500 Ι | 0 movimenti AI. Insediamento + prima struttura tranquilli |
+| **Ramp early-game** | ×0.3 nei 2000 Ι successivi | Decollo dolce, ~3-5 annessioni totali |
+| **Chance espansione base** | 0.005 per AI per AI-tick | A 10000 Ι: ~30-35 annessioni totali in galassia |
+| **Chance guerre AI-vs-AI** | 0.015 per AI-tick | ~1 schermaglia ogni ~80 Ι |
+| **Chance nascita arrampicatore** | 0.005 | Nessun nuovo prima di ~5000 Ι |
+
+A Ι 10000 la galassia tipica è ~25% AI occupata, **75% libera**. Mai strangolata.
+
+### 13.6 Proprietà al pianeta + coesione di sistema
+**La proprietà è al pianeta, non al sistema** (decisione #52 punto 9). Un sistema può ospitare colonie di proprietari diversi. Stato del sistema derivato:
+- **Esclusivo** (Player o AI X): solo colonie di un proprietario
+- **Sotto influenza X**: ≥66% colonie sono di X
+- **Conteso/Condiviso**: due o più proprietari senza maggioranza
+- **Neutrale**: nessuna colonia
+
+**Colonizzare in un sistema con presenza altrui** ha conseguenze sulla disposizione del proprietario (no blocco hard):
+
+| Relazione | Penalità disposizione |
+|---|---|
+| Alleanza | 0 (alleati condividono) |
+| Pace + amichevole | −5 |
+| Pace + neutrale/ostile | −10 |
+| Tregua | −15 |
+| Guerra | 0 (ma assedio possibile dalla colonia vicina) |
+
+**Sistema coeso** (consorzio locale emergente): un sistema è coeso se TUTTE le condizioni sono vere:
+1. ≥2 fazioni distinte hanno colonie nel sistema
+2. ≥50% dei corpi colonizzabili sono colonizzati
+3. ≥3 colonie totali nel sistema
+4. Tutti i proprietari sono in pace/alleanza tra loro
+5. Il giocatore non è alleato di tutti
+
+**Effetti del sistema coeso** (riusano meccaniche esistenti, niente nuovi parametri):
+- **Move/move-route con flotta**: warning UI + −1 disposizione/proprietario (cap −3/visita)
+- **Spedizione in transito**: +5% incidente per proprietario (cap +15%)
+- **Colonizzazione**: penalità rafforzata −15 disposizione/proprietario
+- **Attacco a una coesa**: solidarietà → −15 disposizione delle altre coese
+- **Rottura coesione**: se due membri entrano in guerra, o tu diventi alleato di tutti, la coesione cade automaticamente
+
+UI: alone ambra tratteggiato sul nodo + tooltip "Sistema coeso · X+Y+Z in pace". Cronaca `system-cohesion-formed`/`broken` (atmosfera, auto-pause OFF).
+
+### 13.7 Le Quattro Costanti (fazioni fisse di colore)
+Quattro fazioni **sempre presenti** in ogni galassia, ognuna con funzione narrativa/gameplay unica. Vivono sopra il conteggio di §13.1 (non riducono lo slot di micro o imperi). Visibili nella vista Civiltà ⬡ come sezione fissa "Le Quattro Costanti" con nome+ruolo sempre noti (anche prima del contatto), dossier completo dopo interazione.
+
+| Fazione | Sistemi | Distribuzione | Funzione |
+|---|---|---|---|
+| **Sindacato Mekhari** | 4-6 | Sparsa — 1 hub per cluster fino a max 6 | Mercato grigio, contrabbando, taglie pirata, intel grigia (gancio M19), spread ridotto nei cluster dove presente. **Vocazione fissa: Mercantile.** |
+| **Conclave di Vehryn** | 2-4 | Sparsa — avamposti presso sistemi con anomalie/reliquie | Vendita informazioni su sistemi inesplorati, dati antichi §7.2, contratti scoperta. **Vocazione fissa: Tecnocratici + affinità Glaciale.** |
+| **Guardiani di Phaerion** | 2-3 | Concentrata — sede ancestrale + 1-2 satelliti | Custodi di tech antica, intransigenti sui confini (scaramuccia su violazione), forniscono tech rare se aiutati. **Vocazione fissa: Isolazionisti + affinità Ancestrale.** |
+| **Pellegrini di Solhar** | 3-5 | Sparsa — missioni in cluster Nucleo/Colonie | Conversione diplomatica (dispacci, alleanze ideologiche), figure speciali religiose (gancio M14), bonus passivo decadimento ICG quando galassia allineata. Subiscono secessioni eretiche (scissione → nuova micro-AI). **Vocazione fissa: Mistici + affinità Biotica.** |
+
+Le 4 Costanti hanno **comportamenti speciali rispetto alle vocazioni base**: i Mekhari espandono pianissimo (~1 nuovo nodo ogni ~4000-8000 Ι), i Phaerion non espandono affatto (subiscono solo decline lento), Vehryn e Pellegrini espandono con cadenza media ma in direzioni dettate dalla loro funzione (Vehryn segue le anomalie nuove, Pellegrini cercano civiltà da convertire).
+
+### 13.8 Federazioni emergenti (fusione di alleanze)
+Quando due AI restano alleate per ≥N Ι senza tradimenti, accumulano **trust reciproco**. Superata una soglia + vocazioni compatibili, una propone **patto federativo**. Se entrambe accettano (deterministicamente, in base a vocazione+allineamento), si **fondono** in una entità composita:
+- **Nome composito** (es. "Federazione di Aethon-Vega")
+- **Colore unificato** (mix delle tinte originali)
+- **Somma sistemi/pianeti/potere** delle due
+- **Decisioni concertate** (movimenti unificati, espansione coordinata)
+
+**Fragilità interna**: se le vocazioni divergono troppo (es. Sedentaria + Imperialista), o un membro perde >50% del proprio territorio originario, la federazione **si spezza** → pezzi tornano AI separate (memoria del trust resta a 0).
+
+**Iterazione**: una federazione può a sua volta federarsi con un'altra → in late-game possono emergere **blocchi** composti da 4-6 micro originali → guerre totali blocco-vs-blocco quando arrivano.
+
+Vivono come campo composito calcolato run-time (`game.federations[]`) — non sostituiscono le `civs` ma le riferenziano.
+
+### 13.9 Diplomazia (stati base)
+**Stati**: Guerra / Tregua / Pace / Alleanza (vedi §13.4 e implementazione decisione #51).
+
+**Transizioni**: tramite azioni del giocatore (M11), eventi (§17), cambi di reputazione (§14). **Tradimenti**: AI di allineamento Male possono tradire alleanze con preavviso indiretto (cronaca, spionaggio M19). AI di allineamento Bene non tradiscono mai (vincolo del loro carattere).
+
+**AI proattive**: tutte le AI fanno cose, lo stile dipende dalla vocazione. Una Sedentaria propone rotte commerciali ma non guerre; una Predona razzia ma non offre alleanze; una Mistica invia dispacci di conversione regolarmente.
+
+### 13.10 Vista Civiltà ⬡ — scoperta progressiva
+Le AI appaiono nel dossier **per gradi di intimità** (decisione #52):
+
+| Grado | Trigger | Info visibili |
+|---|---|---|
+| **Sconosciuta** | Default | Nessuna voce |
+| **Avvistata** | Esplori un loro pianeta/sistema | Nome + sigla regione + chip "Avvistata" |
+| **Contattata** | Dispaccio diplomatico, scontro, primo evento | + allineamento + sede + relazione |
+| **Conosciuta** | ≥3 interazioni significative | + **vocazione** + tratto + dossier completo + intel forza |
+| **Familiare** | Alleanza ≥1000 Ι, o federazione | + cronaca specifica della relazione + ultimo scontro + perché disposizione |
+
+Le **4 Costanti** sono visibili in sezione fissa con nome+ruolo sempre noti, dossier per gradi come le altre.
 
 ---
 
