@@ -342,13 +342,15 @@
         }
 
         const shortName = SHORT_LABEL[id] || def.name;
+        /* PR-G: ⓘ inline in alto a destra della card invece che assoluto
+           (con padding-top dedicato) — risparmia una riga visiva. */
         html +=
           '<li class="deck-struct' + catCls + (inQueue ? ' is-busy' : '') + '" title="' + escapeHtml(def.name) + '">' +
-            '<button type="button" class="deck-struct__info" data-deck-action="info" data-id="' + id + '" title="Cosa fa, bonus, concatenazioni">ⓘ</button>' +
             '<div class="deck-struct__top">' +
               '<span class="deck-struct__glyph">' + def.glyph + '</span>' +
               '<span class="deck-struct__name">' + escapeHtml(shortName) + '</span>' +
               '<span class="deck-struct__lvl">×' + lvl + '</span>' +
+              '<button type="button" class="deck-struct__info" data-deck-action="info" data-id="' + id + '" title="Cosa fa, bonus, concatenazioni" aria-label="Info">ⓘ</button>' +
             '</div>' +
             '<div class="deck-struct__bot">' +
               '<span class="deck-struct__pips">' + pips + '</span>' +
