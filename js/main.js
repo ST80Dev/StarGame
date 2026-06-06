@@ -1398,8 +1398,6 @@ function renderPlanetColoniaTab(host, planet, colony) {
           row('Slot utilizzati', out.used + ' / ' + ORION.planet.effectiveSlots(planet, colony, g)) +
           row('Ostilità ' + hostilityNoun(planet), planet.hostility) +
         '</dl>' +
-        '<p class="sysinfo__sub">Riepilogo produzione (/Impulso)</p>' +
-        rateGrid(out.rates, out.upkeep, colony) +
         scarRow +
         wasteRow +
         renderCapitalSection(colony, planet) +
