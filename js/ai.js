@@ -117,6 +117,7 @@
     POWER_GROWTH: 0.6,                  // crescita potenza/AI-tick per sistema
     EXPAND_CHANCE_BASE: 0.18,           // prob. base di annettere un sistema
     WAR_CHANCE: 0.14,                   // prob. di una schermaglia AI-vs-AI/AI-tick
+    AIWAR_POWER_PER_LOSS: 6,            // M10 Fase D: potenza persa per nave distrutta in una guerra AI-vs-AI materializzata
     BIRTH_CHANCE: 0.015,                // prob. nascita nuovo arrampicatore/AI-tick
     PIRATE_RAID_CHANCE: 0.06,           // prob. razzia pirata/AI-tick (solo voce)
     RUMOR_EXPAND_CHANCE: 0.30,          // quota di espansioni che diventano "voce"
@@ -555,41 +556,106 @@
     }
     if (!pairs.length) return;
     const pair = pairs[rng.int(0, pairs.length - 1)];
-    // il più forte strappa un sistema di confine al più debole
-    let winner = pair[0], loser = pair[1];
-    if (loser.power > winner.power) { const t = winner; winner = loser; loser = t; }
-    // esito pesato: il più forte vince spesso, non sempre (imprevedibilità §13.1)
-    const pWin = winner.power / Math.max(1, winner.power + loser.power);
-    if (rng.float() > pWin * 1.1) { const t = winner; winner = loser; loser = t; }
 
-    const border = borderSystemsBetween(galaxy, loser, winner);
-    if (!border.length) return;
-    border.sort(function (x, y) { return x - y; });
-    const lost = border[rng.int(0, border.length - 1)];
-    loser.systems = loser.systems.filter(function (s) { return s !== lost; });
-    winner.systems.push(lost);
-    winner.power += CFG.POWER_PER_SYSTEM * 0.5;
-    loser.power = Math.max(0, loser.power - CFG.POWER_PER_SYSTEM);
-    if (winner.alignment === 'male') addIcg(CFG.ICG_PER_EVIL_EXPAND);
+    /* Attaccante = più forte, difensore = più debole: il forte preme sul
+       confine del debole. L'esito può comunque sorprendere (§13.1). */
+    let attacker = pair[0], defender = pair[1];
+    if (defender.power > attacker.power) { const t = attacker; attacker = defender; defender = t; }
 
-    // voce di cronaca (rate-limitata: la guerra avviene comunque nel
-    // background, ma solo una quota diventa "voce" per non intasare il log)
-    if (rng.chance(CFG.RUMOR_WAR_CHANCE)) {
+    /* Sistema conteso = un sistema di confine del DIFENSORE adiacente
+       all'attaccante. Se il giocatore ne vede almeno uno (DETECTED+),
+       la guerra è "assistibile" → la risolviamo col motore M09 (Fase D). */
+    const dborder = borderSystemsBetween(galaxy, defender, attacker);
+    if (!dborder.length) return;
+    dborder.sort(function (x, y) { return x - y; });
+    const seenBorder = dborder.filter(function (s) { return discovered(game, s); });
+    const witnessed = seenBorder.length > 0 && !!root.ORION.combat;
+    const contested = witnessed
+      ? seenBorder[rng.int(0, seenBorder.length - 1)]
+      : dborder[rng.int(0, dborder.length - 1)];
+
+    /* Esito. Witnessed → battaglia REALE materializzata (decisione #47 Fase D):
+       le due civiltà diventano forze concrete e si scontrano col motore
+       deterministico di M09; chi vince la battaglia decide il sistema. Le
+       guerre LONTANE (non viste) restano astratte (zero costo/spam). */
+    let attackerWon, report = null;
+    if (witnessed) {
+      const C = root.ORION.combat;
+      const A = C.forceFromMaterialized(materialize(game, attacker, contested), 'A');
+      const B = C.forceFromMaterialized(materialize(game, defender, contested), 'B');
+      const battleId = 'aiwar:' + attacker.id + ':' + defender.id + ':' + contested + ':' + (game.timeImpulsi || 0);
+      report = C.resolve(game, battleId, A, B);
+      attackerWon = (report.winner === 'A');
+      // costo della battaglia: le perdite si traducono in potenza persa
+      attacker.power = Math.max(0, attacker.power - report.sideA.lost * CFG.AIWAR_POWER_PER_LOSS);
+      defender.power = Math.max(0, defender.power - report.sideB.lost * CFG.AIWAR_POWER_PER_LOSS);
+    } else {
+      const pWin = attacker.power / Math.max(1, attacker.power + defender.power);
+      attackerWon = !(rng.float() > pWin * 1.1);   // upset come prima (§13.1)
+    }
+
+    let winner, loser;
+    if (attackerWon) {
+      // l'attaccante conquista il sistema conteso
+      defender.systems = defender.systems.filter(function (s) { return s !== contested; });
+      attacker.systems.push(contested);
+      attacker.power += CFG.POWER_PER_SYSTEM * 0.5;
+      defender.power = Math.max(0, defender.power - CFG.POWER_PER_SYSTEM);
+      if (attacker.alignment === 'male') addIcg(CFG.ICG_PER_EVIL_EXPAND);
+      winner = attacker; loser = defender;
+    } else {
+      // il difensore resiste. Nelle guerre VISTE è una difesa riuscita
+      // (nessun trasferimento); in quelle ASTRATTE conserviamo la regola
+      // "il territorio cambia sempre" → il difensore-vincitore strappa un
+      // sistema all'attaccante (equivalente all'upset originale).
+      winner = defender; loser = attacker;
+      if (!witnessed) {
+        const aborder = borderSystemsBetween(galaxy, attacker, defender);
+        if (aborder.length) {
+          aborder.sort(function (x, y) { return x - y; });
+          const taken = aborder[rng.int(0, aborder.length - 1)];
+          attacker.systems = attacker.systems.filter(function (s) { return s !== taken; });
+          defender.systems.push(taken);
+          defender.power += CFG.POWER_PER_SYSTEM * 0.5;
+          attacker.power = Math.max(0, attacker.power - CFG.POWER_PER_SYSTEM);
+          if (defender.alignment === 'male') addIcg(CFG.ICG_PER_EVIL_EXPAND);
+        }
+      }
+    }
+
+    // Cronaca: le guerre VISTE producono un report reale ("hai assistito a…");
+    // le lontane restano una "voce" rate-limitata.
+    if (witnessed) {
+      events.push({
+        kind: 'civ-battle',
+        attacker: attacker.name, attackerColor: attacker.color,
+        defender: defender.name, defenderColor: defender.color,
+        outcome: attackerWon ? 'taken' : 'held',
+        systemId: contested, systemName: (galaxy.systems[contested] || {}).name,
+        regionLabel: regionLabelOfSystem(galaxy, contested),
+        lostA: report.sideA.lost, lostB: report.sideB.lost, rounds: report.rounds,
+        impulso: game.timeImpulsi
+      });
+    } else if (rng.chance(CFG.RUMOR_WAR_CHANCE)) {
       events.push({
         kind: 'civ-war', winner: winner.name, winnerColor: winner.color,
-        loser: loser.name, regionLabel: regionLabelOfSystem(galaxy, lost),
+        loser: loser.name, regionLabel: regionLabelOfSystem(galaxy, contested),
         impulso: game.timeImpulsi
       });
     }
 
-    // caduta (roster vivo): ridotta a 0 sistemi → sparisce
-    if (loser.systems.length === 0) {
-      loser.alive = false;
-      events.push({
-        kind: 'civ-fallen', civName: loser.name, conqueror: winner.name,
-        impulso: game.timeImpulsi
-      });
-    }
+    // Caduta (roster vivo): controlla ENTRAMBE (nell'upset astratto anche
+    // l'attaccante può perdere il suo ultimo sistema).
+    [attacker, defender].forEach(function (civ) {
+      if (civ.alive && civ.systems.length === 0) {
+        civ.alive = false;
+        const conq = (civ === attacker) ? defender : attacker;
+        events.push({
+          kind: 'civ-fallen', civName: civ.name, conqueror: conq.name,
+          impulso: game.timeImpulsi
+        });
+      }
+    });
   }
 
   function maybeBirth(game, rng, claimed, players, events) {

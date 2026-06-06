@@ -3924,6 +3924,7 @@ const DEFAULT_AUTOPAUSE = {
   'civ-emerged': true,
   'civ-expand': false,
   'civ-war': false,
+  'civ-battle': false,
   'pirate-raid': false,
   /* M09 Fase A (decisione #49): il combattimento è notevole → auto-pausa ON.
      L'incursione inbound è il PREAVVISO; l'assedio si auto-pausa a ogni round
@@ -4157,6 +4158,7 @@ function showEventOverlay(events) {
     'civ-contact': 'Primo contatto con una civiltà',
     'civ-expand': 'Civiltà AI: espansione',
     'civ-war': 'Guerra tra civiltà',
+    'civ-battle': 'Battaglia tra civiltà (vista)',
     'civ-fallen': 'Civiltà caduta',
     'civ-emerged': 'Nuova civiltà emersa',
     'pirate-raid': 'Razzia pirata',
@@ -4427,6 +4429,17 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — Voci dal/dalla ' + escapeHtml(ev.regionLabel) + ': <strong>' + escapeHtml(ev.civName) + '</strong> ha annesso un nuovo sistema.', 'civ');
   } else if (ev.kind === 'civ-war') {
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.winner) + '</strong> strappa un sistema a <strong>' + escapeHtml(ev.loser) + '</strong> nel/nella ' + escapeHtml(ev.regionLabel) + '.', 'civ');
+    if (ORION.tutorial) ORION.tutorial.fire('civilizations');
+  } else if (ev.kind === 'civ-battle') {
+    /* M10 Fase D (decisione #47): guerra AI-vs-AI VISTA dal giocatore,
+       risolta col motore M09 → report reale. */
+    const stag = (ev.systemId != null && ev.systemId >= 0) ? systemTagHtml(ev.systemId) : '';
+    const verdict = ev.outcome === 'taken'
+      ? '<strong>' + escapeHtml(ev.attacker) + '</strong> conquista il sistema'
+      : '<strong>' + escapeHtml(ev.defender) + '</strong> resiste all\'assalto di <strong>' + escapeHtml(ev.attacker) + '</strong>';
+    pushChronicle(ds + ' — Battaglia di <strong>' + escapeHtml(ev.systemName || '—') + '</strong>' + stag + ': ' + verdict +
+      ' · navi perse ' + (ev.lostA || 0) + '/' + (ev.lostB || 0) + ' in ' + (ev.rounds || 0) + ' round.', 'civ');
+    if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
     if (ORION.tutorial) ORION.tutorial.fire('civilizations');
   } else if (ev.kind === 'civ-fallen') {
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.civName) + '</strong> è caduta: ridotta a zero sistemi, assorbita da <strong>' + escapeHtml(ev.conqueror) + '</strong>.', 'civ');
