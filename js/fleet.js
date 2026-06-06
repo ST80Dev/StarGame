@@ -359,6 +359,10 @@
     for (let i = 0; i < fleet.crew.length; i++) {
       colony.crews.explorer.push(fleet.crew[i]);
     }
+    /* Restituisci il Comandante alla panchina della colonia (#43/#49). */
+    if (fleet.commander && ORION.commander && ORION.commander.releaseFromFleet) {
+      ORION.commander.releaseFromFleet(game, fleet, { toColonyKey: fleet.ownerColonyKey });
+    }
     /* Rimuovi la flotta dal gioco. */
     const idx = (game.fleets || []).indexOf(fleet);
     if (idx >= 0) game.fleets.splice(idx, 1);
@@ -574,7 +578,12 @@
     }
     const toSys = fleet.route[nextIdx];
     fleet.location.status = 'in-transit';
-    return tempoLeg(galaxy, from, toSys, fleetMinSpeed(fleet));
+    let t = tempoLeg(galaxy, from, toSys, fleetMinSpeed(fleet));
+    /* Bonus Comandante Navigatore (#43): −15% durata viaggio. */
+    if (ORION.commander && ORION.commander.fleetSpeedMul) {
+      t = Math.max(1, Math.round(t * ORION.commander.fleetSpeedMul(fleet)));
+    }
+    return t;
   }
 
   /* ------------------------------------------------------------------

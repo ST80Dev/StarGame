@@ -1061,6 +1061,11 @@
       }
       // Se la flotta è stata annientata → rimuovila
       if (fleet.ships.length === 0) {
+        /* Il Comandante si salva (scialuppa, come il crew M07): torna in
+           panchina invece di perdersi (recovery-friendly #22). */
+        if (fleet.commander && root.ORION.commander && root.ORION.commander.releaseFromFleet) {
+          root.ORION.commander.releaseFromFleet(game, fleet);
+        }
         game.fleets = game.fleets.filter(function (f) { return f !== fleet; });
       }
 

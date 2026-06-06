@@ -133,6 +133,89 @@
     if (!Array.isArray(colony.commanders)) colony.commanders = [];
   }
 
+  /* ---------------------------------------------------------------
+     Aggancio Comandante → flotta (M09, chiude il gancio #43/#49).
+     `combat.js` legge già `fleet.commander.specialization` per il
+     +10% Tattico; `fleet.js` legge il bonus Navigatore sul viaggio.
+     Modello a "spostamento" (single source of truth): un Comandante
+     vive O sulla panchina di una colonia (colony.commanders) O su una
+     flotta (fleet.commander), mai duplicato → round-trip JSON pulito,
+     nessun bump di schema (additivo a game.fleets / game.colonies).
+     --------------------------------------------------------------- */
+
+  /* Tutti i Comandanti assegnabili (idle, in panchina) di ogni colonia. */
+  function assignableOf(game) {
+    var out = [];
+    var cols = (game && game.colonies) || {};
+    Object.keys(cols).forEach(function (k) {
+      listOf(cols[k]).forEach(function (cmd) {
+        if (cmd.status !== 'assigned') out.push({ colonyKey: k, commander: cmd });
+      });
+    });
+    return out;
+  }
+
+  /* Assegna un Comandante idle (per id) alla flotta. Se la flotta ne ha
+     già uno, prima lo rilascia. Recovery-friendly: niente perdita. */
+  function assignToFleet(game, fleet, commanderId) {
+    if (!game || !fleet) return { ok: false, reason: 'Dati mancanti' };
+    if (fleet.commander && fleet.commander.id === commanderId) return { ok: true, commander: fleet.commander };
+    var cols = game.colonies || {};
+    var found = null, fromKey = null, idx = -1;
+    Object.keys(cols).forEach(function (k) {
+      var arr = listOf(cols[k]);
+      for (var i = 0; i < arr.length; i++) {
+        if (arr[i].id === commanderId && arr[i].status !== 'assigned') { found = arr[i]; fromKey = k; idx = i; }
+      }
+    });
+    if (!found) return { ok: false, reason: 'Comandante non disponibile' };
+    if (fleet.commander) releaseFromFleet(game, fleet);   // libera il precedente
+    cols[fromKey].commanders.splice(idx, 1);              // esce dalla panchina
+    found.status = 'assigned';
+    found.assignedFleetId = fleet.id;
+    found.benchColonyKey = found.originColonyKey || fromKey;   // dove tornerà
+    fleet.commander = found;
+    return { ok: true, commander: found };
+  }
+
+  /* Rilascia il Comandante di una flotta, rimettendolo in panchina su una
+     colonia (origine se esiste, altrimenti owner flotta, altrimenti prima
+     colonia). Se nessuna colonia esiste (esilio), lo lascia sulla flotta
+     per non perderlo. Ritorna il Comandante (o null). */
+  function releaseFromFleet(game, fleet, opts) {
+    if (!fleet || !fleet.commander) return null;
+    var cmd = fleet.commander;
+    var cols = (game && game.colonies) || {};
+    var destKey = (opts && opts.toColonyKey) || cmd.benchColonyKey || cmd.originColonyKey || fleet.ownerColonyKey;
+    if (!destKey || !cols[destKey]) {
+      destKey = Object.keys(cols).filter(function (k) { return cols[k] && cols[k].colonized; })[0] || Object.keys(cols)[0] || null;
+    }
+    if (!destKey || !cols[destKey]) return null;   // nessuna colonia → resta sulla flotta
+    cmd.status = 'idle';
+    delete cmd.assignedFleetId;
+    ensure(cols[destKey]);
+    cols[destKey].commanders.push(cmd);
+    fleet.commander = null;
+    return cmd;
+  }
+
+  /* Moltiplicatore di velocità di viaggio dal Comandante (Navigatore −15%).
+     Letto da fleet.js in startNextLeg. */
+  function fleetSpeedMul(fleet) {
+    var cmd = fleet && fleet.commander;
+    if (cmd && cmd.specialization === 'navigatore') return 0.85;
+    return 1;
+  }
+
+  /* Etichetta del bonus attivo, per la UI. */
+  function bonusLabel(cmd) {
+    if (!cmd) return '';
+    if (cmd.specialization === 'tattico') return '+10% potenza di fuoco';
+    if (cmd.specialization === 'navigatore') return '−15% durata viaggio';
+    if (cmd.specialization === 'logista') return 'logistica/cargo (gancio M12)';
+    return '';
+  }
+
   root.ORION = root.ORION || {};
   root.ORION.commander = {
     PROMOTION_THRESHOLD: PROMOTION_THRESHOLD,
@@ -143,6 +226,11 @@
     promote: promote,
     isPromotable: isPromotable,
     listOf: listOf,
-    ensure: ensure
+    ensure: ensure,
+    assignableOf: assignableOf,
+    assignToFleet: assignToFleet,
+    releaseFromFleet: releaseFromFleet,
+    fleetSpeedMul: fleetSpeedMul,
+    bonusLabel: bonusLabel
   };
-}(typeof window !== 'undefined' ? window : globalThis));
+}(typeof window !== 'undefined' ? window : this));
