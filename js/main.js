@@ -1200,6 +1200,12 @@ function mountColonyDeck(planet, colony, body) {
       updatePlanetUI();
     }
   });
+  /* Dopo il mount, ridimensiona la planet-view: ora che il deck DOM
+     esiste, resize() misura la sua altezza e adatta fitR/cy della sfera
+     in modo che non venga sopraffatta dalle card (M07.2 iter 3). */
+  if (ORION.planetView && ORION.planetView.resize) {
+    requestAnimationFrame(function () { ORION.planetView.resize(); });
+  }
 }
 
 function renderPlanetBreadcrumb() {
@@ -4339,7 +4345,7 @@ function renderLeftPanel() {
     const status = (f.location && f.location.status) || 'idle';
     const statusLbl = status === 'docked' ? 'attracco' : status === 'in-transit' ? 'transito' : 'orbita';
     const cls = status === 'docked' ? 'ok' : status === 'in-transit' ? 'info' : 'warn';
-    return '<button class="lp-item" data-action="roster-fleet" data-id="' + escapeHtml(f.id) + '" data-sys="' + sysId + '" type="button">' +
+    return '<button class="lp-item lp-item--fleet" data-action="roster-fleet" data-id="' + escapeHtml(f.id) + '" data-sys="' + sysId + '" type="button">' +
       '<span class="lp-item__glyph" aria-hidden="true">▸</span>' +
       '<span class="lp-item__name"><strong>' + escapeHtml(f.name) + '</strong> <span class="lp-item__sub">in ' + escapeHtml(sysName) + '</span></span>' +
       '<span class="lp-item__badges"><span class="lp-item__badge lp-item__badge--' + cls + '">' + statusLbl + '</span></span>' +
@@ -4415,15 +4421,22 @@ function renderLeftPanel() {
     '</section>';
   }
 
+  /* Titoli sezione: glifo + testo separati per applicare la tinta tematica
+     CSS (.lp-section__glyph--*) coerente con .res-icon (decisione #50 polish). */
+  function secTitle(glyphCls, glyph, text) {
+    return '<span class="lp-section__glyph lp-section__glyph--' + glyphCls + '" aria-hidden="true">' + glyph + '</span>' +
+           '<span class="lp-section__text">' + text + '</span>';
+  }
+
   const chronCollapsed = !!ORION.chronicleCollapsed;
   host.innerHTML =
-    sec('roster',   '🏛 Roster',       rosterCount, rosterBody) +
-    sec('nav',      '✦ Navigazione',   '',          '<nav class="lp-nav">' + navHtml + '</nav>') +
-    sec('launcher', '⚑ Sale e moduli', '',          '<div class="lp-launcher">' + launcherHtml + '</div>') +
+    sec('roster',   secTitle('roster', '⬢', 'Roster'),         rosterCount, rosterBody) +
+    sec('nav',      secTitle('nav',    '✦', 'Navigazione'),    '',          '<nav class="lp-nav">' + navHtml + '</nav>') +
+    sec('launcher', secTitle('launch', '◈', 'Sale e moduli'),  '',          '<div class="lp-launcher">' + launcherHtml + '</div>') +
     '<section class="lp-section lp-section--chron' + (chronCollapsed ? ' is-collapsed' : '') + '" data-section="chronicle">' +
       '<div class="lp-section__head" data-action="lp-toggle-chron">' +
         '<span class="lp-section__caret"></span>' +
-        '<span class="lp-section__title">📜 Cronaca</span>' +
+        '<span class="lp-section__title">' + secTitle('chron', '✎', 'Cronaca') + '</span>' +
         '<span class="lp-section__count">' + cron.length + '</span>' +
       '</div>' +
       '<div class="lp-section__body" data-bind="chronicle-host">' + cronHtml + '</div>' +
