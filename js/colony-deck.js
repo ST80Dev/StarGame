@@ -167,11 +167,19 @@
       const out = ORION.planet.structureOutput(colony, planet, ORION.game);
       const scar = colony._scar;
       const keys = ['met', 'en', 'food', 'water'];
+      /* Decisione #45: pop drena cibo/acqua dallo stock. Il saldo visualizzato
+         deve includere il drenaggio, altrimenti vedi "+4 / Ι" ma lo stock cala. */
+      const CFG = ORION.time && ORION.time.CFG;
+      const popTotal = (colony.pop && colony.pop.total) || 0;
+      const opPhase = colony.phase !== 'settling';
+      const popFood  = (opPhase && CFG && popTotal > 0) ? popTotal * CFG.POP_FOOD_PER_UNIT  : 0;
+      const popWater = (opPhase && CFG && popTotal > 0) ? popTotal * CFG.POP_WATER_PER_UNIT : 0;
 
       let html = '<aside class="deck-resources" aria-label="Risorse della colonia">';
       keys.forEach(function (k) {
         const stock = colony.stock[k] || 0;
-        const net = (out.rates[k] || 0) - (out.upkeep[k] || 0);
+        const popDrain = k === 'food' ? popFood : k === 'water' ? popWater : 0;
+        const net = (out.rates[k] || 0) - (out.upkeep[k] || 0) - popDrain;
         const state = scar && scar[k] ? scar[k].state : 'ok';
         const stateCls = state === 'crit' ? ' is-crit' : state === 'low' ? ' is-low' : '';
         const stateLabel = state === 'crit' ? 'critica' : state === 'low' ? 'allerta' : 'ok';
