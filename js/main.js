@@ -2141,16 +2141,20 @@ function crewShortLabel(id) {
 }
 
 /* Helper HTML per le sigle del Calendario del Faro (decisione #30).
-   La sigla Ι (iota greca) è visivamente indistinguibile dalla I latina
-   maiuscola e dal numerale romano nei font sans → confonde la lettura
-   delle durate ("10 I" sembra "decimo I" o un divisorio). Le wrappiamo
-   in un piccolo badge ambra (.ds-unit) che le rende immediatamente
-   identificabili come unità temporali, coerentemente col tema
-   NASA/Visions (decisione #8). Restano i caratteri greci sotto perché
-   sono il "linguaggio del Faro" della decisione #30 — il CSS le rende
-   distintive senza cambiare la grammatica. */
+   PR-H: ogni sigla è ora una piccola icona SVG colorata (UI_GUIDE §3
+   strategia B) — niente più capsule ambra uniforme. Tinte tematiche
+   distinte per scansione rapida: Ι ciano (atomic, ricorrente),
+   Κ verde (ciclo), Φ ambra (fase), Ω viola (eone raro).
+   La lettera greca resta come fallback se ORION.icon non è caricato. */
+const DS_UNIT_MAP = { 'Ι': 'iota', 'Κ': 'kappa', 'Φ': 'phi', 'Ω': 'omega' };
 function dsUnit(letter) {
-  return '<span class="ds-unit" aria-hidden="true">' + letter + '</span>';
+  const iconName = DS_UNIT_MAP[letter];
+  if (!iconName || !(ORION && ORION.icon)) {
+    return '<span class="ds-unit" aria-hidden="true">' + letter + '</span>';
+  }
+  return '<span class="ds-unit ds-unit--' + iconName + '" title="' +
+    iconName.charAt(0).toUpperCase() + iconName.slice(1) +
+    '" aria-hidden="true">' + ORION.icon(iconName) + '</span>';
 }
 function iU() { return dsUnit('Ι'); }      /* Impulso */
 
@@ -5361,7 +5365,14 @@ function starCss(g, starId) {
    --------------------------------------------------------------------- */
 function setHudDate(ds) {
   const el = document.querySelector('[data-bind="data-stellare"]');
-  if (el) el.textContent = ds;
+  if (!el) return;
+  /* PR-H: se è disponibile la versione HTML colorata, usiamo innerHTML;
+     altrimenti fallback a textContent (sicuro per stringhe). */
+  if (ORION && ORION.time && ORION.time.currentDSHtml && ORION.game) {
+    el.innerHTML = ORION.time.currentDSHtml(ORION.game);
+  } else {
+    el.textContent = ds;
+  }
 }
 
 /* Stoppa il timer alla chiusura della partita per non avere advance

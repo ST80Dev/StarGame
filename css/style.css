@@ -2766,10 +2766,24 @@ select.main-menu__input { cursor: pointer; }
    ma vivono dentro un piccolo capsule ambra a font display — l'occhio
    le riconosce subito come unità temporali, non più come "I" latina
    o numerali romani. */
+/* PR-H: sigle del Faro (decisione #30) — niente più capsule ambra.
+   Ora SVG icon inline con tinta tematica per unità. Glow morbido
+   come tutte le altre icone UI_GUIDE §3. */
 .ds-unit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: -0.18em;
+  margin: 0 1px;
+  font-size: 1em;
+  line-height: 1;
+}
+.ds-unit .ui-icon-svg { width: 0.95em; height: 0.95em; }
+/* Fallback (letter) per quando ORION.icon non è caricato */
+.ds-unit:not(.ds-unit--iota):not(.ds-unit--kappa):not(.ds-unit--phi):not(.ds-unit--omega) {
   display: inline-block;
   min-width: 1.1em;
-  padding: 0 5px;
+  padding: 0 4px;
   margin-left: 1px;
   background: rgba(220, 170, 90, 0.16);
   border: 1px solid rgba(220, 170, 90, 0.34);
@@ -2782,6 +2796,28 @@ select.main-menu__input { cursor: pointer; }
   line-height: 1.35;
   text-align: center;
   vertical-align: baseline;
+}
+.ds-unit--iota  { color: var(--c-accent); }    /* ciano: battito atomico ricorrente */
+.ds-unit--kappa { color: #6fe0b8; }            /* verde: ciclo, ritmo sano */
+.ds-unit--phi   { color: #f0a868; }            /* ambra: fase, periodo medio */
+.ds-unit--omega { color: #b89cff; }            /* viola: eone, scala rara */
+
+/* PR-H: HUD DATA Stellare — i 4 valori posizionali colorati
+   coerenti con le sigle .ds-unit. Stesso ordine Ω·Φ·Κ·Ι. */
+.ds-val {
+  font-family: var(--font-data, monospace);
+  font-weight: 600;
+  text-shadow: 0 0 4px currentColor;
+}
+.ds-val--omega { color: #b89cff; }
+.ds-val--phi   { color: #f0a868; }
+.ds-val--kappa { color: #6fe0b8; }
+.ds-val--iota  { color: var(--c-accent); }
+.ds-sep {
+  color: var(--c-text-faint);
+  font-weight: 400;
+  margin: 0 1px;
+  opacity: 0.6;
 }
 
 /* xp chip viola */
