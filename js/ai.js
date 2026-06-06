@@ -120,6 +120,8 @@
     AIWAR_POWER_PER_LOSS: 6,            // M10 Fase D: potenza persa per nave distrutta in una guerra AI-vs-AI materializzata
     BIRTH_CHANCE: 0.015,                // prob. nascita nuovo arrampicatore/AI-tick
     PIRATE_RAID_CHANCE: 0.06,           // prob. razzia pirata/AI-tick (solo voce)
+    PIRATE_RAIDER_CHANCE: 0.05,         // M10 Fase E: prob. che un covo lanci un raider contro una tua flotta esposta
+    PIRATE_RAIDER_GRACE: 120,           // M10 Fase E: nessun raider prima di questo Impulso (grazia, recovery-friendly)
     RUMOR_EXPAND_CHANCE: 0.30,          // quota di espansioni che diventano "voce"
     RUMOR_WAR_CHANCE: 0.45,             // quota di guerre che diventano "voce"
 
@@ -482,6 +484,11 @@
 
     /* --- Pirati: razzia atmosferica (voce di cronaca). --- */
     maybePirateRaid(game, grng, events);
+
+    /* --- M10 Fase E: i predoni cacciano le tue flotte ESPOSTE (in orbita
+       lontano dalle colonie). Gated da grazia iniziale; lo scontro è risolto
+       all'arrivo in time.js (lampo). --- */
+    maybePirateRaider(game, grng, events);
 
     /* --- M09 Fase A (decisione #49): incursione pirata "con denti" verso
        una colonia del giocatore. Gated dalla pressione (catena di sconfitte
@@ -854,6 +861,89 @@
     });
   }
 
+  /* M10 Fase E: un covo lancia un RAIDER contro una flotta del giocatore
+     ESPOSTA (in orbita lontano dalle colonie). Crea un'incursione di tipo
+     'pirate-raider' che time.js risolve all'arrivo come scaramuccia lampo
+     contro quella flotta. Grazia iniziale + una preda alla volta per covo.
+     Recovery-friendly (#22): se la preda non c'è più, il raider svanisce. */
+  function maybePirateRaider(game, rng, events) {
+    if ((game.timeImpulsi || 0) < CFG.PIRATE_RAIDER_GRACE) return;
+    const nests = game.piracy && game.piracy.nests;
+    if (!nests || !nests.length) return;
+    const fleets = game.fleets || [];
+    if (!fleets.length) return;
+    if (!ORION.fleet || !ORION.fleet.computePath) return;
+
+    // flotte esposte: armate, in orbita, NON in un sistema-colonia del giocatore
+    const players = playerSystems(game);
+    const exposed = [];
+    for (let i = 0; i < fleets.length; i++) {
+      const f = fleets[i];
+      if (!f || !f.location || f.location.status !== 'orbiting') continue;
+      if (players.has(f.location.systemId)) continue;   // in casa = al sicuro
+      const guns = (f.ships || []).some(function (s) {
+        const cls = ORION.fleet.getClass && ORION.fleet.getClass(s.kind);
+        return cls && cls.fp > 0;
+      });
+      // anche le flotte disarmate possono essere predate (anzi, sono prede facili)
+      exposed.push({ fleet: f, armed: guns });
+    }
+    if (!exposed.length) return;
+
+    if (!Array.isArray(game.incursions)) game.incursions = [];
+    for (let i = 0; i < nests.length; i++) {
+      const nest = nests[i];
+      if (!rng.chance(CFG.PIRATE_RAIDER_CHANCE)) continue;
+      // scegli la preda raggiungibile più vicina non già bersagliata
+      let best = null, bestHops = Infinity;
+      for (let e = 0; e < exposed.length; e++) {
+        const sysId = exposed[e].fleet.location.systemId;
+        if (raiderTargeting(game, exposed[e].fleet.id)) continue;
+        const path = ORION.fleet.computePath(game.galaxy, nest.sysId, sysId);
+        if (!path) continue;
+        const hops = path.length - 1;
+        if (hops < bestHops) { bestHops = hops; best = exposed[e].fleet; }
+      }
+      if (!best) continue;
+      const eta = Math.max(10, Math.min(60, 12 + bestHops * 12));
+      const id = 'raid-' + (game.timeImpulsi || 0) + '-' + i;
+      game.incursions.push({
+        id: id, kind: 'pirate-raider', fromSysId: nest.sysId,
+        targetSysId: best.location.systemId, targetFleetId: best.id,
+        level: nest.level || 1, eta: eta, launchedAt: game.timeImpulsi || 0
+      });
+      events.push({
+        kind: 'raider-inbound', raiderId: id,
+        targetFleetId: best.id, targetFleetName: best.name,
+        targetSysId: best.location.systemId, eta: eta, impulso: game.timeImpulsi
+      });
+    }
+  }
+  function raiderTargeting(game, fleetId) {
+    const inc = game.incursions || [];
+    for (let i = 0; i < inc.length; i++) {
+      if (inc[i].kind === 'pirate-raider' && inc[i].targetFleetId === fleetId) return true;
+    }
+    return false;
+  }
+
+  /* M10 Fase E: covi pirata NOTI al giocatore (sistema DETECTED+). Per i
+     marker sulla mappa e la lista "Minacce pirata" nel dossier. */
+  function knownNests(game) {
+    const nests = (game.piracy && game.piracy.nests) || [];
+    const out = [];
+    for (let i = 0; i < nests.length; i++) {
+      if (!discovered(game, nests[i].sysId)) continue;
+      const sys = game.galaxy.systems[nests[i].sysId];
+      out.push({
+        sysId: nests[i].sysId, level: nests[i].level || 1,
+        name: sys ? sys.name : '—',
+        regionLabel: regionLabelOfSystem(game.galaxy, nests[i].sysId)
+      });
+    }
+    return out;
+  }
+
   /* ------------------------------------------------------------------
      API per Fase B / UI (innocue in Fase A)
      ------------------------------------------------------------------ */
@@ -1054,6 +1144,8 @@
     recordBattle: recordBattle,
     relationStatus: relationStatus,
     forceEstimate: forceEstimate,
-    dispositionReason: dispositionReason
+    dispositionReason: dispositionReason,
+    /* Fase E — pirati raidabili + raider */
+    knownNests: knownNests
   };
 })(typeof window !== 'undefined' ? window : this);
