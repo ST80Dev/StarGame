@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Orion Empires — Anteprima icone</title>
+  <link rel="stylesheet" href="fonts/fonts.css">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body {
+      margin: 0;
+      padding: 30px;
+      background: #050816;
+      color: #e5ecff;
+      font-family: var(--font-display, system-ui);
+      min-height: 100vh;
+    }
+    h1 { font-family: var(--font-display); font-size: 1.6rem; letter-spacing: 0.06em; margin: 0 0 6px; }
+    .lead { color: #9bb0d6; font-size: 0.92rem; margin: 0 0 30px; font-family: system-ui; }
+    h2 {
+      font-family: var(--font-display); font-size: 0.9rem; text-transform: uppercase;
+      letter-spacing: 0.14em; color: #9bb0d6; margin: 32px 0 14px;
+      border-bottom: 1px solid rgba(120,160,255,0.18); padding-bottom: 8px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 14px;
+    }
+    .icon-card {
+      display: flex; flex-direction: column; align-items: center; gap: 9px;
+      padding: 16px 10px;
+      background: rgba(14, 20, 44, 0.55);
+      border: 1px solid rgba(120,160,255,0.16);
+      border-radius: 8px;
+    }
+    .icon-box {
+      width: 56px; height: 56px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .icon-box svg {
+      width: 100%; height: 100%;
+      filter: drop-shadow(0 0 6px currentColor);
+    }
+    .icon-name {
+      font-family: var(--font-data, monospace);
+      font-size: 0.78rem;
+      color: #cbd2e4;
+      letter-spacing: 0.04em;
+    }
+    .icon-concept {
+      font-family: system-ui;
+      font-size: 0.72rem;
+      color: #889ec5;
+      text-align: center;
+      line-height: 1.3;
+    }
+
+    /* Palette canonica UI_GUIDE §1 */
+    .c-roster      { color: #f0a868; }  /* ambra — colonia mia, capitale, sistema */
+    .c-galaxy      { color: #2fe6e0; }  /* ciano — navigazione macro */
+    .c-group       { color: #b89cff; }  /* viola — gruppo, ricerca, sale */
+    .c-system      { color: #f0a868; }  /* ambra — sistema stellare */
+    .c-planet      { color: #80c8e6; }  /* azzurro — pianeta, acqua, intel */
+    .c-fleet       { color: #2fe6e0; }  /* ciano — flotta */
+    .c-diplomacy   { color: #f08296; }  /* rosa — diplomazia, civ */
+    .c-civ         { color: #f08296; }  /* rosa */
+    .c-research    { color: #b89cff; }  /* viola */
+    .c-market      { color: #6fe0b8; }  /* verde — mercato */
+    .c-chronicle   { color: #cbd2e4; }  /* bianco neutro */
+    .c-build       { color: #2fe6e0; }  /* ciano — azione build */
+    .c-pin         { color: #f0a868; }  /* ambra — pin attivo */
+    .c-info        { color: #80c8e6; }  /* azzurro */
+    .c-settings    { color: #9bb0d6; }  /* grigio-text-soft */
+    .c-save        { color: #2fe6e0; }
+    .c-warning     { color: #f0d670; }  /* oro — warn */
+    .c-spy         { color: #9d7bff; }  /* viola scuro */
+
+    /* Sezione "uso reale" — come appaiono nei contesti veri */
+    .demo-section {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+      margin-bottom: 30px;
+    }
+    .demo-card {
+      padding: 16px;
+      background: rgba(14, 20, 44, 0.55);
+      border: 1px solid rgba(120,160,255,0.16);
+      border-radius: 8px;
+    }
+    .demo-title {
+      font-family: var(--font-display);
+      font-size: 0.72rem; text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #9bb0d6;
+      margin: 0 0 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(120,160,255,0.12);
+    }
+    .demo-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 11px;
+      background: rgba(8,12,30,0.5);
+      border: 1px solid rgba(120,160,255,0.12);
+      border-radius: 5px;
+      margin-bottom: 5px;
+      font-family: system-ui;
+      font-size: 0.88rem;
+      color: #e5ecff;
+    }
+    .demo-row svg {
+      width: 18px; height: 18px;
+      filter: drop-shadow(0 0 5px currentColor);
+      flex: 0 0 18px;
+    }
+    .demo-row__sub {
+      margin-left: auto;
+      font-family: var(--font-data, monospace);
+      font-size: 0.76rem;
+      color: #9bb0d6;
+    }
+    .demo-row__badge {
+      font-size: 0.74rem; font-weight: 600;
+      padding: 2px 6px; border-radius: 9px;
+    }
+    .badge-ok   { background: rgba(95,200,140,0.18);  color: #6fe0b8; }
+    .badge-warn { background: rgba(240,210,100,0.18); color: #f0d670; }
+    .badge-crit { background: rgba(240,130,150,0.20); color: #f08296; }
+  </style>
+</head>
+<body>
+  <h1>Anteprima icone Orion Empires</h1>
+  <p class="lead">
+    Set Lucide-style adattato (~stroke 2px, viewBox 24×24, monocrome stroke-based).
+    Ogni icona usa <code>currentColor</code> + <code>drop-shadow</code> glow secondo
+    la palette tematica di UI_GUIDE.md. Apri questa pagina nel browser per valutare
+    qualità di disegno, leggibilità a varie dimensioni e coerenza visiva.
+  </p>
+
+  <h2>Uso reale — come appaiono nelle sezioni</h2>
+  <div class="demo-section">
+    <div class="demo-card">
+      <div class="demo-title">📋 Sezione sx — Roster colonie</div>
+      <div class="demo-row"><svg class="c-roster" data-icon="roster"></svg>
+        <span><strong>Cathay</strong> · Antares III</span>
+        <span class="demo-row__badge badge-ok">OK</span>
+      </div>
+      <div class="demo-row"><svg class="c-roster" data-icon="roster"></svg>
+        <span><strong>Talax</strong> · Vega II</span>
+        <span class="demo-row__badge badge-warn">LOW</span>
+      </div>
+      <div class="demo-row"><svg class="c-fleet" data-icon="fleet"></svg>
+        <span><strong>Squadrone 1</strong></span>
+        <span class="demo-row__sub">in orbita · Procyon</span>
+      </div>
+    </div>
+
+    <div class="demo-card">
+      <div class="demo-title">🧭 Sezione sx — Sale e moduli</div>
+      <div class="demo-row"><svg class="c-diplomacy" data-icon="diplomacy"></svg>
+        <span>Diplomazia</span>
+        <span class="demo-row__sub">3 contatti</span>
+      </div>
+      <div class="demo-row"><svg class="c-research" data-icon="research"></svg>
+        <span>Ricerca</span>
+        <span class="demo-row__sub">M13</span>
+      </div>
+      <div class="demo-row"><svg class="c-market" data-icon="market"></svg>
+        <span>Mercato</span>
+        <span class="demo-row__sub">M12</span>
+      </div>
+    </div>
+
+    <div class="demo-card">
+      <div class="demo-title">🌌 Navigazione livelli</div>
+      <div class="demo-row"><svg class="c-galaxy" data-icon="galaxy"></svg>
+        <span>Galassia</span>
+      </div>
+      <div class="demo-row"><svg class="c-group" data-icon="group"></svg>
+        <span>Gruppo stellare</span>
+      </div>
+      <div class="demo-row"><svg class="c-system" data-icon="system"></svg>
+        <span>Sistema</span>
+      </div>
+      <div class="demo-row"><svg class="c-planet" data-icon="planet"></svg>
+        <span>Pianeta</span>
+      </div>
+    </div>
+
+    <div class="demo-card">
+      <div class="demo-title">⚠️ Stati e feedback</div>
+      <div class="demo-row"><svg class="c-warning" data-icon="warning"></svg>
+        <span>Scarsità cibo in arrivo</span>
+        <span class="demo-row__badge badge-warn">LOW</span>
+      </div>
+      <div class="demo-row"><svg class="c-info" data-icon="info"></svg>
+        <span>Sistema scoperto</span>
+      </div>
+      <div class="demo-row"><svg class="c-spy" data-icon="spy"></svg>
+        <span>Missione spionaggio (M19)</span>
+        <span class="demo-row__sub">richiede missione</span>
+      </div>
+    </div>
+  </div>
+
+  <h2>Catalogo completo (16px, 28px, 56px)</h2>
+  <div class="grid" id="catalog"></div>
+
+  <script src="js/icons.js"></script>
+  <script>
+    /* Concetti → tinte (mapping UI_GUIDE §1) */
+    const CONCEPTS = {
+      roster:     { color: 'c-roster',     label: 'Colonia / capitale' },
+      galaxy:     { color: 'c-galaxy',     label: 'Galassia (livello macro)' },
+      group:      { color: 'c-group',      label: 'Gruppo stellare' },
+      system:     { color: 'c-system',     label: 'Sistema stellare' },
+      planet:     { color: 'c-planet',     label: 'Pianeta / corpo' },
+      fleet:      { color: 'c-fleet',      label: 'Flotta' },
+      diplomacy:  { color: 'c-diplomacy',  label: 'Diplomazia (M11)' },
+      civ:        { color: 'c-civ',        label: 'Civiltà AI' },
+      research:   { color: 'c-research',   label: 'Ricerca (M13)' },
+      market:     { color: 'c-market',     label: 'Mercato (M12)' },
+      chronicle:  { color: 'c-chronicle',  label: 'Cronaca' },
+      build:      { color: 'c-build',      label: 'Costruisci' },
+      pin:        { color: 'c-pin',        label: 'Pin colonia (dx)' },
+      info:       { color: 'c-info',       label: 'Info contestuale' },
+      settings:   { color: 'c-settings',   label: 'Impostazioni' },
+      save:       { color: 'c-save',       label: 'Salvataggio' },
+      warning:    { color: 'c-warning',    label: 'Allerta' },
+      spy:        { color: 'c-spy',        label: 'Spionaggio (M19)' }
+    };
+
+    /* Inietta le SVG nei demo-row */
+    document.querySelectorAll('[data-icon]').forEach(function (el) {
+      const name = el.dataset.icon;
+      const cls  = el.getAttribute('class') || '';
+      el.outerHTML = ORION.icon(name).replace('<svg ', '<svg class="' + cls + '" ');
+    });
+
+    /* Costruisce il catalogo */
+    const host = document.getElementById('catalog');
+    let html = '';
+    ORION.icons.NAMES.forEach(function (name) {
+      const cfg = CONCEPTS[name] || { color: 'c-info', label: '—' };
+      const svgStr = ORION.icon(name).replace('<svg ', '<svg class="' + cfg.color + '" ');
+      html += '<div class="icon-card">' +
+        '<div class="icon-box">' + svgStr + '</div>' +
+        '<div class="icon-name">' + name + '</div>' +
+        '<div class="icon-concept">' + cfg.label + '</div>' +
+      '</div>';
+    });
+    host.innerHTML = html;
+  </script>
+</body>
+</html>
