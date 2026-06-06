@@ -884,7 +884,74 @@
     if (!civ || !outcome) return true;
     const loss = (outcome.winner === 'player') ? 12 : 5;
     civ.power = Math.max(0, civ.power - loss);
+    /* M10 Fase C (decisione #47): registra l'esito come INTEL nel dossier
+       (campo lazy, niente bump di schema — civ è serializzata in game.civs). */
+    recordBattle(game, civ.id, outcome.winner === 'player' ? 'win' : 'loss', 'skirmish',
+      outcome.report && outcome.report.systemId);
     return true;
+  }
+
+  /* ==================================================================
+     M10 Fase C (decisione #47) — INTEL dossier combat-aware.
+     Ora che M09 produce dati di combattimento, il dossier li riflette:
+     stato di guerra/tregua col giocatore, stima della forza, ultimo
+     scontro col suo esito, e il "perché" della disposizione. Tutto
+     DERIVATO dallo stato esistente; l'unico campo nuovo è `civ.lastBattle`
+     (lazy → niente bump di schema). Determinismo: nessun RNG.
+     ================================================================== */
+
+  /* Registra l'ultimo scontro col giocatore sul dossier della civiltà.
+     result: 'win'|'loss' DAL PUNTO DI VISTA DEL GIOCATORE. */
+  function recordBattle(game, civId, result, kind, sysId) {
+    const civ = (game.civs || []).filter(function (c) { return c.id === civId; })[0];
+    if (!civ) return;
+    civ.lastBattle = {
+      result: result, kind: kind || 'skirmish',
+      sysId: (sysId == null ? -1 : sysId), impulso: game.timeImpulsi || 0
+    };
+  }
+
+  /* Stato della relazione col giocatore (derivato): tregua → guerra attiva
+     → ostile → disposizione. Per il chip del dossier. */
+  function relationStatus(game, civ) {
+    const now = game.timeImpulsi || 0;
+    if ((civ.truceUntil || 0) > now) return { id: 'truce', label: 'Tregua' };
+    const inc = (game.incursions || []).some(function (i) { return i.kind === 'ai' && i.civId === civ.id; });
+    const bat = (game.battles || []).some(function (b) { return b.attackerKind === 'ai' && b.attackerCiv === civ.id && b.status === 'active'; });
+    if (inc || bat) return { id: 'war', label: 'In guerra' };
+    const d = civ.disposition || 0;
+    if (d <= -40) return { id: 'hostile', label: 'Ostile' };
+    if (d >= 40) return { id: 'friendly', label: 'Amichevole' };
+    if (d >= 15) return { id: 'cordial', label: 'Cordiale' };
+    return { id: 'neutral', label: 'Neutrale' };
+  }
+
+  /* Stima coarse della forza materializzabile (numero di unità), coerente
+     con la formula di materialize(). Mantiene la nebbia (è una stima). */
+  function forceEstimate(game, civ) {
+    return Math.max(1, Math.round((civ.power || 0) / 25));
+  }
+
+  /* "Perché" della disposizione: euristica leggibile dai fattori che la
+     guidano (allineamento, azioni morali del giocatore #23, vicinanza,
+     ultimo scontro). Stringa breve per il dossier. */
+  function dispositionReason(game, civ) {
+    const deeds = game.alignmentDeeds || { light: 0, dark: 0 };
+    const near = civBordersPlayer(game, civ);
+    const out = [];
+    if (civ.alignment === 'bene') {
+      if (deeds.light > deeds.dark) out.push('apprezza la tua condotta');
+      if (deeds.dark > deeds.light + 1) out.push('disapprova le tue aggressioni');
+    } else if (civ.alignment === 'male') {
+      if (near) out.push('ti considera un bersaglio (confini vicini)');
+      if (deeds.dark > deeds.light) out.push('rispetta la forza che mostri');
+    } else {
+      out.push('opportunista: pesa la tua forza');
+    }
+    if (civ.lastBattle) {
+      out.push(civ.lastBattle.result === 'win' ? 'memore della sconfitta subita' : 'rinfrancata dalla vittoria su di te');
+    }
+    return out.length ? out.join(' · ') : 'nessun fattore rilevante';
   }
 
   /* Reputazione globale del giocatore come anteprima (§14, decisione #47):
@@ -916,6 +983,11 @@
     knownSystemsCount: knownSystemsCount,
     contactedCivs: contactedCivs,
     materialize: materialize,
-    demobilize: demobilize
+    demobilize: demobilize,
+    /* Fase C — intel dossier combat-aware */
+    recordBattle: recordBattle,
+    relationStatus: relationStatus,
+    forceEstimate: forceEstimate,
+    dispositionReason: dispositionReason
   };
 })(typeof window !== 'undefined' ? window : this);

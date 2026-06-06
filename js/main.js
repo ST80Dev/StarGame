@@ -3106,40 +3106,69 @@ function renderCivView(stage) {
       const known = ORION.ai.knownSystemsCount(g, c);
       const ptier = ORION.ai.powerTier(c.power || 0);
       const seat = (g.galaxy.groups.find(function (gp) { return gp.id === c.homeGroupId; }) || {});
+      /* M10 Fase C: intel combat-aware (relazione, forza stimata, ultimo
+         scontro, "perché" della disposizione). */
+      const rel = ORION.ai.relationStatus ? ORION.ai.relationStatus(g, c) : { id: 'neutral', label: 'Neutrale' };
+      const force = ORION.ai.forceEstimate ? ORION.ai.forceEstimate(g, c) : 0;
+      const reason = ORION.ai.dispositionReason ? ORION.ai.dispositionReason(g, c) : '';
+      let lastB = '';
+      if (c.lastBattle) {
+        const lb = c.lastBattle;
+        const sys = (lb.sysId != null && lb.sysId >= 0 && g.galaxy.systems[lb.sysId]) ? g.galaxy.systems[lb.sysId].name : null;
+        const verdict = lb.result === 'win' ? 'vittoria tua' : 'sconfitta tua';
+        const where = sys ? ' a <strong>' + escapeHtml(sys) + '</strong>' : '';
+        const when = ORION.time ? ORION.time.format((g.startEpochOrbita || 0) * 100 + lb.impulso) : '';
+        lastB = '<div class="civ-card__row civ-lastbattle civ-lastbattle--' + (lb.result === 'win' ? 'win' : 'loss') + '">' +
+          '<span class="civ-card__k">Ultimo scontro</span><span>' + verdict + where +
+          (when ? ' · <span class="civ-card__when">' + escapeHtml(when) + '</span>' : '') + '</span></div>';
+      }
       return '<li class="civ-card" style="--civ-color:' + escapeHtml(c.color) + '">' +
         '<div class="civ-card__head">' +
           '<span class="civ-card__swatch" aria-hidden="true"></span>' +
           '<span class="civ-card__name">' + escapeHtml(c.name) + '</span>' +
           '<span class="civ-chip civ-chip--' + c.alignment + '">' + (ALIGN_LABEL[c.alignment] || c.alignment) + '</span>' +
+          '<span class="civ-rel civ-rel--' + rel.id + '">' + escapeHtml(rel.label) + '</span>' +
         '</div>' +
         '<div class="civ-card__row"><span class="civ-card__k">Tratto</span><span>' + escapeHtml(c.traitLabel) + '</span></div>' +
         '<div class="civ-card__row"><span class="civ-card__k">Sede</span><span>' +
           escapeHtml(seat.tierLabel || '—') + (seat.name ? ' · ' + escapeHtml(seat.name) : '') + '</span></div>' +
         '<div class="civ-card__row"><span class="civ-card__k">Potenza</span><span class="civ-power civ-power--' + ptier + '">' + ptier + '</span>' +
+          '<span class="civ-card__k">Forza stimata</span><span>≈ ' + force + ' unità</span>' +
           '<span class="civ-card__k">Sistemi noti</span><span>' + known + '</span></div>' +
+        lastB +
         '<div class="civ-disp">' +
           '<div class="civ-disp__top"><span class="civ-card__k">Disposizione verso di te</span>' +
             '<span class="civ-disp__label civ-disp__label--' + dispCls + '">' + dispLabel + '</span></div>' +
           '<div class="civ-disp__bar"><span class="civ-disp__mid" aria-hidden="true"></span>' +
             '<span class="civ-disp__fill civ-disp__fill--' + dispCls + '" style="width:' + pct.toFixed(0) + '%"></span></div>' +
+          (reason ? '<div class="civ-disp__reason">' + escapeHtml(reason) + '</div>' : '') +
         '</div>' +
       '</li>';
     }).join('') + '</ul>';
   }
 
+  /* Stato di guerra d'impero (§ M09): morale + pressione, contesto globale. */
+  const ws = g.warState || { morale: 1, pressure: 0 };
+  const moralePct = Math.round((ws.morale != null ? ws.morale : 1) * 100);
+  const pressure = Math.round(ws.pressure || 0);
+  const deeds = g.alignmentDeeds || { light: 0, dark: 0 };
+
   stage.innerHTML =
     '<div class="civ-view">' +
       '<header class="fleet-view__head">' +
-        '<h2 class="fleet-view__title">Civiltà della galassia <span class="fleet-view__sub">M10 · Fase B</span></h2>' +
+        '<h2 class="fleet-view__title">Civiltà della galassia <span class="fleet-view__sub">M10 · Fase C</span></h2>' +
         '<div class="civ-indices">' +
           '<span class="civ-index" title="Indice Corruzione Galattica (§5.4)">ICG <strong>' + icg + '</strong></span>' +
           '<span class="civ-index" title="Reputazione — anteprima (§14)">Reputazione <strong>' + rep + '</strong></span>' +
+          '<span class="civ-index" title="Morale d\'impero (M09): cala con le sconfitte, riduce la produzione">Morale <strong>' + moralePct + '%</strong></span>' +
+          '<span class="civ-index" title="Pressione nemica (M09): sale con le sconfitte, attira più attacchi">Pressione <strong>' + pressure + '</strong></span>' +
         '</div>' +
       '</header>' +
       '<p class="panel__note">Le civiltà vivono in <strong>background</strong> (espandono, si fanno guerra, cadono e ' +
-        'nascono). Qui vedi solo quelle <strong>contattate</strong>: identità, disposizione verso di te e territorio ' +
-        '<em>noto</em>. Trattati e alleanze arrivano con la <strong>Diplomazia</strong> (M11); gli scontri con il ' +
-        '<strong>Combattimento</strong> (M09).</p>' +
+        'nascono). Dossier <strong>combat-aware</strong>: relazione (guerra/tregua/ostile), forza stimata, ultimo scontro ' +
+        'e il <em>perché</em> della disposizione. Le tue azioni morali finora — <span class="civ-deeds civ-deeds--light">' + (deeds.light || 0) + ' luce</span> · ' +
+        '<span class="civ-deeds civ-deeds--dark">' + (deeds.dark || 0) + ' ombra</span>. ' +
+        'Trattati e alleanze arrivano con la <strong>Diplomazia</strong> (M11).</p>' +
       cards +
     '</div>';
 }

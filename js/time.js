@@ -1208,6 +1208,9 @@
       if (atkWiped || atkRetreat) {
         // difensori vincono: razzia respinta, covo indebolito
         warRegisterWin(game);
+        if (battle.attackerKind === 'ai' && root.ORION.ai && root.ORION.ai.recordBattle) {
+          root.ORION.ai.recordBattle(game, battle.attackerCiv, 'win', 'siege-defense', battle.systemId);
+        }
         events.push({ kind: 'siege-end', battleId: battle.id, outcome: 'repelled',
           colonyKey: colonyKey, systemId: battle.systemId, impulso: game.timeImpulsi });
         grantSiegeVeterancy(game, present);
@@ -1224,6 +1227,9 @@
         const win = C.totalHp(def) >= C.totalHp(atk);
         if (win) {
           warRegisterWin(game);
+          if (battle.attackerKind === 'ai' && root.ORION.ai && root.ORION.ai.recordBattle) {
+            root.ORION.ai.recordBattle(game, battle.attackerCiv, 'win', 'siege-defense', battle.systemId);
+          }
           events.push({ kind: 'siege-end', battleId: battle.id, outcome: 'repelled',
             colonyKey: colonyKey, systemId: battle.systemId, impulso: game.timeImpulsi });
           grantSiegeVeterancy(game, present);
@@ -1282,6 +1288,11 @@
   function applySiegeWin(game, battle, colony, colonyKey, events) {
     if (battle.attackerKind === 'ai') {
       const civ = (game.civs || []).filter(function (c) { return c.id === battle.attackerCiv; })[0];
+      /* M10 Fase C (decisione #47): l'assedio AI è andato a segno → intel
+         "sconfitta subita" nel dossier (perdita dal punto di vista del giocatore). */
+      if (root.ORION.ai && root.ORION.ai.recordBattle) {
+        root.ORION.ai.recordBattle(game, battle.attackerCiv, 'loss', 'siege-attack', colony.systemId);
+      }
       const wasCapital = isCapitalColony(game, colonyKey);
       const sysId = colony.systemId;
       const raze = civ && civ.trait === 'predoni';
