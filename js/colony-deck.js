@@ -40,6 +40,18 @@
     operai: 'Operai', scienziati: 'Scienziati', militari: 'Militari',
     mercanti: 'Mercanti', tecnici: 'Tecnici'
   };
+  /* Categorie strutture per tab + label breve (UI_GUIDE §4 parola
+     abbreviata sui tab, non sigla 3-lettere, vedi anti-pattern). */
+  const CAT_LABEL = {
+    'estrattiva':  'Estr.',
+    'produttiva':  'Prod.',
+    'militare':    'Mil.',
+    'civile':      'Civ.',
+    'ricerca':     'Ric.',
+    'avanzata':    'Av.'
+  };
+  const CAT_ORDER = ['estrattiva', 'produttiva', 'militare', 'civile', 'ricerca', 'avanzata'];
+
   /* Label abbreviate per le card strutture compatte (M07.2 iter 3,
      UI_GUIDE §4 — sigla solo dove l'utente esperto basta + tooltip
      parola piena al hover sul title della <li>). */
@@ -223,7 +235,8 @@
     }
 
     /* Strutture costruite — entry-point per "+Espandi" e "Smantella".
-       (Costruire nuovi tipi resta solo in sidebar — decisione #44.)        */
+       (Costruire nuovi tipi resta solo in sidebar — decisione #44.)
+       PR-A: tab categoria + filtro (estrattiva/produttiva/militare/...). */
     _renderStructures() {
       const colony = this.colony, planet = this.planet;
       const S = ORION.structures;
@@ -246,8 +259,43 @@
         return html;
       }
 
-      html += '<ul class="deck-struct-list">';
+      /* Conteggio per categoria + render tab */
+      const byCat = { all: builtIds.length };
       builtIds.forEach(function (id) {
+        const def = S.get(id);
+        if (!def) return;
+        byCat[def.cat] = (byCat[def.cat] || 0) + 1;
+      });
+      /* Stato filtro: memorizzato in ORION.deckCatFilter (in-memory, non
+         persistito — è preferenza UI volatile per la sessione corrente). */
+      const filter = ORION.deckCatFilter || 'all';
+      const activeFilter = byCat[filter] ? filter : 'all';
+
+      let tabs = '<div class="deck-struct-tabs" role="tablist">' +
+        '<button class="deck-struct-tab' + (activeFilter === 'all' ? ' is-active' : '') + '" ' +
+          'data-deck-action="filter-cat" data-cat="all" type="button" role="tab">' +
+          'Tutte <span class="deck-struct-tab__count">' + builtIds.length + '</span>' +
+        '</button>';
+      CAT_ORDER.forEach(function (cat) {
+        if (!byCat[cat]) return;
+        const isAct = activeFilter === cat;
+        tabs += '<button class="deck-struct-tab' + (isAct ? ' is-active' : '') + '" ' +
+          'data-deck-action="filter-cat" data-cat="' + cat + '" type="button" role="tab">' +
+          (CAT_LABEL[cat] || cat) +
+          ' <span class="deck-struct-tab__count">' + byCat[cat] + '</span>' +
+        '</button>';
+      });
+      tabs += '</div>';
+      html += tabs;
+
+      /* Filtro ID per categoria scelta */
+      const filtered = (activeFilter === 'all') ? builtIds : builtIds.filter(function (id) {
+        const def = S.get(id);
+        return def && def.cat === activeFilter;
+      });
+
+      html += '<ul class="deck-struct-list">';
+      filtered.forEach(function (id) {
         const def = S.get(id);
         if (!def) return;
         const ent = colony.structures[id];
@@ -446,6 +494,9 @@
         this.opts.onInfo(t.dataset.id);
       } else if (action === 'open-tab' && this.opts.onOpenTab) {
         this.opts.onOpenTab(t.dataset.tab);
+      } else if (action === 'filter-cat') {
+        ORION.deckCatFilter = t.dataset.cat;
+        this._render();
       }
     }
   }

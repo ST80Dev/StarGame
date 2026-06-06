@@ -3050,13 +3050,12 @@ select.main-menu__input { cursor: pointer; }
 }
 .colony-deck[hidden] { display: none; }
 
-/* M07.2 iter 3 (decisione #44): 2 righe — top fascia "scena" (risorse +
-   coda con la sfera al centro), bottom 3 colonne pop|strutture|cronaca.
-   La sfera al centro respira di più; cronaca allargata, popolazione
-   compatta verticale a sinistra. */
+/* M07.2 iter 4 (PR-A): pop e cronaca allargati per leggibilità delle
+   info; strutture al centro filtrate per categoria via tab, quindi più
+   strette ma con card più grandi (3 max colonne, info più leggibile). */
 .deck-grid {
   display: grid;
-  grid-template-columns: 132px 1fr 252px;
+  grid-template-columns: 168px 1fr 290px;
   grid-template-rows: 1fr auto;
   grid-template-areas:
     "resources .          queue"
@@ -3217,9 +3216,8 @@ select.main-menu__input { cursor: pointer; }
 }
 
 /* ---- Strutture costruite (centro riga inferiore) ----------------
-   M07.2 iter 3: card compatte con info verticale (glifo+nome top,
-   livello+costo+expand bottom). Etichette abbreviate via SHORT_LABEL
-   in colony-deck.js. */
+   M07.2 iter 4 (PR-A): tab categoria sotto l'header, card verticali
+   più grandi e leggibili. Bordo sx 3px colorato per categoria. */
 .deck-structures {
   grid-area: structs;
   padding: 6px 8px;
@@ -3231,37 +3229,72 @@ select.main-menu__input { cursor: pointer; }
   flex-direction: column;
   min-height: 0;
 }
+.deck-struct-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.deck-struct-tab {
+  padding: 3px 9px;
+  background: rgba(8, 12, 30, 0.5);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 999px;
+  color: var(--c-text-soft);
+  font-size: 0.72rem;
+  font-family: var(--font-display, inherit);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: var(--transition);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.deck-struct-tab:hover { color: var(--c-text); border-color: var(--c-accent-dim); }
+.deck-struct-tab.is-active {
+  background: rgba(47, 230, 224, 0.12);
+  border-color: var(--c-accent);
+  color: var(--c-accent);
+}
+.deck-struct-tab__count {
+  font-family: var(--font-data);
+  font-size: 0.68rem;
+  color: var(--c-text-faint);
+  letter-spacing: 0;
+}
+.deck-struct-tab.is-active .deck-struct-tab__count { color: var(--c-accent); }
 .deck-struct-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
-  gap: 4px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 6px;
 }
 .deck-struct {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 18px 5px 5px;
+  gap: 5px;
+  padding: 22px 8px 8px;
   background: rgba(8, 12, 30, 0.55);
   border: 1px solid var(--c-border-soft);
   border-left: 3px solid var(--c-border);
   border-radius: var(--radius-sm);
-  min-height: 64px;
+  min-height: 80px;
 }
 .deck-struct__top {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   min-width: 0;
 }
 .deck-struct__bot {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 4px;
+  gap: 5px;
 }
 .deck-struct.is-busy { opacity: 0.92; }
 .deck-cat--estrattiva { border-left-color: var(--c-accent-warm); }
@@ -3294,33 +3327,34 @@ select.main-menu__input { cursor: pointer; }
   color: var(--c-text);
 }
 .deck-struct__glyph {
-  font-size: 0.98rem;
+  font-size: 1.1rem;
   color: var(--c-text);
   text-align: center;
-  flex: 0 0 14px;
+  flex: 0 0 18px;
 }
 .deck-struct__name {
   flex: 1;
-  font-size: 0.76rem;
+  font-size: 0.84rem;
   color: var(--c-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.1;
+  line-height: 1.15;
 }
 .deck-struct__lvl {
   color: var(--c-accent);
   font-family: var(--font-data, inherit);
-  font-size: 0.72rem;
+  font-size: 0.78rem;
+  font-weight: 600;
   flex: 0 0 auto;
 }
 .deck-struct__pips {
   display: inline-flex;
-  gap: 2px;
+  gap: 3px;
 }
 .deck-pip {
-  width: 5px;
-  height: 3px;
+  width: 7px;
+  height: 4px;
   background: rgba(120, 160, 255, 0.18);
   border-radius: 1px;
 }
@@ -3330,8 +3364,8 @@ select.main-menu__input { cursor: pointer; }
 .deck-struct__expand {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 2px 5px;
+  gap: 4px;
+  padding: 3px 7px;
   background: rgba(47, 230, 224, 0.12);
   border: 1px solid var(--c-accent-dim);
   border-radius: var(--radius-sm);
@@ -3347,14 +3381,14 @@ select.main-menu__input { cursor: pointer; }
   border-color: var(--c-accent);
 }
 .deck-struct__expand-plus {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   line-height: 1;
 }
 .deck-struct__expand-cost {
   display: inline-flex;
-  gap: 3px;
-  font-size: 0.6rem;
+  gap: 5px;
+  font-size: 0.72rem;
   color: var(--c-text-soft);
   flex-wrap: nowrap;
 }
@@ -3613,7 +3647,7 @@ select.main-menu__input { cursor: pointer; }
 /* ---- Responsive (decisione #6: ≥768px) ------------------------- */
 @media (max-width: 1199px) {
   .deck-grid {
-    grid-template-columns: 118px 1fr 216px;
+    grid-template-columns: 150px 1fr 250px;
   }
   .deck-res__value { font-size: 0.9rem; }
 }
@@ -4066,17 +4100,26 @@ select.main-menu__input { cursor: pointer; }
 .lp-section__caret { color: var(--c-text-soft); font-size: 0.72rem; width: 10px; }
 .lp-section__title { flex: 1; display: inline-flex; align-items: center; gap: 7px; }
 /* Glyph colorato per sezione — stile analogo a .res-icon (decisione #28).
-   Ogni sezione ha la sua tinta tematica per scansione rapida. */
+   PR-A: ora SVG inline (UI_GUIDE §3 B). La tinta arriva da `color:` →
+   currentColor sullo stroke dell'SVG; il glow è drop-shadow morbido. */
 .lp-section__glyph {
-  display: inline-block;
-  font-size: 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
   line-height: 1;
-  font-variant-emoji: text;
+  width: 1em;
+  height: 1em;
 }
-.lp-section__glyph--roster { color: #f0a868; text-shadow: 0 0 6px rgba(240,168,104,0.45); }
-.lp-section__glyph--nav    { color: var(--c-accent); text-shadow: 0 0 6px rgba(47,230,224,0.45); }
-.lp-section__glyph--launch { color: #b89cff; text-shadow: 0 0 6px rgba(184,156,255,0.45); }
-.lp-section__glyph--chron  { color: #cbd2e4; text-shadow: 0 0 5px rgba(203,210,228,0.4); }
+.lp-section__glyph--roster { color: #f0a868; }
+.lp-section__glyph--nav    { color: var(--c-accent); }
+.lp-section__glyph--launch { color: #b89cff; }
+.lp-section__glyph--chron  { color: #cbd2e4; }
+/* Glow morbido canonico UI_GUIDE §3 (blur 3px, alpha ~0.4) sulle icone SVG */
+.ui-icon { display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
+.ui-icon-svg { width: 1em; height: 1em; filter: drop-shadow(0 0 3px currentColor); display: block; }
+/* Bottoni HUD top con SVG: leggermente più grandi */
+.btn--tutorial .ui-icon, .btn--save .ui-icon { font-size: 1.05rem; }
 .lp-section__text { font-weight: 600; }
 .lp-section__count {
   font-family: var(--font-data);
@@ -4149,18 +4192,18 @@ select.main-menu__input { cursor: pointer; }
   box-shadow: inset 2px 0 0 var(--c-accent);
 }
 /* Glifo item con colore tematico (es. colonia=ambra, flotta=ciano).
-   Riusa il pattern .res-icon con text-shadow per coerenza visiva. */
+   PR-A: SVG inline, glow via filter sul .ui-icon-svg. */
 .lp-item__glyph {
   width: 16px;
-  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 1rem;
   color: #f0a868;
-  text-shadow: 0 0 5px rgba(240,168,104,0.45);
   line-height: 1;
 }
 .lp-item--fleet .lp-item__glyph {
   color: var(--c-accent);
-  text-shadow: 0 0 5px rgba(47,230,224,0.45);
 }
 .lp-item__name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lp-item__name strong { font-weight: 600; color: var(--c-text); }
@@ -4196,11 +4239,13 @@ select.main-menu__input { cursor: pointer; }
   padding: 7px 11px;
   font-size: 0.88rem;
 }
-/* Glifo nav colorato per livello (Galassia/Gruppo=accent, Sistema=warm, Pianeta=violet). */
+/* Glifo nav colorato per livello (Galassia=ciano · Gruppo=viola · Sistema=ambra · Pianeta=azzurro).
+   PR-A: SVG inline, glow via filter sul .ui-icon-svg. */
 .lp-nav .nav-item__glyph {
-  font-size: 1rem;
-  text-shadow: 0 0 5px currentColor;
-  opacity: 0.85;
+  display: inline-flex;
+  align-items: center;
+  font-size: 1.05rem;
+  opacity: 0.92;
 }
 .lp-nav .nav-item[data-view="galaxy"] .nav-item__glyph { color: var(--c-accent); }
 .lp-nav .nav-item[data-view="group"]  .nav-item__glyph { color: #b89cff; }
@@ -4231,12 +4276,13 @@ select.main-menu__input { cursor: pointer; }
   box-shadow: inset 2px 0 0 var(--c-accent);
 }
 .lp-launcher__btn[disabled] { opacity: 0.6; cursor: default; }
-/* Glyph del launcher con tinte tematiche (palette coerente con .res-icon). */
+/* Glyph del launcher con tinte tematiche (palette coerente con .res-icon).
+   PR-A: SVG inline, glow via filter sul .ui-icon-svg. */
 .lp-launcher__glyph {
-  width: 16px; text-align: center;
-  font-size: 1rem; line-height: 1;
-  text-shadow: 0 0 5px currentColor;
-  opacity: 0.9;
+  width: 16px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1.05rem; line-height: 1;
+  opacity: 0.92;
 }
 .lp-launcher__btn[data-view="fleet"]    .lp-launcher__glyph { color: var(--c-accent); }
 .lp-launcher__btn[data-view="civ"]      .lp-launcher__glyph { color: #f08296; }
