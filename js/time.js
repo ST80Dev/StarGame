@@ -638,14 +638,22 @@
       let growth = CFG.POP_GROWTH_BASE * morale;
       if (colony.structures['ospedale']) growth *= (1 + CFG.POP_GROWTH_HOSPITAL);
 
-      /* Capacità di carico (DECISIONE #45, emenda #37): il consumo pop è
-         ora drenato direttamente in processProduction → prod.net.food/water
-         INCLUDE già la richiesta della popolazione corrente. Quindi il
-         "surplus" che alimenta la crescita = net diretto (positivo = c'è
-         margine per nuove unità; ≤0 = plateau o carestia). Legge del minimo
-         tra cibo e acqua. La crescita resta lenta e di lungo periodo. */
-      const surplus = Math.min(prod.net.food || 0, prod.net.water || 0);
-      const supplyFactor = surplus <= 0 ? 0 : Math.min(1, surplus / CFG.POP_SUPPLY_REF);
+      /* Capacità di carico (DECISIONE #45, emenda v2): il consumo pop è
+         drenato in processProduction → prod.net include già la richiesta.
+         MA gating della crescita NON è sul saldo istantaneo: se lo stock
+         è in stato 'ok' (riserve abbondanti) la pop cresce a pieno regime
+         anche con saldo leggermente negativo — sta usando il magazzino.
+         Solo quando le scorte calano davvero (stato 'low' o 'crit') la
+         crescita rallenta/si ferma. Recovery-friendly (#22): il buffer
+         30 Ι di pop-loss resta sopra (`scar.famineI`). */
+      let supplyFactor;
+      if (scar.food.state === 'crit' || scar.water.state === 'crit') {
+        supplyFactor = 0;
+      } else if (scar.food.state === 'low' || scar.water.state === 'low') {
+        supplyFactor = 0.3;   // segnale: scorte basse, crescita rallentata
+      } else {
+        supplyFactor = 1;     // scorte ok: pieno regime, anche con saldo < 0
+      }
 
       growth *= supplyFactor;
       pop.accum += growth;
