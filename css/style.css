@@ -3092,12 +3092,12 @@ select.main-menu__input { cursor: pointer; }
 }
 .colony-deck[hidden] { display: none; }
 
-/* M07.2 iter 4 (PR-A): pop e cronaca allargati per leggibilità delle
-   info; strutture al centro filtrate per categoria via tab, quindi più
-   strette ma con card più grandi (3 max colonne, info più leggibile). */
+/* M07.2 iter 5 (PR-G): cards strutture più strette → due righe fisse.
+   Spazio guadagnato va a pop (sx) e cronaca (dx). Internal scroll
+   sulle strutture quando la lista eccede l'altezza disponibile. */
 .deck-grid {
   display: grid;
-  grid-template-columns: 168px 1fr 290px;
+  grid-template-columns: 200px 1fr 320px;
   grid-template-rows: 1fr auto;
   grid-template-areas:
     "resources .          queue"
@@ -3309,22 +3309,31 @@ select.main-menu__input { cursor: pointer; }
 .deck-struct-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 2px 0 0;       /* margine sx 2px per la scroll bar interna */
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 6px;
+  /* PR-G: card più strette (min 135px) → 4-5 per riga, 2 righe fisse
+     per 9-10 strutture. Gap orizzontale moderato, verticale 5px. */
+  grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+  gap: 5px;
+  /* Internal scroll quando la lista supera l'altezza disponibile:
+     ~2 righe (60px each + 5px gap + padding) ≈ 140-150px. Senza
+     altezza fissa il grid si espande; con questa max-height resta a
+     2 righe e fa scroll verticale solo se servono più di 10 card. */
+  max-height: 148px;
+  overflow-y: auto;
+  align-content: start;
 }
 .deck-struct {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 22px 8px 8px;
+  gap: 4px;
+  padding: 6px 8px 6px;     /* PR-G: niente più padding-top per ⓘ assoluto */
   background: rgba(8, 12, 30, 0.55);
   border: 1px solid var(--c-border-soft);
   border-left: 3px solid var(--c-border);
   border-radius: var(--radius-sm);
-  min-height: 80px;
+  min-height: 60px;
 }
 .deck-struct__top {
   display: flex;
@@ -3346,13 +3355,13 @@ select.main-menu__input { cursor: pointer; }
 .deck-cat--civile     { border-left-color: var(--c-good); }
 .deck-cat--avanzata   { border-left-color: #ff66c4; }
 
+/* PR-G: ⓘ inline nella riga superiore (a destra del livello), non più
+   assoluto. Compatto: 14px circle, niente reserve nel padding card. */
 .deck-struct__info {
-  position: absolute;
-  top: 3px;
-  left: 4px;
   width: 16px;
   height: 16px;
   padding: 0;
+  flex: 0 0 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3393,21 +3402,23 @@ select.main-menu__input { cursor: pointer; }
 .deck-struct__pips {
   display: inline-flex;
   gap: 3px;
+  flex: 0 0 auto;
 }
+/* PR-G: pip più grandi e leggibili (era 7×4) — segna meglio i livelli. */
 .deck-pip {
-  width: 7px;
-  height: 4px;
+  width: 11px;
+  height: 6px;
   background: rgba(120, 160, 255, 0.18);
-  border-radius: 1px;
+  border-radius: 2px;
 }
-.deck-pip.is-on { background: var(--c-accent); }
+.deck-pip.is-on { background: var(--c-accent); box-shadow: 0 0 4px rgba(47, 230, 224, 0.45); }
 
-/* "+Espandi" compatto: bottone stretto con costi in linea sotto il + */
+/* "+Espandi" compatto: padding ridotto (PR-G), info costo più stretta. */
 .deck-struct__expand {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 7px;
+  gap: 3px;
+  padding: 2px 5px;
   background: rgba(47, 230, 224, 0.12);
   border: 1px solid var(--c-accent-dim);
   border-radius: var(--radius-sm);
@@ -3417,20 +3428,21 @@ select.main-menu__input { cursor: pointer; }
   white-space: nowrap;
   flex: 1;
   justify-content: center;
+  min-width: 0;
 }
 .deck-struct__expand:hover:not(.is-locked):not([disabled]) {
   background: rgba(47, 230, 224, 0.22);
   border-color: var(--c-accent);
 }
 .deck-struct__expand-plus {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 600;
   line-height: 1;
 }
 .deck-struct__expand-cost {
   display: inline-flex;
-  gap: 5px;
-  font-size: 0.72rem;
+  gap: 4px;
+  font-size: 0.68rem;
   color: var(--c-text-soft);
   flex-wrap: nowrap;
 }
@@ -3689,7 +3701,7 @@ select.main-menu__input { cursor: pointer; }
 /* ---- Responsive (decisione #6: ≥768px) ------------------------- */
 @media (max-width: 1199px) {
   .deck-grid {
-    grid-template-columns: 150px 1fr 250px;
+    grid-template-columns: 178px 1fr 278px;
   }
   .deck-res__value { font-size: 0.9rem; }
 }
