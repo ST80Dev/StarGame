@@ -4332,8 +4332,9 @@ function renderLeftPanel() {
       badges.push('<span class="lp-item__badge lp-item__badge--warn" title="Segnalazione del governatore">⚙</span>');
     }
     const isFocus = (k === dxKey);
+    const icon = (ORION.icon && ORION.icon('roster')) || '';
     return '<button class="lp-item' + (isFocus ? ' is-focus' : '') + '" data-action="roster-colony" data-key="' + escapeHtml(k) + '" type="button">' +
-      '<span class="lp-item__glyph" aria-hidden="true">◉</span>' +
+      '<span class="lp-item__glyph ui-icon" aria-hidden="true">' + icon + '</span>' +
       '<span class="lp-item__name"><strong>' + escapeHtml(name) + '</strong>' + tag + '</span>' +
       '<span class="lp-item__badges">' + badges.join('') + '</span>' +
     '</button>';
@@ -4345,8 +4346,9 @@ function renderLeftPanel() {
     const status = (f.location && f.location.status) || 'idle';
     const statusLbl = status === 'docked' ? 'attracco' : status === 'in-transit' ? 'transito' : 'orbita';
     const cls = status === 'docked' ? 'ok' : status === 'in-transit' ? 'info' : 'warn';
+    const fleetIcon = (ORION.icon && ORION.icon('fleet')) || '';
     return '<button class="lp-item lp-item--fleet" data-action="roster-fleet" data-id="' + escapeHtml(f.id) + '" data-sys="' + sysId + '" type="button">' +
-      '<span class="lp-item__glyph" aria-hidden="true">▸</span>' +
+      '<span class="lp-item__glyph ui-icon" aria-hidden="true">' + fleetIcon + '</span>' +
       '<span class="lp-item__name"><strong>' + escapeHtml(f.name) + '</strong> <span class="lp-item__sub">in ' + escapeHtml(sysName) + '</span></span>' +
       '<span class="lp-item__badges"><span class="lp-item__badge lp-item__badge--' + cls + '">' + statusLbl + '</span></span>' +
     '</button>';
@@ -4359,37 +4361,41 @@ function renderLeftPanel() {
 
   /* ----- Navigazione (Galassia/Gruppo/Sistema/Pianeta) ----- */
   const navItems = [
-    { view: 'galaxy', glyph: '✦', label: 'Galassia' },
-    { view: 'group',  glyph: '❋', label: 'Gruppo' },
-    { view: 'system', glyph: '◉', label: 'Sistema' },
-    { view: 'planet', glyph: '○', label: 'Pianeta' }
+    { view: 'galaxy', icon: 'galaxy', label: 'Galassia' },
+    { view: 'group',  icon: 'group',  label: 'Gruppo' },
+    { view: 'system', icon: 'system', label: 'Sistema' },
+    { view: 'planet', icon: 'planet', label: 'Pianeta' }
   ];
   const navHtml = navItems.map(function (n) {
     const active = (n.view === currentView) ? ' is-active' : '';
+    const icon = (ORION.icon && ORION.icon(n.icon)) || '';
     return '<button class="nav-item' + active + '" data-view="' + n.view + '" type="button">' +
-      '<span class="nav-item__glyph" aria-hidden="true">' + n.glyph + '</span>' +
+      '<span class="nav-item__glyph ui-icon" aria-hidden="true">' + icon + '</span>' +
       '<span class="nav-item__label">' + n.label + '</span></button>';
   }).join('');
 
   /* ----- Launcher (Diplomazia/Ricerca/Mercato + vista Flotte/Civiltà) ----- */
+  function launcherIcon(name) {
+    return (ORION.icon && ORION.icon(name)) || '';
+  }
   const launcherHtml =
     '<button class="lp-launcher__btn' + (currentView === 'fleet' ? ' is-active' : '') + '" data-view="fleet" type="button">' +
-      '<span class="lp-launcher__glyph" aria-hidden="true">▸</span>' +
+      '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('fleet') + '</span>' +
       '<span>Flotte</span>' +
       '<span class="lp-launcher__sub">' + fleets.length + '</span>' +
     '</button>' +
     '<button class="lp-launcher__btn' + (currentView === 'civ' ? ' is-active' : '') + '" data-view="civ" type="button">' +
-      '<span class="lp-launcher__glyph" aria-hidden="true">⚑</span>' +
+      '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('diplomacy') + '</span>' +
       '<span>Diplomazia</span>' +
       '<span class="lp-launcher__sub">' + civsContacted.length + ' contatti</span>' +
     '</button>' +
     '<button class="lp-launcher__btn" data-view="research" type="button">' +
-      '<span class="lp-launcher__glyph" aria-hidden="true">⌬</span>' +
+      '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('research') + '</span>' +
       '<span>Ricerca</span>' +
       '<span class="lp-launcher__sub">M13</span>' +
     '</button>' +
     '<button class="lp-launcher__btn" data-view="market" type="button">' +
-      '<span class="lp-launcher__glyph" aria-hidden="true">⇄</span>' +
+      '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('market') + '</span>' +
       '<span>Mercato</span>' +
       '<span class="lp-launcher__sub">M12</span>' +
     '</button>';
@@ -4421,22 +4427,24 @@ function renderLeftPanel() {
     '</section>';
   }
 
-  /* Titoli sezione: glifo + testo separati per applicare la tinta tematica
-     CSS (.lp-section__glyph--*) coerente con .res-icon (decisione #50 polish). */
-  function secTitle(glyphCls, glyph, text) {
-    return '<span class="lp-section__glyph lp-section__glyph--' + glyphCls + '" aria-hidden="true">' + glyph + '</span>' +
+  /* Titoli sezione: glifo SVG + testo separati per applicare la tinta tematica
+     CSS (.lp-section__glyph--*). Migrazione UI_GUIDE §3 strategia B: niente
+     più Unicode, ogni glifo è un'icona SVG da ORION.icons (PR-A). */
+  function secTitle(glyphCls, iconName, text) {
+    const icon = (ORION.icon && ORION.icon(iconName)) || '';
+    return '<span class="lp-section__glyph lp-section__glyph--' + glyphCls + ' ui-icon" aria-hidden="true">' + icon + '</span>' +
            '<span class="lp-section__text">' + text + '</span>';
   }
 
   const chronCollapsed = !!ORION.chronicleCollapsed;
   host.innerHTML =
-    sec('roster',   secTitle('roster', '⬢', 'Roster'),         rosterCount, rosterBody) +
-    sec('nav',      secTitle('nav',    '✦', 'Navigazione'),    '',          '<nav class="lp-nav">' + navHtml + '</nav>') +
-    sec('launcher', secTitle('launch', '◈', 'Sale e moduli'),  '',          '<div class="lp-launcher">' + launcherHtml + '</div>') +
+    sec('roster',   secTitle('roster', 'roster',     'Roster'),         rosterCount, rosterBody) +
+    sec('nav',      secTitle('nav',    'galaxy',     'Navigazione'),    '',          '<nav class="lp-nav">' + navHtml + '</nav>') +
+    sec('launcher', secTitle('launch', 'settings',   'Sale e moduli'),  '',          '<div class="lp-launcher">' + launcherHtml + '</div>') +
     '<section class="lp-section lp-section--chron' + (chronCollapsed ? ' is-collapsed' : '') + '" data-section="chronicle">' +
       '<div class="lp-section__head" data-action="lp-toggle-chron">' +
         '<span class="lp-section__caret"></span>' +
-        '<span class="lp-section__title">' + secTitle('chron', '✎', 'Cronaca') + '</span>' +
+        '<span class="lp-section__title">' + secTitle('chron', 'chronicle', 'Cronaca') + '</span>' +
         '<span class="lp-section__count">' + cron.length + '</span>' +
       '</div>' +
       '<div class="lp-section__body" data-bind="chronicle-host">' + cronHtml + '</div>' +
@@ -5570,9 +5578,25 @@ function renderMainMenuInfo(body) {
 /* ---------------------------------------------------------------------
    Avvio
    --------------------------------------------------------------------- */
+function injectStaticSvgIcons() {
+  /* PR-A (UI_GUIDE §3 strategia B): inietta SVG nelle icon-span statiche
+     dichiarate in index.html con `data-icon="<nome>"`. Idempotente:
+     skippa quelle già popolate. innerHTML è safe per SVG inline (l'HTML5
+     parser gestisce il namespacing automaticamente). */
+  if (!ORION.icon) return;
+  document.querySelectorAll('[data-icon]').forEach(function (el) {
+    if (el.innerHTML.trim()) return;
+    const name = el.dataset.icon;
+    const svg = ORION.icon(name);
+    if (svg) el.innerHTML = svg;
+  });
+}
+
 function boot() {
   /* M06: assorbe eventuale autosave M05 (chiavi legacy). Idempotente. */
   if (ORION.save && ORION.save.migrateLegacy) ORION.save.migrateLegacy();
+  /* PR-A: SVG icons negli host statici (HUD top, main menu). */
+  injectStaticSvgIcons();
   /* Decisione #50: prefs UI persistite (cronaca collassata, sezioni sx). */
   loadUiPrefs();
   /* Decisione #25: il boot non entra più direttamente in partita —
