@@ -40,6 +40,30 @@
     operai: 'Operai', scienziati: 'Scienziati', militari: 'Militari',
     mercanti: 'Mercanti', tecnici: 'Tecnici'
   };
+  /* Label abbreviate per le card strutture compatte (M07.2 iter 3,
+     UI_GUIDE §4 — sigla solo dove l'utente esperto basta + tooltip
+     parola piena al hover sul title della <li>). */
+  const SHORT_LABEL = {
+    'miniera': 'Miniera',
+    'centrale-solare': 'Centrale',
+    'impianto-idrico': 'Imp. idr.',
+    'fattoria': 'Fattoria',
+    'fonderia': 'Fonderia',
+    'raffineria': 'Raffineria',
+    'laboratorio': 'Laborat.',
+    'osservatorio': 'Osservat.',
+    'cantiere-navale': 'Hangar',
+    'accademia-militare': 'Accademia',
+    'batteria-difesa': 'Batteria',
+    'scudo-planetario': 'Scudo',
+    'centro-abitativo': 'Abitativo',
+    'ospedale': 'Ospedale',
+    'mercato': 'Mercato',
+    'impianto-riciclo': 'Riciclo',
+    'impianto-esotico': 'Imp. esot.',
+    'centro-ingegneria-planetaria': 'Ingegn.',
+    'terraformatori': 'Terraf.'
+  };
 
   function escapeHtml(s) {
     return String(s == null ? '' : s)
@@ -269,17 +293,19 @@
             '</button>';
         }
 
+        const shortName = SHORT_LABEL[id] || def.name;
         html +=
-          '<li class="deck-struct' + catCls + (inQueue ? ' is-busy' : '') + '">' +
+          '<li class="deck-struct' + catCls + (inQueue ? ' is-busy' : '') + '" title="' + escapeHtml(def.name) + '">' +
             '<button type="button" class="deck-struct__info" data-deck-action="info" data-id="' + id + '" title="Cosa fa, bonus, concatenazioni">ⓘ</button>' +
-            '<span class="deck-struct__glyph">' + def.glyph + '</span>' +
-            '<div class="deck-struct__main">' +
-              '<div class="deck-struct__name">' + escapeHtml(def.name) +
-                ' <span class="deck-struct__lvl">×' + lvl + '</span>' +
-              '</div>' +
-              '<div class="deck-struct__pips">' + pips + '</div>' +
+            '<div class="deck-struct__top">' +
+              '<span class="deck-struct__glyph">' + def.glyph + '</span>' +
+              '<span class="deck-struct__name">' + escapeHtml(shortName) + '</span>' +
+              '<span class="deck-struct__lvl">×' + lvl + '</span>' +
             '</div>' +
-            action +
+            '<div class="deck-struct__bot">' +
+              '<span class="deck-struct__pips">' + pips + '</span>' +
+              action +
+            '</div>' +
           '</li>';
       });
       html += '</ul></section>';
@@ -352,19 +378,20 @@
       });
       chips += '</div>';
 
-      /* Riga totale: label · NUMERO/CAP · barra · % (unit-based, non
-         persone-based: la curva persone è esponenziale e darebbe ~0% per
-         quasi tutto il game). */
+      /* Layout verticale per colonna stretta (M07.2 iter 3):
+         label · numero+cap · barra full-width · % unit-based. */
       const totalHtml =
-        '<div class="deck-pop__total" title="Popolazione totale / capacità · ' + pctCap + '% (in unità)">' +
-          '<span class="deck-pop__total-label">Popolazione</span>' +
+        '<div class="deck-pop__total" title="Popolazione totale / capacità · ' + pctCap + '% (unità)">' +
+          '<div class="deck-pop__total-row">' +
+            '<span class="deck-pop__total-label">Popolazione</span>' +
+            '<span class="deck-pop__total-pct">' + pctCap + '%</span>' +
+          '</div>' +
           '<span class="deck-pop__total-num">' +
             escapeHtml(ORION.planet.formatPeople(peopleNow)) +
             '<span class="sep">/</span>' +
             '<span class="cap">' + escapeHtml(ORION.planet.formatPeople(peopleCap)) + '</span>' +
           '</span>' +
           '<div class="deck-pop__bar"><div class="deck-pop__bar-fill" style="width:' + pctCap + '%"></div></div>' +
-          '<span class="deck-pop__total-pct">' + pctCap + '%</span>' +
         '</div>';
 
       return '<section class="deck-population" aria-label="Popolazione">' +

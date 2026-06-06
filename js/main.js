@@ -1200,6 +1200,12 @@ function mountColonyDeck(planet, colony, body) {
       updatePlanetUI();
     }
   });
+  /* Dopo il mount, ridimensiona la planet-view: ora che il deck DOM
+     esiste, resize() misura la sua altezza e adatta fitR/cy della sfera
+     in modo che non venga sopraffatta dalle card (M07.2 iter 3). */
+  if (ORION.planetView && ORION.planetView.resize) {
+    requestAnimationFrame(function () { ORION.planetView.resize(); });
+  }
 }
 
 function renderPlanetBreadcrumb() {
