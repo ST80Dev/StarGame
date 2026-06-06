@@ -7,16 +7,16 @@
       .desc { font-family: system-ui, sans-serif; font-size: 11px; fill: #889ec5; }
       .title { font-family: 'Orbitron', sans-serif; font-size: 18px; fill: #e5ecff; letter-spacing: 0.06em; }
       .subtitle { font-family: system-ui, sans-serif; font-size: 12px; fill: #9bb0d6; }
-      .glow-amber { filter: drop-shadow(0 0 5px rgba(240,168,104,0.7)); }
-      .glow-cyan  { filter: drop-shadow(0 0 5px rgba(47,230,224,0.7)); }
-      .glow-violet { filter: drop-shadow(0 0 5px rgba(184,156,255,0.7)); }
-      .glow-blue  { filter: drop-shadow(0 0 5px rgba(128,200,230,0.7)); }
-      .glow-pink  { filter: drop-shadow(0 0 5px rgba(240,130,150,0.7)); }
-      .glow-green { filter: drop-shadow(0 0 5px rgba(111,224,184,0.7)); }
-      .glow-white { filter: drop-shadow(0 0 5px rgba(203,210,228,0.6)); }
-      .glow-gold  { filter: drop-shadow(0 0 5px rgba(240,214,112,0.7)); }
-      .glow-purple { filter: drop-shadow(0 0 5px rgba(157,123,255,0.7)); }
-      .glow-soft  { filter: drop-shadow(0 0 4px rgba(155,176,214,0.5)); }
+      .glow-amber { filter: drop-shadow(0 0 3px rgba(240,168,104,0.4)); }
+      .glow-cyan  { filter: drop-shadow(0 0 3px rgba(47,230,224,0.4)); }
+      .glow-violet { filter: drop-shadow(0 0 3px rgba(184,156,255,0.4)); }
+      .glow-blue  { filter: drop-shadow(0 0 3px rgba(128,200,230,0.4)); }
+      .glow-pink  { filter: drop-shadow(0 0 3px rgba(240,130,150,0.4)); }
+      .glow-green { filter: drop-shadow(0 0 3px rgba(111,224,184,0.4)); }
+      .glow-white { filter: drop-shadow(0 0 3px rgba(203,210,228,0.35)); }
+      .glow-gold  { filter: drop-shadow(0 0 3px rgba(240,214,112,0.4)); }
+      .glow-purple { filter: drop-shadow(0 0 3px rgba(157,123,255,0.4)); }
+      .glow-soft  { filter: drop-shadow(0 0 3px rgba(155,176,214,0.3)); }
     </style>
   </defs>
 

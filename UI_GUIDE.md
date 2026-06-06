@@ -85,7 +85,7 @@
 ### Principi
 
 - **Mai glyph "piatto" color-text.** Ogni icona porta la sua tinta tematica.
-- **Sempre con glow** (`text-shadow` o `filter: drop-shadow`) coerente con `.res-icon` (decisione #8 NASA/Visions).
+- **Sempre con glow morbido** (`text-shadow` o `filter: drop-shadow`) coerente con `.res-icon` (decisione #8 NASA/Visions). **Specifica canonica**: blur `3-4px`, alpha `0.35-0.45`. Niente alone marcato (`5px` blur / `0.7` alpha stanca l'occhio nelle sessioni lunghe).
 - **3 livelli di prominenza**:
   - Hero `1.05rem` (HUD risorse, header modali)
   - Standard `0.95-1.0rem` (sezioni, item card)
@@ -102,7 +102,7 @@ Per icone semplici che esistono già nel codice, applica:
   font-family: 'JetBrains Mono', 'Segoe UI Symbol', 'Noto Sans Symbols2', monospace;
   font-variant-emoji: text;          /* forza style "text" anche su emoji */
   color: var(--c-accent);            /* tinta tematica */
-  text-shadow: 0 0 5px currentColor; /* glow uniforme */
+  text-shadow: 0 0 3px currentColor; /* glow morbido (alpha effettivo modulato dal colore) */
 }
 ```
 
@@ -133,7 +133,7 @@ Uso:
   display: inline-block;
   width: 1em; height: 1em;
   line-height: 1;
-  filter: drop-shadow(0 0 4px currentColor);
+  filter: drop-shadow(0 0 3px currentColor); /* glow morbido, blur 3-4px */
 }
 .ui-icon--roster { color: var(--c-accent-warm); }
 ```
@@ -308,3 +308,4 @@ Modifiche a UI_GUIDE.md vanno discusse con l'utente PRIMA di applicarle (come pe
 ### Storico modifiche
 
 - **2026-06-06** — Prima stesura. Codifica gli standard emersi durante il refactor sidebar (PR #74 / decisione #50). Inputs dell'utente: icone colorate sempre, sigle solo dove l'utente esperto basta + tooltip, parola piena nei titoli sezione, glyph fallback inconsistente → migrazione canonica a inline SVG.
+- **2026-06-06** — Glow morbido: specifica canonica abbassata da `0 0 5px` alpha `0.7` a `0 0 3px` alpha `0.35-0.45` (feedback utente: l'alone fluo marcato stancava l'occhio nelle sessioni lunghe). `.res-icon` esistente a `4px / 0.45` resta valido. La preview `icons-preview.svg` è stata aggiornata di conseguenza.
