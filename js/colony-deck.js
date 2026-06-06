@@ -344,15 +344,23 @@
       });
       chips += '</div>';
 
-      return '<section class="deck-population" aria-label="Popolazione">' +
-        '<header class="deck-section__head">' +
-          '<span class="deck-section__title">Popolazione</span>' +
-          '<span class="deck-section__sub">' +
-            ORION.planet.formatPeople(peopleNow) +
-            ' / ' + ORION.planet.formatPeople(peopleCap) +
-            ' (' + pctCap + '%)' +
+      /* Riga totale: label · NUMERO/CAP · barra · % (unit-based, non
+         persone-based: la curva persone è esponenziale e darebbe ~0% per
+         quasi tutto il game). */
+      const totalHtml =
+        '<div class="deck-pop__total" title="Popolazione totale / capacità · ' + pctCap + '% (in unità)">' +
+          '<span class="deck-pop__total-label">Popolazione</span>' +
+          '<span class="deck-pop__total-num">' +
+            escapeHtml(ORION.planet.formatPeople(peopleNow)) +
+            '<span class="sep">/</span>' +
+            '<span class="cap">' + escapeHtml(ORION.planet.formatPeople(peopleCap)) + '</span>' +
           '</span>' +
-        '</header>' +
+          '<div class="deck-pop__bar"><div class="deck-pop__bar-fill" style="width:' + pctCap + '%"></div></div>' +
+          '<span class="deck-pop__total-pct">' + pctCap + '%</span>' +
+        '</div>';
+
+      return '<section class="deck-population" aria-label="Popolazione">' +
+        totalHtml +
         chips +
       '</section>';
     }
