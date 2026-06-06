@@ -229,6 +229,22 @@
       '<path d="M12 17v4"/>' +
       '<path d="M2 6h4"/>' +
       '<path d="M18 6h4"/>'
+    ),
+
+    /* Star — stella riempita per "home/capitale/preferito". */
+    star: svg(
+      '<polygon points="12,2 15,8.5 22,9.3 17,14 18.5,21 12,17.5 5.5,21 7,14 2,9.3 9,8.5" fill="currentColor" stroke="none"/>'
+    ),
+
+    /* Dot-circle — cerchio con punto interno (colonia attiva, status). */
+    dotCircle: svg(
+      '<circle cx="12" cy="12" r="9"/>' +
+      '<circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>'
+    ),
+
+    /* Transition — cerchio puntinato per "in transizione". */
+    transition: svg(
+      '<circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/>'
     )
   };
 
