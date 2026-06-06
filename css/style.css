@@ -4523,3 +4523,24 @@ select.main-menu__input { cursor: pointer; }
 .attack-pick__name { font-weight: 600; font-size: 0.9rem; }
 .attack-pick__meta { font-size: 0.74rem; color: var(--c-text-faint); }
 .attack-overlay__hint { font-size: 0.74rem; color: var(--c-text-faint); margin: 10px 0 0; }
+
+/* M09 — Comandante assegnato alla flotta (#43/#49) */
+.fleet-item__cmd {
+  margin: 4px 0 2px; font-size: 0.8rem; color: #d7c9a6;
+}
+.fleet-item__cmdbonus { color: var(--c-text-faint); font-size: 0.74rem; }
+.cmd-pick__current {
+  margin: 0 0 8px; padding: 7px 9px; border-radius: 6px;
+  background: rgba(215,201,166,0.08); border: 1px solid rgba(215,201,166,0.25);
+  font-size: 0.84rem; display: flex; align-items: center; gap: 8px; justify-content: space-between;
+}
+.cmd-pick__list { display: flex; flex-direction: column; gap: 6px; }
+.cmd-pick__row {
+  display: flex; flex-direction: column; gap: 2px; text-align: left;
+  padding: 8px 10px; border-radius: 6px; cursor: pointer;
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: inherit;
+}
+.cmd-pick__row:hover { background: rgba(215,201,166,0.12); border-color: rgba(215,201,166,0.45); }
+.cmd-pick__name { font-weight: 600; font-size: 0.9rem; }
+.cmd-pick__meta { font-size: 0.74rem; color: var(--c-text-faint); }
+.cmd-pick__empty { font-size: 0.8rem; color: var(--c-text-faint); margin: 4px 0; }

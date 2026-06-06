@@ -2672,6 +2672,14 @@ function renderFleetView(stage) {
       const vetHtml = fleetVeterancyHtml(f);
       const FORM_LABEL = { aggressive: 'Aggressiva', balanced: 'Bilanciata', defensive: 'Difensiva' };
       const formation = (f.formation) || 'balanced';
+      /* M09 (#43/#49): Comandante assegnato → bonus di specializzazione. */
+      const cmd = f.commander;
+      const cmdHtml = cmd
+        ? '<div class="fleet-item__cmd">★ <strong>' + escapeHtml(cmd.rank + ' ' + cmd.name) + '</strong> · ' +
+            escapeHtml(cmd.specializationLabel || cmd.specialization) +
+            ' <span class="fleet-item__cmdbonus">' + escapeHtml(ORION.commander ? ORION.commander.bonusLabel(cmd) : '') + '</span></div>'
+        : '';
+      const cmdBtnLabel = cmd ? ('★ ' + escapeHtml(cmd.name)) : '★ Comandante';
       return '<li class="fleet-item" data-fleet-id="' + escapeHtml(f.id) + '">' +
         '<div class="fleet-item__head">' +
           '<span class="fleet-item__name"><strong>' + escapeHtml(f.name) + '</strong> ' +
@@ -2686,9 +2694,11 @@ function renderFleetView(stage) {
           ' · <span class="cantieri-row__base">equipaggio ' + (f.crew ? f.crew.length : 0) + ' / ' +
           (ORION.fleet ? ORION.fleet.fleetCrewRequired(f) : 0) + '</span></div>' +
         vetHtml +
+        cmdHtml +
         '<div class="fleet-item__actions">' +
           '<button class="btn btn--mini" data-action="fleet-orders" data-fleet="' + escapeHtml(f.id) + '" type="button">Ordini ▸</button>' +
           '<button class="btn btn--mini" data-action="fleet-formation" data-fleet="' + escapeHtml(f.id) + '" type="button" title="Soglia di ritirata in battaglia">⚑ ' + FORM_LABEL[formation] + '</button>' +
+          '<button class="btn btn--mini" data-action="fleet-commander" data-fleet="' + escapeHtml(f.id) + '" type="button" title="Assegna un Comandante alla flotta">' + cmdBtnLabel + '</button>' +
           '<button class="btn btn--mini" data-action="fleet-manage" data-fleet="' + escapeHtml(f.id) + '" type="button">Gestisci navi/eq.</button>' +
           '<button class="btn btn--mini btn--danger" data-action="fleet-dissolve" data-fleet="' + escapeHtml(f.id) + '" type="button">Dissolvi</button>' +
         '</div>' +
@@ -2735,6 +2745,9 @@ function renderFleetView(stage) {
   });
   stage.querySelectorAll('[data-action="fleet-orders"]').forEach(function (b) {
     b.addEventListener('click', function () { openFleetOrdersOverlay(b.dataset.fleet); });
+  });
+  stage.querySelectorAll('[data-action="fleet-commander"]').forEach(function (b) {
+    b.addEventListener('click', function () { openCommanderPicker(b.dataset.fleet, stage); });
   });
   stage.querySelectorAll('[data-action="fleet-manage"]').forEach(function (b) {
     b.addEventListener('click', function () { openFleetManageOverlay(b.dataset.fleet); });
@@ -2862,6 +2875,64 @@ function cycleFleetFormation(fleetId, stage) {
   ORION.fleet.setFormation(fleet, next);
   persistGame(g);
   renderFleetView(stage);
+}
+
+/* M09 (#43/#49): overlay di assegnazione Comandante → flotta. Elenca i
+   Comandanti idle in panchina su tutte le colonie + opzione di rilascio. */
+function openCommanderPicker(fleetId, stage) {
+  const g = ORION.game;
+  const fleet = findFleet(fleetId);
+  if (!fleet || !ORION.commander) return;
+  const avail = ORION.commander.assignableOf(g);
+  const cur = fleet.commander;
+  if (!avail.length && !cur) { showToast('Nessun Comandante disponibile — emergono dagli equipaggi veterani (xp≥5)'); return; }
+  const rows = avail.map(function (a) {
+    const c = a.commander;
+    return '<button class="cmd-pick__row" data-cmd="' + escapeHtml(c.id) + '" type="button">' +
+      '<span class="cmd-pick__name">★ ' + escapeHtml(c.rank + ' ' + c.name) + '</span>' +
+      '<span class="cmd-pick__meta">' + escapeHtml(c.specializationLabel || c.specialization) +
+        ' · ' + escapeHtml(ORION.commander.bonusLabel(c)) + ' · ' + escapeHtml(c.traitLabel || '') +
+        ' · da ' + escapeHtml(colonyName(a.colonyKey)) + '</span>' +
+    '</button>';
+  }).join('') || '<p class="cmd-pick__empty">Nessun Comandante in panchina.</p>';
+  const curHtml = cur
+    ? '<div class="cmd-pick__current">Assegnato: <strong>★ ' + escapeHtml(cur.rank + ' ' + cur.name) + '</strong> · ' +
+        escapeHtml(cur.specializationLabel || cur.specialization) +
+        ' <button class="btn btn--mini btn--danger" data-cmd-release type="button">Rimuovi</button></div>'
+    : '';
+  const html =
+    '<div class="attack-overlay" data-cmd-overlay>' +
+      '<div class="attack-overlay__panel">' +
+        '<header class="attack-overlay__head"><h3>★ Comandante di ' + escapeHtml(fleet.name) + '</h3>' +
+          '<button class="attack-overlay__x" data-cmd-close type="button" aria-label="Chiudi">✕</button></header>' +
+        curHtml +
+        '<p class="attack-overlay__sub">Specializzazioni: <strong>Tattico</strong> +10% fuoco · <strong>Navigatore</strong> −15% durata viaggio · <strong>Logista</strong> (gancio M12).</p>' +
+        '<div class="cmd-pick__list">' + rows + '</div>' +
+      '</div>' +
+    '</div>';
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  const node = wrap.firstChild;
+  document.body.appendChild(node);
+  function close() { if (node.parentNode) node.parentNode.removeChild(node); }
+  node.querySelector('[data-cmd-close]').addEventListener('click', close);
+  node.addEventListener('click', function (e) { if (e.target === node) close(); });
+  const rel = node.querySelector('[data-cmd-release]');
+  if (rel) rel.addEventListener('click', function () {
+    ORION.commander.releaseFromFleet(g, fleet);
+    pushChronicle(ORION.time.currentDS(g) + ' — Comandante sollevato dal comando di <strong>' + escapeHtml(fleet.name) + '</strong>.', 'figure');
+    persistGame(g); close(); renderFleetView(stage);
+  });
+  node.querySelectorAll('[data-cmd]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const r = ORION.commander.assignToFleet(g, fleet, b.dataset.cmd);
+      if (!r.ok) { showToast(r.reason || 'Assegnazione fallita'); return; }
+      pushChronicle(ORION.time.currentDS(g) + ' — <strong>★ ' + escapeHtml(r.commander.rank + ' ' + r.commander.name) +
+        '</strong> assume il comando di <strong>' + escapeHtml(fleet.name) + '</strong> (' +
+        escapeHtml(ORION.commander.bonusLabel(r.commander)) + ').', 'figure');
+      persistGame(g); close(); renderFleetView(stage);
+    });
+  });
 }
 
 function handleSiegeTribute(battleId, stage) {
