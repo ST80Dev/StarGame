@@ -802,6 +802,8 @@
         /* M10 Fase A (decisione #47): confini delle civiltà AI. Visibili solo
            sui sistemi che il giocatore ha DETECTED/EXPLORED (scoperta-guidata). */
         this._drawCivOwnership(ctx, reveal);
+        /* M10 Fase E: covi pirata noti (DETECTED+) — bersagli raidabili. */
+        this._drawPirateNests(ctx, reveal);
         /* M08 Fase B (decisione #46): markers flotte + rotte in transito.
            Visualizzazione read-only: il drag&drop ordini è polish successivo. */
         this._drawFleets(ctx, reveal);
@@ -1153,6 +1155,34 @@
           this._ring(ctx, p, r + 4.5, hexA(civ.color, 0.9), 1.6);
           this._ring(ctx, p, r + 7.5, hexA(civ.color, 0.35), 1);
         }
+      }
+      ctx.restore();
+    }
+
+    /* M10 Fase E: covi pirata NOTI (sistema DETECTED+). Glifo a teschio
+       rosso sopra il nodo — bersaglio raidabile (manda una flotta armata). */
+    _drawPirateNests(ctx, reveal) {
+      const game = root.ORION && root.ORION.game;
+      if (!game || !game.piracy || !Array.isArray(game.piracy.nests)) return;
+      const g = this.galaxy;
+      const disc = this.state.discovery;
+      const DET = DISCOVERY.DETECTED;
+      const nests = game.piracy.nests;
+      ctx.save();
+      ctx.globalAlpha = reveal;
+      for (let i = 0; i < nests.length; i++) {
+        const sid = nests[i].sysId;
+        if (disc[sid] < DET) continue;
+        const sys = g.systems[sid];
+        if (!sys) continue;
+        const p = this.project(sys.x, sys.y, sys.z || 0);
+        if (p.x < -30 || p.x > this.cssW + 30 || p.y < -30 || p.y > this.cssH + 30) continue;
+        const r = this.nodeRadius(p.parallax);
+        ctx.fillStyle = '#ff5a5a';
+        ctx.font = Math.max(11, r + 7) + 'px ' + 'monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('☠', p.x, p.y - (r + 9));
       }
       ctx.restore();
     }

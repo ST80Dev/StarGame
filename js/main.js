@@ -3189,10 +3189,29 @@ function renderCivView(stage) {
   const pressure = Math.round(ws.pressure || 0);
   const deeds = g.alignmentDeeds || { light: 0, dark: 0 };
 
+  /* M10 Fase E: covi pirata NOTI — bersagli raidabili (manda una flotta
+     armata sul sistema per sgominarli e incassare la taglia). */
+  let nestsHtml = '';
+  const nests = ORION.ai.knownNests ? ORION.ai.knownNests(g) : [];
+  if (nests.length) {
+    nestsHtml = '<div class="civ-nests">' +
+      '<h3 class="civ-nests__title">☠ Minacce pirata note</h3>' +
+      '<ul class="civ-nests__list">' + nests.map(function (n) {
+        const tag = (n.sysId != null && n.sysId >= 0) ? systemTagHtml(n.sysId) : '';
+        return '<li class="civ-nest"><span class="civ-nest__sys"><strong>' + escapeHtml(n.name) + '</strong>' + tag + '</span>' +
+          '<span class="civ-nest__lvl">covo liv. ' + n.level + '</span>' +
+          '<span class="civ-nest__taglia">taglia ≈ ' + resIcon('met') + (25 * n.level + 40) + ' ' + resIcon('en') + (12 * n.level + 20) + '</span></li>';
+      }).join('') + '</ul>' +
+      '<p class="panel__note civ-nests__hint">Manda una <strong>flotta armata</strong> su questi sistemi per sgominare i covi: ' +
+        'sconfiggerli frutta una <strong>taglia</strong> e riduce le razzie. I predoni, però, possono colpire le tue ' +
+        'flotte lasciate <em>esposte</em> in orbita lontano dalle colonie.</p>' +
+      '</div>';
+  }
+
   stage.innerHTML =
     '<div class="civ-view">' +
       '<header class="fleet-view__head">' +
-        '<h2 class="fleet-view__title">Civiltà della galassia <span class="fleet-view__sub">M10 · Fase C</span></h2>' +
+        '<h2 class="fleet-view__title">Civiltà della galassia <span class="fleet-view__sub">M10 · Fase E</span></h2>' +
         '<div class="civ-indices">' +
           '<span class="civ-index" title="Indice Corruzione Galattica (§5.4)">ICG <strong>' + icg + '</strong></span>' +
           '<span class="civ-index" title="Reputazione — anteprima (§14)">Reputazione <strong>' + rep + '</strong></span>' +
@@ -3205,6 +3224,7 @@ function renderCivView(stage) {
         'e il <em>perché</em> della disposizione. Le tue azioni morali finora — <span class="civ-deeds civ-deeds--light">' + (deeds.light || 0) + ' luce</span> · ' +
         '<span class="civ-deeds civ-deeds--dark">' + (deeds.dark || 0) + ' ombra</span>. ' +
         'Trattati e alleanze arrivano con la <strong>Diplomazia</strong> (M11).</p>' +
+      nestsHtml +
       cards +
     '</div>';
 }
@@ -3931,6 +3951,13 @@ const DEFAULT_AUTOPAUSE = {
   'civ-war': false,
   'civ-battle': false,
   'pirate-raid': false,
+  /* M10 Fase E: covo sgominato = notevole (ON); raid parziale OFF (frequente).
+     Raider in arrivo + esito = notevoli (la tua flotta è sotto attacco). */
+  'pirate-cleared': true,
+  'pirate-raid-won': false,
+  'raider-inbound': true,
+  'raider-hit': true,
+  'raider-fizzle': false,
   /* M09 Fase A (decisione #49): il combattimento è notevole → auto-pausa ON.
      L'incursione inbound è il PREAVVISO; l'assedio si auto-pausa a ogni round
      per dare la finestra di reazione (rinforza/ritira/tributo). */
@@ -4172,6 +4199,11 @@ function showEventOverlay(events) {
     'civ-fallen': 'Civiltà caduta',
     'civ-emerged': 'Nuova civiltà emersa',
     'pirate-raid': 'Razzia pirata',
+    'pirate-cleared': 'Covo pirata sgominato',
+    'pirate-raid-won': 'Covo pirata colpito',
+    'raider-inbound': 'Predoni in rotta sulla tua flotta',
+    'raider-hit': 'La tua flotta sotto attacco pirata',
+    'raider-fizzle': 'Predoni a vuoto',
     'incursion-inbound': 'Incursione pirata in arrivo',
     'siege-begin': 'Assedio iniziato',
     'siege-round': 'Assedio: round',
@@ -4457,6 +4489,32 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — Una nuova potenza emerge nel/nella ' + escapeHtml(ev.regionLabel) + ': <strong>' + escapeHtml(ev.civName) + '</strong>.', 'civ');
   } else if (ev.kind === 'pirate-raid') {
     pushChronicle(ds + ' — Predoni hanno colpito una rotta nel/nella ' + escapeHtml(ev.regionLabel) + '.', 'system');
+  } else if (ev.kind === 'pirate-cleared') {
+    /* M10 Fase E: covo sgominato → taglia. */
+    const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
+    const sys = (ev.systemId != null && ORION.game.galaxy.systems[ev.systemId]) ? ORION.game.galaxy.systems[ev.systemId].name : '—';
+    const rw = ev.reward || {};
+    pushChronicle(ds + ' — <strong>Covo pirata sgominato</strong> a <strong>' + escapeHtml(sys) + '</strong>' + stag +
+      ' · taglia: ' + resIcon('met') + (rw.met || 0) + ' ' + resIcon('en') + (rw.en || 0) + '.', 'explore');
+    if (ORION.tutorial) ORION.tutorial.fire('pirates');
+  } else if (ev.kind === 'pirate-raid-won') {
+    const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
+    const rw = ev.reward || {};
+    pushChronicle(ds + ' — Covo pirata colpito e indebolito' + stag + ' · bottino ' + resIcon('met') + (rw.met || 0) + ' ' + resIcon('en') + (rw.en || 0) + '.', 'explore');
+    if (ORION.tutorial) ORION.tutorial.fire('pirates');
+  } else if (ev.kind === 'raider-inbound') {
+    const stag = ev.targetSysId != null && ev.targetSysId >= 0 ? systemTagHtml(ev.targetSysId) : '';
+    pushChronicle(ds + ' — <strong>Predoni in rotta</strong> verso la flotta <strong>' + escapeHtml(ev.targetFleetName || '—') + '</strong>' + stag + ' (arrivo fra ' + (ev.eta || 0) + ' ' + iU() + ').', 'system');
+    if (ORION.tutorial) ORION.tutorial.fire('pirates');
+  } else if (ev.kind === 'raider-hit') {
+    const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
+    const verb = ev.playerWon ? 'respinge i predoni' : 'subisce l\'attacco predone';
+    const losses = ev.lost > 0 ? ' · ' + ev.lost + ' nave/i perdute' : ' · nessuna perdita';
+    pushChronicle(ds + ' — Flotta <strong>' + escapeHtml(ev.fleetName || '—') + '</strong> ' + verb + stag + losses + '.', 'system');
+    if (ORION.tutorial) ORION.tutorial.fire('pirates');
+  } else if (ev.kind === 'raider-fizzle') {
+    /* preda fuggita: voce leggera, niente spam */
+    pushChronicle(ds + ' — I predoni non hanno trovato la preda e si sono dileguati.', 'system');
   } else if (ev.kind === 'battle-skirmish') {
     /* M09 Fase A (decisione #49): scaramuccia lampo. */
     const sys = ORION.game.galaxy.systems[ev.systemId];

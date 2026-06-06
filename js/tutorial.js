@@ -220,6 +220,18 @@
         'alleanze) arriva più avanti.</p>'
     },
     {
+      id: 'pirates',
+      tag: 'Galassia · Pirati',
+      title: 'Predoni e covi pirata',
+      body:
+        '<p>I <strong>covi pirata</strong> si annidano nei sistemi pericolosi dell\'Orlo. Quelli che hai <strong>rilevato</strong> ' +
+        'compaiono sulla mappa con un teschio ☠ e nella lista <em>Minacce pirata</em> della vista Civiltà.</p>' +
+        '<p>Sono <strong>bersagli raidabili</strong>: manda una <strong>flotta armata</strong> sul loro sistema — lo scontro si risolve ' +
+        'da solo. Sgominare un covo frutta una <strong>taglia</strong> in risorse e <strong>riduce le razzie</strong> della zona.</p>' +
+        '<p>Attenzione al rovescio: i predoni possono <strong>colpire le tue flotte esposte</strong> (in orbita lontano dalle colonie). ' +
+        'Tieni le flotte vicino a casa o pronte a combattere. Taglie formali, covi-boss e contratti arriveranno con gli <strong>Eventi</strong> (M17).</p>'
+    },
+    {
       id: 'combat',
       tag: 'Guerra · Combattimento',
       title: 'Combattimento',
