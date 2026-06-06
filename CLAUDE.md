@@ -49,6 +49,14 @@
 
 **Anti-pattern da evitare esplicitamente**: aprire un secondo branch "per la correzione" quando il primo ha una PR appena aperta ma non ancora mergiata. La correzione va sullo **stesso** branch e aggiorna la **stessa** PR.
 
+### R2 — Standard grafici UI vivono in `UI_GUIDE.md` (consultazione obbligatoria)
+
+**Prima di qualunque modifica a CSS, HTML strutturale, o creazione di sezioni/widget nuovi**: leggere `UI_GUIDE.md`. Stessa autorevolezza della R1.
+
+`UI_GUIDE.md` contiene: palette colori canonici (concetto → tinta), tipografia e scala font, strategia icone (Unicode forzato vs SVG inline canonico per il nuovo), regole sigle/abbreviazioni (sigla 3 lettere per badge stato, parola piena per titoli sezione, parola abbreviata per piste vittoria), spacing/border-radius, pattern ricorrenti (`.lp-item`, `.deck-chip`, ...), stati semantici (`is-ok`/`warn`/`crit`/`active`/`busy`), accessibilità minima. **Quando UI_GUIDE.md e CLAUDE.md confliggono su temi UI**, vince `UI_GUIDE.md`.
+
+Modifiche a `UI_GUIDE.md` vanno discusse con l'utente PRIMA di applicarle (come per le decisioni di CLAUDE.md) e registrate nello "Storico modifiche" in coda al file.
+
 ---
 
 ## Stato moduli
