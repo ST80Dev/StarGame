@@ -376,6 +376,9 @@
     if (fleet.ships.length === 0) return { ok: false, reason: 'Flotta vuota' };
 
     const type = order.type;
+    /* Qualunque nuovo ordine annulla l'intento offensivo precedente
+       (M09 — decisione #49): re-ordinare una flotta cancella l'attacco. */
+    fleet.attackTarget = null;
     if (type === 'idle') {
       fleet.orders = { type: 'idle' };
       fleet.route = [];
@@ -400,6 +403,26 @@
       fleet.orders = { type: type, toSysId: to };
       fleet.route = path;
       fleet.routeIdx = 0;
+      fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
+      return { ok: true };
+    }
+
+    /* M09 (decisione #49): ordine d'attacco. Viaggia come un `move` verso un
+       sistema (tipicamente di una civiltà AI o un covo) e all'arrivo lo
+       INGAGGIA — `attackTarget` segnala l'intento offensivo a
+       processSkirmishes, che risolve lo scontro anche se la civiltà non è
+       già ostile (atto di aggressione → verbo morale dark se buona/neutrale,
+       light se maligna). Richiede potenza di fuoco. */
+    if (type === 'attack') {
+      const to = order.toSysId;
+      if (to == null) return { ok: false, reason: 'Sistema di destinazione assente' };
+      if (!fleetHasGunsLocal(fleet)) return { ok: false, reason: 'La flotta è disarmata (nessuna potenza di fuoco)' };
+      const path = computePath(game.galaxy, fleet.location.systemId, to);
+      if (!path) return { ok: false, reason: 'Nessuna rotta verso il sistema target' };
+      fleet.orders = { type: 'attack', toSysId: to };
+      fleet.route = path;
+      fleet.routeIdx = 0;
+      fleet.attackTarget = to;
       fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
       return { ok: true };
     }
@@ -621,7 +644,9 @@
 
     /* Rotta completata. Cosa fare dipende dall'ordine. */
     const order = fleet.orders;
-    if (order.type === 'move') {
+    if (order.type === 'move' || order.type === 'attack') {
+      /* L'attacco mantiene `fleet.attackTarget`: all'arrivo la flotta orbita
+         e processSkirmishes ingaggia il bersaglio al tick successivo. */
       fleet.location.status = 'orbiting';
       fleet.etaImpulsi = 0;
       fleet.route = [arrivedAt];

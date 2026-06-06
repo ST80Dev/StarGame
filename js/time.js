@@ -988,15 +988,22 @@
 
       const nest = pirateNestAt(game, sysId);
       const civ = (root.ORION.ai && root.ORION.ai.civForSystem) ? root.ORION.ai.civForSystem(game, sysId) : null;
+      /* La flotta ingaggia una civiltà se questa è già ostile OPPURE se il
+         giocatore ha dato un ordine d'attacco esplicito su questo sistema
+         (M09 — decisione #49: aggressione offensiva, anche contro neutrali). */
+      const civAttacked = civ && civ.alive && fleet.attackTarget === sysId;
       const civHostile = civ && civ.alive && (civ.disposition <= -40);
 
       let enemy = null, enemyKind = null;
       if (nest) { enemy = C.forceFromPirateNest(nest); enemyKind = 'pirate'; }
-      else if (civHostile && root.ORION.ai.materialize) {
+      else if ((civHostile || civAttacked) && root.ORION.ai.materialize) {
         enemy = C.forceFromMaterialized(root.ORION.ai.materialize(game, civ, sysId), 'B');
         enemyKind = 'ai';
+        /* Aggressione contro una civiltà non già ostile: la relazione si
+           deteriora (la diplomazia piena è M11). */
+        if (civAttacked && !civHostile) civ.disposition = Math.max(-100, civ.disposition - 25);
       }
-      if (!enemy) continue;
+      if (!enemy) { if (fleet.attackTarget === sysId) fleet.attackTarget = null; continue; }
 
       fleet.combatResolvedAt = sysId;
       const A = C.forceFromFleet(game, fleet, 'A');
@@ -1056,6 +1063,9 @@
       if (fleet.ships.length === 0) {
         game.fleets = game.fleets.filter(function (f) { return f !== fleet; });
       }
+
+      // L'intento offensivo è stato consumato
+      if (fleet.attackTarget === sysId) fleet.attackTarget = null;
 
       events.push({
         kind: 'battle-skirmish', report: report,
