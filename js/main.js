@@ -1488,7 +1488,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
         '<dl class="sysinfo__list">' +
           row('Accumulo', Math.round(W.stock) + ' / ' + Math.round(W.capacity)) +
           row('Saturazione', '<span class="waste-tag waste--' + cls + '">' + stateLbl + ' · ' + pct + '%</span>') +
-          row('Netto', netTxt + ' /' + iU() + (W.net > 0 ? ' (in accumulo)' : W.net < 0 ? ' (in calo)' : ' (stabile)')) +
+          row('Netto', impHtml(netTxt, '/') + (W.net > 0 ? ' (in accumulo)' : W.net < 0 ? ' (in calo)' : ' (stabile)')) +
         '</dl>' +
         '<div class="progress-bar"><div class="progress-bar__fill waste-fill--' + cls + '" style="width:' + barPct + '%"></div></div>' +
         (W.state !== 'ok'
@@ -1508,7 +1508,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
           '<p class="settle-banner__title">' + uiIcon('transition', 'violet') + ' Insediamento in corso</p>' +
           '<p class="settle-banner__hint">Produzione al 50% · +50% velocità prima struttura · crescita pop bloccata.</p>' +
           '<dl class="sysinfo__list">' +
-            row('Restanti', remain + ' ' + iU()) +
+            row('Restanti', impHtml(remain)) +
             row('Avanzamento', pct + '%') +
           '</dl>' +
           '<div class="progress-bar"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
@@ -1647,13 +1647,13 @@ function renderCapitalSection(colony, planet) {
     const dur = colony.capitalState.transitionDuration || cap.TRANSITION_DURATION;
     const remain = Math.max(0, (colony.capitalState.transitionEnd || 0) - (g.timeImpulsi || 0));
     const pct = Math.min(100, Math.round(((dur - remain) / dur) * 100));
-    statusHtml = '<p class="capital-state capital-state--pre-capital">◌ Transizione in corso (entrante) — ' + remain + ' ' + iU() + ' al passaggio.</p>' +
+    statusHtml = '<p class="capital-state capital-state--pre-capital">◌ Transizione in corso (entrante) — ' + impHtml(remain) + ' al passaggio.</p>' +
       '<div class="capital-transition-bar"><div class="capital-transition-bar__fill" style="width:' + pct + '%"></div></div>';
   } else if (st === 'decommissioning') {
     const dur = colony.capitalState.transitionDuration || cap.TRANSITION_DURATION;
     const remain = Math.max(0, (colony.capitalState.transitionEnd || 0) - (g.timeImpulsi || 0));
     const pct = Math.min(100, Math.round(((dur - remain) / dur) * 100));
-    statusHtml = '<p class="capital-state capital-state--decommissioning">◌ Decommissioning — malus −10% per altri ' + remain + ' ' + iU() + '.</p>' +
+    statusHtml = '<p class="capital-state capital-state--decommissioning">◌ Decommissioning — malus −10% per altri ' + impHtml(remain) + '.</p>' +
       '<div class="capital-transition-bar capital-transition-bar--neg"><div class="capital-transition-bar__fill" style="width:' + pct + '%"></div></div>';
   } else {
     statusHtml = '<p class="capital-state">◉ Colonia di gruppo (non capitale).</p>';
@@ -1905,7 +1905,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
       html += '<li class="struct-item is-queue' + (isDemo ? ' is-demolish' : '') + '">' +
         '<span class="struct-item__glyph">' + def.glyph + '</span>' +
         '<div class="struct-item__main">' +
-          '<div class="struct-item__name">' + label + ' <span class="struct-item__cat">' + remain + ' / ' + total + '</span> ' + iU() + '</div>' +
+          '<div class="struct-item__name">' + label + ' ' + impHtml(remain + ' / ' + total) + '</div>' +
           '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
         '</div>' +
         '<button class="btn btn--mini btn--icon-only struct-item__cancel" data-cancel="' + idx + '" type="button" title="' + cancelTitle + '" aria-label="Annulla">' + uiIcon('close', 'pink') + '</button>' +
@@ -1925,7 +1925,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
       '<div class="struct-item is-queue">' +
         '<span class="struct-item__glyph">◎</span>' +
         '<div class="struct-item__main">' +
-          '<div class="struct-item__name">Mappatura risorse avanzate <span class="struct-item__cat">' + remain + '</span> ' + iU() + '</div>' +
+          '<div class="struct-item__name">Mappatura risorse avanzate ' + impHtml(remain) + '</div>' +
           '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
         '</div>' +
       '</div>';
@@ -1972,7 +1972,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
           } else {
             upBtn = '<span class="struct-item__locked struct-item__locked--icon" title="' + escapeHtml(up.reason) + '" aria-label="Espandi (bloccato)">+</span>';
           }
-          timeChip = ' <span class="struct-item__cat">' + nextTime + '</span> ' + iU();
+          timeChip = ' ' + impHtml(nextTime);
           infoLine = '<div class="struct-item__cost"><span class="struct-item__cost-label">L' + (lvl + 1) + '</span> ' + costStr + (balance ? ' ' + balance : '') + '</div>';
         }
         html += '<li class="struct-item is-built">' +
@@ -1998,13 +1998,13 @@ function renderPlanetStruttureTab(host, planet, colony) {
           const qEntry = colony.queue.find(function (q) { return q.id === def.id; });
           const total = def.time || 1;
           const remain = qEntry ? Math.max(0, qEntry.duration | 0) : total;
-          statusCell = '<span class="struct-item__locked is-building" title="In costruzione (' + remain + ' / ' + total + ' Ι)">▶ In costruzione · ' + remain + '/' + total + ' ' + iU() + '</span>';
+          statusCell = '<span class="struct-item__locked is-building" title="In costruzione (' + remain + ' / ' + total + ' Ι)">▶ In costruzione · ' + impHtml(remain + '/' + total) + '</span>';
           extraClass += ' is-building';
         } else if (check.code === 'demolishing') {
           const qEntry = colony.queue.find(function (q) { return q.id === def.id; });
           const total = Math.max(1, Math.round((def.time || 2) / 2));
           const remain = qEntry ? Math.max(0, qEntry.duration | 0) : total;
-          statusCell = '<span class="struct-item__locked is-demolish" title="In smantellamento (' + remain + ' / ' + total + ' Ι)">🛠 Smantellamento · ' + remain + '/' + total + ' ' + iU() + '</span>';
+          statusCell = '<span class="struct-item__locked is-demolish" title="In smantellamento (' + remain + ' / ' + total + ' Ι)">🛠 Smantellamento · ' + impHtml(remain + '/' + total) + '</span>';
           extraClass += ' is-building';
         } else if (check.code === 'busy') {
           statusCell = '<span class="struct-item__locked is-busy" title="' + check.reason + '">' + uiIcon('transition', 'soft') + ' Occupato</span>';
@@ -2014,7 +2014,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
         html += '<li class="struct-item' + extraClass + '" title="' + def.desc + '">' +
           '<span class="struct-item__glyph">' + def.glyph + '</span>' +
           '<div class="struct-item__main">' +
-            '<div class="struct-item__name">' + def.name + ' <span class="struct-item__cat">' + def.time + '</span> ' + iU() + '</div>' +
+            '<div class="struct-item__name">' + def.name + ' ' + impHtml(def.time) + '</div>' +
             '<div class="struct-item__cost">' + costStr + (balance ? ' ' + balance : '') + '</div>' +
           '</div>' +
           '<button class="btn btn--mini btn--icon-only struct-item__info" data-info="' + def.id + '" type="button" title="Cosa fa, bonus/malus, concatenazioni" aria-label="Informazioni su ' + def.name + '">' + uiIcon('info', 'violet') + '</button>' +
@@ -2174,6 +2174,23 @@ function dsUnit(letter) {
     '" aria-hidden="true">' + ORION.icon(iconName) + '</span>';
 }
 function iU() { return dsUnit('Ι'); }      /* Impulso */
+
+/* PR-J: helper per durate/rate in Impulsi (Ι). Avvolge numero + glifo
+   in un pill ciano compatto in modo che il glifo non sembri un
+   divisorio o una "I" isolata. Usa la stessa tinta della DATA in
+   header (UI_GUIDE §1: Ι = ciano).
+   - impHtml("10")          → "10 Ι" in pill ciano
+   - impHtml("5/10")        → "5/10 Ι" in pill ciano (durata)
+   - impHtml("+4.1", "/")   → "+4.1 / Ι" in pill ciano (rate per Ι) */
+function impHtml(value, sep) {
+  const iotaSvg = (ORION && ORION.icon) ? ORION.icon('iota') : '';
+  const sepHtml = sep ? '<span class="imp-pill__sep">' + sep + '</span>' : '';
+  if (!iotaSvg) return value + (sep ? ' ' + sep + ' Ι' : ' Ι');
+  return '<span class="imp-pill">' +
+    '<span class="imp-pill__n">' + value + '</span>' + sepHtml +
+    '<span class="imp-pill__u ui-icon ui-icon--iota" aria-hidden="true">' + iotaSvg + '</span>' +
+  '</span>';
+}
 
 /* PR-D: helper inline per inserire icona SVG con tinta + glow morbido,
    coerente con UI_GUIDE §3. Usato dove l'HTML è generato dinamicamente
