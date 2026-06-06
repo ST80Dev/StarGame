@@ -1493,6 +1493,12 @@
     if (root.ORION.ai && root.ORION.ai.tick) {
       root.ORION.ai.tick(game, events);
     }
+    /* M11 Fase A (decisione #51): diplomazia. Deriva lenta della reputazione
+       verso il target morale (light/dark) + scadenza tregue → guerra.
+       Determinismo: zero RNG. */
+    if (root.ORION.diplomacy && root.ORION.diplomacy.tick) {
+      root.ORION.diplomacy.tick(game, events);
+    }
   }
 
   /* M06.5 (decisione #27): scriptata della fase Insediamento.
