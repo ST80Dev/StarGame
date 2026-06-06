@@ -44,7 +44,7 @@
   --gap:          12px;
   --radius:       8px;
   --radius-sm:    4px;
-  --panel-left-w: 220px;
+  --panel-left-w: 280px;
   --panel-right-w:400px;
   --hud-top-h:    64px;
   --hud-bottom-h: 130px;
@@ -4005,24 +4005,42 @@ select.main-menu__input { cursor: pointer; }
 /* --- Sezione generica del launcher --- */
 .lp-section { display: flex; flex-direction: column; min-height: 0; }
 .lp-section__head {
-  display: flex; align-items: center; gap: 6px;
-  padding: 4px 4px 4px 2px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 6px 6px 2px;
   font-family: var(--font-display);
-  font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase;
-  color: var(--c-text-soft);
+  font-size: 0.82rem; letter-spacing: 0.1em; text-transform: uppercase;
+  font-weight: 600;
+  color: var(--c-text);
   cursor: pointer; user-select: none;
-  border-bottom: 1px solid var(--c-border-soft);
-  margin-bottom: 4px;
+  border-bottom: 1px solid var(--c-border);
+  margin-bottom: 6px;
 }
-.lp-section__head:hover { color: var(--c-text); }
-.lp-section__caret { color: var(--c-accent); font-size: 0.7rem; width: 10px; }
-.lp-section__title { flex: 1; }
+.lp-section__head:hover { color: var(--c-accent); }
+.lp-section__caret { color: var(--c-text-soft); font-size: 0.72rem; width: 10px; }
+.lp-section__title { flex: 1; display: inline-flex; align-items: center; gap: 7px; }
+/* Glyph colorato per sezione — stile analogo a .res-icon (decisione #28).
+   Ogni sezione ha la sua tinta tematica per scansione rapida. */
+.lp-section__glyph {
+  display: inline-block;
+  font-size: 0.95rem;
+  line-height: 1;
+  font-variant-emoji: text;
+}
+.lp-section__glyph--roster { color: #f0a868; text-shadow: 0 0 6px rgba(240,168,104,0.45); }
+.lp-section__glyph--nav    { color: var(--c-accent); text-shadow: 0 0 6px rgba(47,230,224,0.45); }
+.lp-section__glyph--launch { color: #b89cff; text-shadow: 0 0 6px rgba(184,156,255,0.45); }
+.lp-section__glyph--chron  { color: #cbd2e4; text-shadow: 0 0 5px rgba(203,210,228,0.4); }
+.lp-section__text { font-weight: 600; }
 .lp-section__count {
   font-family: var(--font-data);
-  color: var(--c-text-faint);
+  color: var(--c-text-soft);
   letter-spacing: 0;
   text-transform: none;
-  font-size: 0.72rem;
+  font-size: 0.78rem;
+  padding: 1px 7px;
+  background: rgba(120,160,255,0.10);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 10px;
 }
 .lp-section__body { display: flex; flex-direction: column; gap: 3px; min-height: 0; }
 .lp-section.is-collapsed .lp-section__body { display: none; }
@@ -4032,10 +4050,10 @@ select.main-menu__input { cursor: pointer; }
 /* Roster cronaca scrollabile */
 .lp-section--chron { flex: 1 1 auto; min-height: 120px; }
 .lp-section--chron .lp-section__body {
-  max-height: 240px;
+  max-height: 260px;
   overflow-y: auto;
-  font-size: 0.78rem; line-height: 1.5;
-  padding: 4px 2px;
+  font-size: 0.84rem; line-height: 1.5;
+  padding: 6px 4px;
   background: rgba(8,12,30,0.4);
   border: 1px solid var(--c-border-soft);
   border-radius: var(--radius-sm);
@@ -4063,15 +4081,15 @@ select.main-menu__input { cursor: pointer; }
 
 /* --- Item del roster (colonia/flotta) --- */
 .lp-item {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 9px;
   width: 100%;
-  padding: 6px 8px;
-  background: rgba(8,12,30,0.45);
+  padding: 7px 10px;
+  background: rgba(8,12,30,0.5);
   border: 1px solid var(--c-border-soft);
   border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
-  font-size: 0.82rem;
+  font-size: 0.88rem;
   color: var(--c-text);
   transition: var(--transition);
 }
@@ -4083,53 +4101,77 @@ select.main-menu__input { cursor: pointer; }
   border-color: var(--c-accent);
   box-shadow: inset 2px 0 0 var(--c-accent);
 }
-.lp-item__glyph { color: var(--c-accent); width: 14px; text-align: center; }
+/* Glifo item con colore tematico (es. colonia=ambra, flotta=ciano).
+   Riusa il pattern .res-icon con text-shadow per coerenza visiva. */
+.lp-item__glyph {
+  width: 16px;
+  text-align: center;
+  font-size: 1rem;
+  color: #f0a868;
+  text-shadow: 0 0 5px rgba(240,168,104,0.45);
+  line-height: 1;
+}
+.lp-item--fleet .lp-item__glyph {
+  color: var(--c-accent);
+  text-shadow: 0 0 5px rgba(47,230,224,0.45);
+}
 .lp-item__name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lp-item__name strong { font-weight: 600; }
+.lp-item__name strong { font-weight: 600; color: var(--c-text); }
 .lp-item__sub {
-  font-size: 0.72rem;
-  color: var(--c-text-faint);
+  font-size: 0.76rem;
+  color: var(--c-text-soft);
   margin-left: 4px;
 }
 .lp-item__badges { display: flex; gap: 3px; }
 .lp-item__badge {
-  font-size: 0.68rem;
-  padding: 1px 5px;
-  border-radius: 8px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 9px;
   background: rgba(255,255,255,0.06);
   color: var(--c-text-soft);
 }
-.lp-item__badge--ok   { background: rgba(95,200,140,0.15); color: #6fe0b8; }
-.lp-item__badge--warn { background: rgba(240,210,100,0.15); color: #f0d670; }
-.lp-item__badge--crit { background: rgba(240,130,150,0.18); color: #f08296; }
-.lp-item__badge--info { background: rgba(120,180,240,0.15); color: #80c8e6; }
+.lp-item__badge--ok   { background: rgba(95,200,140,0.18); color: #6fe0b8; }
+.lp-item__badge--warn { background: rgba(240,210,100,0.18); color: #f0d670; }
+.lp-item__badge--crit { background: rgba(240,130,150,0.20); color: #f08296; }
+.lp-item__badge--info { background: rgba(120,180,240,0.18); color: #80c8e6; }
 
 .lp-empty {
-  font-size: 0.78rem;
-  color: var(--c-text-faint);
+  font-size: 0.82rem;
+  color: var(--c-text-soft);
   font-style: italic;
   padding: 4px 6px;
 }
 
 /* --- Nav compatta (Galassia/Gruppo/Sistema/Pianeta) --- */
-.lp-nav { display: flex; flex-direction: column; gap: 3px; }
+.lp-nav { display: flex; flex-direction: column; gap: 4px; }
 .lp-nav .nav-item {
-  padding: 6px 10px;
-  font-size: 0.82rem;
+  padding: 7px 11px;
+  font-size: 0.88rem;
 }
+/* Glifo nav colorato per livello (Galassia/Gruppo=accent, Sistema=warm, Pianeta=violet). */
+.lp-nav .nav-item__glyph {
+  font-size: 1rem;
+  text-shadow: 0 0 5px currentColor;
+  opacity: 0.85;
+}
+.lp-nav .nav-item[data-view="galaxy"] .nav-item__glyph { color: var(--c-accent); }
+.lp-nav .nav-item[data-view="group"]  .nav-item__glyph { color: #b89cff; }
+.lp-nav .nav-item[data-view="system"] .nav-item__glyph { color: #f0a868; }
+.lp-nav .nav-item[data-view="planet"] .nav-item__glyph { color: #80c8e6; }
 
 /* --- Launcher buttons (Diplomazia / Ricerca / Mercato) --- */
-.lp-launcher { display: flex; flex-direction: column; gap: 4px; }
+.lp-launcher { display: flex; flex-direction: column; gap: 5px; }
 .lp-launcher__btn {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 9px;
   width: 100%;
-  padding: 8px 10px;
-  background: rgba(8,12,30,0.45);
+  padding: 9px 11px;
+  background: rgba(8,12,30,0.5);
   border: 1px solid var(--c-border-soft);
   border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
-  font-size: 0.82rem;
+  font-size: 0.9rem;
   color: var(--c-text);
   transition: var(--transition);
 }
@@ -4137,9 +4179,28 @@ select.main-menu__input { cursor: pointer; }
   background: rgba(47,230,224,0.08);
   border-color: var(--c-accent-dim);
 }
-.lp-launcher__btn[disabled] { opacity: 0.55; cursor: default; }
-.lp-launcher__glyph { color: var(--c-accent-warm); width: 14px; text-align: center; }
-.lp-launcher__sub { margin-left: auto; font-size: 0.72rem; color: var(--c-text-faint); }
+.lp-launcher__btn.is-active {
+  border-color: var(--c-accent);
+  box-shadow: inset 2px 0 0 var(--c-accent);
+}
+.lp-launcher__btn[disabled] { opacity: 0.6; cursor: default; }
+/* Glyph del launcher con tinte tematiche (palette coerente con .res-icon). */
+.lp-launcher__glyph {
+  width: 16px; text-align: center;
+  font-size: 1rem; line-height: 1;
+  text-shadow: 0 0 5px currentColor;
+  opacity: 0.9;
+}
+.lp-launcher__btn[data-view="fleet"]    .lp-launcher__glyph { color: var(--c-accent); }
+.lp-launcher__btn[data-view="civ"]      .lp-launcher__glyph { color: #f08296; }
+.lp-launcher__btn[data-view="research"] .lp-launcher__glyph { color: #b89cff; }
+.lp-launcher__btn[data-view="market"]   .lp-launcher__glyph { color: #9fd0a8; }
+.lp-launcher__sub {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--c-text-soft);
+  font-family: var(--font-data);
+}
 
 /* =====================================================================
    Plancia Operativa (dx) — selector colonia pinnata
