@@ -220,6 +220,22 @@
         'alleanze) arriva più avanti.</p>'
     },
     {
+      id: 'diplomacy',
+      tag: 'Civiltà · Diplomazia',
+      title: 'Diplomazia: stati e reputazione',
+      body:
+        '<p>Ogni civiltà <strong>contattata</strong> ha uno <strong>stato diplomatico</strong> verso di te: ' +
+        '<strong>Pace</strong> (default), <strong>Tregua</strong> (temporanea), <strong>Guerra</strong>, <strong>Alleanza</strong>. ' +
+        'Dalla vista <strong>Civiltà ⬡</strong> puoi <em>dichiarare guerra</em>, <em>proporre pace</em> o <em>alleanza</em>.</p>' +
+        '<p>L\'esito non è scontato: la AI accetta in base alla sua <strong>disposizione</strong> verso di te, alla tua ' +
+        '<strong>Reputazione</strong> (§14, in HUD) e al suo <strong>allineamento</strong> (i buoni vogliono onore, i maligni ' +
+        'diffidano dei santi). Ogni proposta mostra un <strong>pronostico</strong> dell\'esito.</p>' +
+        '<p>L\'<strong>Alleanza</strong> è un patto di <strong>non-aggressione</strong>: un alleato non ti attacca. La ' +
+        '<strong>Pace</strong> sospende le ostilità (e <strong>revoca incursioni/assedi</strong> in corso di quella civiltà) ' +
+        'finché la disposizione regge. <strong>Dichiarare guerra a chi non è maligno</strong>, o <strong>rompere un\'alleanza</strong>, ' +
+        'costa <strong>reputazione</strong>: i tuoi atti pesano su come tutta la galassia ti vede.</p>'
+    },
+    {
       id: 'pirates',
       tag: 'Galassia · Pirati',
       title: 'Predoni e covi pirata',

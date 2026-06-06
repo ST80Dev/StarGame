@@ -350,7 +350,9 @@
               '<span class="deck-struct__glyph">' + def.glyph + '</span>' +
               '<span class="deck-struct__name">' + escapeHtml(shortName) + '</span>' +
               '<span class="deck-struct__lvl">×' + lvl + '</span>' +
-              '<button type="button" class="deck-struct__info" data-deck-action="info" data-id="' + id + '" title="Cosa fa, bonus, concatenazioni" aria-label="Info">ⓘ</button>' +
+              '<button type="button" class="deck-struct__info ui-icon ui-icon--violet" data-deck-action="info" data-id="' + id + '" title="Cosa fa, bonus, concatenazioni" aria-label="Info">' +
+                (ORION.icon ? ORION.icon('info') : 'ⓘ') +
+              '</button>' +
             '</div>' +
             '<div class="deck-struct__bot">' +
               '<span class="deck-struct__pips">' + pips + '</span>' +

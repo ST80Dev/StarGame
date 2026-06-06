@@ -343,6 +343,7 @@
         systems: owned,
         power: owned.length * CFG.POWER_PER_SYSTEM,
         disposition: baseDisposition(alignment),
+        relation: 'peace',          // M11 (#51): stato diplomatico esplicito
         contacted: false,
         alive: true,
         bornAt: 0
@@ -523,6 +524,11 @@
     // vicinanza: una civiltà che confina col giocatore reagisce di più
     if (civBordersPlayer(game, civ)) {
       target += (civ.alignment === 'male') ? -10 : (civ.alignment === 'bene' ? 6 : 0);
+    }
+    /* M11 (#51): lo stato diplomatico formale tira il target — alleati si
+       fidano (alleanza non erode da sola), nemici restano ostili. */
+    if (ORION.diplomacy && ORION.diplomacy.relationDispositionBias) {
+      target += ORION.diplomacy.relationDispositionBias(civ);
     }
     target = Math.max(-100, Math.min(100, target));
     civ.disposition += (target - civ.disposition) * CFG.DISPOSITION_DRIFT;
@@ -706,7 +712,7 @@
       color: PALETTE[idx % PALETTE.length],
       homeGroupId: grp.id, homeTier: grp.tier, established: false,
       systems: [seed], power: CFG.POWER_PER_SYSTEM,
-      disposition: baseDisposition(alignment), contacted: false,
+      disposition: baseDisposition(alignment), relation: 'peace', contacted: false,
       alive: true, bornAt: game.timeImpulsi
     });
     events.push({
@@ -800,6 +806,12 @@
     const threshold = -50 + pressure * 20;     // pressione 1.0 → fino a -30
     for (let i = 0; i < civs.length; i++) {
       const civ = civs[i];
+      /* M11 (#51): pace/tregua/alleanza = non-aggressione formale → niente
+         incursioni. L'alleanza è una garanzia, la pace una scelta del
+         giocatore che sospende la guerra finché la disposizione regge. */
+      const rel = (ORION.diplomacy && ORION.diplomacy.effectiveRelation)
+        ? ORION.diplomacy.effectiveRelation(game, civ) : null;
+      if (rel === 'alliance' || rel === 'peace' || rel === 'truce') continue;
       if (civ.disposition > threshold) continue;
       if ((civ.truceUntil || 0) > (game.timeImpulsi || 0)) continue;  // tregua in corso
       if (!civBordersPlayer(game, civ)) continue;                // deve confinare
@@ -835,6 +847,7 @@
       const eta = Math.max(25, Math.min(90, 25 + bestHops * 12));
       const id = 'inc-ai-' + (game.timeImpulsi || 0) + '-' + i;
       const level = Math.max(1, Math.round(civ.power / 30));
+      civ.relation = 'war';   // M11 (#51): l'aggressione formalizza la guerra
       game.incursions.push({
         id: id, kind: 'ai', civId: civ.id, civName: civ.name, civColor: civ.color,
         fromSysId: civ.systems[0], targetSysId: best.sysId, targetColonyKey: best.key,

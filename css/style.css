@@ -1354,8 +1354,9 @@ button { font-family: inherit; }
   font-size: 0.66rem;
   letter-spacing: 0.06em;
 }
-/* M06.7: bottone "ⓘ" della scheda strutture — più piccolo, accento viola
-   per distinguerlo da "Costruisci" (azione vs informazione). */
+/* M06.7 + PR-I: bottone info ⓘ della scheda strutture — ora SVG icon
+   coerente con UI_GUIDE §3 e con il bottone tutorial in HUD. Niente
+   più border-radius/italic font weird "i" che sembrava una barra. */
 .struct-item .btn--mini.struct-item__info {
   display: inline-flex;
   align-items: center;
@@ -1364,21 +1365,18 @@ button { font-family: inherit; }
   height: 22px;
   min-width: 22px;
   padding: 0 !important;
-  border: 1.4px solid transparent !important;
-  border-radius: 50%;
-  color: var(--c-violet);
-  font-family: var(--font-display);
-  font-style: italic;
-  font-weight: 700;
+  border: none !important;
+  background: transparent;
+  color: #b89cff;
   font-size: 0.95rem;
   line-height: 1;
-  opacity: 0.85;
-  background: transparent;
+  opacity: 0.9;
 }
 .struct-item .btn--mini.struct-item__info:hover {
   opacity: 1;
-  background: color-mix(in srgb, var(--c-violet) 22%, transparent);
+  color: var(--c-text);
 }
+.struct-item .btn--mini.struct-item__info .ui-icon-svg { width: 1em; height: 1em; }
 
 /* btn--mini lite (riusa lo stile dei mini-pulsanti dell'overlay galassia) */
 
@@ -2766,10 +2764,24 @@ select.main-menu__input { cursor: pointer; }
    ma vivono dentro un piccolo capsule ambra a font display — l'occhio
    le riconosce subito come unità temporali, non più come "I" latina
    o numerali romani. */
+/* PR-H: sigle del Faro (decisione #30) — niente più capsule ambra.
+   Ora SVG icon inline con tinta tematica per unità. Glow morbido
+   come tutte le altre icone UI_GUIDE §3. */
 .ds-unit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: -0.18em;
+  margin: 0 1px;
+  font-size: 1em;
+  line-height: 1;
+}
+.ds-unit .ui-icon-svg { width: 0.95em; height: 0.95em; }
+/* Fallback (letter) per quando ORION.icon non è caricato */
+.ds-unit:not(.ds-unit--iota):not(.ds-unit--kappa):not(.ds-unit--phi):not(.ds-unit--omega) {
   display: inline-block;
   min-width: 1.1em;
-  padding: 0 5px;
+  padding: 0 4px;
   margin-left: 1px;
   background: rgba(220, 170, 90, 0.16);
   border: 1px solid rgba(220, 170, 90, 0.34);
@@ -2782,6 +2794,28 @@ select.main-menu__input { cursor: pointer; }
   line-height: 1.35;
   text-align: center;
   vertical-align: baseline;
+}
+.ds-unit--iota  { color: var(--c-accent); }    /* ciano: battito atomico ricorrente */
+.ds-unit--kappa { color: #6fe0b8; }            /* verde: ciclo, ritmo sano */
+.ds-unit--phi   { color: #f0a868; }            /* ambra: fase, periodo medio */
+.ds-unit--omega { color: #b89cff; }            /* viola: eone, scala rara */
+
+/* PR-H: HUD DATA Stellare — i 4 valori posizionali colorati
+   coerenti con le sigle .ds-unit. Stesso ordine Ω·Φ·Κ·Ι. */
+.ds-val {
+  font-family: var(--font-data, monospace);
+  font-weight: 600;
+  text-shadow: 0 0 4px currentColor;
+}
+.ds-val--omega { color: #b89cff; }
+.ds-val--phi   { color: #f0a868; }
+.ds-val--kappa { color: #6fe0b8; }
+.ds-val--iota  { color: var(--c-accent); }
+.ds-sep {
+  color: var(--c-text-faint);
+  font-weight: 400;
+  margin: 0 1px;
+  opacity: 0.6;
 }
 
 /* xp chip viola */
@@ -3323,19 +3357,34 @@ select.main-menu__input { cursor: pointer; }
 .deck-struct-list {
   list-style: none;
   margin: 0;
-  padding: 0 2px 0 0;       /* margine sx 2px per la scroll bar interna */
+  /* PR-I: padding-right 10px riserva spazio per la scrollbar verticale
+     così le 3 card per riga restano allineate anche quando appare. */
+  padding: 0 10px 0 0;
   display: grid;
-  /* PR-G: card più strette (min 135px) → 4-5 per riga, 2 righe fisse
-     per 9-10 strutture. Gap orizzontale moderato, verticale 5px. */
-  grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
-  gap: 5px;
-  /* Internal scroll quando la lista supera l'altezza disponibile:
-     ~2 righe (60px each + 5px gap + padding) ≈ 140-150px. Senza
-     altezza fissa il grid si espande; con questa max-height resta a
-     2 righe e fa scroll verticale solo se servono più di 10 card. */
-  max-height: 148px;
+  /* PR-I: 3 card per riga (era 4-5) — info più leggibili. minmax(190px)
+     consente max 3 colonne nella width tipica di .deck-structures e
+     gestisce gracefully larghezze diverse. Gap 6px. */
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 6px;
+  /* Internal scroll quando la lista supera 2 righe (era 148px troppo
+     stretto). Card ora 70px alte + 6px gap + 2px padding → ~150px per
+     2 righe. Più strutture → scroll verticale interno con scrollbar
+     riservata nel padding-right. */
+  max-height: 150px;
   overflow-y: auto;
   align-content: start;
+  /* Scrollbar sottile e tematica (NASA/Visions) */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 160, 255, 0.3) transparent;
+}
+.deck-struct-list::-webkit-scrollbar { width: 8px; }
+.deck-struct-list::-webkit-scrollbar-track { background: transparent; }
+.deck-struct-list::-webkit-scrollbar-thumb {
+  background: rgba(120, 160, 255, 0.3);
+  border-radius: 4px;
+}
+.deck-struct-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 160, 255, 0.5);
 }
 .deck-struct {
   position: relative;
@@ -3371,26 +3420,27 @@ select.main-menu__input { cursor: pointer; }
 
 /* PR-G: ⓘ inline nella riga superiore (a destra del livello), non più
    assoluto. Compatto: 14px circle, niente reserve nel padding card. */
+/* PR-I: ⓘ → SVG info icon coerente con UI_GUIDE §3 e con il bottone
+   tutorial in HUD top. Niente più bordo cerchiato disallineato. */
 .deck-struct__info {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   padding: 0;
-  flex: 0 0 16px;
+  flex: 0 0 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.75rem;
-  color: var(--c-violet);
+  font-size: 0.85rem;
+  color: #b89cff;
   background: transparent;
-  border: 1px solid rgba(138, 108, 255, 0.5);
-  border-radius: 50%;
+  border: none;
   cursor: pointer;
   line-height: 1;
 }
 .deck-struct__info:hover {
-  background: rgba(138, 108, 255, 0.15);
   color: var(--c-text);
 }
+.deck-struct__info .ui-icon-svg { width: 1em; height: 1em; }
 .deck-struct__glyph {
   font-size: 1.1rem;
   color: var(--c-text);
@@ -4065,6 +4115,42 @@ select.main-menu__input { cursor: pointer; }
 .civ-disp__fill--pos { background: linear-gradient(90deg, #f0a64a, #3fcaa0); }
 
 .chronicle__hint { color: var(--c-text-faint); font-style: italic; font-size: 0.92em; }
+
+/* =====================================================================
+   M11 Fase A (decisione #51) — Diplomazia: chip stato + proposte
+   Tinta concetto = rosa (civiltà/altri attori, UI_GUIDE §1). Gli stati
+   relazione riusano i semantici §7 (war→crit, truce→warn, peace→ok,
+   alliance→active).
+   ===================================================================== */
+.dip-relchip {
+  font-family: var(--font-display); font-size: 0.7rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 1px 8px; border-radius: 999px; border: 1px solid transparent;
+}
+.dip-relchip.is-crit   { background: rgba(255, 92, 108, 0.16); color: var(--c-bad); border-color: rgba(255,92,108,0.4); }
+.dip-relchip.is-warn   { background: rgba(240, 214, 112, 0.14); color: #f0d670; border-color: rgba(240,214,112,0.4); }
+.dip-relchip.is-ok     { background: rgba(79, 224, 138, 0.14); color: var(--c-good); border-color: rgba(79,224,138,0.4); }
+.dip-relchip.is-active { background: rgba(47, 230, 224, 0.14); color: var(--c-accent); border-color: rgba(47,230,224,0.42); }
+
+.dip-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.dip-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px; border-radius: var(--radius-sm, 5px);
+  background: rgba(255, 124, 168, 0.12);
+  border: 1px solid rgba(255, 124, 168, 0.34);
+  color: #ffb3cd; font-size: 0.78rem; font-weight: 600; cursor: pointer;
+  transition: var(--transition, 200ms ease);
+}
+.dip-btn:hover:not([disabled]) { background: rgba(255, 124, 168, 0.2); border-color: rgba(255,124,168,0.55); }
+.dip-btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+.dip-btn--danger {
+  background: rgba(255, 92, 108, 0.12); border-color: rgba(255, 92, 108, 0.4); color: #ff9aa6;
+}
+.dip-btn--danger:hover:not([disabled]) { background: rgba(255, 92, 108, 0.22); }
+.dip-btn__odds {
+  font-family: var(--font-data); font-size: 0.66rem; font-weight: 400;
+  opacity: 0.78; text-transform: lowercase;
+}
 
 /* =====================================================================
    M09 Fase A (decisione #49) — Guerra / assedi / veteranità

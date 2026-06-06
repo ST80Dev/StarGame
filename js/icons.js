@@ -320,6 +320,36 @@
     book: svg(
       '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>' +
       '<path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>'
+    ),
+
+    /* PR-H: 4 sigle del Calendario del Faro (decisione #30). Ognuna
+       ha un glifo dedicato per sostituire la lettera greca nel testo,
+       più colore tematico per scansione rapida. */
+
+    /* Iota (Ι) — Impulso atomico (battito). Punto + tick verticale. */
+    iota: svg(
+      '<circle cx="12" cy="6" r="2" fill="currentColor" stroke="none"/>' +
+      '<line x1="12" y1="10" x2="12" y2="20"/>'
+    ),
+
+    /* Kappa (Κ) — Ciclo (50 Ι). Cerchio chiuso = oscillazione breve. */
+    kappa: svg(
+      '<circle cx="12" cy="12" r="6"/>'
+    ),
+
+    /* Phi (Φ) — Fase (20 Κ = 1000 Ι). Orbita con baricentro
+       = precessione, periodo medio. */
+    phi: svg(
+      '<ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(-25 12 12)"/>' +
+      '<circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/>'
+    ),
+
+    /* Omega (Ω) — Eone (100 Φ = 100 000 Ι). Forma greca Ω
+       = grande risonanza, scala rara. */
+    omega: svg(
+      '<path d="M5 19c-1-2-1-5 0-8 1-3 4-5 7-5s6 2 7 5c1 3 1 6 0 8"/>' +
+      '<line x1="3" y1="19" x2="7" y2="19"/>' +
+      '<line x1="17" y1="19" x2="21" y2="19"/>'
     )
   };
 
