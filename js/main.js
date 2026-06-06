@@ -1319,7 +1319,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
           row('Ostilità ' + hostilityNoun(planet), planet.hostility) +
         '</dl>' +
         '<p class="sysinfo__sub">Riepilogo produzione (/Impulso)</p>' +
-        rateGrid(out.rates, out.upkeep) +
+        rateGrid(out.rates, out.upkeep, colony) +
         scarRow +
         renderCapitalSection(colony, planet) +
         renderGovernorSection(colony, planet) +
@@ -1597,7 +1597,7 @@ function renderPlanetRisorseTab(host, planet, colony) {
       '<p class="sysinfo__sub">Scorte in colonia</p>' +
       '<dl class="sysinfo__list">' + stockRows + '</dl>' +
       '<p class="sysinfo__sub">Produzione potenziale per Impulso</p>' +
-      rateGrid(out.rates, out.upkeep) +
+      rateGrid(out.rates, out.upkeep, colony) +
       '<p class="sysinfo__sub">Risorse avanzate</p>' +
       advancedHtml +
     '</div>';
@@ -2911,7 +2911,11 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
   } else if (critFW) {
     growthStr = 'ferma (carenza critica)';
   } else {
-    growthStr = 'plateau · ' + limitRes + ' locale al limite';
+    /* Decisione #45: la pop drena davvero lo stock. Se siamo qui (supplyFactor=0)
+       significa surplus locale ≤ 0: la richiesta pop supera la produzione e lo
+       stock cala. Differenziato dal vecchio "al limite" che faceva pensare a
+       un pareggio. */
+    growthStr = 'plateau · richiesta pop > produzione ' + limitRes + ' locale (lo stock cala)';
   }
 
   // Target classi suggerito dalle strutture
@@ -2957,13 +2961,27 @@ function potentialBars(planet) {
   }).join('') + '</ul>';
 }
 
-function rateGrid(rates, upkeep) {
+function rateGrid(rates, upkeep, colony) {
   function fmtNet(v) { return (v >= 0 ? '+' : '−') + (Math.round(Math.abs(v) * 100) / 100); }
   function fmtAbs(v) { return Math.round(Math.abs(v) * 100) / 100; }
+  /* Decisione #45: il consumo pro-capite della popolazione drena cibo/acqua
+     dallo stock (time.js processProduction). Lo mostriamo esplicitamente nel
+     riepilogo perché in passato l'utente vedeva "+4 /I" senza capire perché
+     lo stock scendeva. Solo in fase operational (Insediamento è bloccato). */
+  const CFG = ORION.time && ORION.time.CFG;
+  const popTotal = (colony && colony.pop && colony.pop.total) || 0;
+  const opPhase = !colony || colony.phase !== 'settling';
+  const popFood  = (opPhase && CFG && popTotal > 0) ? popTotal * CFG.POP_FOOD_PER_UNIT  : 0;
+  const popWater = (opPhase && CFG && popTotal > 0) ? popTotal * CFG.POP_WATER_PER_UNIT : 0;
   const items = [];
   ['met', 'en', 'food', 'water'].forEach(function (k) {
-    const r = rates[k] || 0; const u = upkeep[k] || 0; const net = r - u;
-    if (r || u) items.push(row(resLabel(k), '<span class="rate ' + (net >= 0 ? 'rate--pos' : 'rate--neg') + '">' + fmtNet(net) + '</span> / ' + iU() + ' <span class="rate-aux">(+' + fmtAbs(r) + ' / −' + fmtAbs(u) + ')</span>'));
+    const r = rates[k] || 0; const u = upkeep[k] || 0;
+    const popDrain = k === 'food' ? popFood : k === 'water' ? popWater : 0;
+    const net = r - u - popDrain;
+    if (!(r || u || popDrain)) return;
+    let aux = '+' + fmtAbs(r) + ' prod / −' + fmtAbs(u) + ' upkeep';
+    if (popDrain > 0) aux += ' / −' + fmtAbs(popDrain) + ' pop';
+    items.push(row(resLabel(k), '<span class="rate ' + (net >= 0 ? 'rate--pos' : 'rate--neg') + '">' + fmtNet(net) + '</span> / ' + iU() + ' <span class="rate-aux">(' + aux + ')</span>'));
   });
   if (rates.research) items.push(row('Ricerca', '<span class="rate rate--pos">+' + (Math.round(rates.research * 100) / 100) + '</span> / ' + iU()));
   if (rates.scan) items.push(row('Scansione', '<span class="rate rate--pos">+' + rates.scan + '</span> / ' + iU()));
