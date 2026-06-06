@@ -767,13 +767,18 @@
     const host = ensureHost();
     const game = getGame();
     const enabled = isEnabled(game);
+    /* PR-F: stato lezioni con SVG (UI_GUIDE §3) — check verde per
+       lezione vista, transition viola per nuova. */
+    const ICON = (typeof ORION !== 'undefined' && ORION.icon) ? ORION.icon : function () { return ''; };
+    const checkSvg = '<span class="ui-icon ui-icon--green" aria-hidden="true">' + ICON('check') + '</span>';
+    const newSvg   = '<span class="ui-icon ui-icon--violet" aria-hidden="true">' + ICON('transition') + '</span>';
     const rows = LESSONS.map(function (l) {
       const seen = isSeen(game, l.id);
       return '<button class="tutorial-index__row" data-tut-id="' + l.id + '" type="button">' +
         '<span class="tutorial-index__tag">' + escapeText(l.tag) + '</span>' +
         '<span class="tutorial-index__title">' + escapeText(l.title) + '</span>' +
         '<span class="tutorial-index__state ' + (seen ? 'is-seen' : 'is-unseen') + '">' +
-          (seen ? '✓ vista' : '◌ nuova') +
+          (seen ? checkSvg + ' vista' : newSvg + ' nuova') +
         '</span>' +
       '</button>';
     }).join('');
@@ -781,7 +786,10 @@
       '<div class="tutorial-card tutorial-card--index" role="document">' +
         '<header class="tutorial-card__head">' +
           '<span class="tutorial-card__tag">Tutorial</span>' +
-          '<h2 class="tutorial-card__title">Tutorial — indice</h2>' +
+          '<h2 class="tutorial-card__title">' +
+            '<span class="ui-icon ui-icon--violet" aria-hidden="true">' + ICON('book') + '</span> ' +
+            'Tutorial — indice' +
+          '</h2>' +
           '<button class="btn btn--mini btn--icon-only tutorial-card__close" data-action="tut-close" type="button" aria-label="Chiudi">' +
             '<span class="ui-icon" aria-hidden="true">' + ((typeof ORION !== 'undefined' && ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
           '</button>' +
