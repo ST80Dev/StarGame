@@ -525,9 +525,9 @@
       this.canvas.height = Math.round(h * this.dpr);
       this.canvas.style.width = w + 'px';
       this.canvas.style.height = h + 'px';
-      /* M07.2 polish: zoom iniziale ridotto per fare spazio ai widget
-         della Plancia di Colonia (decisione #44). Prima 0.34 → ora 0.28. */
-      this.fitR = Math.min(w, h) * 0.28;
+      /* M07.2 polish iter 2: card laterali compattate → sfera può tornare
+         più grande senza coprire i widget (decisione #44). 0.28 → 0.32. */
+      this.fitR = Math.min(w, h) * 0.32;
       if (!hadFit) this.resetView();
       this.requestRender();
     }
