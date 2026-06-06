@@ -46,7 +46,16 @@
   /* Schema 10 (M09 Fase B, decisione #49): aggiunge `defeated` (esilio/
      gameover) e `alignmentDeeds` (verbi morali → piste reputation). Le
      tregue AI (civ.truceUntil) vivono dentro game.civs (auto). */
-  const SCHEMA_VERSION = 11;
+  /* Schema 11 (M11 Fase A, decisione #51): reputazione globale §14
+     sistematizzata + stato diplomatico per civiltà (civ.relation). */
+  /* Schema 12 (fix): persiste game.state.discovery[] (nebbia di guerra).
+     Prima il delta della scoperta veniva perso al load → i sistemi
+     esplorati tornavano grigi. Retro-compat: i save vecchi caricano con
+     discovery ricostruita da createState (home EXPLORED + adiacenti
+     DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
+     nuovo gioco la preserva e una recovery best-effort prova a dedurla
+     da colonie/flotte/spedizioni/cronaca. */
+  const SCHEMA_VERSION = 12;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -128,7 +137,12 @@
       alignmentDeeds: (game.alignmentDeeds && typeof game.alignmentDeeds === 'object') ? game.alignmentDeeds : { light: 0, dark: 0 },
       /* M11 Fase A (decisione #51): reputazione globale §14 sistematizzata.
          Lo stato diplomatico civ.relation vive dentro game.civs (auto). */
-      reputation: (typeof game.reputation === 'number') ? game.reputation : 50
+      reputation: (typeof game.reputation === 'number') ? game.reputation : 50,
+      /* Schema 12: nebbia di guerra (delta scoperta per sistema). Indice
+         = systemId, valore = livello DISCOVERY (UNKNOWN/DETECTED/EXPLORED).
+         Serializzato come array di interi (compatto in JSON). */
+      discovery: (game.state && Array.isArray(game.state.discovery)) ? game.state.discovery.slice() : null,
+      selectedId: (game.state && Number.isInteger(game.state.selectedId)) ? game.state.selectedId : null
     };
   }
 
@@ -277,6 +291,17 @@
         payload.civs.forEach(function (c) { if (c && !c.relation) c.relation = 'peace'; });
       }
       payload.schema = 11;
+    }
+    /* v11 → v12 (fix nebbia di guerra): aggiunge discovery/selectedId al
+       payload. I save vecchi non hanno la nebbia persistita → restano null
+       e newGame esegue la recovery best-effort da colonie/flotte/
+       spedizioni/cronaca (vedi recoverDiscoveryFromPayload in main.js).
+       Coerente con seed+delta: l'esplorazione "ufficiale" dei save
+       pre-fix è persa, ma dedotta dove possibile. */
+    if ((payload.schema || 11) < 12) {
+      if (payload.discovery === undefined) payload.discovery = null;
+      if (payload.selectedId === undefined) payload.selectedId = null;
+      payload.schema = 12;
     }
     return payload;
   }
