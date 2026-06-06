@@ -33,12 +33,108 @@ ORION.currentSystem = null;
 /* Vista pianeta (M04): istanza attiva + chiave del corpo aperto. */
 ORION.planetView = null;
 ORION.colonyDeck = null;        // M07.2 (decisione #44): Plancia di Colonia
-ORION.openPlanetKey = null;     // "<sysId>:<bodyKey>"
+ORION.openPlanetKey = null;     // "<sysId>:<bodyKey>" — pianeta navigato al centro
 ORION.currentPlanet = null;
 ORION.planetTab = 'colonia';    // 'colonia' | 'risorse' | 'strutture' | 'popolazione' | 'esplorazione' (M07)
 
 /* Ultimo sistema annotato in cronaca (evita doppioni consecutivi). */
 ORION.lastChronicleId = -1;
+
+/* =====================================================================
+   Decisione #50 — Plancia Operativa pinnata (dx indipendente dalla nav)
+   `dxPinnedColonyKey` = colonia "in focus" del pannello dx. Quando l'utente
+   cambia esplicitamente il selector → flag `dxIsPinned=true` e da quel
+   momento la dx non segue più la navigazione. Quando false, segue le
+   colonie mie aperte al centro come default comodo.
+   ===================================================================== */
+ORION.dxPinnedColonyKey = null;
+ORION.dxIsPinned = false;
+/* Tab in vita per la dx (separata da planetTab che è del centro). Stessi
+   id ('colonia' | 'risorse' | ...) per coerenza con renderPlanetPanel. */
+ORION.dxTab = 'colonia';
+/* Cronaca: stato collassato (sx). Persistito in localStorage. */
+ORION.chronicleCollapsed = false;
+/* Stato delle sezioni roster nel launcher sx (id → bool collassato). */
+ORION.lpSectionCollapsed = { roster: false, nav: false, launcher: false };
+
+/* Persistenza preferenze UI (NON nel save: vivono solo in localStorage,
+   sono scelte di interfaccia indipendenti dalla partita). */
+function loadUiPrefs() {
+  try {
+    const raw = localStorage.getItem('orion.uiprefs');
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (d.chronicleCollapsed != null) ORION.chronicleCollapsed = !!d.chronicleCollapsed;
+    if (d.lpSectionCollapsed && typeof d.lpSectionCollapsed === 'object') {
+      Object.assign(ORION.lpSectionCollapsed, d.lpSectionCollapsed);
+    }
+    /* La pin si recupera per partita (chiave seed-aware), perché un
+       seed diverso → colonie diverse → il pin vecchio non è valido. */
+  } catch (_) { /* niente */ }
+}
+function saveUiPrefs() {
+  try {
+    localStorage.setItem('orion.uiprefs', JSON.stringify({
+      chronicleCollapsed: ORION.chronicleCollapsed,
+      lpSectionCollapsed: ORION.lpSectionCollapsed
+    }));
+  } catch (_) { /* niente */ }
+}
+function loadDxPin(game) {
+  try {
+    if (!game || !game.seed) return;
+    const raw = localStorage.getItem('orion.dxPin.' + game.seed);
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (d && d.key && game.colonies && game.colonies[d.key]) {
+      ORION.dxPinnedColonyKey = d.key;
+      ORION.dxIsPinned = !!d.pinned;
+    }
+  } catch (_) { /* niente */ }
+}
+function saveDxPin() {
+  try {
+    const g = ORION.game;
+    if (!g || !g.seed) return;
+    localStorage.setItem('orion.dxPin.' + g.seed, JSON.stringify({
+      key: ORION.dxPinnedColonyKey, pinned: ORION.dxIsPinned
+    }));
+  } catch (_) { /* niente */ }
+}
+
+/* Lista colonie del giocatore (operative o in insediamento o in arrivo). */
+function myColonyKeys() {
+  const g = ORION.game;
+  if (!g || !g.colonies) return [];
+  return Object.keys(g.colonies).filter(function (k) {
+    const c = g.colonies[k];
+    return !!c && (c.colonized || c.colonizing || c.phase === 'settling');
+  });
+}
+
+/* Risolve la colonia "attiva" per la dx (auto-follow se non pinned). */
+function resolveDxColonyKey() {
+  const g = ORION.game;
+  if (!g) return null;
+  const mine = myColonyKeys();
+  if (!mine.length) return null;
+  /* Se pinned e ancora valida → usala. */
+  if (ORION.dxIsPinned && ORION.dxPinnedColonyKey && g.colonies[ORION.dxPinnedColonyKey]) {
+    if (mine.indexOf(ORION.dxPinnedColonyKey) >= 0) return ORION.dxPinnedColonyKey;
+  }
+  /* Auto-follow: se il pianeta navigato al centro è una colonia mia,
+     usa quella. Tradeoff (documentato in decisione #50): auto-follow
+     finché non c'è pin esplicito, comodo nel caso comune. */
+  if (ORION.openPlanetKey && mine.indexOf(ORION.openPlanetKey) >= 0) {
+    return ORION.openPlanetKey;
+  }
+  /* Fallback: l'ultima usata (se valida) o home. */
+  if (ORION.dxPinnedColonyKey && mine.indexOf(ORION.dxPinnedColonyKey) >= 0) {
+    return ORION.dxPinnedColonyKey;
+  }
+  if (g.homePlanetKey && mine.indexOf(g.homePlanetKey) >= 0) return g.homePlanetKey;
+  return mine[0];
+}
 
 /* ---------------------------------------------------------------------
    Generazione/avvio di una partita (galassia)
@@ -300,6 +396,14 @@ function updateGlobalResourceHud() {
   const popEl = document.querySelector('[data-bind="popolazione"]');
   if (popEl) popEl.textContent = ORION.planet.formatPeople(people);
   updateGlobalIndicesHud();
+  /* Decisione #50: la dx mostra lo stato della colonia in focus —
+     rinfreschiamola con l'HUD globale. La sx (Roster) ha badge che
+     dipendono da scarsità/coda ma re-renderarla ad ogni tick costa
+     scroll-position della cronaca: la rifacciamo solo agli eventi
+     "grossi" (build/colonize/load), non ad ogni resource hud. */
+  if (ORION.game && document.querySelector('[data-bind="dx-content"]')) {
+    renderDxPanel();
+  }
 }
 
 /* M10 Fase A (decisione #47): ICG §5.4 + Reputazione §14 come ANTEPRIMA.
@@ -321,23 +425,20 @@ function updateGlobalIndicesHud() {
    Navigazione tra viste
    --------------------------------------------------------------------- */
 function initNavigation() {
-  const items = document.querySelectorAll('.nav-item');
+  /* Decisione #50: la navigazione vive ora nel pannello sx come sezione
+     "Navigazione" dentro la Plancia d'Impero. Il binding avviene in
+     renderLeftPanel() ogni volta che il pannello si ridisegna. La vista
+     iniziale viene attivata da `enterGame()` (decisione #25). */
+}
+
+/* Wrapper: cambia la vista del centro come faceva il vecchio nav.
+   Chiamato dai bottoni della navigazione e dai launcher (decisione #50). */
+function navigateView(view) {
+  if (!ORION.game) return;
   const stage = document.querySelector('[data-view-stage]');
-
-  items.forEach((item) => {
-    item.addEventListener('click', () => {
-      /* Guard: senza partita la navigazione non fa nulla (main menu
-         attivo). I bottoni rimangono visibili ma inerti finché il
-         giocatore non avvia/carica una partita dal menu (decisione #25). */
-      if (!ORION.game) return;
-      items.forEach((i) => i.classList.remove('is-active'));
-      item.classList.add('is-active');
-      renderView(stage, item.dataset.view);
-    });
-  });
-
-  /* La vista iniziale viene attivata da `enterGame()` quando si lascia
-     il main menu (decisione #25). */
+  if (stage) renderView(stage, view);
+  setNavActive(view);
+  renderLeftPanel();
 }
 
 function renderView(stage, view) {
@@ -484,15 +585,12 @@ function onMapContext(ctx) {
   if (ORION.tutorial && ctx.level === 'group') ORION.tutorial.fire('galaxy');
   setNavActive(ctx.level === 'group' ? 'group' : 'galaxy');
   renderBreadcrumb(ctx);
-  const panel = document.querySelector('.panel--right');
-  if (!panel) return;
-  const title = panel.querySelector('.panel__title');
-  const content = panel.querySelector('.panel__content');
-  if (!title || !content) return;
-
-  if (ctx.systemId >= 0) renderSystemPanel(title, content, ctx.systemId);
-  else if (ctx.level === 'group' && ctx.groupId >= 0) renderGroupPanel(title, content, ctx.groupId);
-  else renderGalaxyPanel(title, content);
+  /* Decisione #50: la dx non segue più la navigazione — è la Plancia
+     Operativa indipendente. Le info del sistema/gruppo/galassia selezionati
+     vengono mostrate nell'action bar contestuale al centro e/o nella sx.
+     Aggiorniamo solo l'action bar centro qui (e renderLeftPanel per refresh). */
+  renderContextActionBar(ctx);
+  renderLeftPanel();
 }
 
 function renderBreadcrumb(ctx) {
@@ -809,17 +907,10 @@ function closeSystem() {
 
 function updateSystemUI(system, bodyKey) {
   renderSystemBreadcrumb(system, bodyKey);
-  const panel = document.querySelector('.panel--right');
-  if (!panel) return;
-  const title = panel.querySelector('.panel__title');
-  const content = panel.querySelector('.panel__content');
-  if (!title || !content) return;
-  const disc = ORION.game.state.discovery[system.id];
-  if (bodyKey) {
-    const body = ORION.system.findBody(system, bodyKey);
-    if (body) { renderBodyPanel(title, content, system, body); return; }
-  }
-  renderSystemInteriorPanel(title, content, system, disc);
+  /* Decisione #50: la dx non segue più. Le azioni contestuali
+     (apri pianeta, colonizza, dossier AI) sono nell'action bar. */
+  renderContextActionBar({ level: 'system', systemId: system.id, bodyKey: bodyKey || null });
+  renderLeftPanel();
 }
 
 /* Breadcrumb: Galassia › Gruppo › Sistema › [Corpo] */
@@ -1078,12 +1169,19 @@ function updatePlanetUI() {
     const deckHolder = document.querySelector('[data-colony-deck]');
     if (deckHolder) deckHolder.hidden = true;
   }
-  const panel = document.querySelector('.panel--right');
-  if (!panel) return;
-  const title = panel.querySelector('.panel__title');
-  const content = panel.querySelector('.panel__content');
-  if (!title || !content) return;
-  renderPlanetPanel(title, content);
+  /* Decisione #50: la dx è ora indipendente — autofollow se non pinned.
+     Se il pianeta navigato è una colonia mia, è la default. */
+  renderDxPanel();
+  /* Action bar contestuale al centro: colonizza / dossier AI / etc. */
+  renderContextActionBar({
+    level: 'planet',
+    systemId: ORION.currentSystem ? ORION.currentSystem.id : -1,
+    bodyKey: ORION.currentPlanet ? ORION.currentPlanet.bodyKey : null
+  });
+  /* M07.2 polish: lo sfondo "foreign" si monta/rinfresca quando si
+     apre un pianeta AI (Punto 3). */
+  refreshForeignDeck();
+  renderLeftPanel();
 }
 
 /* M07.2 (decisione #44): monta la Plancia di Colonia.
@@ -1109,6 +1207,12 @@ function mountColonyDeck(planet, colony, body) {
       updatePlanetUI();
     }
   });
+  /* Dopo il mount, ridimensiona la planet-view: ora che il deck DOM
+     esiste, resize() misura la sua altezza e adatta fitR/cy della sfera
+     in modo che non venga sopraffatta dalle card (M07.2 iter 3). */
+  if (ORION.planetView && ORION.planetView.resize) {
+    requestAnimationFrame(function () { ORION.planetView.resize(); });
+  }
 }
 
 function renderPlanetBreadcrumb() {
@@ -1405,8 +1509,6 @@ function renderPlanetColoniaTab(host, planet, colony) {
           row('Slot utilizzati', out.used + ' / ' + ORION.planet.effectiveSlots(planet, colony, g)) +
           row('Ostilità ' + hostilityNoun(planet), planet.hostility) +
         '</dl>' +
-        '<p class="sysinfo__sub">Riepilogo produzione (/Impulso)</p>' +
-        rateGrid(out.rates, out.upkeep) +
         scarRow +
         wasteRow +
         renderCapitalSection(colony, planet) +
@@ -1685,7 +1787,7 @@ function renderPlanetRisorseTab(host, planet, colony) {
       '<p class="sysinfo__sub">Scorte in colonia</p>' +
       '<dl class="sysinfo__list">' + stockRows + '</dl>' +
       '<p class="sysinfo__sub">Produzione potenziale per Impulso</p>' +
-      rateGrid(out.rates, out.upkeep) +
+      rateGrid(out.rates, out.upkeep, colony) +
       '<p class="sysinfo__sub">Risorse avanzate</p>' +
       advancedHtml +
     '</div>';
@@ -3397,10 +3499,12 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
   const scar = colony._scar;
   const settling = colony.phase === 'settling';
 
-  // Capacità di carico locale (decisione #37): il consumo pro-capite è una
-  // RICHIESTA sulla produzione di cibo/acqua, non un drenaggio dello stock.
-  // La popolazione cresce finché produzione > consumo e si stabilizza in
-  // plateau quando si pareggiano — senza carestia. Legge del minimo.
+  // Capacità di carico locale (decisione #45, emenda v2): il consumo pop
+  // drena lo stock (vedi time.js processProduction). MA la crescita NON è
+  // gata sul saldo istantaneo: se lo stock è in stato 'ok' (riserve
+  // abbondanti) la pop cresce a pieno regime anche con saldo negativo —
+  // sta consumando il magazzino. Solo se le scorte scendono davvero
+  // (low/crit) la crescita rallenta/si ferma. Coerente col motore.
   const out = ORION.planet.structureOutput(colony, planet, ORION.game);
   const foodNet = (out.rates.food || 0) - (out.upkeep.food || 0);
   const waterNet = (out.rates.water || 0) - (out.upkeep.water || 0);
@@ -3410,13 +3514,28 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
   if (sustainable < 0) sustainable = 0;
   if (sustainable > cap) sustainable = cap;
   const limitRes = sustWater <= sustFood ? 'acqua' : 'cibo';
-  const foodSurplus = foodNet - total * CFG.POP_FOOD_PER_UNIT;
-  const waterSurplus = waterNet - total * CFG.POP_WATER_PER_UNIT;
-  const surplus = Math.min(foodSurplus, waterSurplus);
-  const supplyFactor = surplus <= 0 ? 0 : Math.min(1, surplus / CFG.POP_SUPPLY_REF);
-
-  const critFW = scar && (scar.food.state === 'crit' || scar.water.state === 'crit');
-  const canGrow = !settling && total < cap && supplyFactor > 0 && !critFW;
+  /* Saldo reale comprensivo di drenaggio pop. */
+  const realFoodNet = foodNet - total * CFG.POP_FOOD_PER_UNIT;
+  const realWaterNet = waterNet - total * CFG.POP_WATER_PER_UNIT;
+  /* Runway (Ι rimanenti al ritmo di consumo) — gating relativo, scala da
+     pop piccola a miliardi (decisione #45 emenda v3). */
+  const drainFood = Math.max(0, -realFoodNet);
+  const drainWater = Math.max(0, -realWaterNet);
+  const runwayFood = drainFood > 0 ? Math.floor((colony.stock.food || 0) / drainFood) : Infinity;
+  const runwayWater = drainWater > 0 ? Math.floor((colony.stock.water || 0) / drainWater) : Infinity;
+  const runway = Math.min(runwayFood, runwayWater);
+  const RUNWAY_LOW = CFG.POP_RUNWAY_LOW || 30;
+  const RUNWAY_CRIT = CFG.POP_RUNWAY_CRIT || 10;
+  /* Stock esaurito? identifica anche quale risorsa. */
+  const foodOut = (colony.stock.food || 0) <= 0;
+  const waterOut = (colony.stock.water || 0) <= 0;
+  const critFW = foodOut || waterOut || runway < RUNWAY_CRIT;
+  let supplyFactor;
+  if (critFW) supplyFactor = 0;
+  else if (runway < RUNWAY_LOW) supplyFactor = 0.3;
+  else supplyFactor = 1;
+  const limitRunway = runwayFood <= runwayWater ? 'cibo' : 'acqua';
+  const canGrow = !settling && total < cap && supplyFactor > 0;
   // Morale: calcolato sempre (anche se la crescita è bloccata) per dare
   // visibilità della leva §9.3. Breakdown dei contributi mostrato sotto.
   const moraleParts = [];
@@ -3465,15 +3584,29 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
     const slope = M > 0 ? Math.log(M / ORION.planet.POP_FLOOR) / (refCap - 1) : 0;
     const unitCost = 1 + CFG.POP_LEVEL_COST * (total - 1);
     const marginal = peopleNow * slope * growthEst / Math.max(1, unitCost);
-    growthStr = '+' + ORION.planet.formatPeople(marginal) + ' / Impulso';
+    let suffix = '';
+    /* Decisione #45 emenda v3: messaggio runway-based.
+       - saldo positivo (runway infinito): pulito, nessun suffisso
+       - saldo neg ma runway > 30 Ι: "consuma riserve (X Ι rimanenti)"
+       - runway 10-30 Ι: "rallentata · scorte basse (X Ι rimanenti)" */
+    if (runway < RUNWAY_LOW && isFinite(runway)) {
+      suffix = ' · rallentata · scorte ' + limitRunway + ' basse (' + runway + ' Ι rimanenti)';
+    } else if ((drainFood > 0 || drainWater > 0) && isFinite(runway)) {
+      suffix = ' · consuma riserve (' + runway + ' Ι rimanenti)';
+    }
+    growthStr = '+' + ORION.planet.formatPeople(marginal) + ' / Impulso' + suffix;
   } else if (settling) {
     growthStr = 'ferma (Insediamento)';
   } else if (total >= cap) {
     growthStr = 'al cap del pianeta';
+  } else if (foodOut) {
+    growthStr = 'ferma · scorte cibo esaurite';
+  } else if (waterOut) {
+    growthStr = 'ferma · scorte acqua esaurite';
   } else if (critFW) {
-    growthStr = 'ferma (carenza critica)';
+    growthStr = 'ferma · scorte ' + limitRunway + ' critiche (' + runway + ' Ι rimanenti)';
   } else {
-    growthStr = 'plateau · ' + limitRes + ' locale al limite';
+    growthStr = 'plateau';
   }
 
   // Target classi suggerito dalle strutture
@@ -3519,13 +3652,27 @@ function potentialBars(planet) {
   }).join('') + '</ul>';
 }
 
-function rateGrid(rates, upkeep) {
+function rateGrid(rates, upkeep, colony) {
   function fmtNet(v) { return (v >= 0 ? '+' : '−') + (Math.round(Math.abs(v) * 100) / 100); }
   function fmtAbs(v) { return Math.round(Math.abs(v) * 100) / 100; }
+  /* Decisione #45: il consumo pro-capite della popolazione drena cibo/acqua
+     dallo stock (time.js processProduction). Lo mostriamo esplicitamente nel
+     riepilogo perché in passato l'utente vedeva "+4 /I" senza capire perché
+     lo stock scendeva. Solo in fase operational (Insediamento è bloccato). */
+  const CFG = ORION.time && ORION.time.CFG;
+  const popTotal = (colony && colony.pop && colony.pop.total) || 0;
+  const opPhase = !colony || colony.phase !== 'settling';
+  const popFood  = (opPhase && CFG && popTotal > 0) ? popTotal * CFG.POP_FOOD_PER_UNIT  : 0;
+  const popWater = (opPhase && CFG && popTotal > 0) ? popTotal * CFG.POP_WATER_PER_UNIT : 0;
   const items = [];
   ['met', 'en', 'food', 'water'].forEach(function (k) {
-    const r = rates[k] || 0; const u = upkeep[k] || 0; const net = r - u;
-    if (r || u) items.push(row(resLabel(k), '<span class="rate ' + (net >= 0 ? 'rate--pos' : 'rate--neg') + '">' + fmtNet(net) + '</span> / ' + iU() + ' <span class="rate-aux">(+' + fmtAbs(r) + ' / −' + fmtAbs(u) + ')</span>'));
+    const r = rates[k] || 0; const u = upkeep[k] || 0;
+    const popDrain = k === 'food' ? popFood : k === 'water' ? popWater : 0;
+    const net = r - u - popDrain;
+    if (!(r || u || popDrain)) return;
+    let aux = '+' + fmtAbs(r) + ' prod / −' + fmtAbs(u) + ' upkeep';
+    if (popDrain > 0) aux += ' / −' + fmtAbs(popDrain) + ' pop';
+    items.push(row(resLabel(k), '<span class="rate ' + (net >= 0 ? 'rate--pos' : 'rate--neg') + '">' + fmtNet(net) + '</span> / ' + iU() + ' <span class="rate-aux">(' + aux + ')</span>'));
   });
   if (rates.research) items.push(row('Ricerca', '<span class="rate rate--pos">+' + (Math.round(rates.research * 100) / 100) + '</span> / ' + iU()));
   if (rates.scan) items.push(row('Scansione', '<span class="rate rate--pos">+' + rates.scan + '</span> / ' + iU()));
@@ -4264,9 +4411,569 @@ function pulseHud() {
 
 /* Sincronizza l'evidenziazione della navigazione sinistra. */
 function setNavActive(view) {
+  ORION._currentView = view;
   document.querySelectorAll('.nav-item').forEach((i) => {
     i.classList.toggle('is-active', i.dataset.view === view);
   });
+}
+
+/* =====================================================================
+   Decisione #50 — Plancia d'Impero (pannello sx)
+   Sezioni: Roster (colonie + flotte) · Navigazione · Diplomazia/Ricerca/Mercato · Cronaca
+   ===================================================================== */
+function renderLeftPanel() {
+  const host = document.querySelector('[data-bind="left-panel"]');
+  if (!host) return;
+  const g = ORION.game;
+  if (!g) {
+    host.innerHTML = '<p class="lp-empty">Avvia una partita dal menu.</p>';
+    return;
+  }
+
+  const myKeys = myColonyKeys();
+  const fleets = (g.fleets || []);
+  const civsContacted = (ORION.ai && ORION.ai.contactedCivs) ? ORION.ai.contactedCivs(g) : [];
+  const currentView = ORION._currentView || 'galaxy';
+  const dxKey = resolveDxColonyKey();
+
+  /* ----- Roster ----- */
+  const colItems = myKeys.map(function (k) {
+    const c = g.colonies[k];
+    const p = planetForColony(c);
+    const name = p ? p.name : ('Colonia ' + k);
+    const sysId = c.systemId;
+    const tag = bodyTagHtml(sysId);
+    const badges = [];
+    if (c.phase === 'settling') badges.push('<span class="lp-item__badge lp-item__badge--info">⏳</span>');
+    if (c.colonizing) badges.push('<span class="lp-item__badge lp-item__badge--info">◌</span>');
+    if (ORION.capital && ORION.capital.isCapital && ORION.capital.isCapital(g, k)) {
+      badges.push('<span class="lp-item__badge lp-item__badge--ok" title="Capitale">★</span>');
+    } else if (c.isHomeBase) {
+      badges.push('<span class="lp-item__badge lp-item__badge--ok" title="Pianeta base">★</span>');
+    }
+    if (c._scar) {
+      let worst = 'ok';
+      ['met','en','food','water'].forEach(function (rk) {
+        const s = c._scar[rk] && c._scar[rk].state;
+        if (s === 'crit') worst = 'crit';
+        else if (s === 'low' && worst !== 'crit') worst = 'low';
+      });
+      if (worst === 'crit') badges.push('<span class="lp-item__badge lp-item__badge--crit" title="Scarsità critica">!</span>');
+      else if (worst === 'low') badges.push('<span class="lp-item__badge lp-item__badge--warn" title="Scarsità">!</span>');
+    }
+    if (c.queue && c.queue.length) {
+      badges.push('<span class="lp-item__badge lp-item__badge--info" title="Coda di costruzione">⚒</span>');
+    }
+    if (c.governor && Array.isArray(c.governor.recent) && c.governor.recent.length) {
+      badges.push('<span class="lp-item__badge lp-item__badge--warn" title="Segnalazione del governatore">⚙</span>');
+    }
+    const isFocus = (k === dxKey);
+    return '<button class="lp-item' + (isFocus ? ' is-focus' : '') + '" data-action="roster-colony" data-key="' + escapeHtml(k) + '" type="button">' +
+      '<span class="lp-item__glyph" aria-hidden="true">◉</span>' +
+      '<span class="lp-item__name"><strong>' + escapeHtml(name) + '</strong>' + tag + '</span>' +
+      '<span class="lp-item__badges">' + badges.join('') + '</span>' +
+    '</button>';
+  }).join('');
+
+  const fleetItems = fleets.map(function (f) {
+    const sysId = (f.location && f.location.systemId >= 0) ? f.location.systemId : -1;
+    const sysName = sysId >= 0 ? g.galaxy.systems[sysId].name : '—';
+    const status = (f.location && f.location.status) || 'idle';
+    const statusLbl = status === 'docked' ? 'attracco' : status === 'in-transit' ? 'transito' : 'orbita';
+    const cls = status === 'docked' ? 'ok' : status === 'in-transit' ? 'info' : 'warn';
+    return '<button class="lp-item lp-item--fleet" data-action="roster-fleet" data-id="' + escapeHtml(f.id) + '" data-sys="' + sysId + '" type="button">' +
+      '<span class="lp-item__glyph" aria-hidden="true">▸</span>' +
+      '<span class="lp-item__name"><strong>' + escapeHtml(f.name) + '</strong> <span class="lp-item__sub">in ' + escapeHtml(sysName) + '</span></span>' +
+      '<span class="lp-item__badges"><span class="lp-item__badge lp-item__badge--' + cls + '">' + statusLbl + '</span></span>' +
+    '</button>';
+  }).join('');
+
+  const rosterBody =
+    (myKeys.length ? colItems : '<p class="lp-empty">Nessuna colonia operativa.</p>') +
+    (fleets.length ? fleetItems : (myKeys.length ? '<p class="lp-empty">Nessuna flotta attiva.</p>' : ''));
+  const rosterCount = myKeys.length + ' colonie · ' + fleets.length + ' flotte';
+
+  /* ----- Navigazione (Galassia/Gruppo/Sistema/Pianeta) ----- */
+  const navItems = [
+    { view: 'galaxy', glyph: '✦', label: 'Galassia' },
+    { view: 'group',  glyph: '❋', label: 'Gruppo' },
+    { view: 'system', glyph: '◉', label: 'Sistema' },
+    { view: 'planet', glyph: '○', label: 'Pianeta' }
+  ];
+  const navHtml = navItems.map(function (n) {
+    const active = (n.view === currentView) ? ' is-active' : '';
+    return '<button class="nav-item' + active + '" data-view="' + n.view + '" type="button">' +
+      '<span class="nav-item__glyph" aria-hidden="true">' + n.glyph + '</span>' +
+      '<span class="nav-item__label">' + n.label + '</span></button>';
+  }).join('');
+
+  /* ----- Launcher (Diplomazia/Ricerca/Mercato + vista Flotte/Civiltà) ----- */
+  const launcherHtml =
+    '<button class="lp-launcher__btn' + (currentView === 'fleet' ? ' is-active' : '') + '" data-view="fleet" type="button">' +
+      '<span class="lp-launcher__glyph" aria-hidden="true">▸</span>' +
+      '<span>Flotte</span>' +
+      '<span class="lp-launcher__sub">' + fleets.length + '</span>' +
+    '</button>' +
+    '<button class="lp-launcher__btn' + (currentView === 'civ' ? ' is-active' : '') + '" data-view="civ" type="button">' +
+      '<span class="lp-launcher__glyph" aria-hidden="true">⚑</span>' +
+      '<span>Diplomazia</span>' +
+      '<span class="lp-launcher__sub">' + civsContacted.length + ' contatti</span>' +
+    '</button>' +
+    '<button class="lp-launcher__btn" data-view="research" type="button">' +
+      '<span class="lp-launcher__glyph" aria-hidden="true">⌬</span>' +
+      '<span>Ricerca</span>' +
+      '<span class="lp-launcher__sub">M13</span>' +
+    '</button>' +
+    '<button class="lp-launcher__btn" data-view="market" type="button">' +
+      '<span class="lp-launcher__glyph" aria-hidden="true">⇄</span>' +
+      '<span>Mercato</span>' +
+      '<span class="lp-launcher__sub">M12</span>' +
+    '</button>';
+
+  /* ----- Cronaca (collassabile) -----
+     Manteniamo sempre un <ul data-bind="chronicle"> presente nel DOM
+     così che pushChronicle/restoreChronicleDom funzionino anche quando
+     la lista è vuota al boot. */
+  const cron = (g.chronicle || []).slice(0, 40);
+  const cronHtml = '<ul class="chronicle__log">' + (cron.length
+    ? cron.map(function (e) {
+        const mod = e.mod ? ' chronicle__entry--' + e.mod : '';
+        return '<li class="chronicle__entry' + mod + '">' + e.html + '</li>';
+      }).join('')
+    : '<li class="chronicle__entry chronicle__entry--system">Nessuna voce.</li>'
+  ) + '</ul>';
+
+  /* Compone le sezioni. */
+  const collapsed = ORION.lpSectionCollapsed;
+  function sec(id, title, count, body, extraCls) {
+    const isCol = !!collapsed[id];
+    return '<section class="lp-section ' + (extraCls || '') + (isCol ? ' is-collapsed' : '') + '" data-section="' + id + '">' +
+      '<div class="lp-section__head" data-action="lp-toggle" data-id="' + id + '">' +
+        '<span class="lp-section__caret"></span>' +
+        '<span class="lp-section__title">' + title + '</span>' +
+        (count ? '<span class="lp-section__count">' + count + '</span>' : '') +
+      '</div>' +
+      '<div class="lp-section__body">' + body + '</div>' +
+    '</section>';
+  }
+
+  /* Titoli sezione: glifo + testo separati per applicare la tinta tematica
+     CSS (.lp-section__glyph--*) coerente con .res-icon (decisione #50 polish). */
+  function secTitle(glyphCls, glyph, text) {
+    return '<span class="lp-section__glyph lp-section__glyph--' + glyphCls + '" aria-hidden="true">' + glyph + '</span>' +
+           '<span class="lp-section__text">' + text + '</span>';
+  }
+
+  const chronCollapsed = !!ORION.chronicleCollapsed;
+  host.innerHTML =
+    sec('roster',   secTitle('roster', '⬢', 'Roster'),         rosterCount, rosterBody) +
+    sec('nav',      secTitle('nav',    '✦', 'Navigazione'),    '',          '<nav class="lp-nav">' + navHtml + '</nav>') +
+    sec('launcher', secTitle('launch', '◈', 'Sale e moduli'),  '',          '<div class="lp-launcher">' + launcherHtml + '</div>') +
+    '<section class="lp-section lp-section--chron' + (chronCollapsed ? ' is-collapsed' : '') + '" data-section="chronicle">' +
+      '<div class="lp-section__head" data-action="lp-toggle-chron">' +
+        '<span class="lp-section__caret"></span>' +
+        '<span class="lp-section__title">' + secTitle('chron', '✎', 'Cronaca') + '</span>' +
+        '<span class="lp-section__count">' + cron.length + '</span>' +
+      '</div>' +
+      '<div class="lp-section__body" data-bind="chronicle-host">' + cronHtml + '</div>' +
+    '</section>';
+
+  /* Mantieni `[data-bind="chronicle"]` valido per pushChronicle/restore:
+     ri-tagghiamo l'UL come "chronicle" così le funzioni esistenti continuano
+     a funzionare senza modifiche. */
+  const ul = host.querySelector('.chronicle__log');
+  if (ul) ul.setAttribute('data-bind', 'chronicle');
+
+  /* Bind handlers */
+  host.querySelectorAll('[data-action="lp-toggle"]').forEach(function (h) {
+    h.addEventListener('click', function () {
+      const id = h.dataset.id;
+      ORION.lpSectionCollapsed[id] = !ORION.lpSectionCollapsed[id];
+      saveUiPrefs();
+      renderLeftPanel();
+    });
+  });
+  const chronHead = host.querySelector('[data-action="lp-toggle-chron"]');
+  if (chronHead) chronHead.addEventListener('click', function () {
+    ORION.chronicleCollapsed = !ORION.chronicleCollapsed;
+    saveUiPrefs();
+    renderLeftPanel();
+  });
+  host.querySelectorAll('[data-view]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const v = btn.dataset.view;
+      if (v === 'research' || v === 'market') {
+        navigateView(v);
+        return;
+      }
+      navigateView(v);
+    });
+  });
+  host.querySelectorAll('[data-action="roster-colony"]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const k = btn.dataset.key;
+      const parts = k.split(':');
+      const sid = Number(parts[0]);
+      const bk = parts[1];
+      navigateView('planet');
+      /* navigateView('planet') usa il pianeta natale come default; sostituiamo
+         con il pianeta cliccato. */
+      if (ORION.openSystemId !== sid) openSystem(sid);
+      openPlanet(sid, bk);
+    });
+  });
+  host.querySelectorAll('[data-action="roster-fleet"]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const sid = Number(btn.dataset.sys);
+      navigateView('fleet');
+      /* Anche se la mappa non è visibile, conserviamo la selezione: utile
+         al prossimo ritorno. */
+      if (ORION.game && ORION.game.state && sid >= 0) ORION.game.state.selectedId = sid;
+    });
+  });
+}
+
+/* =====================================================================
+   Decisione #50 — Plancia Operativa (pannello dx)
+   La dx renderizza la scheda della colonia "in focus" (pinned o auto).
+   Riusa renderPlanetPanel() esistente swapando temporaneamente
+   ORION.openPlanetKey → la dx key, per non duplicare la logica delle tab.
+   ===================================================================== */
+function renderDxPanel() {
+  const g = ORION.game;
+  const header = document.querySelector('.panel__header--dx');
+  const selectorHost = document.querySelector('[data-bind="dx-selector"]');
+  const content = document.querySelector('[data-bind="dx-content"]');
+  const title = header ? header.querySelector('.panel__title') : null;
+  if (!content) return;
+
+  if (!g) {
+    if (title) title.textContent = 'Plancia Operativa';
+    if (selectorHost) selectorHost.innerHTML = '';
+    content.innerHTML = '<p class="panel__note">Avvia una partita dal menu.</p>';
+    return;
+  }
+
+  const mine = myColonyKeys();
+  if (!mine.length) {
+    if (title) title.textContent = 'Plancia Operativa';
+    if (selectorHost) selectorHost.innerHTML = '';
+    content.innerHTML = '<p class="panel__note">Nessuna colonia operativa. Quando completi l\'Insediamento la colonia comparirà qui.</p>';
+    return;
+  }
+
+  const dxKey = resolveDxColonyKey();
+  if (!dxKey || !g.colonies[dxKey]) {
+    content.innerHTML = '<p class="panel__note">Nessuna colonia selezionabile.</p>';
+    return;
+  }
+
+  /* Renderizza il selector colonia. */
+  if (selectorHost) {
+    const opts = mine.map(function (k) {
+      const c = g.colonies[k];
+      const p = planetForColony(c);
+      const name = p ? p.name : ('Colonia ' + k);
+      const sysId = c.systemId;
+      const acr = regionAcronymFor(sysId);
+      const tag = acr ? ' [' + acr + ']' : '';
+      let stChip = '';
+      if (c.phase === 'settling') stChip = ' ⏳';
+      else if (c.colonizing) stChip = ' ◌';
+      else if (ORION.capital && ORION.capital.isCapital && ORION.capital.isCapital(g, k)) stChip = ' ★';
+      else if (c.isHomeBase) stChip = ' ★';
+      const sel = (k === dxKey) ? ' selected' : '';
+      return '<option value="' + escapeHtml(k) + '"' + sel + '>' + escapeHtml(name + tag + stChip) + '</option>';
+    }).join('');
+    const pinned = ORION.dxIsPinned;
+    selectorHost.innerHTML =
+      '<select class="dx-selector__select" data-action="dx-pick" aria-label="Colonia in focus">' + opts + '</select>' +
+      '<button class="dx-selector__pin' + (pinned ? ' is-pinned' : '') + '" data-action="dx-pin-toggle" type="button" ' +
+        'title="' + (pinned ? 'Pin attivo — la dx non segue la navigazione' : 'Pin disattivo — segue il pianeta navigato') + '">' +
+        (pinned ? '📌' : '⛓') +
+      '</button>';
+    const sel = selectorHost.querySelector('[data-action="dx-pick"]');
+    if (sel) sel.addEventListener('change', function () {
+      ORION.dxPinnedColonyKey = sel.value;
+      ORION.dxIsPinned = true;  /* cambio manuale = pin esplicito */
+      saveDxPin();
+      renderDxPanel();
+      renderLeftPanel();
+    });
+    const pinBtn = selectorHost.querySelector('[data-action="dx-pin-toggle"]');
+    if (pinBtn) pinBtn.addEventListener('click', function () {
+      ORION.dxIsPinned = !ORION.dxIsPinned;
+      if (ORION.dxIsPinned && !ORION.dxPinnedColonyKey) ORION.dxPinnedColonyKey = dxKey;
+      saveDxPin();
+      renderDxPanel();
+      renderLeftPanel();
+    });
+  }
+
+  /* Renderizza la scheda della colonia in focus.
+     Trucco: renderPlanetPanel() legge ORION.openPlanetKey / currentPlanet
+     hardcoded; swapiamo solo durante il render e li ripristiniamo,
+     così il centro (canvas) resta indipendente. */
+  const colony = g.colonies[dxKey];
+  const parts = dxKey.split(':');
+  const sysId = Number(parts[0]);
+  const bodyKey = parts[1];
+  let planet = null;
+  if (ORION._planetMemo[dxKey]) planet = ORION._planetMemo[dxKey];
+  else {
+    try {
+      const system = ORION.system.generate(g.galaxy, sysId);
+      planet = ORION.planet.generate(g.galaxy, system, bodyKey);
+      if (planet) ORION._planetMemo[dxKey] = planet;
+    } catch (_) { /* niente */ }
+  }
+  if (!planet) {
+    content.innerHTML = '<p class="panel__note">Errore: impossibile caricare la colonia.</p>';
+    return;
+  }
+
+  /* Tab dx separata (per non confondersi con quella del centro). */
+  if (!ORION.dxTab) ORION.dxTab = 'colonia';
+
+  const savedKey = ORION.openPlanetKey;
+  const savedPlanet = ORION.currentPlanet;
+  const savedTab = ORION.planetTab;
+  ORION.openPlanetKey = dxKey;
+  ORION.currentPlanet = planet;
+  ORION.planetTab = ORION.dxTab;
+  try {
+    if (title) {
+      title.innerHTML = 'Plancia · ' + escapeHtml(planet.name) + bodyTagHtml(sysId);
+    }
+    renderPlanetPanel(title || document.createElement('h2'), content);
+  } finally {
+    /* renderPlanetPanel ha re-bindato i listener di tab a un closure
+       che usa ORION.planetTab; salviamo prima di ripristinare. */
+    ORION.dxTab = ORION.planetTab;
+    ORION.openPlanetKey = savedKey;
+    ORION.currentPlanet = savedPlanet;
+    ORION.planetTab = savedTab;
+  }
+  /* I bottoni di tab dentro la dx-content cambiano ORION.planetTab e
+     richiamano renderPlanetPanel: dobbiamo intercettare e re-routare a
+     renderDxPanel. Sostituiamo i listener. */
+  content.querySelectorAll('[data-tab]').forEach(function (btn) {
+    const nb = btn.cloneNode(true);
+    btn.parentNode.replaceChild(nb, btn);
+    nb.addEventListener('click', function () {
+      ORION.dxTab = nb.dataset.tab;
+      renderDxPanel();
+    });
+  });
+
+  /* Tutti gli handler che agiscono sulla colonia (tryBuild, tryCancel,
+     tryDemolish, tryColonize, tryBuildShip/Crew, tryCancelShip/Crew,
+     governor toggle, capital declare, ecc.) leggono ORION.openPlanetKey
+     al CLICK. Per far sì che agiscano sulla colonia dx (anche se diversa
+     da quella navigata al centro), intercettiamo i bottoni rilevanti e
+     wrappiamo l'invocazione con uno swap temporaneo openPlanetKey↔dxKey.
+     Capture-phase per arrivare prima dei listener originali. */
+  function wrapDxAction(selector) {
+    content.querySelectorAll(selector).forEach(function (btn) {
+      btn.addEventListener('click', function (ev) {
+        if (btn._dxWrapped) return;
+        ev.stopImmediatePropagation();
+      }, true);
+    });
+  }
+  /* Approccio più solido: ri-installiamo i listener click su quei
+     bottoni come "in-scope" della dx key. Cloniamo per buttare via tutti
+     i listener esistenti, poi ricolleghiamo quelli noti, settando il
+     contesto dx prima di chiamare la funzione di gioco. */
+  function withDxScope(fn) {
+    return function (ev) {
+      const sk = ORION.openPlanetKey, sp = ORION.currentPlanet, st = ORION.planetTab;
+      ORION.openPlanetKey = dxKey;
+      ORION.currentPlanet = planet;
+      ORION.planetTab = ORION.dxTab;
+      try { fn.call(this, ev); }
+      finally {
+        ORION.dxTab = ORION.planetTab;
+        ORION.openPlanetKey = sk;
+        ORION.currentPlanet = sp;
+        ORION.planetTab = st;
+      }
+    };
+  }
+  function rebind(selector, action) {
+    content.querySelectorAll(selector).forEach(function (btn) {
+      const nb = btn.cloneNode(true);
+      btn.parentNode.replaceChild(nb, btn);
+      nb.addEventListener('click', withDxScope(function () {
+        action.call(this, nb);
+        /* Dopo l'azione, ridisegna la dx per riflettere lo stato. */
+        renderDxPanel();
+      }));
+    });
+  }
+  rebind('[data-build]',    function (b) { tryBuild(b.dataset.build); });
+  rebind('[data-cancel]',   function (b) { tryCancel(Number(b.dataset.cancel)); });
+  rebind('[data-demolish]', function (b) { tryDemolish(b.dataset.demolish); });
+  rebind('[data-action="colonize"]', function () { tryColonize(planet); });
+  rebind('[data-cancel-ship]', function (b) { tryCancelShip(Number(b.dataset.cancelShip)); });
+  rebind('[data-cancel-crew]', function (b) { tryCancelCrew(Number(b.dataset.cancelCrew)); });
+  rebind('[data-action="build-ship"]', function () { tryBuildShip(); });
+  rebind('[data-action="build-crew"]', function () { tryBuildCrew(); });
+  rebind('[data-action="capital-declare"]', function () {
+    /* Il bind originale di capital-declare contiene logica complessa
+       (confirm, pushChronicle); per riusarlo intero, lo richiamiamo dal
+       bindCapitalHandlers. Re-installiamo: */
+    bindCapitalHandlers(content, planet, colony);
+    /* Triggera click del nuovo bottone (è già stato sostituito sopra,
+       quindi questo è no-op se il flusso è completato — fallback). */
+  });
+  /* Governor toggle: rebind diretto. */
+  content.querySelectorAll('[data-action="gov-toggle"]').forEach(function (chk) {
+    const nb = chk.cloneNode(true);
+    chk.parentNode.replaceChild(nb, chk);
+    nb.addEventListener('change', withDxScope(function () {
+      if (!ORION.governor) return;
+      ORION.governor.setEnabled(colony, nb.checked);
+      if (nb.checked && ORION.tutorial) ORION.tutorial.fire('governor');
+      if (ORION.save && ORION.save.autosave && ORION.game) ORION.save.autosave(ORION.game);
+      renderDxPanel();
+    }));
+  });
+}
+
+/* =====================================================================
+   Decisione #50 — Action bar contestuale (centro, sopra/sotto la scena)
+   Mostra azioni rilevanti per ciò che stai guardando:
+     - pianeta libero colonizzabile → "Colonizza"
+     - pianeta AI                   → "Apri dossier" / disabili: Diplomazia/Spionaggio/Attacca
+     - mio pianeta                  → niente (la dx fa già il resto)
+     - sistema/galassia             → niente
+   ===================================================================== */
+function renderContextActionBar(ctx) {
+  const host = document.querySelector('[data-bind="action-bar"]');
+  if (!host) return;
+  const g = ORION.game;
+  if (!g) { host.hidden = true; host.innerHTML = ''; return; }
+
+  const buttons = [];
+  if (ctx && ctx.level === 'planet' && ORION.currentPlanet) {
+    const sysId = ctx.systemId;
+    const planet = ORION.currentPlanet;
+    const colKey = sysId + ':' + planet.bodyKey;
+    const colony = g.colonies[colKey];
+    const civ = (ORION.ai && ORION.ai.civForSystem) ? ORION.ai.civForSystem(g, sysId) : null;
+    const isMine = !!(colony && colony.colonized);
+    const isForeign = !!(civ && !isMine);
+    const isFree = !isMine && !isForeign;
+    const def = ORION.system && ORION.system.BODY_TYPES ? ORION.system.BODY_TYPES[planet.type] : null;
+    const habitable = !!(def && def.habitable);
+
+    if (isFree && habitable && !colony.colonizing && !colony.colonized) {
+      /* Bottone Colonizza prominente. Controllo costi/eccezione §6.2
+         replicato dalla scheda. */
+      const home = g.colonies[g.homePlanetKey];
+      const homeColonized = !!(home && home.colonized);
+      const homeInTrouble = !!(home && home._scar &&
+        (home._scar.food.state === 'crit' || home._scar.water.state === 'crit'));
+      const costMul = (homeColonized && !colony.isHomeBase && !homeInTrouble) ? 5 : 1;
+      const cost = planet.colCost;
+      const stockHome = homeColonized ? home.stock : { met: 0, en: 0, food: 0, water: 0 };
+      const canPay =
+        stockHome.met   >= cost.met   * costMul &&
+        stockHome.en    >= cost.en    * costMul &&
+        stockHome.water >= cost.water * costMul &&
+        stockHome.food  >= cost.food  * costMul;
+      const tooltip = canPay
+        ? 'Avvia spedizione coloniale (' + cost.impulsi + ' ' + iU() + ')'
+        : 'Risorse insufficienti sulla colonia base' + (costMul > 1 ? ' (×' + costMul + ' per produttiva)' : '');
+      buttons.push('<button class="actionbar__btn actionbar__btn--primary" data-action="ctx-colonize"' +
+        (canPay ? '' : ' disabled') + ' title="' + escapeHtml(tooltip) + '">🏗 Colonizza ' + escapeHtml(planet.name) + '</button>');
+    } else if (isForeign) {
+      buttons.push('<button class="actionbar__btn actionbar__btn--primary" data-action="ctx-civ-dossier" data-civ="' + escapeHtml(civ.id) + '">Apri dossier civiltà</button>');
+      buttons.push('<button class="actionbar__btn" disabled title="Richiede M11 Diplomazia">⚑ Proponi accordo (M11)</button>');
+      buttons.push('<button class="actionbar__btn" disabled title="Richiede M09 Fase B">⚔ Attacca (M09 Fase B)</button>');
+      buttons.push('<button class="actionbar__btn" disabled title="Richiede M19 Spionaggio">🕵 Pianifica spionaggio (M19)</button>');
+    }
+  }
+
+  if (!buttons.length) { host.hidden = true; host.innerHTML = ''; return; }
+  host.innerHTML = buttons.join('');
+  host.hidden = false;
+  /* Handlers */
+  const cBtn = host.querySelector('[data-action="ctx-colonize"]');
+  if (cBtn) cBtn.addEventListener('click', function () {
+    if (ORION.currentPlanet) tryColonize(ORION.currentPlanet);
+  });
+  const dBtn = host.querySelector('[data-action="ctx-civ-dossier"]');
+  if (dBtn) dBtn.addEventListener('click', function () { navigateView('civ'); });
+}
+
+/* =====================================================================
+   Decisione #50 — Foreign Planet overlay (Punto 3)
+   Quando il pianeta navigato appartiene a una civiltà AI: mostra una
+   scheda read-only sopra la sfera (viola/grigia) con info pubbliche +
+   stima impero + placeholder spionaggio. Niente azioni dirette (vivono
+   nell'action bar al centro).
+   ===================================================================== */
+function refreshForeignDeck() {
+  const root = document.querySelector('.galaxy-root');
+  if (!root) return;
+  /* Smonta sempre prima — se non più applicabile, rimane smontato. */
+  const existing = root.querySelector('.deck-foreign');
+  if (existing) existing.remove();
+  const g = ORION.game;
+  if (!g || !ORION.currentPlanet || !ORION.currentSystem) return;
+  const sysId = ORION.currentSystem.id;
+  const planet = ORION.currentPlanet;
+  const colKey = sysId + ':' + planet.bodyKey;
+  const colony = g.colonies[colKey];
+  if (colony && colony.colonized) return;  /* mio: nessun foreign deck */
+  if (!ORION.ai || !ORION.ai.civForSystem) return;
+  const civ = ORION.ai.civForSystem(g, sysId);
+  if (!civ) return;  /* pianeta libero: nessun foreign deck (action bar gestisce) */
+
+  /* Mostra solo se DETECTED o EXPLORED — nebbia di guerra (#11). */
+  const disc = g.state.discovery[sysId];
+  if (disc == null || disc < (ORION.galaxy.DISCOVERY.DETECTED)) return;
+
+  const ALIGN_LABEL = { bene: 'Bene', male: 'Male', neutrale: 'Neutrale' };
+  const seat = (g.galaxy.groups || []).find(function (gp) { return gp.id === civ.homeGroupId; }) || {};
+  const ptier = ORION.ai.powerTier ? ORION.ai.powerTier(civ.power || 0) : '—';
+  const known = ORION.ai.knownSystemsCount ? ORION.ai.knownSystemsCount(g, civ) : civ.systems.length;
+  const def = ORION.system.BODY_TYPES[planet.type];
+  const tier = (g.galaxy.groups || []).find(function (gp) { return gp.id === g.galaxy.systems[sysId].cluster; }) || {};
+  /* Stima a banda della struttura nemica — coarse (nebbia di guerra
+     per le strutture interne). */
+  const lo = Math.max(1, known);
+  const hi = Math.max(lo + 1, known * 2);
+
+  const html =
+    '<div class="deck-foreign colony-deck--foreign" style="--civ-color:' + escapeHtml(civ.color) + '">' +
+      '<div class="deck-foreign__head">' +
+        '<span class="deck-foreign__swatch" aria-hidden="true"></span>' +
+        '<span class="deck-foreign__name">' + escapeHtml(civ.name) + '</span>' +
+        '<span class="deck-foreign__chip">' + (ALIGN_LABEL[civ.alignment] || civ.alignment) + '</span>' +
+        '<span class="deck-foreign__chip">' + escapeHtml(civ.traitLabel || '—') + '</span>' +
+      '</div>' +
+      '<section class="deck-foreign__section">' +
+        '<h4>📡 Info pubbliche</h4>' +
+        '<div class="deck-foreign__row"><span class="deck-foreign__k">Tipo corpo</span><span class="deck-foreign__v">' + escapeHtml(def ? def.label : planet.type) + '</span></div>' +
+        '<div class="deck-foreign__row"><span class="deck-foreign__k">Regione</span><span class="deck-foreign__v">' + escapeHtml(tier.name || '—') + ' · ' + escapeHtml(tier.tierLabel || '—') + '</span></div>' +
+        '<div class="deck-foreign__row"><span class="deck-foreign__k">Proprietario</span><span class="deck-foreign__v">' + escapeHtml(civ.name) + '</span></div>' +
+      '</section>' +
+      '<section class="deck-foreign__section">' +
+        '<h4>📊 Stima impero</h4>' +
+        '<div class="deck-foreign__row"><span class="deck-foreign__k">Potenza percepita</span><span class="deck-foreign__v">' + escapeHtml(ptier) + '</span></div>' +
+        '<div class="deck-foreign__row"><span class="deck-foreign__k">Sistemi noti</span><span class="deck-foreign__v">' + known + '</span></div>' +
+        '<div class="deck-foreign__row"><span class="deck-foreign__k">Sede</span><span class="deck-foreign__v">' + escapeHtml(seat.name || '—') + '</span></div>' +
+        '<div class="deck-foreign__row"><span class="deck-foreign__k">Struttura stimata</span><span class="deck-foreign__v">tra ' + lo + ' e ' + hi + ' insediamenti</span></div>' +
+      '</section>' +
+      '<section class="deck-foreign__section">' +
+        '<h4>🕵 Intel dettagliato</h4>' +
+        '<div class="deck-foreign__placeholder">Spionaggio (M19) — richiede una missione di intel attiva su questo mondo.</div>' +
+      '</section>' +
+    '</div>';
+  root.insertAdjacentHTML('beforeend', html);
 }
 
 /* Suggerimento contestuale in fondo alla mappa. */
@@ -4627,6 +5334,8 @@ function enterGame() {
   if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
   /* Una tantum per ogni boot: rinomina i crew con ID legacy collidente. */
   migrateLegacyCrewIds(ORION.game);
+  /* Decisione #50: ripristina il pin della dx per questo seed (se presente). */
+  loadDxPin(ORION.game);
   hideMainMenu();
   const stage = document.querySelector('[data-view-stage]');
   if (stage) renderGalaxyView(stage);
@@ -4635,6 +5344,11 @@ function enterGame() {
   setHudDate(ORION.time.currentDS(ORION.game));
   renderTimeControls();        /* #31: ridisegna i 5 controlli per la partita */
   updateTimeControlsHint();
+  /* Decisione #50: prima render della Plancia d'Impero (sx) e della
+     Plancia Operativa (dx) — restaura la cronaca nel DOM nuovo. */
+  renderLeftPanel();
+  restoreChronicleDom(ORION.game);
+  renderDxPanel();
   /* M06.6: tutorial — la "?" diventa attiva solo dentro partita. */
   updateTutorialButton();
   /* Welcome: prima trigger della partita (solo se tutorial attivo e non già vista). */
@@ -4995,6 +5709,8 @@ function renderMainMenuInfo(body) {
 function boot() {
   /* M06: assorbe eventuale autosave M05 (chiavi legacy). Idempotente. */
   if (ORION.save && ORION.save.migrateLegacy) ORION.save.migrateLegacy();
+  /* Decisione #50: prefs UI persistite (cronaca collassata, sezioni sx). */
+  loadUiPrefs();
   /* Decisione #25: il boot non entra più direttamente in partita —
      si parte sempre dal main menu (Continua / Nuova / Carica / Info). */
   initNavigation();

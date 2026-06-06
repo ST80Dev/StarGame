@@ -44,7 +44,7 @@
   --gap:          12px;
   --radius:       8px;
   --radius-sm:    4px;
-  --panel-left-w: 220px;
+  --panel-left-w: 280px;
   --panel-right-w:400px;
   --hud-top-h:    64px;
   --hud-bottom-h: 130px;
@@ -142,14 +142,15 @@ button { font-family: inherit; }
 /* =====================================================================
    Shell — griglia generale
    ===================================================================== */
+/* Decisione #50: rimosso hud-bottom — cronaca migrata in sx come sezione
+   collassabile. La griglia ora è solo 2 righe (top + body). */
 .app-shell {
   display: grid;
   grid-template-columns: var(--panel-left-w) 1fr var(--panel-right-w);
-  grid-template-rows: var(--hud-top-h) 1fr var(--hud-bottom-h);
+  grid-template-rows: var(--hud-top-h) 1fr;
   grid-template-areas:
     "top   top   top"
-    "left  view  right"
-    "chron chron right";
+    "left  view  right";
   height: 100vh;
   height: 100dvh;
   padding: var(--gap);
@@ -159,10 +160,8 @@ button { font-family: inherit; }
 .hud-top { grid-area: top; }
 .hud-body { display: contents; }
 .panel--left { grid-area: left; }
-.viewport { grid-area: view; }
+.viewport { grid-area: view; position: relative; }
 .panel--right { grid-area: right; }
-.hud-bottom { display: contents; }
-.chronicle { grid-area: chron; }
 
 /* =====================================================================
    HUD superiore
@@ -675,8 +674,14 @@ button { font-family: inherit; }
   border-radius: 999px;
   backdrop-filter: blur(5px);
   z-index: 4;             /* sopra Plancia di Colonia (z=3) */
-  max-width: 90%;
-  overflow: hidden;
+  max-width: calc(100% - 28px);
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+.galaxy-breadcrumb .breadcrumb__type,
+.galaxy-breadcrumb .crumb,
+.galaxy-breadcrumb .crumb-chip {
+  white-space: nowrap;
 }
 /* M07.2 (decisione #44): wrapper presente solo a livello pianeta —
    raggruppa i crumb sinistri per separarli visivamente dal blocco info dx. */
@@ -3039,25 +3044,26 @@ select.main-menu__input { cursor: pointer; }
   inset: 0;
   z-index: 3;              /* sopra planet-canvas (z=2), sotto breadcrumb (z=4) */
   pointer-events: none;    /* il pan/zoom del canvas sotto resta utilizzabile */
-  padding: 64px 16px 36px; /* top maggiore per non incappare nella breadcrumb estesa */
+  padding: 56px 10px 18px; /* top maggiore per non incappare nella breadcrumb estesa */
   display: block;
   overflow: hidden;
 }
 .colony-deck[hidden] { display: none; }
 
-/* M07.2 polish (decisione #44): grid senza topbar — le info di intestazione
-   vivono nella breadcrumb estesa. Risorse sinistra più strette. */
+/* M07.2 iter 3 (decisione #44): 2 righe — top fascia "scena" (risorse +
+   coda con la sfera al centro), bottom 3 colonne pop|strutture|cronaca.
+   La sfera al centro respira di più; cronaca allargata, popolazione
+   compatta verticale a sinistra. */
 .deck-grid {
   display: grid;
-  grid-template-columns: 180px 1fr 260px;
-  grid-template-rows: 1fr auto auto;
+  grid-template-columns: 132px 1fr 252px;
+  grid-template-rows: 1fr auto;
   grid-template-areas:
     "resources .          queue"
-    "structs   structs    structs"
-    "pop       pop        footer";
-  gap: 10px;
+    "pop       structs    footer";
+  gap: 6px;
   height: 100%;
-  max-width: 1400px;
+  max-width: 1500px;
   margin: 0 auto;
 }
 
@@ -3159,11 +3165,11 @@ select.main-menu__input { cursor: pointer; }
   grid-area: resources;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   align-self: start;
 }
 .deck-res {
-  padding: 5px 8px;
+  padding: 4px 7px;
   background: rgba(14, 20, 44, 0.75);
   border: 1px solid var(--c-border-soft);
   border-left: 3px solid var(--c-border);
@@ -3188,7 +3194,7 @@ select.main-menu__input { cursor: pointer; }
 }
 .deck-res__value {
   font-family: var(--font-data, inherit);
-  font-size: 1.05rem;
+  font-size: 0.96rem;
   font-weight: 600;
   color: var(--c-text);
   line-height: 1.1;
@@ -3210,35 +3216,52 @@ select.main-menu__input { cursor: pointer; }
   box-shadow: inset 0 0 0 1px rgba(255, 92, 108, 0.28);
 }
 
-/* ---- Strutture costruite (riga centrale ampia) ------------------ */
+/* ---- Strutture costruite (centro riga inferiore) ----------------
+   M07.2 iter 3: card compatte con info verticale (glifo+nome top,
+   livello+costo+expand bottom). Etichette abbreviate via SHORT_LABEL
+   in colony-deck.js. */
 .deck-structures {
   grid-area: structs;
-  padding: 10px 12px;
+  padding: 6px 8px;
   background: rgba(14, 20, 44, 0.72);
   border: 1px solid var(--c-border-soft);
   border-radius: var(--radius);
   backdrop-filter: blur(6px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 .deck-struct-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 4px;
 }
 .deck-struct {
   position: relative;
-  display: grid;
-  grid-template-columns: 22px 1fr auto;
-  align-items: center;
-  column-gap: 8px;
-  padding: 5px 6px 5px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 18px 5px 5px;
   background: rgba(8, 12, 30, 0.55);
   border: 1px solid var(--c-border-soft);
   border-left: 3px solid var(--c-border);
   border-radius: var(--radius-sm);
-  min-height: 40px;
+  min-height: 64px;
+}
+.deck-struct__top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.deck-struct__bot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
 }
 .deck-struct.is-busy { opacity: 0.92; }
 .deck-cat--estrattiva { border-left-color: var(--c-accent-warm); }
@@ -3250,10 +3273,10 @@ select.main-menu__input { cursor: pointer; }
 
 .deck-struct__info {
   position: absolute;
-  top: 2px;
+  top: 3px;
   left: 4px;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -3271,36 +3294,32 @@ select.main-menu__input { cursor: pointer; }
   color: var(--c-text);
 }
 .deck-struct__glyph {
-  font-size: 1.05rem;
+  font-size: 0.98rem;
   color: var(--c-text);
   text-align: center;
-}
-.deck-struct__main {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex: 0 0 14px;
 }
 .deck-struct__name {
-  font-size: 0.82rem;
+  flex: 1;
+  font-size: 0.76rem;
   color: var(--c-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.15;
+  line-height: 1.1;
 }
 .deck-struct__lvl {
   color: var(--c-accent);
   font-family: var(--font-data, inherit);
-  font-size: 0.74rem;
-  margin-left: 2px;
+  font-size: 0.72rem;
+  flex: 0 0 auto;
 }
 .deck-struct__pips {
   display: inline-flex;
-  gap: 3px;
+  gap: 2px;
 }
 .deck-pip {
-  width: 7px;
+  width: 5px;
   height: 3px;
   background: rgba(120, 160, 255, 0.18);
   border-radius: 1px;
@@ -3311,8 +3330,8 @@ select.main-menu__input { cursor: pointer; }
 .deck-struct__expand {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 6px;
+  gap: 3px;
+  padding: 2px 5px;
   background: rgba(47, 230, 224, 0.12);
   border: 1px solid var(--c-accent-dim);
   border-radius: var(--radius-sm);
@@ -3320,20 +3339,22 @@ select.main-menu__input { cursor: pointer; }
   cursor: pointer;
   font-family: var(--font-data, inherit);
   white-space: nowrap;
+  flex: 1;
+  justify-content: center;
 }
 .deck-struct__expand:hover:not(.is-locked):not([disabled]) {
   background: rgba(47, 230, 224, 0.22);
   border-color: var(--c-accent);
 }
 .deck-struct__expand-plus {
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   font-weight: 600;
   line-height: 1;
 }
 .deck-struct__expand-cost {
   display: inline-flex;
-  gap: 4px;
-  font-size: 0.62rem;
+  gap: 3px;
+  font-size: 0.6rem;
   color: var(--c-text-soft);
   flex-wrap: nowrap;
 }
@@ -3377,7 +3398,7 @@ select.main-menu__input { cursor: pointer; }
 /* ---- Coda (colonna destra) ------------------------------------- */
 .deck-queue {
   grid-area: queue;
-  padding: 10px 12px;
+  padding: 6px 10px;
   background: rgba(14, 20, 44, 0.75);
   border: 1px solid var(--c-border-soft);
   border-radius: var(--radius);
@@ -3451,29 +3472,84 @@ select.main-menu__input { cursor: pointer; }
   border-color: var(--c-bad);
 }
 
-/* ---- Popolazione ----------------------------------------------- */
+/* ---- Popolazione (colonna SX, verticale compatta) ---------------
+   M07.2 iter 3: layout verticale per colonna stretta — label sopra,
+   numero grande, barra full-width, % sotto, chip classi a wrap. */
 .deck-population {
   grid-area: pop;
-  padding: 8px 12px;
+  padding: 6px 10px 8px;
   background: rgba(14, 20, 44, 0.72);
   border: 1px solid var(--c-border-soft);
   border-radius: var(--radius);
   backdrop-filter: blur(6px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-self: start;
+}
+.deck-pop__total {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 2px;
+}
+.deck-pop__total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+}
+.deck-pop__total-label {
+  font-family: var(--font-display, inherit);
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--c-text-soft);
+}
+.deck-pop__total-num {
+  font-family: var(--font-data, inherit);
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--c-text);
+  white-space: nowrap;
+}
+.deck-pop__total-num .sep { color: var(--c-text-faint); margin: 0 3px; }
+.deck-pop__total-num .cap { color: var(--c-text-soft); font-weight: 500; font-size: 0.8rem; }
+.deck-pop__total-pct {
+  font-family: var(--font-data, inherit);
+  font-size: 0.74rem;
+  color: var(--c-accent);
+  font-weight: 600;
+}
+.deck-pop__bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(120, 160, 255, 0.12);
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--c-border-soft);
+}
+.deck-pop__bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--c-accent) 0%, var(--c-accent-warm) 100%);
+  transition: width 0.4s ease;
 }
 .deck-pop__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 3px;
+  margin-top: 2px;
 }
 .deck-pop__chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 9px;
+  justify-content: space-between;
+  gap: 3px;
+  padding: 2px 6px;
   border-radius: 999px;
   background: rgba(120, 160, 255, 0.08);
   border: 1px solid var(--c-border-soft);
-  font-size: 0.74rem;
+  font-size: 0.66rem;
   font-family: var(--font-data, inherit);
 }
 .deck-pop__chip-label {
@@ -3492,38 +3568,54 @@ select.main-menu__input { cursor: pointer; }
 .deck-pop__chip.class--mercanti    { border-color: rgba(255, 202, 85, 0.4); }
 .deck-pop__chip.class--tecnici     { border-color: rgba(47, 230, 224, 0.4); }
 
-/* ---- Footer cronaca ------------------------------------------- */
+/* ---- Footer cronaca (colonna DX, scrollabile) ------------------
+   M07.2 iter 3: allargata e scrollabile, testi su più righe. */
 .deck-footer {
   grid-area: footer;
-  padding: 6px 12px;
+  padding: 6px 10px 6px;
   background: rgba(14, 20, 44, 0.72);
   border: 1px solid var(--c-border-soft);
   border-radius: var(--radius);
   backdrop-filter: blur(6px);
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
 }
 .deck-footer-log {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 2px 0 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  font-size: 0.78rem;
+  gap: 5px;
+  font-size: 0.76rem;
+  line-height: 1.4;
   color: var(--c-text-soft);
+  overflow-y: auto;
+  flex: 1;
 }
 .deck-footer-log li {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-wrap: break-word;
+  padding-left: 8px;
+  position: relative;
+}
+.deck-footer-log li::before {
+  content: "›";
+  position: absolute;
+  left: 0;
+  color: var(--c-accent);
 }
 .deck-footer-log li strong { color: var(--c-text); }
 
 /* ---- Responsive (decisione #6: ≥768px) ------------------------- */
 @media (max-width: 1199px) {
   .deck-grid {
-    grid-template-columns: 160px 1fr 220px;
+    grid-template-columns: 118px 1fr 216px;
   }
-  .deck-res__value { font-size: 0.98rem; }
+  .deck-res__value { font-size: 0.9rem; }
 }
 @media (max-width: 900px) {
   .colony-deck { padding: 56px 8px 24px; }
@@ -3951,3 +4043,365 @@ select.main-menu__input { cursor: pointer; }
   color: #f0a6b4; font-size: 0.86rem;
 }
 .war-siege--ai { border-left-color: #8a6cff; background: rgba(138, 108, 255, 0.10); }
+/* =====================================================================
+   Decisione #50 — Refactor sidebar architecture
+   Sx = launcher (Roster + Nav + Diplomazia/Ricerca/Mercato + Cronaca)
+   Dx = Plancia Operativa con selector colonia pinnata, indipendente dalla nav
+   Centro = scena + action bar contestuale (Colonizza / Apri dossier / ...)
+   ===================================================================== */
+
+.panel__content--launcher {
+  padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 10px;
+  min-height: 0;
+}
+
+/* --- Sezione generica del launcher --- */
+.lp-section { display: flex; flex-direction: column; min-height: 0; }
+.lp-section__head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 6px 6px 2px;
+  font-family: var(--font-display);
+  font-size: 0.82rem; letter-spacing: 0.1em; text-transform: uppercase;
+  font-weight: 600;
+  color: var(--c-text);
+  cursor: pointer; user-select: none;
+  border-bottom: 1px solid var(--c-border);
+  margin-bottom: 6px;
+}
+.lp-section__head:hover { color: var(--c-accent); }
+.lp-section__caret { color: var(--c-text-soft); font-size: 0.72rem; width: 10px; }
+.lp-section__title { flex: 1; display: inline-flex; align-items: center; gap: 7px; }
+/* Glyph colorato per sezione — stile analogo a .res-icon (decisione #28).
+   Ogni sezione ha la sua tinta tematica per scansione rapida. */
+.lp-section__glyph {
+  display: inline-block;
+  font-size: 0.95rem;
+  line-height: 1;
+  font-variant-emoji: text;
+}
+.lp-section__glyph--roster { color: #f0a868; text-shadow: 0 0 6px rgba(240,168,104,0.45); }
+.lp-section__glyph--nav    { color: var(--c-accent); text-shadow: 0 0 6px rgba(47,230,224,0.45); }
+.lp-section__glyph--launch { color: #b89cff; text-shadow: 0 0 6px rgba(184,156,255,0.45); }
+.lp-section__glyph--chron  { color: #cbd2e4; text-shadow: 0 0 5px rgba(203,210,228,0.4); }
+.lp-section__text { font-weight: 600; }
+.lp-section__count {
+  font-family: var(--font-data);
+  color: var(--c-text-soft);
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 0.78rem;
+  padding: 1px 7px;
+  background: rgba(120,160,255,0.10);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 10px;
+}
+.lp-section__body { display: flex; flex-direction: column; gap: 3px; min-height: 0; }
+.lp-section.is-collapsed .lp-section__body { display: none; }
+.lp-section.is-collapsed .lp-section__caret::before { content: '▸'; }
+.lp-section:not(.is-collapsed) .lp-section__caret::before { content: '▾'; }
+
+/* Roster cronaca scrollabile */
+.lp-section--chron { flex: 1 1 auto; min-height: 120px; }
+.lp-section--chron .lp-section__body {
+  max-height: 260px;
+  overflow-y: auto;
+  font-size: 0.84rem; line-height: 1.5;
+  padding: 6px 4px;
+  background: rgba(8,12,30,0.4);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+}
+.lp-section--chron.is-collapsed .lp-section__body { display: none; }
+.lp-section--chron .chronicle__log {
+  display: flex; flex-direction: column; gap: 5px;
+  margin: 0; padding: 0 4px;
+  list-style: none;
+}
+.lp-section--chron .chronicle__entry {
+  padding-left: 12px; position: relative;
+  color: var(--c-text-soft);
+  white-space: normal;
+  word-wrap: break-word;
+}
+.lp-section--chron .chronicle__entry::before {
+  content: "›"; position: absolute; left: 0; color: var(--c-accent);
+}
+.lp-section--chron .chronicle__entry--system { color: var(--c-text-faint); font-style: italic; }
+.lp-section--chron .chronicle__entry--explore { color: var(--c-text); }
+.lp-section--chron .chronicle__entry--explore::before { color: var(--c-accent-warm); }
+.lp-section--chron .chronicle__entry--civ { color: var(--c-text); }
+.lp-section--chron .chronicle__entry--civ::before { color: #9d7bff; }
+
+/* --- Item del roster (colonia/flotta) --- */
+.lp-item {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%;
+  padding: 7px 10px;
+  background: rgba(8,12,30,0.5);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.88rem;
+  color: var(--c-text);
+  transition: var(--transition);
+}
+.lp-item:hover {
+  background: rgba(47,230,224,0.08);
+  border-color: var(--c-accent-dim);
+}
+.lp-item.is-focus {
+  border-color: var(--c-accent);
+  box-shadow: inset 2px 0 0 var(--c-accent);
+}
+/* Glifo item con colore tematico (es. colonia=ambra, flotta=ciano).
+   Riusa il pattern .res-icon con text-shadow per coerenza visiva. */
+.lp-item__glyph {
+  width: 16px;
+  text-align: center;
+  font-size: 1rem;
+  color: #f0a868;
+  text-shadow: 0 0 5px rgba(240,168,104,0.45);
+  line-height: 1;
+}
+.lp-item--fleet .lp-item__glyph {
+  color: var(--c-accent);
+  text-shadow: 0 0 5px rgba(47,230,224,0.45);
+}
+.lp-item__name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-item__name strong { font-weight: 600; color: var(--c-text); }
+.lp-item__sub {
+  font-size: 0.76rem;
+  color: var(--c-text-soft);
+  margin-left: 4px;
+}
+.lp-item__badges { display: flex; gap: 3px; }
+.lp-item__badge {
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 9px;
+  background: rgba(255,255,255,0.06);
+  color: var(--c-text-soft);
+}
+.lp-item__badge--ok   { background: rgba(95,200,140,0.18); color: #6fe0b8; }
+.lp-item__badge--warn { background: rgba(240,210,100,0.18); color: #f0d670; }
+.lp-item__badge--crit { background: rgba(240,130,150,0.20); color: #f08296; }
+.lp-item__badge--info { background: rgba(120,180,240,0.18); color: #80c8e6; }
+
+.lp-empty {
+  font-size: 0.82rem;
+  color: var(--c-text-soft);
+  font-style: italic;
+  padding: 4px 6px;
+}
+
+/* --- Nav compatta (Galassia/Gruppo/Sistema/Pianeta) --- */
+.lp-nav { display: flex; flex-direction: column; gap: 4px; }
+.lp-nav .nav-item {
+  padding: 7px 11px;
+  font-size: 0.88rem;
+}
+/* Glifo nav colorato per livello (Galassia/Gruppo=accent, Sistema=warm, Pianeta=violet). */
+.lp-nav .nav-item__glyph {
+  font-size: 1rem;
+  text-shadow: 0 0 5px currentColor;
+  opacity: 0.85;
+}
+.lp-nav .nav-item[data-view="galaxy"] .nav-item__glyph { color: var(--c-accent); }
+.lp-nav .nav-item[data-view="group"]  .nav-item__glyph { color: #b89cff; }
+.lp-nav .nav-item[data-view="system"] .nav-item__glyph { color: #f0a868; }
+.lp-nav .nav-item[data-view="planet"] .nav-item__glyph { color: #80c8e6; }
+
+/* --- Launcher buttons (Diplomazia / Ricerca / Mercato) --- */
+.lp-launcher { display: flex; flex-direction: column; gap: 5px; }
+.lp-launcher__btn {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%;
+  padding: 9px 11px;
+  background: rgba(8,12,30,0.5);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.9rem;
+  color: var(--c-text);
+  transition: var(--transition);
+}
+.lp-launcher__btn:hover {
+  background: rgba(47,230,224,0.08);
+  border-color: var(--c-accent-dim);
+}
+.lp-launcher__btn.is-active {
+  border-color: var(--c-accent);
+  box-shadow: inset 2px 0 0 var(--c-accent);
+}
+.lp-launcher__btn[disabled] { opacity: 0.6; cursor: default; }
+/* Glyph del launcher con tinte tematiche (palette coerente con .res-icon). */
+.lp-launcher__glyph {
+  width: 16px; text-align: center;
+  font-size: 1rem; line-height: 1;
+  text-shadow: 0 0 5px currentColor;
+  opacity: 0.9;
+}
+.lp-launcher__btn[data-view="fleet"]    .lp-launcher__glyph { color: var(--c-accent); }
+.lp-launcher__btn[data-view="civ"]      .lp-launcher__glyph { color: #f08296; }
+.lp-launcher__btn[data-view="research"] .lp-launcher__glyph { color: #b89cff; }
+.lp-launcher__btn[data-view="market"]   .lp-launcher__glyph { color: #9fd0a8; }
+.lp-launcher__sub {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--c-text-soft);
+  font-family: var(--font-data);
+}
+
+/* =====================================================================
+   Plancia Operativa (dx) — selector colonia pinnata
+   ===================================================================== */
+.panel__header--dx {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.dx-selector { display: flex; gap: 6px; align-items: center; }
+.dx-selector__select {
+  flex: 1;
+  background: rgba(8,12,30,0.65);
+  border: 1px solid var(--c-border);
+  color: var(--c-text);
+  padding: 5px 8px;
+  font-size: 0.82rem;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  cursor: pointer;
+}
+.dx-selector__select:focus {
+  outline: none; border-color: var(--c-accent);
+}
+.dx-selector__pin {
+  font-size: 0.7rem;
+  color: var(--c-text-faint);
+  padding: 2px 5px;
+  border: 1px solid var(--c-border-soft);
+  border-radius: 8px;
+  background: rgba(8,12,30,0.5);
+  cursor: pointer;
+}
+.dx-selector__pin.is-pinned {
+  color: var(--c-amber);
+  border-color: rgba(255,174,92,0.4);
+}
+
+/* =====================================================================
+   Action bar contestuale (centro, sotto la scena)
+   ===================================================================== */
+.viewport__actionbar {
+  position: absolute;
+  bottom: 12px; left: 12px; right: 12px;
+  display: flex; gap: 8px; flex-wrap: wrap;
+  padding: 8px 10px;
+  background: rgba(8,12,30,0.78);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  backdrop-filter: blur(6px);
+  z-index: 5;
+  box-shadow: var(--shadow-panel);
+}
+.viewport__actionbar[hidden] { display: none; }
+.actionbar__btn {
+  font-family: inherit;
+  font-size: 0.82rem;
+  padding: 6px 12px;
+  background: rgba(8,12,30,0.7);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.actionbar__btn:hover:not([disabled]) {
+  background: rgba(47,230,224,0.12);
+  border-color: var(--c-accent);
+}
+.actionbar__btn[disabled] {
+  opacity: 0.45; cursor: not-allowed;
+}
+.actionbar__btn--primary {
+  background: rgba(47,230,224,0.18);
+  border-color: var(--c-accent);
+  color: var(--c-text);
+  font-weight: 600;
+}
+.actionbar__btn--primary:hover:not([disabled]) {
+  background: rgba(47,230,224,0.28);
+  box-shadow: 0 0 12px rgba(47,230,224,0.4);
+}
+
+/* =====================================================================
+   Plancia AI (decisione #50, Punto 3) — read-only viola/grigia
+   ===================================================================== */
+.colony-deck--foreign .deck-grid,
+.colony-deck--foreign .deck-resources,
+.colony-deck--foreign .deck-structures,
+.colony-deck--foreign .deck-queue,
+.colony-deck--foreign .deck-population,
+.colony-deck--foreign .deck-footer {
+  filter: grayscale(0.4) hue-rotate(225deg);
+  opacity: 0.85;
+}
+.deck-foreign {
+  position: absolute;
+  inset: 56px 12px 80px 12px;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 14px 16px;
+  background: rgba(20, 14, 36, 0.78);
+  border: 1px solid rgba(157, 123, 255, 0.35);
+  border-radius: var(--radius);
+  backdrop-filter: blur(5px);
+  pointer-events: auto;
+  overflow-y: auto;
+  color: var(--c-text);
+  z-index: 3;
+}
+.deck-foreign__head {
+  display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid rgba(157,123,255,0.25);
+  padding-bottom: 8px;
+}
+.deck-foreign__swatch {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--civ-color, #9d7bff);
+  box-shadow: 0 0 8px var(--civ-color, #9d7bff);
+}
+.deck-foreign__name {
+  font-family: var(--font-display);
+  font-size: 1.0rem;
+  letter-spacing: 0.08em;
+}
+.deck-foreign__chip {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(157,123,255,0.15);
+  color: #c8b7ff;
+}
+.deck-foreign__section {
+  display: flex; flex-direction: column; gap: 6px;
+  padding-top: 6px;
+}
+.deck-foreign__section h4 {
+  margin: 0; font-size: 0.72rem; letter-spacing: 0.14em;
+  text-transform: uppercase; color: #c8b7ff;
+  font-family: var(--font-display);
+}
+.deck-foreign__row {
+  display: flex; gap: 10px; font-size: 0.84rem;
+}
+.deck-foreign__k { color: var(--c-text-faint); min-width: 110px; }
+.deck-foreign__v { color: var(--c-text); }
+.deck-foreign__placeholder {
+  padding: 10px;
+  background: rgba(255,255,255,0.03);
+  border: 1px dashed rgba(157,123,255,0.3);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem; color: var(--c-text-faint); font-style: italic;
+}

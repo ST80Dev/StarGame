@@ -115,41 +115,19 @@
       </div>
     </div>
 
-    <!-- ---- Corpo principale a tre colonne ---- -->
+    <!-- ---- Corpo principale a tre colonne ----
+         Decisione #50: sx = launcher (roster colonie/flotte + navigazione + cronaca),
+         centro = scena + azioni contestuali, dx = Plancia Operativa di UNA colonia mia
+         indipendente dalla navigazione (selector in testa). -->
     <main class="hud-body">
 
-      <!-- Pannello sinistro: navigazione / sistemi -->
-      <aside class="panel panel--left" aria-label="Navigazione">
+      <!-- Pannello sinistro: Plancia d'Impero (roster + nav + launcher + cronaca) -->
+      <aside class="panel panel--left" aria-label="Plancia d'Impero">
         <div class="panel__header">
-          <h2 class="panel__title">Navigazione</h2>
+          <h2 class="panel__title">Plancia d'Impero</h2>
         </div>
-        <div class="panel__content">
-          <nav class="nav-list">
-            <button class="nav-item is-active" data-view="galaxy" type="button" title="Galassia">
-              <span class="nav-item__glyph" aria-hidden="true">✦</span> <span class="nav-item__label">Galassia</span>
-            </button>
-            <button class="nav-item" data-view="group" type="button" title="Gruppo stellare">
-              <span class="nav-item__glyph" aria-hidden="true">❋</span> <span class="nav-item__label">Gruppo</span>
-            </button>
-            <button class="nav-item" data-view="system" type="button" title="Sistema">
-              <span class="nav-item__glyph" aria-hidden="true">◉</span> <span class="nav-item__label">Sistema</span>
-            </button>
-            <button class="nav-item" data-view="planet" type="button" title="Pianeta">
-              <span class="nav-item__glyph" aria-hidden="true">○</span> <span class="nav-item__label">Pianeta</span>
-            </button>
-            <button class="nav-item" data-view="fleet" type="button" title="Flotta">
-              <span class="nav-item__glyph" aria-hidden="true">▸</span> <span class="nav-item__label">Flotta</span>
-            </button>
-            <button class="nav-item" data-view="civ" type="button" title="Civiltà">
-              <span class="nav-item__glyph" aria-hidden="true">⬡</span> <span class="nav-item__label">Civiltà</span>
-            </button>
-            <button class="nav-item" data-view="research" type="button" title="Ricerca">
-              <span class="nav-item__glyph" aria-hidden="true">⌬</span> <span class="nav-item__label">Ricerca</span>
-            </button>
-            <button class="nav-item" data-view="diplomacy" type="button" title="Diplomazia">
-              <span class="nav-item__glyph" aria-hidden="true">⚑</span> <span class="nav-item__label">Diplomazia</span>
-            </button>
-          </nav>
+        <div class="panel__content panel__content--launcher" data-bind="left-panel">
+          <!-- Popolato da renderLeftPanel() in main.js (decisione #50). -->
         </div>
       </aside>
 
@@ -162,46 +140,24 @@
             <p class="viewport__hint">La mappa galattica verrà generata all'avvio della partita.</p>
           </div>
         </div>
+        <!-- Action bar contestuale (decisione #50): bottoni "Colonizza" /
+             "Apri dossier" / "Proponi accordo" / ... appaiono qui in base
+             a cosa stai guardando al centro. Popolata da renderContextActionBar(). -->
+        <div class="viewport__actionbar" data-bind="action-bar" hidden></div>
       </section>
 
-      <!-- Pannello destro: dettagli / Consiglio della Civiltà -->
-      <aside class="panel panel--right" aria-label="Dettagli">
-        <div class="panel__header">
-          <h2 class="panel__title">Consiglio</h2>
+      <!-- Pannello destro: Plancia Operativa — colonia MIA in focus
+           (indipendente dalla navigazione, decisione #50). -->
+      <aside class="panel panel--right" aria-label="Plancia operativa della colonia in focus">
+        <div class="panel__header panel__header--dx">
+          <h2 class="panel__title">Plancia Operativa</h2>
+          <div class="dx-selector" data-bind="dx-selector"></div>
         </div>
-        <div class="panel__content">
-          <div class="council">
-            <div class="council__member">
-              <span class="council__role">Militare</span>
-              <span class="council__status">In attesa</span>
-            </div>
-            <div class="council__member">
-              <span class="council__role">Economico</span>
-              <span class="council__status">In attesa</span>
-            </div>
-            <div class="council__member">
-              <span class="council__role">Scientifico</span>
-              <span class="council__status">In attesa</span>
-            </div>
-          </div>
-          <p class="panel__note">I dettagli contestuali appariranno qui in base alla selezione.</p>
+        <div class="panel__content" data-bind="dx-content">
+          <p class="panel__note">Nessuna colonia operativa. Inizia una partita dal menu.</p>
         </div>
       </aside>
     </main>
-
-    <!-- ---- HUD inferiore: cronaca galattica (time control è ora nell'header) ---- -->
-    <footer class="hud-bottom" role="contentinfo">
-      <section class="chronicle" aria-label="Cronaca galattica">
-        <div class="panel__header panel__header--inline">
-          <h2 class="panel__title">Cronaca Galattica</h2>
-        </div>
-        <ul class="chronicle__log" data-bind="chronicle">
-          <li class="chronicle__entry chronicle__entry--system">
-            Sistema inizializzato. In attesa della prima partita.
-          </li>
-        </ul>
-      </section>
-    </footer>
   </div>
 
   <!-- Moduli di gioco (vanilla JS, ordine di dipendenza) -->

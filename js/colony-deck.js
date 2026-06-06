@@ -40,6 +40,30 @@
     operai: 'Operai', scienziati: 'Scienziati', militari: 'Militari',
     mercanti: 'Mercanti', tecnici: 'Tecnici'
   };
+  /* Label abbreviate per le card strutture compatte (M07.2 iter 3,
+     UI_GUIDE §4 — sigla solo dove l'utente esperto basta + tooltip
+     parola piena al hover sul title della <li>). */
+  const SHORT_LABEL = {
+    'miniera': 'Miniera',
+    'centrale-solare': 'Centrale',
+    'impianto-idrico': 'Imp. idr.',
+    'fattoria': 'Fattoria',
+    'fonderia': 'Fonderia',
+    'raffineria': 'Raffineria',
+    'laboratorio': 'Laborat.',
+    'osservatorio': 'Osservat.',
+    'cantiere-navale': 'Hangar',
+    'accademia-militare': 'Accademia',
+    'batteria-difesa': 'Batteria',
+    'scudo-planetario': 'Scudo',
+    'centro-abitativo': 'Abitativo',
+    'ospedale': 'Ospedale',
+    'mercato': 'Mercato',
+    'impianto-riciclo': 'Riciclo',
+    'impianto-esotico': 'Imp. esot.',
+    'centro-ingegneria-planetaria': 'Ingegn.',
+    'terraformatori': 'Terraf.'
+  };
 
   function escapeHtml(s) {
     return String(s == null ? '' : s)
@@ -167,11 +191,19 @@
       const out = ORION.planet.structureOutput(colony, planet, ORION.game);
       const scar = colony._scar;
       const keys = ['met', 'en', 'food', 'water'];
+      /* Decisione #45: pop drena cibo/acqua dallo stock. Il saldo visualizzato
+         deve includere il drenaggio, altrimenti vedi "+4 / Ι" ma lo stock cala. */
+      const CFG = ORION.time && ORION.time.CFG;
+      const popTotal = (colony.pop && colony.pop.total) || 0;
+      const opPhase = colony.phase !== 'settling';
+      const popFood  = (opPhase && CFG && popTotal > 0) ? popTotal * CFG.POP_FOOD_PER_UNIT  : 0;
+      const popWater = (opPhase && CFG && popTotal > 0) ? popTotal * CFG.POP_WATER_PER_UNIT : 0;
 
       let html = '<aside class="deck-resources" aria-label="Risorse della colonia">';
       keys.forEach(function (k) {
         const stock = colony.stock[k] || 0;
-        const net = (out.rates[k] || 0) - (out.upkeep[k] || 0);
+        const popDrain = k === 'food' ? popFood : k === 'water' ? popWater : 0;
+        const net = (out.rates[k] || 0) - (out.upkeep[k] || 0) - popDrain;
         const state = scar && scar[k] ? scar[k].state : 'ok';
         const stateCls = state === 'crit' ? ' is-crit' : state === 'low' ? ' is-low' : '';
         const stateLabel = state === 'crit' ? 'critica' : state === 'low' ? 'allerta' : 'ok';
@@ -261,17 +293,19 @@
             '</button>';
         }
 
+        const shortName = SHORT_LABEL[id] || def.name;
         html +=
-          '<li class="deck-struct' + catCls + (inQueue ? ' is-busy' : '') + '">' +
+          '<li class="deck-struct' + catCls + (inQueue ? ' is-busy' : '') + '" title="' + escapeHtml(def.name) + '">' +
             '<button type="button" class="deck-struct__info" data-deck-action="info" data-id="' + id + '" title="Cosa fa, bonus, concatenazioni">ⓘ</button>' +
-            '<span class="deck-struct__glyph">' + def.glyph + '</span>' +
-            '<div class="deck-struct__main">' +
-              '<div class="deck-struct__name">' + escapeHtml(def.name) +
-                ' <span class="deck-struct__lvl">×' + lvl + '</span>' +
-              '</div>' +
-              '<div class="deck-struct__pips">' + pips + '</div>' +
+            '<div class="deck-struct__top">' +
+              '<span class="deck-struct__glyph">' + def.glyph + '</span>' +
+              '<span class="deck-struct__name">' + escapeHtml(shortName) + '</span>' +
+              '<span class="deck-struct__lvl">×' + lvl + '</span>' +
             '</div>' +
-            action +
+            '<div class="deck-struct__bot">' +
+              '<span class="deck-struct__pips">' + pips + '</span>' +
+              action +
+            '</div>' +
           '</li>';
       });
       html += '</ul></section>';
@@ -344,15 +378,24 @@
       });
       chips += '</div>';
 
-      return '<section class="deck-population" aria-label="Popolazione">' +
-        '<header class="deck-section__head">' +
-          '<span class="deck-section__title">Popolazione</span>' +
-          '<span class="deck-section__sub">' +
-            ORION.planet.formatPeople(peopleNow) +
-            ' / ' + ORION.planet.formatPeople(peopleCap) +
-            ' (' + pctCap + '%)' +
+      /* Layout verticale per colonna stretta (M07.2 iter 3):
+         label · numero+cap · barra full-width · % unit-based. */
+      const totalHtml =
+        '<div class="deck-pop__total" title="Popolazione totale / capacità · ' + pctCap + '% (unità)">' +
+          '<div class="deck-pop__total-row">' +
+            '<span class="deck-pop__total-label">Popolazione</span>' +
+            '<span class="deck-pop__total-pct">' + pctCap + '%</span>' +
+          '</div>' +
+          '<span class="deck-pop__total-num">' +
+            escapeHtml(ORION.planet.formatPeople(peopleNow)) +
+            '<span class="sep">/</span>' +
+            '<span class="cap">' + escapeHtml(ORION.planet.formatPeople(peopleCap)) + '</span>' +
           '</span>' +
-        '</header>' +
+          '<div class="deck-pop__bar"><div class="deck-pop__bar-fill" style="width:' + pctCap + '%"></div></div>' +
+        '</div>';
+
+      return '<section class="deck-population" aria-label="Popolazione">' +
+        totalHtml +
         chips +
       '</section>';
     }
