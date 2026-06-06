@@ -3346,7 +3346,14 @@ select.main-menu__input { cursor: pointer; }
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* PR-K: altezza FISSA della sezione strutture indipendente dal
+     contenuto. Riserviamo: header (~22) + tabs (~26) + list (150) +
+     padding (12) ≈ 210px. Così la sfera planet sopra ha sempre la
+     stessa altezza visibile (no jitter del bottomReserve in
+     planet-view.resize). */
+  align-self: stretch;
 }
+.deck-structures > .deck-struct-list { flex: 0 0 150px; }
 .deck-struct-tabs {
   display: flex;
   gap: 4px;
@@ -3393,12 +3400,18 @@ select.main-menu__input { cursor: pointer; }
      consente max 3 colonne nella width tipica di .deck-structures e
      gestisce gracefully larghezze diverse. Gap 6px. */
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  /* PR-K: righe a altezza ESATTA — niente più 2.5 card visibili per
+     stretching. La griglia ha 2 righe fisse da 72px nello spazio
+     visibile; card aggiuntive vanno su righe implicite della stessa
+     altezza (grid-auto-rows) e scrollano dentro il container. */
+  grid-template-rows: 72px 72px;
+  grid-auto-rows: 72px;
   gap: 6px;
-  /* Internal scroll quando la lista supera 2 righe (era 148px troppo
-     stretto). Card ora 70px alte + 6px gap + 2px padding → ~150px per
-     2 righe. Più strutture → scroll verticale interno con scrollbar
-     riservata nel padding-right. */
-  max-height: 150px;
+  /* PR-K: altezza FISSA della lista (era max-height 150) → la sezione
+     riserva sempre lo spazio per 2 righe anche con 1 sola card, così
+     il layout non balla e la posizione mouse resta stabile (richiesta
+     utente). 2*72 + 6 (gap) = 150. */
+  height: 150px;
   overflow-y: auto;
   align-content: start;
   /* Scrollbar sottile e tematica (NASA/Visions) */
@@ -3424,7 +3437,11 @@ select.main-menu__input { cursor: pointer; }
   border: 1px solid var(--c-border-soft);
   border-left: 3px solid var(--c-border);
   border-radius: var(--radius-sm);
-  min-height: 60px;
+  /* PR-K: altezza ESATTA (era min-height 60). Box-sizing border-box
+     così padding+border rientrano nei 72px → row del grid identici. */
+  height: 72px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 .deck-struct__top {
   display: flex;
