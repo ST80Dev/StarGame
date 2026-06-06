@@ -188,6 +188,138 @@
     spy: svg(
       '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>' +
       '<circle cx="12" cy="12" r="3"/>'
+    ),
+
+    /* Close — X per chiudere modali/overlay. */
+    close: svg(
+      '<line x1="6" y1="6" x2="18" y2="18"/>' +
+      '<line x1="18" y1="6" x2="6" y2="18"/>'
+    ),
+
+    /* Play — triangolo destro per riprendere/lanciare. */
+    play: svg(
+      '<polygon points="6,4 20,12 6,20" fill="currentColor" stroke="none"/>'
+    ),
+
+    /* ChevronRight — freccia compatta per "Avanza/Apri ▸". */
+    chevronRight: svg(
+      '<polyline points="9,6 15,12 9,18"/>'
+    ),
+
+    /* Send — aeroplano/paper-plane per "Invia spedizione". */
+    send: svg(
+      '<path d="M22 2L11 13"/>' +
+      '<polygon points="22,2 15,22 11,13 2,9 22,2"/>'
+    ),
+
+    /* Sword — gladio per battaglia/attacco. */
+    sword: svg(
+      '<polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/>' +
+      '<line x1="13" y1="19" x2="19" y2="13"/>' +
+      '<line x1="16" y1="16" x2="20" y2="20"/>' +
+      '<line x1="19" y1="21" x2="21" y2="19"/>'
+    ),
+
+    /* Trophy — coppa per vittoria. */
+    trophy: svg(
+      '<line x1="6" y1="9" x2="6" y2="6"/>' +
+      '<line x1="18" y1="9" x2="18" y2="6"/>' +
+      '<path d="M6 9a6 6 0 0 0 12 0"/>' +
+      '<path d="M10 21h4"/>' +
+      '<path d="M12 17v4"/>' +
+      '<path d="M2 6h4"/>' +
+      '<path d="M18 6h4"/>'
+    ),
+
+    /* Star — stella riempita per "home/capitale/preferito". */
+    star: svg(
+      '<polygon points="12,2 15,8.5 22,9.3 17,14 18.5,21 12,17.5 5.5,21 7,14 2,9.3 9,8.5" fill="currentColor" stroke="none"/>'
+    ),
+
+    /* Dot-circle — cerchio con punto interno (colonia attiva, status). */
+    dotCircle: svg(
+      '<circle cx="12" cy="12" r="9"/>' +
+      '<circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>'
+    ),
+
+    /* Transition — cerchio puntinato per "in transizione". */
+    transition: svg(
+      '<circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/>'
+    ),
+
+    /* Pause — due barre verticali (HUD time controls). */
+    pause: svg(
+      '<rect x="6" y="4" width="4" height="16" fill="currentColor" stroke="none"/>' +
+      '<rect x="14" y="4" width="4" height="16" fill="currentColor" stroke="none"/>'
+    ),
+
+    /* Step — triangolo + barra verticale (singolo Impulso, ⏵Ι). */
+    step: svg(
+      '<polygon points="5,4 16,12 5,20" fill="currentColor" stroke="none"/>' +
+      '<line x1="19" y1="5" x2="19" y2="19"/>'
+    ),
+
+    /* SkipNext — due triangoli + barra ("Prossimo evento", ⏭). */
+    skipNext: svg(
+      '<polygon points="5,4 13,12 5,20" fill="currentColor" stroke="none"/>' +
+      '<polygon points="13,4 19,12 13,20" fill="currentColor" stroke="none"/>'
+    ),
+
+    /* Folder — cartella aperta (Carica partita da slot). */
+    folder: svg(
+      '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'
+    ),
+
+    /* Plus — segno + per "nuovo" (nuova partita, espandi modulo). */
+    plus: svg(
+      '<line x1="12" y1="5" x2="12" y2="19"/>' +
+      '<line x1="5" y1="12" x2="19" y2="12"/>'
+    ),
+
+    /* Trash — cestino per smantellamento. */
+    trash: svg(
+      '<polyline points="3,6 5,6 21,6"/>' +
+      '<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>' +
+      '<path d="M10 11v6"/>' +
+      '<path d="M14 11v6"/>' +
+      '<path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>'
+    ),
+
+    /* Refresh — freccia circolare per "richiama/aggiorna". */
+    refresh: svg(
+      '<polyline points="23 4 23 10 17 10"/>' +
+      '<polyline points="1 20 1 14 7 14"/>' +
+      '<path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/>' +
+      '<path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/>'
+    ),
+
+    /* Crown — corona per Comandante/leader (alternativa a star). */
+    crown: svg(
+      '<polygon points="2 18 5 7 12 12 19 7 22 18 2 18" fill="currentColor" fill-opacity="0.15"/>' +
+      '<polygon points="2 18 5 7 12 12 19 7 22 18 2 18"/>'
+    ),
+
+    /* Tag — etichetta/tag (slot save, metadata). */
+    tag: svg(
+      '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>' +
+      '<line x1="7" y1="7" x2="7.01" y2="7"/>'
+    ),
+
+    /* Clock — orologio per timestamp save. */
+    clock: svg(
+      '<circle cx="12" cy="12" r="10"/>' +
+      '<polyline points="12 6 12 12 16 14"/>'
+    ),
+
+    /* Check — segno di spunta (tutorial "vista", azione completata). */
+    check: svg(
+      '<polyline points="20 6 9 17 4 12"/>'
+    ),
+
+    /* Book — libro (tutorial, indice schede). */
+    book: svg(
+      '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>' +
+      '<path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>'
     )
   };
 

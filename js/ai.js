@@ -117,8 +117,11 @@
     POWER_GROWTH: 0.6,                  // crescita potenza/AI-tick per sistema
     EXPAND_CHANCE_BASE: 0.18,           // prob. base di annettere un sistema
     WAR_CHANCE: 0.14,                   // prob. di una schermaglia AI-vs-AI/AI-tick
+    AIWAR_POWER_PER_LOSS: 6,            // M10 Fase D: potenza persa per nave distrutta in una guerra AI-vs-AI materializzata
     BIRTH_CHANCE: 0.015,                // prob. nascita nuovo arrampicatore/AI-tick
     PIRATE_RAID_CHANCE: 0.06,           // prob. razzia pirata/AI-tick (solo voce)
+    PIRATE_RAIDER_CHANCE: 0.05,         // M10 Fase E: prob. che un covo lanci un raider contro una tua flotta esposta
+    PIRATE_RAIDER_GRACE: 120,           // M10 Fase E: nessun raider prima di questo Impulso (grazia, recovery-friendly)
     RUMOR_EXPAND_CHANCE: 0.30,          // quota di espansioni che diventano "voce"
     RUMOR_WAR_CHANCE: 0.45,             // quota di guerre che diventano "voce"
 
@@ -483,6 +486,11 @@
     /* --- Pirati: razzia atmosferica (voce di cronaca). --- */
     maybePirateRaid(game, grng, events);
 
+    /* --- M10 Fase E: i predoni cacciano le tue flotte ESPOSTE (in orbita
+       lontano dalle colonie). Gated da grazia iniziale; lo scontro è risolto
+       all'arrivo in time.js (lampo). --- */
+    maybePirateRaider(game, grng, events);
+
     /* --- M09 Fase A (decisione #49): incursione pirata "con denti" verso
        una colonia del giocatore. Gated dalla pressione (catena di sconfitte
        → più attacchi) + grazia iniziale: niente assedi a freddo. --- */
@@ -561,41 +569,106 @@
     }
     if (!pairs.length) return;
     const pair = pairs[rng.int(0, pairs.length - 1)];
-    // il più forte strappa un sistema di confine al più debole
-    let winner = pair[0], loser = pair[1];
-    if (loser.power > winner.power) { const t = winner; winner = loser; loser = t; }
-    // esito pesato: il più forte vince spesso, non sempre (imprevedibilità §13.1)
-    const pWin = winner.power / Math.max(1, winner.power + loser.power);
-    if (rng.float() > pWin * 1.1) { const t = winner; winner = loser; loser = t; }
 
-    const border = borderSystemsBetween(galaxy, loser, winner);
-    if (!border.length) return;
-    border.sort(function (x, y) { return x - y; });
-    const lost = border[rng.int(0, border.length - 1)];
-    loser.systems = loser.systems.filter(function (s) { return s !== lost; });
-    winner.systems.push(lost);
-    winner.power += CFG.POWER_PER_SYSTEM * 0.5;
-    loser.power = Math.max(0, loser.power - CFG.POWER_PER_SYSTEM);
-    if (winner.alignment === 'male') addIcg(CFG.ICG_PER_EVIL_EXPAND);
+    /* Attaccante = più forte, difensore = più debole: il forte preme sul
+       confine del debole. L'esito può comunque sorprendere (§13.1). */
+    let attacker = pair[0], defender = pair[1];
+    if (defender.power > attacker.power) { const t = attacker; attacker = defender; defender = t; }
 
-    // voce di cronaca (rate-limitata: la guerra avviene comunque nel
-    // background, ma solo una quota diventa "voce" per non intasare il log)
-    if (rng.chance(CFG.RUMOR_WAR_CHANCE)) {
+    /* Sistema conteso = un sistema di confine del DIFENSORE adiacente
+       all'attaccante. Se il giocatore ne vede almeno uno (DETECTED+),
+       la guerra è "assistibile" → la risolviamo col motore M09 (Fase D). */
+    const dborder = borderSystemsBetween(galaxy, defender, attacker);
+    if (!dborder.length) return;
+    dborder.sort(function (x, y) { return x - y; });
+    const seenBorder = dborder.filter(function (s) { return discovered(game, s); });
+    const witnessed = seenBorder.length > 0 && !!root.ORION.combat;
+    const contested = witnessed
+      ? seenBorder[rng.int(0, seenBorder.length - 1)]
+      : dborder[rng.int(0, dborder.length - 1)];
+
+    /* Esito. Witnessed → battaglia REALE materializzata (decisione #47 Fase D):
+       le due civiltà diventano forze concrete e si scontrano col motore
+       deterministico di M09; chi vince la battaglia decide il sistema. Le
+       guerre LONTANE (non viste) restano astratte (zero costo/spam). */
+    let attackerWon, report = null;
+    if (witnessed) {
+      const C = root.ORION.combat;
+      const A = C.forceFromMaterialized(materialize(game, attacker, contested), 'A');
+      const B = C.forceFromMaterialized(materialize(game, defender, contested), 'B');
+      const battleId = 'aiwar:' + attacker.id + ':' + defender.id + ':' + contested + ':' + (game.timeImpulsi || 0);
+      report = C.resolve(game, battleId, A, B);
+      attackerWon = (report.winner === 'A');
+      // costo della battaglia: le perdite si traducono in potenza persa
+      attacker.power = Math.max(0, attacker.power - report.sideA.lost * CFG.AIWAR_POWER_PER_LOSS);
+      defender.power = Math.max(0, defender.power - report.sideB.lost * CFG.AIWAR_POWER_PER_LOSS);
+    } else {
+      const pWin = attacker.power / Math.max(1, attacker.power + defender.power);
+      attackerWon = !(rng.float() > pWin * 1.1);   // upset come prima (§13.1)
+    }
+
+    let winner, loser;
+    if (attackerWon) {
+      // l'attaccante conquista il sistema conteso
+      defender.systems = defender.systems.filter(function (s) { return s !== contested; });
+      attacker.systems.push(contested);
+      attacker.power += CFG.POWER_PER_SYSTEM * 0.5;
+      defender.power = Math.max(0, defender.power - CFG.POWER_PER_SYSTEM);
+      if (attacker.alignment === 'male') addIcg(CFG.ICG_PER_EVIL_EXPAND);
+      winner = attacker; loser = defender;
+    } else {
+      // il difensore resiste. Nelle guerre VISTE è una difesa riuscita
+      // (nessun trasferimento); in quelle ASTRATTE conserviamo la regola
+      // "il territorio cambia sempre" → il difensore-vincitore strappa un
+      // sistema all'attaccante (equivalente all'upset originale).
+      winner = defender; loser = attacker;
+      if (!witnessed) {
+        const aborder = borderSystemsBetween(galaxy, attacker, defender);
+        if (aborder.length) {
+          aborder.sort(function (x, y) { return x - y; });
+          const taken = aborder[rng.int(0, aborder.length - 1)];
+          attacker.systems = attacker.systems.filter(function (s) { return s !== taken; });
+          defender.systems.push(taken);
+          defender.power += CFG.POWER_PER_SYSTEM * 0.5;
+          attacker.power = Math.max(0, attacker.power - CFG.POWER_PER_SYSTEM);
+          if (defender.alignment === 'male') addIcg(CFG.ICG_PER_EVIL_EXPAND);
+        }
+      }
+    }
+
+    // Cronaca: le guerre VISTE producono un report reale ("hai assistito a…");
+    // le lontane restano una "voce" rate-limitata.
+    if (witnessed) {
+      events.push({
+        kind: 'civ-battle',
+        attacker: attacker.name, attackerColor: attacker.color,
+        defender: defender.name, defenderColor: defender.color,
+        outcome: attackerWon ? 'taken' : 'held',
+        systemId: contested, systemName: (galaxy.systems[contested] || {}).name,
+        regionLabel: regionLabelOfSystem(galaxy, contested),
+        lostA: report.sideA.lost, lostB: report.sideB.lost, rounds: report.rounds,
+        impulso: game.timeImpulsi
+      });
+    } else if (rng.chance(CFG.RUMOR_WAR_CHANCE)) {
       events.push({
         kind: 'civ-war', winner: winner.name, winnerColor: winner.color,
-        loser: loser.name, regionLabel: regionLabelOfSystem(galaxy, lost),
+        loser: loser.name, regionLabel: regionLabelOfSystem(galaxy, contested),
         impulso: game.timeImpulsi
       });
     }
 
-    // caduta (roster vivo): ridotta a 0 sistemi → sparisce
-    if (loser.systems.length === 0) {
-      loser.alive = false;
-      events.push({
-        kind: 'civ-fallen', civName: loser.name, conqueror: winner.name,
-        impulso: game.timeImpulsi
-      });
-    }
+    // Caduta (roster vivo): controlla ENTRAMBE (nell'upset astratto anche
+    // l'attaccante può perdere il suo ultimo sistema).
+    [attacker, defender].forEach(function (civ) {
+      if (civ.alive && civ.systems.length === 0) {
+        civ.alive = false;
+        const conq = (civ === attacker) ? defender : attacker;
+        events.push({
+          kind: 'civ-fallen', civName: civ.name, conqueror: conq.name,
+          impulso: game.timeImpulsi
+        });
+      }
+    });
   }
 
   function maybeBirth(game, rng, claimed, players, events) {
@@ -801,6 +874,89 @@
     });
   }
 
+  /* M10 Fase E: un covo lancia un RAIDER contro una flotta del giocatore
+     ESPOSTA (in orbita lontano dalle colonie). Crea un'incursione di tipo
+     'pirate-raider' che time.js risolve all'arrivo come scaramuccia lampo
+     contro quella flotta. Grazia iniziale + una preda alla volta per covo.
+     Recovery-friendly (#22): se la preda non c'è più, il raider svanisce. */
+  function maybePirateRaider(game, rng, events) {
+    if ((game.timeImpulsi || 0) < CFG.PIRATE_RAIDER_GRACE) return;
+    const nests = game.piracy && game.piracy.nests;
+    if (!nests || !nests.length) return;
+    const fleets = game.fleets || [];
+    if (!fleets.length) return;
+    if (!ORION.fleet || !ORION.fleet.computePath) return;
+
+    // flotte esposte: armate, in orbita, NON in un sistema-colonia del giocatore
+    const players = playerSystems(game);
+    const exposed = [];
+    for (let i = 0; i < fleets.length; i++) {
+      const f = fleets[i];
+      if (!f || !f.location || f.location.status !== 'orbiting') continue;
+      if (players.has(f.location.systemId)) continue;   // in casa = al sicuro
+      const guns = (f.ships || []).some(function (s) {
+        const cls = ORION.fleet.getClass && ORION.fleet.getClass(s.kind);
+        return cls && cls.fp > 0;
+      });
+      // anche le flotte disarmate possono essere predate (anzi, sono prede facili)
+      exposed.push({ fleet: f, armed: guns });
+    }
+    if (!exposed.length) return;
+
+    if (!Array.isArray(game.incursions)) game.incursions = [];
+    for (let i = 0; i < nests.length; i++) {
+      const nest = nests[i];
+      if (!rng.chance(CFG.PIRATE_RAIDER_CHANCE)) continue;
+      // scegli la preda raggiungibile più vicina non già bersagliata
+      let best = null, bestHops = Infinity;
+      for (let e = 0; e < exposed.length; e++) {
+        const sysId = exposed[e].fleet.location.systemId;
+        if (raiderTargeting(game, exposed[e].fleet.id)) continue;
+        const path = ORION.fleet.computePath(game.galaxy, nest.sysId, sysId);
+        if (!path) continue;
+        const hops = path.length - 1;
+        if (hops < bestHops) { bestHops = hops; best = exposed[e].fleet; }
+      }
+      if (!best) continue;
+      const eta = Math.max(10, Math.min(60, 12 + bestHops * 12));
+      const id = 'raid-' + (game.timeImpulsi || 0) + '-' + i;
+      game.incursions.push({
+        id: id, kind: 'pirate-raider', fromSysId: nest.sysId,
+        targetSysId: best.location.systemId, targetFleetId: best.id,
+        level: nest.level || 1, eta: eta, launchedAt: game.timeImpulsi || 0
+      });
+      events.push({
+        kind: 'raider-inbound', raiderId: id,
+        targetFleetId: best.id, targetFleetName: best.name,
+        targetSysId: best.location.systemId, eta: eta, impulso: game.timeImpulsi
+      });
+    }
+  }
+  function raiderTargeting(game, fleetId) {
+    const inc = game.incursions || [];
+    for (let i = 0; i < inc.length; i++) {
+      if (inc[i].kind === 'pirate-raider' && inc[i].targetFleetId === fleetId) return true;
+    }
+    return false;
+  }
+
+  /* M10 Fase E: covi pirata NOTI al giocatore (sistema DETECTED+). Per i
+     marker sulla mappa e la lista "Minacce pirata" nel dossier. */
+  function knownNests(game) {
+    const nests = (game.piracy && game.piracy.nests) || [];
+    const out = [];
+    for (let i = 0; i < nests.length; i++) {
+      if (!discovered(game, nests[i].sysId)) continue;
+      const sys = game.galaxy.systems[nests[i].sysId];
+      out.push({
+        sysId: nests[i].sysId, level: nests[i].level || 1,
+        name: sys ? sys.name : '—',
+        regionLabel: regionLabelOfSystem(game.galaxy, nests[i].sysId)
+      });
+    }
+    return out;
+  }
+
   /* ------------------------------------------------------------------
      API per Fase B / UI (innocue in Fase A)
      ------------------------------------------------------------------ */
@@ -897,7 +1053,74 @@
     if (!civ || !outcome) return true;
     const loss = (outcome.winner === 'player') ? 12 : 5;
     civ.power = Math.max(0, civ.power - loss);
+    /* M10 Fase C (decisione #47): registra l'esito come INTEL nel dossier
+       (campo lazy, niente bump di schema — civ è serializzata in game.civs). */
+    recordBattle(game, civ.id, outcome.winner === 'player' ? 'win' : 'loss', 'skirmish',
+      outcome.report && outcome.report.systemId);
     return true;
+  }
+
+  /* ==================================================================
+     M10 Fase C (decisione #47) — INTEL dossier combat-aware.
+     Ora che M09 produce dati di combattimento, il dossier li riflette:
+     stato di guerra/tregua col giocatore, stima della forza, ultimo
+     scontro col suo esito, e il "perché" della disposizione. Tutto
+     DERIVATO dallo stato esistente; l'unico campo nuovo è `civ.lastBattle`
+     (lazy → niente bump di schema). Determinismo: nessun RNG.
+     ================================================================== */
+
+  /* Registra l'ultimo scontro col giocatore sul dossier della civiltà.
+     result: 'win'|'loss' DAL PUNTO DI VISTA DEL GIOCATORE. */
+  function recordBattle(game, civId, result, kind, sysId) {
+    const civ = (game.civs || []).filter(function (c) { return c.id === civId; })[0];
+    if (!civ) return;
+    civ.lastBattle = {
+      result: result, kind: kind || 'skirmish',
+      sysId: (sysId == null ? -1 : sysId), impulso: game.timeImpulsi || 0
+    };
+  }
+
+  /* Stato della relazione col giocatore (derivato): tregua → guerra attiva
+     → ostile → disposizione. Per il chip del dossier. */
+  function relationStatus(game, civ) {
+    const now = game.timeImpulsi || 0;
+    if ((civ.truceUntil || 0) > now) return { id: 'truce', label: 'Tregua' };
+    const inc = (game.incursions || []).some(function (i) { return i.kind === 'ai' && i.civId === civ.id; });
+    const bat = (game.battles || []).some(function (b) { return b.attackerKind === 'ai' && b.attackerCiv === civ.id && b.status === 'active'; });
+    if (inc || bat) return { id: 'war', label: 'In guerra' };
+    const d = civ.disposition || 0;
+    if (d <= -40) return { id: 'hostile', label: 'Ostile' };
+    if (d >= 40) return { id: 'friendly', label: 'Amichevole' };
+    if (d >= 15) return { id: 'cordial', label: 'Cordiale' };
+    return { id: 'neutral', label: 'Neutrale' };
+  }
+
+  /* Stima coarse della forza materializzabile (numero di unità), coerente
+     con la formula di materialize(). Mantiene la nebbia (è una stima). */
+  function forceEstimate(game, civ) {
+    return Math.max(1, Math.round((civ.power || 0) / 25));
+  }
+
+  /* "Perché" della disposizione: euristica leggibile dai fattori che la
+     guidano (allineamento, azioni morali del giocatore #23, vicinanza,
+     ultimo scontro). Stringa breve per il dossier. */
+  function dispositionReason(game, civ) {
+    const deeds = game.alignmentDeeds || { light: 0, dark: 0 };
+    const near = civBordersPlayer(game, civ);
+    const out = [];
+    if (civ.alignment === 'bene') {
+      if (deeds.light > deeds.dark) out.push('apprezza la tua condotta');
+      if (deeds.dark > deeds.light + 1) out.push('disapprova le tue aggressioni');
+    } else if (civ.alignment === 'male') {
+      if (near) out.push('ti considera un bersaglio (confini vicini)');
+      if (deeds.dark > deeds.light) out.push('rispetta la forza che mostri');
+    } else {
+      out.push('opportunista: pesa la tua forza');
+    }
+    if (civ.lastBattle) {
+      out.push(civ.lastBattle.result === 'win' ? 'memore della sconfitta subita' : 'rinfrancata dalla vittoria su di te');
+    }
+    return out.length ? out.join(' · ') : 'nessun fattore rilevante';
   }
 
   /* Reputazione globale del giocatore come anteprima (§14, decisione #47):
@@ -929,6 +1152,13 @@
     knownSystemsCount: knownSystemsCount,
     contactedCivs: contactedCivs,
     materialize: materialize,
-    demobilize: demobilize
+    demobilize: demobilize,
+    /* Fase C — intel dossier combat-aware */
+    recordBattle: recordBattle,
+    relationStatus: relationStatus,
+    forceEstimate: forceEstimate,
+    dispositionReason: dispositionReason,
+    /* Fase E — pirati raidabili + raider */
+    knownNests: knownNests
   };
 })(typeof window !== 'undefined' ? window : this);

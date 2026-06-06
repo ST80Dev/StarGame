@@ -484,6 +484,9 @@ button { font-family: inherit; }
   letter-spacing: 0.04em;
   background: rgba(47, 230, 224, 0.08);
   border-left: 3px solid var(--c-accent);
+  display: flex;
+  align-items: center;
+  gap: 7px;
   border-radius: var(--radius-sm);
   text-shadow: 0 0 8px rgba(47, 230, 224, 0.25);
 }
@@ -1851,7 +1854,11 @@ button { font-family: inherit; }
   letter-spacing: 0.12em;
   color: var(--c-accent);
   text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
 }
+.save-modal__title-icon { font-size: 1.05rem; }
 .save-modal__body { padding: 18px; display: flex; flex-direction: column; gap: 18px; }
 
 .save-section { display: flex; flex-direction: column; gap: 10px; }
@@ -1902,6 +1909,9 @@ button { font-family: inherit; }
   font-weight: 700;
   color: var(--c-text);
   letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 7px;
 }
 .save-card__meta {
   display: grid;
@@ -1918,7 +1928,11 @@ button { font-family: inherit; }
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.12em;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
+.save-card__meta dt .ui-icon { font-size: 0.85rem; }
 .save-card__meta dd {
   margin: 0;
   color: var(--c-text);
@@ -2226,6 +2240,9 @@ select.main-menu__input { cursor: pointer; }
   margin: 0;
   flex: 1;
   color: var(--c-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .tutorial-card__close { margin-left: auto; }
 
@@ -2323,7 +2340,11 @@ select.main-menu__input { cursor: pointer; }
   font-family: var(--font-data);
   font-size: 0.7rem;
   letter-spacing: 0.06em;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
+.tutorial-index__state .ui-icon { font-size: 0.85rem; }
 .tutorial-index__state.is-seen { color: #6a7fa8; }
 .tutorial-index__state.is-unseen { color: #ffb000; }
 
@@ -2470,7 +2491,11 @@ select.main-menu__input { cursor: pointer; }
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--c-accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
 }
+.event-overlay__title-icon { font-size: 0.95rem; }
 .event-overlay__list {
   margin: 0 0 10px;
   padding: 0;
@@ -2592,6 +2617,9 @@ select.main-menu__input { cursor: pointer; }
   border-radius: 10px;
   color: #a8d4ee;
   font-family: var(--font-mono, monospace);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* Roster equipaggi (tab Forze): lista per-equipaggio a riposo / in missione */
@@ -3078,12 +3106,12 @@ select.main-menu__input { cursor: pointer; }
 }
 .colony-deck[hidden] { display: none; }
 
-/* M07.2 iter 4 (PR-A): pop e cronaca allargati per leggibilità delle
-   info; strutture al centro filtrate per categoria via tab, quindi più
-   strette ma con card più grandi (3 max colonne, info più leggibile). */
+/* M07.2 iter 5 (PR-G): cards strutture più strette → due righe fisse.
+   Spazio guadagnato va a pop (sx) e cronaca (dx). Internal scroll
+   sulle strutture quando la lista eccede l'altezza disponibile. */
 .deck-grid {
   display: grid;
-  grid-template-columns: 168px 1fr 290px;
+  grid-template-columns: 200px 1fr 320px;
   grid-template-rows: 1fr auto;
   grid-template-areas:
     "resources .          queue"
@@ -3295,22 +3323,31 @@ select.main-menu__input { cursor: pointer; }
 .deck-struct-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 2px 0 0;       /* margine sx 2px per la scroll bar interna */
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 6px;
+  /* PR-G: card più strette (min 135px) → 4-5 per riga, 2 righe fisse
+     per 9-10 strutture. Gap orizzontale moderato, verticale 5px. */
+  grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+  gap: 5px;
+  /* Internal scroll quando la lista supera l'altezza disponibile:
+     ~2 righe (60px each + 5px gap + padding) ≈ 140-150px. Senza
+     altezza fissa il grid si espande; con questa max-height resta a
+     2 righe e fa scroll verticale solo se servono più di 10 card. */
+  max-height: 148px;
+  overflow-y: auto;
+  align-content: start;
 }
 .deck-struct {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 22px 8px 8px;
+  gap: 4px;
+  padding: 6px 8px 6px;     /* PR-G: niente più padding-top per ⓘ assoluto */
   background: rgba(8, 12, 30, 0.55);
   border: 1px solid var(--c-border-soft);
   border-left: 3px solid var(--c-border);
   border-radius: var(--radius-sm);
-  min-height: 80px;
+  min-height: 60px;
 }
 .deck-struct__top {
   display: flex;
@@ -3332,13 +3369,13 @@ select.main-menu__input { cursor: pointer; }
 .deck-cat--civile     { border-left-color: var(--c-good); }
 .deck-cat--avanzata   { border-left-color: #ff66c4; }
 
+/* PR-G: ⓘ inline nella riga superiore (a destra del livello), non più
+   assoluto. Compatto: 14px circle, niente reserve nel padding card. */
 .deck-struct__info {
-  position: absolute;
-  top: 3px;
-  left: 4px;
   width: 16px;
   height: 16px;
   padding: 0;
+  flex: 0 0 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3379,21 +3416,23 @@ select.main-menu__input { cursor: pointer; }
 .deck-struct__pips {
   display: inline-flex;
   gap: 3px;
+  flex: 0 0 auto;
 }
+/* PR-G: pip più grandi e leggibili (era 7×4) — segna meglio i livelli. */
 .deck-pip {
-  width: 7px;
-  height: 4px;
+  width: 11px;
+  height: 6px;
   background: rgba(120, 160, 255, 0.18);
-  border-radius: 1px;
+  border-radius: 2px;
 }
-.deck-pip.is-on { background: var(--c-accent); }
+.deck-pip.is-on { background: var(--c-accent); box-shadow: 0 0 4px rgba(47, 230, 224, 0.45); }
 
-/* "+Espandi" compatto: bottone stretto con costi in linea sotto il + */
+/* "+Espandi" compatto: padding ridotto (PR-G), info costo più stretta. */
 .deck-struct__expand {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 7px;
+  gap: 3px;
+  padding: 2px 5px;
   background: rgba(47, 230, 224, 0.12);
   border: 1px solid var(--c-accent-dim);
   border-radius: var(--radius-sm);
@@ -3403,20 +3442,21 @@ select.main-menu__input { cursor: pointer; }
   white-space: nowrap;
   flex: 1;
   justify-content: center;
+  min-width: 0;
 }
 .deck-struct__expand:hover:not(.is-locked):not([disabled]) {
   background: rgba(47, 230, 224, 0.22);
   border-color: var(--c-accent);
 }
 .deck-struct__expand-plus {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 600;
   line-height: 1;
 }
 .deck-struct__expand-cost {
   display: inline-flex;
-  gap: 5px;
-  font-size: 0.72rem;
+  gap: 4px;
+  font-size: 0.68rem;
   color: var(--c-text-soft);
   flex-wrap: nowrap;
 }
@@ -3675,7 +3715,7 @@ select.main-menu__input { cursor: pointer; }
 /* ---- Responsive (decisione #6: ≥768px) ------------------------- */
 @media (max-width: 1199px) {
   .deck-grid {
-    grid-template-columns: 150px 1fr 250px;
+    grid-template-columns: 178px 1fr 278px;
   }
   .deck-res__value { font-size: 0.9rem; }
 }
@@ -4124,9 +4164,10 @@ select.main-menu__input { cursor: pointer; }
   background: var(--c-panel-solid); border: 1px solid rgba(255,255,255,0.10);
   border-radius: 10px; padding: 18px 20px; box-shadow: var(--shadow-panel);
 }
-.battle-modal__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.battle-modal__head h3 { margin: 0; font-size: 1.0rem; }
-.battle-modal__verdict { font-weight: 700; margin: 6px 0; }
+.battle-modal__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 10px; }
+.battle-modal__head h3 { margin: 0; font-size: 1.0rem; display: inline-flex; align-items: center; gap: 8px; }
+.battle-modal__verdict { font-weight: 700; margin: 6px 0; display: inline-flex; align-items: center; gap: 8px; }
+.battle-modal__verdict .ui-icon { font-size: 1.1rem; }
 .battle-modal__verdict--win  { color: #6fe0b8; }
 .battle-modal__verdict--lose { color: #f08296; }
 .battle-modal__sides { display: flex; justify-content: space-between; gap: 12px; font-size: 0.82rem; margin-bottom: 10px; flex-wrap: wrap; }
@@ -4189,6 +4230,34 @@ select.main-menu__input { cursor: pointer; }
 /* Glow morbido canonico UI_GUIDE §3 (blur 3px, alpha ~0.4) sulle icone SVG */
 .ui-icon { display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
 .ui-icon-svg { width: 1em; height: 1em; filter: drop-shadow(0 0 3px currentColor); display: block; }
+/* PR-C: helper tinte standardizzate ricorrenti (UI_GUIDE §1). */
+.ui-icon--amber  { color: #f0a868; }
+.ui-icon--cyan   { color: #2fe6e0; }
+.ui-icon--violet { color: #b89cff; }
+.ui-icon--pink   { color: #f08296; }
+.ui-icon--gold   { color: #f0d670; }
+.ui-icon--green  { color: #6fe0b8; }
+.ui-icon--blue   { color: #80c8e6; }
+.ui-icon--soft   { color: var(--c-text-faint); }
+/* PR-C: bottone icon-only (chiusura modali, azioni inline). Quadrato. */
+.btn--icon-only {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 6px;
+  min-width: 0;
+  font-size: 0.92rem;
+  line-height: 1;
+}
+.btn--icon-only .ui-icon { font-size: 0.95rem; }
+.btn--icon-only:hover .ui-icon { color: var(--c-accent); }
+/* PR-C: bottone con icona + testo (UI_GUIDE §6 pattern). */
+.btn--with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.btn--with-icon .ui-icon { font-size: 0.95rem; }
 /* Bottoni HUD top con SVG: leggermente più grandi */
 .btn--tutorial .ui-icon, .btn--save .ui-icon { font-size: 1.05rem; }
 .lp-section__text { font-weight: 600; }
@@ -4291,7 +4360,12 @@ select.main-menu__input { cursor: pointer; }
   border-radius: 9px;
   background: rgba(255,255,255,0.06);
   color: var(--c-text-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  line-height: 1;
 }
+.lp-item__badge .ui-icon { font-size: 0.78rem; }
 .lp-item__badge--ok   { background: rgba(95,200,140,0.18); color: #6fe0b8; }
 .lp-item__badge--warn { background: rgba(240,210,100,0.18); color: #f0d670; }
 .lp-item__badge--crit { background: rgba(240,130,150,0.20); color: #f08296; }
@@ -4436,7 +4510,11 @@ select.main-menu__input { cursor: pointer; }
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: var(--transition);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
+.actionbar__btn .ui-icon { font-size: 0.95rem; }
 .actionbar__btn:hover:not([disabled]) {
   background: rgba(47,230,224,0.12);
   border-color: var(--c-accent);
@@ -4511,7 +4589,11 @@ select.main-menu__input { cursor: pointer; }
   margin: 0; font-size: 0.72rem; letter-spacing: 0.14em;
   text-transform: uppercase; color: #c8b7ff;
   font-family: var(--font-display);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
+.deck-foreign__h4-icon { font-size: 0.95rem; }
 .deck-foreign__row {
   display: flex; gap: 10px; font-size: 0.84rem;
 }
@@ -4544,8 +4626,8 @@ select.main-menu__input { cursor: pointer; }
   background: var(--c-panel, #11151f); border: 1px solid rgba(224,85,110,0.4);
   border-radius: 10px; padding: 16px 18px; box-shadow: 0 18px 50px rgba(0,0,0,0.5);
 }
-.attack-overlay__head { display: flex; align-items: center; justify-content: space-between; margin: 0 0 6px; }
-.attack-overlay__head h3 { margin: 0; font-size: 1.02rem; }
+.attack-overlay__head { display: flex; align-items: center; justify-content: space-between; margin: 0 0 6px; gap: 10px; }
+.attack-overlay__head h3 { margin: 0; font-size: 1.02rem; display: inline-flex; align-items: center; gap: 8px; }
 .attack-overlay__x { background: none; border: none; color: var(--c-text-faint); font-size: 1rem; cursor: pointer; }
 .attack-overlay__sub { font-size: 0.82rem; color: var(--c-text-dim); margin: 0 0 10px; }
 .attack-warn { color: #f0a6b4; }
@@ -4563,6 +4645,7 @@ select.main-menu__input { cursor: pointer; }
 /* M09 — Comandante assegnato alla flotta (#43/#49) */
 .fleet-item__cmd {
   margin: 4px 0 2px; font-size: 0.8rem; color: #d7c9a6;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
 }
 .fleet-item__cmdbonus { color: var(--c-text-faint); font-size: 0.74rem; }
 .cmd-pick__current {
@@ -4580,3 +4663,47 @@ select.main-menu__input { cursor: pointer; }
 .cmd-pick__name { font-weight: 600; font-size: 0.9rem; }
 .cmd-pick__meta { font-size: 0.74rem; color: var(--c-text-faint); }
 .cmd-pick__empty { font-size: 0.8rem; color: var(--c-text-faint); margin: 4px 0; }
+
+/* =====================================================================
+   M10 Fase C (decisione #47) — Intel dossier combat-aware
+   ===================================================================== */
+.civ-rel {
+  font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 2px 7px; border-radius: 4px; flex: 0 0 auto; margin-left: auto;
+}
+.civ-rel--war      { background: rgba(224, 85, 110, 0.22); color: #ff9aa9; border: 1px solid rgba(224,85,110,0.55); }
+.civ-rel--hostile  { background: rgba(224, 85, 110, 0.12); color: #f08296; border: 1px solid rgba(224,85,110,0.35); }
+.civ-rel--truce    { background: rgba(240, 166, 74, 0.14); color: #f0c070; border: 1px solid rgba(240,166,74,0.40); }
+.civ-rel--neutral  { background: rgba(160, 168, 190, 0.12); color: #c0c8da; border: 1px solid rgba(160,168,190,0.30); }
+.civ-rel--cordial  { background: rgba(63, 202, 160, 0.12); color: #6fe0b8; border: 1px solid rgba(63,202,160,0.32); }
+.civ-rel--friendly { background: rgba(63, 202, 160, 0.20); color: #7fe8c4; border: 1px solid rgba(63,202,160,0.5); }
+
+.civ-lastbattle { font-size: 0.80rem; }
+.civ-lastbattle--win  span:last-child { color: #6fe0b8; }
+.civ-lastbattle--loss span:last-child { color: #f08296; }
+.civ-card__when { color: var(--c-text-faint); font-family: var(--font-display); font-size: 0.92em; }
+
+.civ-disp__reason {
+  margin-top: 5px; font-size: 0.76rem; font-style: italic;
+  color: var(--c-text-faint);
+}
+
+.civ-deeds { font-weight: 600; }
+.civ-deeds--light { color: #6fe0b8; }
+.civ-deeds--dark  { color: #f08296; }
+
+/* =====================================================================
+   M10 Fase E — Covi pirata raidabili (lista "Minacce pirata")
+   ===================================================================== */
+.civ-nests {
+  margin: 10px 0 14px; padding: 10px 12px;
+  border: 1px solid rgba(255, 90, 90, 0.35); border-radius: 8px;
+  background: rgba(255, 90, 90, 0.06);
+}
+.civ-nests__title { margin: 0 0 7px; font-size: 0.92rem; color: #ff8a8a; font-family: var(--font-display); }
+.civ-nests__list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.civ-nest { display: flex; gap: 10px; align-items: baseline; font-size: 0.82rem; flex-wrap: wrap; }
+.civ-nest__sys { flex: 1 1 auto; }
+.civ-nest__lvl { color: var(--c-text-faint); font-size: 0.76rem; }
+.civ-nest__taglia { color: #f0c070; font-size: 0.78rem; }
+.civ-nests__hint { margin: 4px 0 0; }

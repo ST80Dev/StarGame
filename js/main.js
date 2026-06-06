@@ -803,7 +803,7 @@ function renderGroupPanel(title, content, groupId) {
   title.innerHTML = grp.name + tagHtml(grp.acronym);
   content.innerHTML =
     '<div class="sysinfo">' +
-      (isHome ? '<p class="sysinfo__home">★ Regione d\'origine</p>' : '') +
+      (isHome ? '<p class="sysinfo__home">' + uiIcon('star', 'amber') + ' Regione d\'origine</p>' : '') +
       '<dl class="sysinfo__list">' +
         row('Sistemi', grp.members.length + ' (' + known + ' noti)') +
         row('Tipi stella', types) +
@@ -844,7 +844,7 @@ function renderSystemPanel(title, content, id) {
   const tierClass = 'tier--' + sys.dangerTier;
   content.innerHTML =
     '<div class="sysinfo">' +
-      (isHome ? '<p class="sysinfo__home">★ Sistema di partenza</p>' : '') +
+      (isHome ? '<p class="sysinfo__home">' + uiIcon('star', 'amber') + ' Sistema di partenza</p>' : '') +
       '<dl class="sysinfo__list">' +
         row('Nome', sys.name + (sys.realName ? ' <span class="sysinfo__tag">reale</span>' : '')) +
         row('Stella', starType ? starType.label : sys.star) +
@@ -853,7 +853,10 @@ function renderSystemPanel(title, content, id) {
         row('Pericolo',
           '<span class="danger-badge ' + tierClass + '">' + sys.danger + ' · ' + sys.dangerTier + '</span>') +
       '</dl>' +
-      '<button class="btn btn--mini btn--enter" data-action="enter-system" type="button">◉ Apri sistema ▸</button>' +
+      '<button class="btn btn--mini btn--enter btn--with-icon" data-action="enter-system" type="button">' +
+        '<span class="ui-icon ui-icon--amber" aria-hidden="true">' + ((ORION.icon && ORION.icon('system')) || '') + '</span> Apri sistema' +
+        '<span class="ui-icon ui-icon--soft" aria-hidden="true">' + ((ORION.icon && ORION.icon('chevronRight')) || '') + '</span>' +
+      '</button>' +
       '<p class="panel__note">Vista interna: stella/e, corpi celesti in orbita e anomalie. Doppio click sul nodo per entrare.</p>' +
     '</div>';
 
@@ -1018,7 +1021,7 @@ function renderSystemInteriorPanel(title, content, system, disc) {
 
   content.innerHTML =
     '<div class="sysinfo">' +
-      (system.isHome ? '<p class="sysinfo__home">★ Sistema di partenza</p>' : '') +
+      (system.isHome ? '<p class="sysinfo__home">' + uiIcon('star', 'amber') + ' Sistema di partenza</p>' : '') +
       '<dl class="sysinfo__list">' +
         row('Stella', system.stars.label) +
         row('Corpi', explored ? String(bodyCount) : bodyCount + ' (rilevati)') +
@@ -1058,13 +1061,13 @@ function renderBodyPanel(title, content, system, body) {
   if (def.cat === 'belt') statusLine = '<p class="panel__note">Cintura asteroidale: solo estrazione orbitale.</p>';
   else if (colony && colony.colonized) {
     statusLine = colony.isHomeBase
-      ? '<p class="sysinfo__home">★ Pianeta base</p>'
-      : '<p class="sysinfo__home">◉ Colonia attiva</p>';
+      ? '<p class="sysinfo__home">' + uiIcon('star', 'amber') + ' Pianeta base</p>'
+      : '<p class="sysinfo__home">' + uiIcon('dotCircle', 'cyan') + ' Colonia attiva</p>';
   }
 
   content.innerHTML =
     '<div class="sysinfo">' +
-      (body.homeWorld && !(colony && colony.colonized) ? '<p class="sysinfo__home">★ Mondo natale candidato</p>' : '') +
+      (body.homeWorld && !(colony && colony.colonized) ? '<p class="sysinfo__home">' + uiIcon('star', 'amber') + ' Mondo natale candidato</p>' : '') +
       statusLine +
       '<dl class="sysinfo__list">' +
         row('Tipo', def.label) +
@@ -1078,7 +1081,10 @@ function renderBodyPanel(title, content, system, body) {
         row('Svantaggi', def.svantaggi) +
       '</dl>' +
       (def.cat !== 'belt'
-        ? '<button class="btn btn--mini btn--enter" data-action="enter-planet" type="button">○ Apri pianeta ▸</button>' +
+        ? '<button class="btn btn--mini btn--enter btn--with-icon" data-action="enter-planet" type="button">' +
+            '<span class="ui-icon ui-icon--blue" aria-hidden="true">' + ((ORION.icon && ORION.icon('planet')) || '') + '</span> Apri pianeta' +
+            '<span class="ui-icon ui-icon--soft" aria-hidden="true">' + ((ORION.icon && ORION.icon('chevronRight')) || '') + '</span>' +
+          '</button>' +
           '<p class="panel__note">Vista pianeta: sfera procedurale, risorse, strutture, popolazione.</p>'
         : '') +
     '</div>';
@@ -1263,13 +1269,15 @@ function renderPlanetBreadcrumb() {
     const dur = colony.settlingDuration || 60;
     const elapsed = Math.max(0, (g.timeImpulsi || 0) - colony.settlingStart);
     const pct = Math.min(100, Math.round((elapsed / dur) * 100));
-    phaseChip = '<span class="crumb-chip crumb-chip--phase">⏳ Insediamento · ' + pct + '%</span>';
+    /* PR-D: chip phase con SVG icona (UI_GUIDE §3) — ⏳/◌ erano emoji
+       codepoint con rendering OS-dependent. */
+    phaseChip = '<span class="crumb-chip crumb-chip--phase">' + uiIcon('transition', 'violet') + ' Insediamento · ' + pct + '%</span>';
   } else if (colony && colony.colonizing) {
-    phaseChip = '<span class="crumb-chip crumb-chip--phase">◌ Coloniale in viaggio</span>';
+    phaseChip = '<span class="crumb-chip crumb-chip--phase">' + uiIcon('transition', 'violet') + ' Coloniale in viaggio</span>';
   } else if (colony && colony.isHomeBase) {
-    phaseChip = '<span class="crumb-chip crumb-chip--home">★ Pianeta base · +20%</span>';
+    phaseChip = '<span class="crumb-chip crumb-chip--home">' + uiIcon('star', 'amber') + ' Pianeta base · +20%</span>';
   } else if (colony && colony.colonized) {
-    phaseChip = '<span class="crumb-chip">◉ Operativa</span>';
+    phaseChip = '<span class="crumb-chip">' + uiIcon('dotCircle', 'cyan') + ' Operativa</span>';
   }
 
   const infoHtml =
@@ -1497,7 +1505,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
       const pct = Math.min(100, Math.round((elapsed / dur) * 100));
       settlingBanner =
         '<div class="settle-banner">' +
-          '<p class="settle-banner__title">⏳ Insediamento in corso</p>' +
+          '<p class="settle-banner__title">' + uiIcon('transition', 'violet') + ' Insediamento in corso</p>' +
           '<p class="settle-banner__hint">Produzione al 50% · +50% velocità prima struttura · crescita pop bloccata.</p>' +
           '<dl class="sysinfo__list">' +
             row('Restanti', remain + ' ' + iU()) +
@@ -1512,13 +1520,13 @@ function renderPlanetColoniaTab(host, planet, colony) {
     const capState = colony.capitalState && colony.capitalState.phase;
     let stateLine;
     if (capState === 'capital' || (isCap && !capState)) {
-      stateLine = '<p class="sysinfo__home">★ Capitale di gruppo — bonus +15% produzione, +10 slot</p>';
+      stateLine = '<p class="sysinfo__home">' + uiIcon('star', 'gold') + ' Capitale di gruppo — bonus +15% produzione, +10 slot</p>';
     } else if (capState === 'pre-capital') {
-      stateLine = '<p class="sysinfo__home">◌ In transizione (entrante) — bonus capitale in attivazione</p>';
+      stateLine = '<p class="sysinfo__home">' + uiIcon('transition', 'cyan') + ' In transizione (entrante) — bonus capitale in attivazione</p>';
     } else if (capState === 'decommissioning') {
-      stateLine = '<p class="sysinfo__home">◌ In decommissioning — malus −10% produzione fino al passaggio</p>';
+      stateLine = '<p class="sysinfo__home">' + uiIcon('transition', 'pink') + ' In decommissioning — malus −10% produzione fino al passaggio</p>';
     } else {
-      stateLine = '<p class="sysinfo__home">◉ Colonia attiva</p>';
+      stateLine = '<p class="sysinfo__home">' + uiIcon('dotCircle', 'cyan') + ' Colonia attiva</p>';
     }
     host.innerHTML =
       '<div class="sysinfo">' +
@@ -1900,7 +1908,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
           '<div class="struct-item__name">' + label + ' <span class="struct-item__cat">' + remain + ' / ' + total + '</span> ' + iU() + '</div>' +
           '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
         '</div>' +
-        '<button class="btn btn--mini struct-item__cancel" data-cancel="' + idx + '" type="button" title="' + cancelTitle + '">×</button>' +
+        '<button class="btn btn--mini btn--icon-only struct-item__cancel" data-cancel="' + idx + '" type="button" title="' + cancelTitle + '" aria-label="Annulla">' + uiIcon('close', 'pink') + '</button>' +
       '</li>';
     });
     html += '</ul>';
@@ -1947,8 +1955,8 @@ function renderPlanetStruttureTab(host, planet, colony) {
         const maxL = def.maxLevel || 1;
         const demoCheck = ORION.planet.canDemolish(colony, planet, def.id);
         const demoBtn = demoCheck.ok
-          ? '<button class="btn btn--mini struct-item__demolish" data-demolish="' + def.id + '" type="button" title="Smantella (rimborso 50% · 70% sulla colonia natale · morale −0,10 per 30 Ι)">🗑</button>'
-          : '<span class="struct-item__locked is-busy" title="' + demoCheck.reason + '">🗑</span>';
+          ? '<button class="btn btn--mini btn--icon-only struct-item__demolish" data-demolish="' + def.id + '" type="button" title="Smantella (rimborso 50% · 70% sulla colonia natale · morale −0,10 per 30 Ι)" aria-label="Smantella">' + uiIcon('trash', 'pink') + '</button>'
+          : '<span class="struct-item__locked is-busy" title="' + demoCheck.reason + '">' + uiIcon('trash', 'soft') + '</span>';
         let upBtn, infoLine, timeChip = '';
         if (lvl >= maxL) {
           upBtn = '<span class="struct-item__locked" title="Livello massimo (' + maxL + ')">max</span>';
@@ -1999,7 +2007,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
           statusCell = '<span class="struct-item__locked is-demolish" title="In smantellamento (' + remain + ' / ' + total + ' Ι)">🛠 Smantellamento · ' + remain + '/' + total + ' ' + iU() + '</span>';
           extraClass += ' is-building';
         } else if (check.code === 'busy') {
-          statusCell = '<span class="struct-item__locked is-busy" title="' + check.reason + '">⏳ Occupato</span>';
+          statusCell = '<span class="struct-item__locked is-busy" title="' + check.reason + '">' + uiIcon('transition', 'soft') + ' Occupato</span>';
         } else {
           statusCell = '<span class="struct-item__locked" title="' + check.reason + '">◌</span>';
         }
@@ -2162,6 +2170,15 @@ function dsUnit(letter) {
   return '<span class="ds-unit" aria-hidden="true">' + letter + '</span>';
 }
 function iU() { return dsUnit('Ι'); }      /* Impulso */
+
+/* PR-D: helper inline per inserire icona SVG con tinta + glow morbido,
+   coerente con UI_GUIDE §3. Usato dove l'HTML è generato dinamicamente
+   (sysinfo__home, chip, label di stato). Ritorna stringa HTML. */
+function uiIcon(name, tone) {
+  if (!ORION.icon) return '';
+  const cls = tone ? (' ui-icon--' + tone) : '';
+  return '<span class="ui-icon' + cls + '" aria-hidden="true">' + ORION.icon(name) + '</span>';
+}
 function kU() { return dsUnit('Κ'); }      /* Ciclo di nutazione */
 function phU() { return dsUnit('Φ'); }     /* Fase di precessione */
 function omU() { return dsUnit('Ω'); }     /* Eone */
@@ -2201,7 +2218,7 @@ function renderCantieriSection(colony, planet) {
   if (hasCommanders) {
     html += '<div class="cantieri-row commander-row">' +
       '<div class="cantieri-row__head">' +
-        '<span class="cantieri-row__glyph" aria-hidden="true">★</span>' +
+        '<span class="cantieri-row__glyph ui-icon ui-icon--amber" aria-hidden="true">' + ((ORION.icon && ORION.icon('star')) || '★') + '</span>' +
         '<span class="cantieri-row__name">Comandanti</span>' +
         '<span class="cantieri-row__counter">In organico: <strong>' + commanders.length + '</strong></span>' +
       '</div>' +
@@ -2246,7 +2263,7 @@ function renderCantieriSection(colony, planet) {
     const cantieriCls = active >= buildSlots ? ' cantieri-cap--full' : '';
     const portCls = bound >= docks ? ' cantieri-cap--full' : '';
     const techHtml = techBonus > 0
-      ? ' <span class="cantieri-tech-chip" title="Bonus tecnici: ' + (E.techCountOf ? E.techCountOf(colony) : 0) + ' tecnici → −' + Math.round(techBonus * 100) + '% tempo costruzione">⚙ −' + Math.round(techBonus * 100) + '%</span>'
+      ? ' <span class="cantieri-tech-chip" title="Bonus tecnici: ' + (E.techCountOf ? E.techCountOf(colony) : 0) + ' tecnici → −' + Math.round(techBonus * 100) + '% tempo costruzione">' + uiIcon('settings', 'soft') + ' −' + Math.round(techBonus * 100) + '%</span>'
       : '';
     const hangarLvl = (colony.structures['cantiere-navale'] && colony.structures['cantiere-navale'].level) || 1;
 
@@ -2300,7 +2317,7 @@ function renderCantieriSection(colony, planet) {
           '<div class="struct-item__name">' + escapeHtml(qCls.name) + ' <span class="struct-item__cat">' + remain + ' / ' + total + '</span> ' + iU() + '</div>' +
           '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
         '</div>' +
-        '<button class="btn btn--mini struct-item__cancel" data-cancel-ship="' + idx + '" type="button" title="Annulla (rimborso 50%)">×</button>' +
+        '<button class="btn btn--mini btn--icon-only struct-item__cancel" data-cancel-ship="' + idx + '" type="button" title="Annulla (rimborso 50%)" aria-label="Annulla">' + uiIcon('close', 'pink') + '</button>' +
       '</div>';
     });
 
@@ -2336,7 +2353,7 @@ function renderCantieriSection(colony, planet) {
     const totalCrews = crews.length + away.length;
     html += '<div class="cantieri-row">' +
       '<div class="cantieri-row__head">' +
-        '<span class="cantieri-row__glyph" aria-hidden="true">⚔</span>' +
+        '<span class="cantieri-row__glyph ui-icon ui-icon--pink" aria-hidden="true">' + ((ORION.icon && ORION.icon('forces')) || '⚔') + '</span>' +
         '<span class="cantieri-row__name">Accademia militare</span>' +
         '<span class="cantieri-row__counter">Equipaggi: <strong>' + totalCrews + '</strong>' +
           (totalCrews ? ' <span class="xp-chip" title="Esperienza media (a riposo)">xp ' + avg + '</span>' : '') +
@@ -2373,12 +2390,12 @@ function renderCantieriSection(colony, planet) {
       const remain = Math.max(0, q.duration | 0);
       const pct = Math.round(((total - remain) / total) * 100);
       html += '<div class="struct-item is-queue">' +
-        '<span class="struct-item__glyph">⚔</span>' +
+        '<span class="struct-item__glyph ui-icon ui-icon--pink" aria-hidden="true">' + ((ORION.icon && ORION.icon('forces')) || '⚔') + '</span>' +
         '<div class="struct-item__main">' +
           '<div class="struct-item__name">Equipaggio esploratore <span class="struct-item__cat">' + remain + ' / ' + total + '</span> ' + iU() + '</div>' +
           '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
         '</div>' +
-        '<button class="btn btn--mini struct-item__cancel" data-cancel-crew="' + idx + '" type="button" title="Annulla (rimborso 50%)">×</button>' +
+        '<button class="btn btn--mini btn--icon-only struct-item__cancel" data-cancel-crew="' + idx + '" type="button" title="Annulla (rimborso 50%)" aria-label="Annulla">' + uiIcon('close', 'pink') + '</button>' +
       '</div>';
     });
     html += '<div class="cantieri-row__build">' +
@@ -2476,7 +2493,7 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
             '<span class="wear-bar__label">scafo ' + wear + '%</span>' +
           '</div>' +
           '<span class="xp-chip" title="' + enr.label + '">xp ' + xp + ' · ' + enr.label + '</span>' +
-          (incCount ? '<span class="expedition-item__inc" title="Incidenti accumulati">⚠ ' + incCount + '</span>' : '') +
+          (incCount ? '<span class="expedition-item__inc" title="Incidenti accumulati">' + uiIcon('warning', 'gold') + ' ' + incCount + '</span>' : '') +
         '</div>' +
       '</li>';
     }).join('') + '</ul>';
@@ -2496,10 +2513,11 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
         row('Equipaggi', crews.length + (crews.length ? ' (xp medio ' + xpAvg + ')' : '')) +
         row('Sistemi raggiungibili', String(reachable.length)) +
       '</dl>' +
-      '<button class="btn btn--mini btn--enter" data-action="exp-organize" type="button"' +
+      '<button class="btn btn--mini btn--enter btn--with-icon" data-action="exp-organize" type="button"' +
         ((canOrganize && hasTargets) ? '' : ' disabled') +
         ' title="' + (canOrganize ? (hasTargets ? 'Pianifica un salto iperspaziale' : 'Nessuna rotta inesplorata adiacente') : 'Servono uno scafo e un equipaggio') + '">' +
-        '✦ Organizza spedizione ▸' +
+        '<span class="ui-icon ui-icon--cyan" aria-hidden="true">' + ((ORION.icon && ORION.icon('fleet')) || '') + '</span> Organizza spedizione' +
+        '<span class="ui-icon ui-icon--soft" aria-hidden="true">' + ((ORION.icon && ORION.icon('chevronRight')) || '') + '</span>' +
       '</button>' +
       '<p class="sysinfo__sub">Spedizioni attive</p>' +
       listHtml +
@@ -2553,7 +2571,9 @@ function openExpeditionPicker(colony) {
         '<div><dt>Rischio incidente</dt><dd>' + Math.round(chance * 100) + '%</dd></div>' +
       '</dl>' +
       '<div class="expedition-card__actions">' +
-        '<button class="btn btn--mini btn--primary" data-action="exp-launch" data-sys="' + sid + '" type="button">✦ Invia</button>' +
+        '<button class="btn btn--mini btn--primary btn--with-icon" data-action="exp-launch" data-sys="' + sid + '" type="button">' +
+          '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('send')) || '') + '</span> Invia' +
+        '</button>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -2562,7 +2582,9 @@ function openExpeditionPicker(colony) {
     '<div class="expedition-pick-overlay__panel" role="document">' +
       '<header class="expedition-pick-overlay__head">' +
         '<h2 class="expedition-pick-overlay__title">Organizza spedizione</h2>' +
-        '<button class="btn btn--mini" data-action="exp-pick-close" type="button" aria-label="Chiudi">✕</button>' +
+        '<button class="btn btn--mini btn--icon-only" data-action="exp-pick-close" type="button" aria-label="Chiudi">' +
+          '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+        '</button>' +
       '</header>' +
       '<p class="panel__note">Scafi disponibili: <strong>' + ships + '</strong> · ' +
         'Equipaggi: <strong>' + crews.length + '</strong>. Verrà impegnato il primo equipaggio in lista (' +
@@ -2691,12 +2713,17 @@ function renderFleetView(stage) {
       const formation = (f.formation) || 'balanced';
       /* M09 (#43/#49): Comandante assegnato → bonus di specializzazione. */
       const cmd = f.commander;
+      /* PR-E: ★ → SVG star ambra per il Comandante (Figura nominata
+         emergente dagli equipaggi veterani, decisione #43). */
+      const starHtml = uiIcon('star', 'amber');
       const cmdHtml = cmd
-        ? '<div class="fleet-item__cmd">★ <strong>' + escapeHtml(cmd.rank + ' ' + cmd.name) + '</strong> · ' +
+        ? '<div class="fleet-item__cmd">' + starHtml + ' <strong>' + escapeHtml(cmd.rank + ' ' + cmd.name) + '</strong> · ' +
             escapeHtml(cmd.specializationLabel || cmd.specialization) +
             ' <span class="fleet-item__cmdbonus">' + escapeHtml(ORION.commander ? ORION.commander.bonusLabel(cmd) : '') + '</span></div>'
         : '';
-      const cmdBtnLabel = cmd ? ('★ ' + escapeHtml(cmd.name)) : '★ Comandante';
+      const cmdBtnLabel = cmd
+        ? (starHtml + ' ' + escapeHtml(cmd.name))
+        : (starHtml + ' Comandante');
       return '<li class="fleet-item" data-fleet-id="' + escapeHtml(f.id) + '">' +
         '<div class="fleet-item__head">' +
           '<span class="fleet-item__name"><strong>' + escapeHtml(f.name) + '</strong> ' +
@@ -2714,7 +2741,9 @@ function renderFleetView(stage) {
         cmdHtml +
         '<div class="fleet-item__actions">' +
           '<button class="btn btn--mini" data-action="fleet-orders" data-fleet="' + escapeHtml(f.id) + '" type="button">Ordini ▸</button>' +
-          '<button class="btn btn--mini" data-action="fleet-formation" data-fleet="' + escapeHtml(f.id) + '" type="button" title="Soglia di ritirata in battaglia">⚑ ' + FORM_LABEL[formation] + '</button>' +
+          '<button class="btn btn--mini btn--with-icon" data-action="fleet-formation" data-fleet="' + escapeHtml(f.id) + '" type="button" title="Soglia di ritirata in battaglia">' +
+            '<span class="ui-icon ui-icon--pink" aria-hidden="true">' + ((ORION.icon && ORION.icon('forces')) || '') + '</span> ' + FORM_LABEL[formation] +
+          '</button>' +
           '<button class="btn btn--mini" data-action="fleet-commander" data-fleet="' + escapeHtml(f.id) + '" type="button" title="Assegna un Comandante alla flotta">' + cmdBtnLabel + '</button>' +
           '<button class="btn btn--mini" data-action="fleet-manage" data-fleet="' + escapeHtml(f.id) + '" type="button">Gestisci navi/eq.</button>' +
           '<button class="btn btn--mini btn--danger" data-action="fleet-dissolve" data-fleet="' + escapeHtml(f.id) + '" type="button">Dissolvi</button>' +
@@ -2800,7 +2829,7 @@ function buildWarSection(g) {
   let html = '<div class="war-section">';
   /* M09 Fase B: stato di esilio (0 colonie, partita non-hard). */
   if (g.defeated === 'exile') {
-    html += '<div class="war-exile">⚑ <strong>Esilio</strong>: la tua civiltà non ha più colonie. Sopravvivi nelle flotte — ricolonizza per risorgere.</div>';
+    html += '<div class="war-exile">' + uiIcon('warning', 'gold') + ' <strong>Esilio</strong>: la tua civiltà non ha più colonie. Sopravvivi nelle flotte — ricolonizza per risorgere.</div>';
   }
   html += '<div class="war-meters">' +
     '<div class="war-meter war-meter--' + moraleCls + '"><span class="war-meter__lbl">Morale d\'impero</span>' +
@@ -2810,17 +2839,21 @@ function buildWarSection(g) {
     '</div>';
 
   if (ORION.lastBattle) {
-    html += '<button class="btn btn--mini" data-action="battle-report" type="button">Ultimo report di battaglia ▸</button>';
+    html += '<button class="btn btn--mini btn--with-icon" data-action="battle-report" type="button">' +
+      uiIcon('sword', 'pink') + ' Ultimo report di battaglia ' + uiIcon('chevronRight', 'soft') +
+    '</button>';
   }
   /* Leva di recovery: richiamo flotte alla capitale (concentra la difesa). */
   if ((g.fleets || []).length) {
-    html += ' <button class="btn btn--mini" data-action="war-recall" type="button" title="Tutte le flotte rientrano alla colonia origine">⟲ Richiama flotte</button>';
+    html += ' <button class="btn btn--mini btn--with-icon" data-action="war-recall" type="button" title="Tutte le flotte rientrano alla colonia origine">' +
+      uiIcon('refresh', 'cyan') + ' Richiama flotte' +
+    '</button>';
   }
 
   if (incursions.length) {
     html += '<div class="war-incursions"><h4 class="war-h">Incursioni in arrivo</h4><ul>';
     incursions.forEach(function (inc) {
-      html += '<li>⚠ Predoni verso ' + colonyNameFromKey(inc.targetColonyKey) +
+      html += '<li>' + uiIcon('warning', 'gold') + ' Predoni verso ' + colonyNameFromKey(inc.targetColonyKey) +
         ' · arrivo fra <strong>' + (inc.eta | 0) + ' ' + iU() + '</strong></li>';
     });
     html += '</ul></div>';
@@ -2841,9 +2874,12 @@ function buildWarSection(g) {
         '<div class="war-siege__head">Assedio di ' + colonyNameFromKey(b.colonyKey) +
           ' · round ' + (b.round | 0) + ' · ' + who + ' ' + atkHp + ' hp</div>' +
         '<div class="war-siege__actions">' +
-          '<button class="btn btn--mini" data-action="siege-retreat" data-battle="' + escapeHtml(b.id) + '" type="button">Ritira flotte</button>' +
-          '<button class="btn btn--mini" data-action="siege-tribute" data-battle="' + escapeHtml(b.id) + '" type="button">' + tributeLbl + ' (' + (costStr || 'gratis') + ')</button>' +
-          '<button class="btn btn--mini btn--danger" data-action="siege-evacuate" data-colony="' + escapeHtml(b.colonyKey) + '" type="button" title="Abbandona la colonia recuperando metà delle risorse alla capitale">Evacua colonia</button>' +
+          '<button class="btn btn--mini btn--with-icon" data-action="siege-retreat" data-battle="' + escapeHtml(b.id) + '" type="button">' +
+            uiIcon('refresh', 'cyan') + ' Ritira flotte</button>' +
+          '<button class="btn btn--mini btn--with-icon" data-action="siege-tribute" data-battle="' + escapeHtml(b.id) + '" type="button">' +
+            uiIcon('diplomacy', 'amber') + ' ' + tributeLbl + ' (' + (costStr || 'gratis') + ')</button>' +
+          '<button class="btn btn--mini btn--with-icon btn--danger" data-action="siege-evacuate" data-colony="' + escapeHtml(b.colonyKey) + '" type="button" title="Abbandona la colonia recuperando metà delle risorse alla capitale">' +
+            uiIcon('warning', 'pink') + ' Evacua colonia</button>' +
         '</div>' +
         '<p class="war-siege__hint">Rinforza spostando una flotta su questo sistema (si unisce alla difesa al prossimo round); oppure consolida altrove.</p>' +
       '</div>';
@@ -2903,25 +2939,28 @@ function openCommanderPicker(fleetId, stage) {
   const avail = ORION.commander.assignableOf(g);
   const cur = fleet.commander;
   if (!avail.length && !cur) { showToast('Nessun Comandante disponibile — emergono dagli equipaggi veterani (xp≥5)'); return; }
+  const starHtml = uiIcon('star', 'amber');
   const rows = avail.map(function (a) {
     const c = a.commander;
     return '<button class="cmd-pick__row" data-cmd="' + escapeHtml(c.id) + '" type="button">' +
-      '<span class="cmd-pick__name">★ ' + escapeHtml(c.rank + ' ' + c.name) + '</span>' +
+      '<span class="cmd-pick__name">' + starHtml + ' ' + escapeHtml(c.rank + ' ' + c.name) + '</span>' +
       '<span class="cmd-pick__meta">' + escapeHtml(c.specializationLabel || c.specialization) +
         ' · ' + escapeHtml(ORION.commander.bonusLabel(c)) + ' · ' + escapeHtml(c.traitLabel || '') +
         ' · da ' + escapeHtml(colonyName(a.colonyKey)) + '</span>' +
     '</button>';
   }).join('') || '<p class="cmd-pick__empty">Nessun Comandante in panchina.</p>';
   const curHtml = cur
-    ? '<div class="cmd-pick__current">Assegnato: <strong>★ ' + escapeHtml(cur.rank + ' ' + cur.name) + '</strong> · ' +
+    ? '<div class="cmd-pick__current">Assegnato: <strong>' + starHtml + ' ' + escapeHtml(cur.rank + ' ' + cur.name) + '</strong> · ' +
         escapeHtml(cur.specializationLabel || cur.specialization) +
-        ' <button class="btn btn--mini btn--danger" data-cmd-release type="button">Rimuovi</button></div>'
+        ' <button class="btn btn--mini btn--with-icon btn--danger" data-cmd-release type="button">' +
+        uiIcon('close', 'pink') + ' Rimuovi</button></div>'
     : '';
   const html =
     '<div class="attack-overlay" data-cmd-overlay>' +
       '<div class="attack-overlay__panel">' +
-        '<header class="attack-overlay__head"><h3>★ Comandante di ' + escapeHtml(fleet.name) + '</h3>' +
-          '<button class="attack-overlay__x" data-cmd-close type="button" aria-label="Chiudi">✕</button></header>' +
+        '<header class="attack-overlay__head"><h3>' + starHtml + ' Comandante di ' + escapeHtml(fleet.name) + '</h3>' +
+          '<button class="attack-overlay__x btn--icon-only" data-cmd-close type="button" aria-label="Chiudi">' +
+            uiIcon('close') + '</button></header>' +
         curHtml +
         '<p class="attack-overlay__sub">Specializzazioni: <strong>Tattico</strong> +10% fuoco · <strong>Navigatore</strong> −15% durata viaggio · <strong>Logista</strong> (gancio M12).</p>' +
         '<div class="cmd-pick__list">' + rows + '</div>' +
@@ -3017,8 +3056,12 @@ function showDefeatModal() {
   const html =
     '<div class="battle-modal" data-defeat-modal>' +
       '<div class="battle-modal__panel">' +
-        '<header class="battle-modal__head"><h3>La civiltà è caduta</h3></header>' +
-        '<p class="battle-modal__verdict battle-modal__verdict--lose">Sconfitta</p>' +
+        '<header class="battle-modal__head"><h3>' +
+          uiIcon('warning', 'pink') + ' La civiltà è caduta' +
+        '</h3></header>' +
+        '<p class="battle-modal__verdict battle-modal__verdict--lose">' +
+          uiIcon('sword', 'pink') + ' Sconfitta' +
+        '</p>' +
         '<p>Senza più colonie, il tuo impero si dissolve negli annali galattici. ' +
         'La galassia continua a vivere senza di te.</p>' +
         '<div class="battle-modal__sides"><button class="btn btn--primary" data-defeat-menu type="button">Torna al menu</button></div>' +
@@ -3066,10 +3109,17 @@ function openBattleReport() {
   const html =
     '<div class="battle-modal" data-battle-modal>' +
       '<div class="battle-modal__panel">' +
-        '<header class="battle-modal__head"><h3>Report di battaglia — ' + escapeHtml(sys) + '</h3>' +
-          '<button class="btn btn--mini" data-close-battle type="button">✕</button></header>' +
-        '<p class="battle-modal__verdict battle-modal__verdict--' + (rep.winner === 'A' ? 'win' : 'lose') + '">' + winLabel +
-          ' in ' + rep.rounds + ' round</p>' +
+        '<header class="battle-modal__head"><h3>' +
+          '<span class="ui-icon ui-icon--pink" aria-hidden="true">' + ((ORION.icon && ORION.icon('sword')) || '') + '</span> ' +
+          'Report di battaglia — ' + escapeHtml(sys) +
+        '</h3>' +
+          '<button class="btn btn--mini btn--icon-only" data-close-battle type="button" aria-label="Chiudi">' +
+            '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+          '</button></header>' +
+        '<p class="battle-modal__verdict battle-modal__verdict--' + (rep.winner === 'A' ? 'win' : 'lose') + '">' +
+          '<span class="ui-icon ' + (rep.winner === 'A' ? 'ui-icon--gold' : 'ui-icon--pink') + '" aria-hidden="true">' +
+            ((ORION.icon && ORION.icon(rep.winner === 'A' ? 'trophy' : 'sword')) || '') +
+          '</span> ' + winLabel + ' in ' + rep.rounds + ' round</p>' +
         '<div class="battle-modal__sides">' +
           '<span><strong>' + escapeHtml(rep.sideA.name) + '</strong>: ' + rep.sideA.before.ships + '→' + rep.sideA.after.ships + ' navi</span>' +
           '<span><strong>' + escapeHtml(rep.sideB.name) + '</strong>: ' + rep.sideB.before.ships + '→' + rep.sideB.after.ships + ' unità</span>' +
@@ -3124,12 +3174,17 @@ function renderCivView(stage) {
       const known = ORION.ai.knownSystemsCount(g, c);
       const ptier = ORION.ai.powerTier(c.power || 0);
       const seat = (g.galaxy.groups.find(function (gp) { return gp.id === c.homeGroupId; }) || {});
-      /* M11 (#51): chip stato diplomatico + pulsanti proposta. */
+      /* M10 Fase C: intel combat-aware (forza stimata, ultimo scontro,
+         "perché" della disposizione). */
+      const force = ORION.ai.forceEstimate ? ORION.ai.forceEstimate(g, c) : 0;
+      const reason = ORION.ai.dispositionReason ? ORION.ai.dispositionReason(g, c) : '';
+      /* M11 (#51): chip stato diplomatico FORMALE (civ.relation, autoritativo)
+         + pulsanti proposta. Sostituisce il chip situazionale di Fase C. */
       let relChip = '', dipActions = '';
       if (DIP) {
-        const rel = DIP.effectiveRelation(g, c);
-        relChip = '<span class="dip-relchip ' + DIP.relationStateClass(rel) + '" title="Stato diplomatico">' +
-          escapeHtml(DIP.relationLabel(rel)) + '</span>';
+        const drel = DIP.effectiveRelation(g, c);
+        relChip = '<span class="dip-relchip ' + DIP.relationStateClass(drel) + '" title="Stato diplomatico">' +
+          escapeHtml(DIP.relationLabel(drel)) + '</span>';
         const acts = DIP.availableActions(g, c);
         const onCd = DIP.onCooldown(g, c);
         dipActions = '<div class="dip-actions">' + acts.map(function (a) {
@@ -3146,6 +3201,17 @@ function renderCivView(stage) {
             '</button>';
         }).join('') + '</div>';
       }
+      let lastB = '';
+      if (c.lastBattle) {
+        const lb = c.lastBattle;
+        const sys = (lb.sysId != null && lb.sysId >= 0 && g.galaxy.systems[lb.sysId]) ? g.galaxy.systems[lb.sysId].name : null;
+        const verdict = lb.result === 'win' ? 'vittoria tua' : 'sconfitta tua';
+        const where = sys ? ' a <strong>' + escapeHtml(sys) + '</strong>' : '';
+        const when = ORION.time ? ORION.time.format((g.startEpochOrbita || 0) * 100 + lb.impulso) : '';
+        lastB = '<div class="civ-card__row civ-lastbattle civ-lastbattle--' + (lb.result === 'win' ? 'win' : 'loss') + '">' +
+          '<span class="civ-card__k">Ultimo scontro</span><span>' + verdict + where +
+          (when ? ' · <span class="civ-card__when">' + escapeHtml(when) + '</span>' : '') + '</span></div>';
+      }
       return '<li class="civ-card" style="--civ-color:' + escapeHtml(c.color) + '">' +
         '<div class="civ-card__head">' +
           '<span class="civ-card__swatch" aria-hidden="true"></span>' +
@@ -3157,16 +3223,44 @@ function renderCivView(stage) {
         '<div class="civ-card__row"><span class="civ-card__k">Sede</span><span>' +
           escapeHtml(seat.tierLabel || '—') + (seat.name ? ' · ' + escapeHtml(seat.name) : '') + '</span></div>' +
         '<div class="civ-card__row"><span class="civ-card__k">Potenza</span><span class="civ-power civ-power--' + ptier + '">' + ptier + '</span>' +
+          '<span class="civ-card__k">Forza stimata</span><span>≈ ' + force + ' unità</span>' +
           '<span class="civ-card__k">Sistemi noti</span><span>' + known + '</span></div>' +
+        lastB +
         '<div class="civ-disp">' +
           '<div class="civ-disp__top"><span class="civ-card__k">Disposizione verso di te</span>' +
             '<span class="civ-disp__label civ-disp__label--' + dispCls + '">' + dispLabel + '</span></div>' +
           '<div class="civ-disp__bar"><span class="civ-disp__mid" aria-hidden="true"></span>' +
             '<span class="civ-disp__fill civ-disp__fill--' + dispCls + '" style="width:' + pct.toFixed(0) + '%"></span></div>' +
+          (reason ? '<div class="civ-disp__reason">' + escapeHtml(reason) + '</div>' : '') +
         '</div>' +
         dipActions +
       '</li>';
     }).join('') + '</ul>';
+  }
+
+  /* Stato di guerra d'impero (§ M09): morale + pressione, contesto globale. */
+  const ws = g.warState || { morale: 1, pressure: 0 };
+  const moralePct = Math.round((ws.morale != null ? ws.morale : 1) * 100);
+  const pressure = Math.round(ws.pressure || 0);
+  const deeds = g.alignmentDeeds || { light: 0, dark: 0 };
+
+  /* M10 Fase E: covi pirata NOTI — bersagli raidabili (manda una flotta
+     armata sul sistema per sgominarli e incassare la taglia). */
+  let nestsHtml = '';
+  const nests = ORION.ai.knownNests ? ORION.ai.knownNests(g) : [];
+  if (nests.length) {
+    nestsHtml = '<div class="civ-nests">' +
+      '<h3 class="civ-nests__title">☠ Minacce pirata note</h3>' +
+      '<ul class="civ-nests__list">' + nests.map(function (n) {
+        const tag = (n.sysId != null && n.sysId >= 0) ? systemTagHtml(n.sysId) : '';
+        return '<li class="civ-nest"><span class="civ-nest__sys"><strong>' + escapeHtml(n.name) + '</strong>' + tag + '</span>' +
+          '<span class="civ-nest__lvl">covo liv. ' + n.level + '</span>' +
+          '<span class="civ-nest__taglia">taglia ≈ ' + resIcon('met') + (25 * n.level + 40) + ' ' + resIcon('en') + (12 * n.level + 20) + '</span></li>';
+      }).join('') + '</ul>' +
+      '<p class="panel__note civ-nests__hint">Manda una <strong>flotta armata</strong> su questi sistemi per sgominare i covi: ' +
+        'sconfiggerli frutta una <strong>taglia</strong> e riduce le razzie. I predoni, però, possono colpire le tue ' +
+        'flotte lasciate <em>esposte</em> in orbita lontano dalle colonie.</p>' +
+      '</div>';
   }
 
   stage.innerHTML =
@@ -3176,13 +3270,17 @@ function renderCivView(stage) {
         '<div class="civ-indices">' +
           '<span class="civ-index" title="Indice Corruzione Galattica (§5.4)">ICG <strong>' + icg + '</strong></span>' +
           '<span class="civ-index" title="Reputazione globale (§14)">Reputazione <strong>' + rep + '</strong></span>' +
+          '<span class="civ-index" title="Morale d\'impero (M09): cala con le sconfitte, riduce la produzione">Morale <strong>' + moralePct + '%</strong></span>' +
+          '<span class="civ-index" title="Pressione nemica (M09): sale con le sconfitte, attira più attacchi">Pressione <strong>' + pressure + '</strong></span>' +
         '</div>' +
       '</header>' +
       '<p class="panel__note">Le civiltà vivono in <strong>background</strong> (espandono, si fanno guerra, cadono e ' +
-        'nascono). Qui vedi solo quelle <strong>contattate</strong>: identità, disposizione e <strong>stato diplomatico</strong>. ' +
-        'Puoi <strong>dichiarare guerra</strong>, <strong>proporre pace</strong> o <strong>alleanza</strong> (non-aggressione): ' +
-        'l\'esito dipende da disposizione, <strong>reputazione</strong> e allineamento. Gli scontri si risolvono col ' +
-        '<strong>Combattimento</strong> (M09).</p>' +
+        'nascono). Dossier <strong>combat-aware</strong> con <strong>stato diplomatico</strong>: puoi <strong>dichiarare guerra</strong>, ' +
+        '<strong>proporre pace</strong> o <strong>alleanza</strong> (non-aggressione) — l\'esito dipende da disposizione, ' +
+        '<strong>reputazione</strong> e allineamento. Le tue azioni morali finora — <span class="civ-deeds civ-deeds--light">' + (deeds.light || 0) + ' luce</span> · ' +
+        '<span class="civ-deeds civ-deeds--dark">' + (deeds.dark || 0) + ' ombra</span>. ' +
+        'Gli scontri si risolvono col <strong>Combattimento</strong> (M09).</p>' +
+      nestsHtml +
       cards +
     '</div>';
 
@@ -3268,7 +3366,9 @@ function openFleetCreateOverlay(eligibleColonies) {
     '<div class="fleet-create-overlay__panel" role="document">' +
       '<header class="fleet-create-overlay__head">' +
         '<h2>Crea flotta</h2>' +
-        '<button class="btn btn--mini" data-action="fleet-overlay-close" type="button" aria-label="Chiudi">✕</button>' +
+        '<button class="btn btn--mini btn--icon-only" data-action="fleet-overlay-close" type="button" aria-label="Chiudi">' +
+          '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+        '</button>' +
       '</header>' +
       '<label class="fleet-field">Colonia origine' +
         '<select data-bind="fleet-create-colony">' + colonyOptions + '</select>' +
@@ -3347,7 +3447,9 @@ function openFleetManageOverlay(fleetId) {
     '<div class="fleet-create-overlay__panel" role="document">' +
       '<header class="fleet-create-overlay__head">' +
         '<h2>Gestisci ' + escapeHtml(fleet.name) + '</h2>' +
-        '<button class="btn btn--mini" data-action="fleet-overlay-close" type="button" aria-label="Chiudi">✕</button>' +
+        '<button class="btn btn--mini btn--icon-only" data-action="fleet-overlay-close" type="button" aria-label="Chiudi">' +
+          '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+        '</button>' +
       '</header>' +
       '<p class="panel__note">La flotta deve essere all\'attracco della colonia origine per assegnare/restituire navi. ' +
         'Stato attuale: <strong>' + (fleet.location.status === 'docked' && fleet.location.systemId === colony.systemId
@@ -3440,7 +3542,9 @@ function openFleetOrdersOverlay(fleetId) {
     '<div class="fleet-orders-overlay__panel" role="document">' +
       '<header class="fleet-orders-overlay__head">' +
         '<h2>Ordini · ' + escapeHtml(fleet.name) + '</h2>' +
-        '<button class="btn btn--mini" data-action="fleet-overlay-close" type="button" aria-label="Chiudi">✕</button>' +
+        '<button class="btn btn--mini btn--icon-only" data-action="fleet-overlay-close" type="button" aria-label="Chiudi">' +
+          '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+        '</button>' +
       '</header>' +
       '<p class="panel__note">Posizione: <strong>' + escapeHtml(g.galaxy.systems[fleet.location.systemId].name) + '</strong>. ' +
         'Equipaggio: ' + fleet.crew.length + ' / ' + ORION.fleet.fleetCrewRequired(fleet) + ' richiesti. ' +
@@ -3567,7 +3671,7 @@ function openFleetOrdersOverlay(fleetId) {
         '<span class="fleet-route-item__n">' + (i + 1) + '.</span>' +
         '<span class="fleet-route-item__name">' + escapeHtml(sysShort(sid)) + '</span>' +
         '<span class="fleet-route-item__dwell">' + (store.dwell[i] || 0) + ' Ι</span>' +
-        '<button class="btn btn--mini" data-action="' + removeAction + '" data-idx="' + i + '" type="button" title="Rimuovi tappa">×</button>' +
+        '<button class="btn btn--mini btn--icon-only" data-action="' + removeAction + '" data-idx="' + i + '" type="button" title="Rimuovi tappa" aria-label="Rimuovi">' + uiIcon('close', 'pink') + '</button>' +
       '</li>';
     }).join('');
     ul.querySelectorAll('[data-action="' + removeAction + '"]').forEach(function (b) {
@@ -3829,7 +3933,7 @@ function rateGrid(rates, upkeep, colony) {
     const popDrain = k === 'food' ? popFood : k === 'water' ? popWater : 0;
     const net = r - u - popDrain;
     if (!(r || u || popDrain)) return;
-    let aux = '+' + fmtAbs(r) + ' prod / −' + fmtAbs(u) + ' upkeep';
+    let aux = '+' + fmtAbs(r) + ' prod / −' + fmtAbs(u) + ' uso';
     if (popDrain > 0) aux += ' / −' + fmtAbs(popDrain) + ' pop';
     items.push(row(resLabel(k), '<span class="rate ' + (net >= 0 ? 'rate--pos' : 'rate--neg') + '">' + fmtNet(net) + '</span> / ' + iU() + ' <span class="rate-aux">(' + aux + ')</span>'));
   });
@@ -3941,7 +4045,15 @@ const DEFAULT_AUTOPAUSE = {
   'civ-emerged': true,
   'civ-expand': false,
   'civ-war': false,
+  'civ-battle': false,
   'pirate-raid': false,
+  /* M10 Fase E: covo sgominato = notevole (ON); raid parziale OFF (frequente).
+     Raider in arrivo + esito = notevoli (la tua flotta è sotto attacco). */
+  'pirate-cleared': true,
+  'pirate-raid-won': false,
+  'raider-inbound': true,
+  'raider-hit': true,
+  'raider-fizzle': false,
   /* M09 Fase A (decisione #49): il combattimento è notevole → auto-pausa ON.
      L'incursione inbound è il PREAVVISO; l'assedio si auto-pausa a ogni round
      per dare la finestra di reazione (rinforza/ritira/tributo). */
@@ -4018,15 +4130,14 @@ function initTimeControls() {
     else if (act === 'play-step')   { stopPlay(); runAdvance(1); }
     else if (act === 'advance-to-event') { stopPlay(); runAdvance(null); }
   });
-  /* Shortcuts globali (decisione #31): Space play/pause · +/- speed
-     · → singolo Ι · E prossimo evento. Ignorati su input/textarea. */
+  /* Shortcuts globali (decisione #31): Space play/pause · → singolo Ι ·
+     E prossimo evento. Ignorati su input/textarea.
+     +/- rimossi: confliggevano con Ctrl + +/- (zoom browser). */
   document.addEventListener('keydown', function (e) {
     if (!ORION.game) return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
     if (e.target.isContentEditable) return;
     if (e.key === ' ') { e.preventDefault(); togglePlay(); }
-    else if (e.key === '+' || e.key === '=') { e.preventDefault(); changeSpeed(+1); }
-    else if (e.key === '-' || e.key === '_') { e.preventDefault(); changeSpeed(-1); }
     else if (e.key === 'ArrowRight') { e.preventDefault(); stopPlay(); runAdvance(1); }
     else if (e.key === 'e' || e.key === 'E') { e.preventDefault(); stopPlay(); runAdvance(null); }
   });
@@ -4113,7 +4224,12 @@ function renderTimeControls() {
   const host = document.querySelector('[data-bind="time-controls"]');
   if (!host) return;
   const playing = ORION.timer.playing;
-  const glyph = playing ? '⏸' : '▶';
+  /* PR-E: SVG icons per i 5 controlli tempo (UI_GUIDE §3). Tinte:
+     play/pause/step = ciano (azioni temporali); skipNext = oro (evento
+     notevole). */
+  const playSvg  = uiIcon(playing ? 'pause' : 'play', 'cyan');
+  const stepSvg  = uiIcon('step', 'cyan');
+  const eventSvg = uiIcon('skipNext', 'gold');
   const label = timerLabel();
   const idx = PLAY_LEVELS.indexOf(ORION.timer.level);
   const atMin = idx <= 0, atMax = idx >= PLAY_LEVELS.length - 1;
@@ -4121,16 +4237,16 @@ function renderTimeControls() {
     '<button class="btn btn--mini btn--play-step" data-action="play-slower" type="button"' +
     (atMin ? ' disabled' : '') + ' title="Rallenta (-)">−</button>' +
     '<button class="btn btn--play" data-action="play-toggle" type="button" title="Play/Pause (Space)">' +
-      '<span class="btn__glyph" aria-hidden="true">' + glyph + '</span>' +
+      '<span class="btn__glyph">' + playSvg + '</span>' +
       '<span class="btn__label">' + escapeHtml(label) + '</span>' +
     '</button>' +
     '<button class="btn btn--mini btn--play-step" data-action="play-faster" type="button"' +
     (atMax ? ' disabled' : '') + ' title="Accelera (+)">+</button>' +
     '<button class="btn btn--mini" data-action="play-step" type="button" title="Singolo Impulso (→)">' +
-      '<span class="btn__glyph" aria-hidden="true">⏵Ι</span>' +
+      '<span class="btn__glyph">' + stepSvg + '</span>' +
     '</button>' +
     '<button class="btn btn--primary btn--next-event" data-action="advance-to-event" type="button" title="Prossimo evento (E)">' +
-      '<span class="btn__glyph" aria-hidden="true">⏭</span>' +
+      '<span class="btn__glyph">' + eventSvg + '</span>' +
       '<span class="btn__label">Evento</span>' +
       '<span class="time-control__delta" data-bind="event-delta">+— Ι</span>' +
     '</button>';
@@ -4180,9 +4296,15 @@ function showEventOverlay(events) {
     'civ-contact': 'Primo contatto con una civiltà',
     'civ-expand': 'Civiltà AI: espansione',
     'civ-war': 'Guerra tra civiltà',
+    'civ-battle': 'Battaglia tra civiltà (vista)',
     'civ-fallen': 'Civiltà caduta',
     'civ-emerged': 'Nuova civiltà emersa',
     'pirate-raid': 'Razzia pirata',
+    'pirate-cleared': 'Covo pirata sgominato',
+    'pirate-raid-won': 'Covo pirata colpito',
+    'raider-inbound': 'Predoni in rotta sulla tua flotta',
+    'raider-hit': 'La tua flotta sotto attacco pirata',
+    'raider-fizzle': 'Predoni a vuoto',
     'incursion-inbound': 'Incursione pirata in arrivo',
     'siege-begin': 'Assedio iniziato',
     'siege-round': 'Assedio: round',
@@ -4203,8 +4325,12 @@ function showEventOverlay(events) {
   /* Raggruppa per kind: una checkbox per categoria, una sola voce di sintesi. */
   const byKind = {};
   triggered.forEach(function (e) { (byKind[e.kind] = byKind[e.kind] || []).push(e); });
+  const pauseIcon = (ORION.icon && ORION.icon('warning')) || '';
   let html = '<div class="event-overlay__panel" role="alertdialog" aria-label="Evento — tempo in pausa">' +
-    '<h3 class="event-overlay__title">⏸ Tempo in pausa</h3>' +
+    '<h3 class="event-overlay__title">' +
+      '<span class="ui-icon ui-icon--gold event-overlay__title-icon" aria-hidden="true">' + pauseIcon + '</span> ' +
+      'Tempo in pausa' +
+    '</h3>' +
     '<ul class="event-overlay__list">';
   Object.keys(byKind).forEach(function (kind) {
     const list = byKind[kind];
@@ -4453,6 +4579,17 @@ function chronicleEvent(ev) {
   } else if (ev.kind === 'civ-war') {
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.winner) + '</strong> strappa un sistema a <strong>' + escapeHtml(ev.loser) + '</strong> nel/nella ' + escapeHtml(ev.regionLabel) + '.', 'civ');
     if (ORION.tutorial) ORION.tutorial.fire('civilizations');
+  } else if (ev.kind === 'civ-battle') {
+    /* M10 Fase D (decisione #47): guerra AI-vs-AI VISTA dal giocatore,
+       risolta col motore M09 → report reale. */
+    const stag = (ev.systemId != null && ev.systemId >= 0) ? systemTagHtml(ev.systemId) : '';
+    const verdict = ev.outcome === 'taken'
+      ? '<strong>' + escapeHtml(ev.attacker) + '</strong> conquista il sistema'
+      : '<strong>' + escapeHtml(ev.defender) + '</strong> resiste all\'assalto di <strong>' + escapeHtml(ev.attacker) + '</strong>';
+    pushChronicle(ds + ' — Battaglia di <strong>' + escapeHtml(ev.systemName || '—') + '</strong>' + stag + ': ' + verdict +
+      ' · navi perse ' + (ev.lostA || 0) + '/' + (ev.lostB || 0) + ' in ' + (ev.rounds || 0) + ' round.', 'civ');
+    if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+    if (ORION.tutorial) ORION.tutorial.fire('civilizations');
   } else if (ev.kind === 'civ-fallen') {
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.civName) + '</strong> è caduta: ridotta a zero sistemi, assorbita da <strong>' + escapeHtml(ev.conqueror) + '</strong>.', 'civ');
   } else if (ev.kind === 'civ-emerged') {
@@ -4475,6 +4612,32 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.civName) + '</strong> ha respinto la tua proposta diplomatica.', 'civ');
   } else if (ev.kind === 'diplo-truce-expired') {
     pushChronicle(ds + ' — La tregua con <strong>' + escapeHtml(ev.civName) + '</strong> è scaduta · stato di guerra ripristinato.', 'civ');
+  } else if (ev.kind === 'pirate-cleared') {
+    /* M10 Fase E: covo sgominato → taglia. */
+    const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
+    const sys = (ev.systemId != null && ORION.game.galaxy.systems[ev.systemId]) ? ORION.game.galaxy.systems[ev.systemId].name : '—';
+    const rw = ev.reward || {};
+    pushChronicle(ds + ' — <strong>Covo pirata sgominato</strong> a <strong>' + escapeHtml(sys) + '</strong>' + stag +
+      ' · taglia: ' + resIcon('met') + (rw.met || 0) + ' ' + resIcon('en') + (rw.en || 0) + '.', 'explore');
+    if (ORION.tutorial) ORION.tutorial.fire('pirates');
+  } else if (ev.kind === 'pirate-raid-won') {
+    const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
+    const rw = ev.reward || {};
+    pushChronicle(ds + ' — Covo pirata colpito e indebolito' + stag + ' · bottino ' + resIcon('met') + (rw.met || 0) + ' ' + resIcon('en') + (rw.en || 0) + '.', 'explore');
+    if (ORION.tutorial) ORION.tutorial.fire('pirates');
+  } else if (ev.kind === 'raider-inbound') {
+    const stag = ev.targetSysId != null && ev.targetSysId >= 0 ? systemTagHtml(ev.targetSysId) : '';
+    pushChronicle(ds + ' — <strong>Predoni in rotta</strong> verso la flotta <strong>' + escapeHtml(ev.targetFleetName || '—') + '</strong>' + stag + ' (arrivo fra ' + (ev.eta || 0) + ' ' + iU() + ').', 'system');
+    if (ORION.tutorial) ORION.tutorial.fire('pirates');
+  } else if (ev.kind === 'raider-hit') {
+    const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
+    const verb = ev.playerWon ? 'respinge i predoni' : 'subisce l\'attacco predone';
+    const losses = ev.lost > 0 ? ' · ' + ev.lost + ' nave/i perdute' : ' · nessuna perdita';
+    pushChronicle(ds + ' — Flotta <strong>' + escapeHtml(ev.fleetName || '—') + '</strong> ' + verb + stag + losses + '.', 'system');
+    if (ORION.tutorial) ORION.tutorial.fire('pirates');
+  } else if (ev.kind === 'raider-fizzle') {
+    /* preda fuggita: voce leggera, niente spam */
+    pushChronicle(ds + ' — I predoni non hanno trovato la preda e si sono dileguati.', 'system');
   } else if (ev.kind === 'battle-skirmish') {
     /* M09 Fase A (decisione #49): scaramuccia lampo. */
     const sys = ORION.game.galaxy.systems[ev.systemId];
@@ -4631,7 +4794,7 @@ function renderLeftPanel() {
     const sysId = c.systemId;
     const tag = bodyTagHtml(sysId);
     const badges = [];
-    if (c.phase === 'settling') badges.push('<span class="lp-item__badge lp-item__badge--info">⏳</span>');
+    if (c.phase === 'settling') badges.push('<span class="lp-item__badge lp-item__badge--info" title="Insediamento">' + uiIcon('transition') + '</span>');
     if (c.colonizing) badges.push('<span class="lp-item__badge lp-item__badge--info">◌</span>');
     if (ORION.capital && ORION.capital.isCapital && ORION.capital.isCapital(g, k)) {
       badges.push('<span class="lp-item__badge lp-item__badge--ok" title="Capitale">★</span>');
@@ -4649,10 +4812,10 @@ function renderLeftPanel() {
       else if (worst === 'low') badges.push('<span class="lp-item__badge lp-item__badge--warn" title="Scarsità">!</span>');
     }
     if (c.queue && c.queue.length) {
-      badges.push('<span class="lp-item__badge lp-item__badge--info" title="Coda di costruzione">⚒</span>');
+      badges.push('<span class="lp-item__badge lp-item__badge--info" title="Coda di costruzione">' + uiIcon('build') + '</span>');
     }
     if (c.governor && Array.isArray(c.governor.recent) && c.governor.recent.length) {
-      badges.push('<span class="lp-item__badge lp-item__badge--warn" title="Segnalazione del governatore">⚙</span>');
+      badges.push('<span class="lp-item__badge lp-item__badge--warn" title="Segnalazione del governatore">' + uiIcon('settings') + '</span>');
     }
     const isFocus = (k === dxKey);
     const icon = (ORION.icon && ORION.icon('roster')) || '';
@@ -5058,6 +5221,14 @@ function renderContextActionBar(ctx) {
   const g = ORION.game;
   if (!g) { host.hidden = true; host.innerHTML = ''; return; }
 
+  /* PR-D helper: emette uno <span class="ui-icon"> con SVG inline +
+     tinta. Tonalità per i bottoni dell'action bar segue UI_GUIDE §1. */
+  function icnHtml(name, tone) {
+    const svg = (ORION.icon && ORION.icon(name)) || '';
+    const cls = tone ? (' ui-icon--' + tone) : '';
+    return '<span class="ui-icon' + cls + '" aria-hidden="true">' + svg + '</span>';
+  }
+
   const buttons = [];
   if (ctx && ctx.level === 'planet' && ORION.currentPlanet) {
     const sysId = ctx.systemId;
@@ -5089,21 +5260,27 @@ function renderContextActionBar(ctx) {
       const tooltip = canPay
         ? 'Avvia spedizione coloniale (' + cost.impulsi + ' ' + iU() + ')'
         : 'Risorse insufficienti sulla colonia base' + (costMul > 1 ? ' (×' + costMul + ' per produttiva)' : '');
-      buttons.push('<button class="actionbar__btn actionbar__btn--primary" data-action="ctx-colonize"' +
-        (canPay ? '' : ' disabled') + ' title="' + escapeHtml(tooltip) + '">🏗 Colonizza ' + escapeHtml(planet.name) + '</button>');
+      buttons.push('<button class="actionbar__btn actionbar__btn--primary btn--with-icon" data-action="ctx-colonize"' +
+        (canPay ? '' : ' disabled') + ' title="' + escapeHtml(tooltip) + '">' +
+        icnHtml('build', 'cyan') + ' Colonizza ' + escapeHtml(planet.name) + '</button>');
     } else if (isForeign) {
-      buttons.push('<button class="actionbar__btn actionbar__btn--primary" data-action="ctx-civ-dossier" data-civ="' + escapeHtml(civ.id) + '">Apri dossier civiltà</button>');
+      buttons.push('<button class="actionbar__btn actionbar__btn--primary btn--with-icon" data-action="ctx-civ-dossier" data-civ="' + escapeHtml(civ.id) + '">' +
+        icnHtml('civ', 'pink') + ' Apri dossier civiltà</button>');
       /* M11 (#51): diplomazia attiva — apre la vista Civiltà sulle proposte. */
-      buttons.push('<button class="actionbar__btn" data-action="ctx-diplomacy" data-civ="' + escapeHtml(civ.id) + '" title="Apri la diplomazia con questa civiltà">⚑ Diplomazia</button>');
+      buttons.push('<button class="actionbar__btn btn--with-icon" data-action="ctx-diplomacy" data-civ="' + escapeHtml(civ.id) + '" title="Apri la diplomazia con questa civiltà">' +
+        icnHtml('diplomacy', 'pink') + ' Diplomazia</button>');
       /* M09 (decisione #49): attacco offensivo. Abilitato se c'è almeno una
          flotta armata che può raggiungere il sistema. */
       const strikers = attackCapableFleets(g, sysId);
       if (strikers.length) {
-        buttons.push('<button class="actionbar__btn actionbar__btn--danger" data-action="ctx-attack" data-sys="' + sysId + '" data-civ="' + escapeHtml(civ.id) + '" title="Ordina a una flotta armata di attaccare questo sistema">⚔ Attacca</button>');
+        buttons.push('<button class="actionbar__btn actionbar__btn--danger btn--with-icon" data-action="ctx-attack" data-sys="' + sysId + '" data-civ="' + escapeHtml(civ.id) + '" title="Ordina a una flotta armata di attaccare questo sistema">' +
+          icnHtml('sword', 'pink') + ' Attacca</button>');
       } else {
-        buttons.push('<button class="actionbar__btn" disabled title="Serve una flotta armata che possa raggiungere il sistema">⚔ Attacca</button>');
+        buttons.push('<button class="actionbar__btn btn--with-icon" disabled title="Serve una flotta armata che possa raggiungere il sistema">' +
+          icnHtml('sword', 'soft') + ' Attacca</button>');
       }
-      buttons.push('<button class="actionbar__btn" disabled title="Richiede M19 Spionaggio">🕵 Pianifica spionaggio (M19)</button>');
+      buttons.push('<button class="actionbar__btn btn--with-icon" disabled title="Richiede M19 Spionaggio">' +
+        icnHtml('spy', 'violet') + ' Pianifica spionaggio (M19)</button>');
     }
   }
 
@@ -5163,8 +5340,13 @@ function openAttackPicker(sysId, civId) {
   const html =
     '<div class="attack-overlay" data-attack-overlay>' +
       '<div class="attack-overlay__panel">' +
-        '<header class="attack-overlay__head"><h3>⚔ Attacca ' + escapeHtml(sys ? sys.name : 'sistema') + '</h3>' +
-          '<button class="attack-overlay__x" data-attack-close type="button" aria-label="Chiudi">✕</button></header>' +
+        '<header class="attack-overlay__head"><h3>' +
+          '<span class="ui-icon ui-icon--pink" aria-hidden="true">' + ((ORION.icon && ORION.icon('sword')) || '') + '</span> ' +
+          'Attacca ' + escapeHtml(sys ? sys.name : 'sistema') +
+        '</h3>' +
+          '<button class="attack-overlay__x" data-attack-close type="button" aria-label="Chiudi">' +
+            '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+          '</button></header>' +
         '<p class="attack-overlay__sub">Bersaglio: <strong>' + escapeHtml(civ ? civ.name : '—') + '</strong>' +
           (aggressive ? ' · <span class="attack-warn">aggressione contro una civiltà non ostile → reputazione oscura</span>' : ' · liberazione di un sistema maligno → reputazione luminosa') + '</p>' +
         '<div class="attack-pick__list">' + rows + '</div>' +
@@ -5242,21 +5424,23 @@ function refreshForeignDeck() {
         '<span class="deck-foreign__chip">' + (ALIGN_LABEL[civ.alignment] || civ.alignment) + '</span>' +
         '<span class="deck-foreign__chip">' + escapeHtml(civ.traitLabel || '—') + '</span>' +
       '</div>' +
+      /* PR-D: emoji sostituiti da SVG inline (UI_GUIDE §3 strategia B).
+         Cross-OS rendering consistente, glow morbido coerente. */
       '<section class="deck-foreign__section">' +
-        '<h4>📡 Info pubbliche</h4>' +
+        '<h4><span class="ui-icon ui-icon--blue deck-foreign__h4-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('info')) || '') + '</span> Info pubbliche</h4>' +
         '<div class="deck-foreign__row"><span class="deck-foreign__k">Tipo corpo</span><span class="deck-foreign__v">' + escapeHtml(def ? def.label : planet.type) + '</span></div>' +
         '<div class="deck-foreign__row"><span class="deck-foreign__k">Regione</span><span class="deck-foreign__v">' + escapeHtml(tier.name || '—') + ' · ' + escapeHtml(tier.tierLabel || '—') + '</span></div>' +
         '<div class="deck-foreign__row"><span class="deck-foreign__k">Proprietario</span><span class="deck-foreign__v">' + escapeHtml(civ.name) + '</span></div>' +
       '</section>' +
       '<section class="deck-foreign__section">' +
-        '<h4>📊 Stima impero</h4>' +
+        '<h4><span class="ui-icon ui-icon--gold deck-foreign__h4-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('resources')) || '') + '</span> Stima impero</h4>' +
         '<div class="deck-foreign__row"><span class="deck-foreign__k">Potenza percepita</span><span class="deck-foreign__v">' + escapeHtml(ptier) + '</span></div>' +
         '<div class="deck-foreign__row"><span class="deck-foreign__k">Sistemi noti</span><span class="deck-foreign__v">' + known + '</span></div>' +
         '<div class="deck-foreign__row"><span class="deck-foreign__k">Sede</span><span class="deck-foreign__v">' + escapeHtml(seat.name || '—') + '</span></div>' +
         '<div class="deck-foreign__row"><span class="deck-foreign__k">Struttura stimata</span><span class="deck-foreign__v">tra ' + lo + ' e ' + hi + ' insediamenti</span></div>' +
       '</section>' +
       '<section class="deck-foreign__section">' +
-        '<h4>🕵 Intel dettagliato</h4>' +
+        '<h4><span class="ui-icon ui-icon--violet deck-foreign__h4-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('spy')) || '') + '</span> Intel dettagliato</h4>' +
         '<div class="deck-foreign__placeholder">Spionaggio (M19) — richiede una missione di intel attiva su questo mondo.</div>' +
       '</section>' +
     '</div>';
@@ -5450,9 +5634,12 @@ function renderSaveModal() {
      da dentro partita (altrimenti il main menu è già aperto). */
   const hasGame = !!ORION.game;
   html += '<section class="save-section save-section--actions">' +
-    (hasGame ? '<button class="btn" data-action="save-export" type="button">⬇ Esporta .json</button>' : '') +
-    '<button class="btn" data-action="save-import" type="button">⬆ Importa .json</button>' +
-    (hasGame ? '<button class="btn btn--danger" data-action="save-newgame" type="button">✦ Nuova partita</button>' : '') +
+    (hasGame ? '<button class="btn btn--with-icon" data-action="save-export" type="button">' +
+      uiIcon('save', 'cyan') + ' Esporta .json</button>' : '') +
+    '<button class="btn btn--with-icon" data-action="save-import" type="button">' +
+      uiIcon('folder', 'cyan') + ' Importa .json</button>' +
+    (hasGame ? '<button class="btn btn--with-icon btn--danger" data-action="save-newgame" type="button">' +
+      uiIcon('plus', 'amber') + ' Nuova partita</button>' : '') +
     '</section>';
 
   body.innerHTML = html;
@@ -5467,10 +5654,14 @@ function saveCardHtml(meta, perms) {
   if (perms.canLoad) buttons.push('<button class="btn btn--mini" data-action="save-load" data-idx="' + meta.idx + '" type="button">Carica</button>');
   if (perms.canSave) buttons.push('<button class="btn btn--mini" data-action="save-overwrite" data-idx="' + meta.idx + '" type="button">Sovrascrivi</button>');
   if (perms.canErase) buttons.push('<button class="btn btn--mini" data-action="save-erase" data-idx="' + meta.idx + '" type="button">Cancella</button>');
+  /* PR-F: icone tematiche per i metadati save (UI_GUIDE §3). */
   return '<div class="save-card' + (perms.isAuto ? ' save-card--auto' : '') + '">' +
-    '<div class="save-card__name">' + escapeHtml(meta.name) + '</div>' +
+    '<div class="save-card__name">' +
+      (perms.isAuto ? uiIcon('refresh', 'cyan') + ' ' : uiIcon('tag', 'amber') + ' ') +
+      escapeHtml(meta.name) +
+    '</div>' +
     '<dl class="save-card__meta">' +
-      '<div><dt>Data Stellare</dt><dd>' + ds + '</dd></div>' +
+      '<div><dt>' + uiIcon('clock', 'soft') + ' Data Stellare</dt><dd>' + ds + '</dd></div>' +
       '<div><dt>Seed</dt><dd><code>' + escapeHtml(meta.seed) + '</code></dd></div>' +
       '<div><dt>Colonie</dt><dd>' + meta.colonies + '</dd></div>' +
       '<div><dt>Modalità</dt><dd>' + escapeHtml(meta.mode) + preset + '</dd></div>' +
@@ -5715,21 +5906,25 @@ function renderMainMenuHome(body) {
 
   body.innerHTML =
     '<div class="main-menu__actions">' +
+      /* PR-E: emoji codepoint (📂, ⓘ, ✦) → SVG inline coerente con
+         UI_GUIDE §3. Tinte: Continua=verde (azione positiva),
+         Nuova=ambra (warm/scoperta), Carica=ciano (utility),
+         Info=azzurro (informativo). */
       '<button class="btn btn--menu btn--menu-primary' + (hasAuto ? '' : ' is-disabled') + '" ' +
         'data-action="menu-continue" type="button"' + (hasAuto ? '' : ' disabled') + '>' +
-        '<span class="btn__glyph">▶</span> Continua' +
+        '<span class="btn__glyph">' + uiIcon('play', 'green') + '</span> Continua' +
         (meta ? '<span class="btn__sub">' + escapeHtml(meta) + '</span>' : '<span class="btn__sub">nessun autosave</span>') +
       '</button>' +
       '<button class="btn btn--menu" data-action="menu-new" type="button">' +
-        '<span class="btn__glyph">✦</span> Nuova partita' +
+        '<span class="btn__glyph">' + uiIcon('plus', 'amber') + '</span> Nuova partita' +
         '<span class="btn__sub">scegli seed, preset, ironman</span>' +
       '</button>' +
       '<button class="btn btn--menu" data-action="menu-load" type="button">' +
-        '<span class="btn__glyph">📂</span> Carica partita' +
+        '<span class="btn__glyph">' + uiIcon('folder', 'cyan') + '</span> Carica partita' +
         '<span class="btn__sub">slot + import .json</span>' +
       '</button>' +
       '<button class="btn btn--menu" data-action="menu-info" type="button">' +
-        '<span class="btn__glyph">ⓘ</span> Info' +
+        '<span class="btn__glyph">' + uiIcon('info', 'blue') + '</span> Info' +
         '<span class="btn__sub">crediti e progetto</span>' +
       '</button>' +
     '</div>';

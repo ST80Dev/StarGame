@@ -1020,8 +1020,14 @@
       // Effetti per tipo nemico
       if (enemyKind === 'pirate') {
         if (playerWon) {
-          nest.level = (nest.level || 1) - 1;
-          if (nest.level <= 0) {
+          /* M10 Fase E: raid riuscito su un covo → TAGLIA (risorse) alla
+             colonia origine della flotta. Bottino maggiore se il covo è
+             sgominato (level → 0). Recovery-friendly: ricompensa positiva. */
+          const lvlBefore = nest.level || 1;
+          nest.level = lvlBefore - 1;
+          const cleared = nest.level <= 0;
+          grantPirateBounty(game, fleet, lvlBefore, cleared, sysId, events);
+          if (cleared) {
             game.piracy.nests = game.piracy.nests.filter(function (n) { return n !== nest; });
           }
         }
@@ -1092,6 +1098,9 @@
       const inc = game.incursions[i];
       inc.eta = (inc.eta || 0) - 1;
       if (inc.eta > 0) { still.push(inc); continue; }
+      /* M10 Fase E: i raider non assediano una colonia — colpiscono una
+         flotta esposta (scaramuccia lampo). Risolto e tolto dalla coda. */
+      if (inc.kind === 'pirate-raider') { resolvePirateRaider(game, inc, events); continue; }
       // arrivo: la colonia esiste ancora?
       const colonyKey = playerColonyKeyForSystem(game, inc.targetSysId);
       if (!colonyKey || !C) continue;     // bersaglio sparito → incursione svanisce
@@ -1208,6 +1217,9 @@
       if (atkWiped || atkRetreat) {
         // difensori vincono: razzia respinta, covo indebolito
         warRegisterWin(game);
+        if (battle.attackerKind === 'ai' && root.ORION.ai && root.ORION.ai.recordBattle) {
+          root.ORION.ai.recordBattle(game, battle.attackerCiv, 'win', 'siege-defense', battle.systemId);
+        }
         events.push({ kind: 'siege-end', battleId: battle.id, outcome: 'repelled',
           colonyKey: colonyKey, systemId: battle.systemId, impulso: game.timeImpulsi });
         grantSiegeVeterancy(game, present);
@@ -1224,6 +1236,9 @@
         const win = C.totalHp(def) >= C.totalHp(atk);
         if (win) {
           warRegisterWin(game);
+          if (battle.attackerKind === 'ai' && root.ORION.ai && root.ORION.ai.recordBattle) {
+            root.ORION.ai.recordBattle(game, battle.attackerCiv, 'win', 'siege-defense', battle.systemId);
+          }
           events.push({ kind: 'siege-end', battleId: battle.id, outcome: 'repelled',
             colonyKey: colonyKey, systemId: battle.systemId, impulso: game.timeImpulsi });
           grantSiegeVeterancy(game, present);
@@ -1275,6 +1290,76 @@
     events.push({ kind: 'colony-looted', colonyKey: colonyKey, colony: colony, looted: looted, impulso: game.timeImpulsi });
   }
 
+  /* M10 Fase E: taglia per aver colpito un covo pirata. Le risorse vanno
+     alla colonia origine della flotta (o, se sparita, alla capitale / a una
+     colonia qualsiasi). Bottino ∝ livello del covo + bonus se sgominato. */
+  function grantPirateBounty(game, fleet, lvlBefore, cleared, sysId, events) {
+    let colonyKey = fleet && fleet.ownerColonyKey;
+    let colony = colonyKey && game.colonies && game.colonies[colonyKey];
+    if (!colony || !colony.colonized) {
+      // fallback: prima colonia colonizzata disponibile
+      colonyKey = null; colony = null;
+      const keys = Object.keys(game.colonies || {});
+      for (let i = 0; i < keys.length; i++) {
+        const c = game.colonies[keys[i]];
+        if (c && c.colonized) { colonyKey = keys[i]; colony = c; break; }
+      }
+    }
+    const reward = {
+      met: 25 * lvlBefore + (cleared ? 40 : 0),
+      en:  12 * lvlBefore + (cleared ? 20 : 0)
+    };
+    if (colony && colony.stock) {
+      colony.stock.met = (colony.stock.met || 0) + reward.met;
+      colony.stock.en = (colony.stock.en || 0) + reward.en;
+    }
+    events.push({
+      kind: cleared ? 'pirate-cleared' : 'pirate-raid-won',
+      colonyKey: colonyKey, reward: reward, level: lvlBefore,
+      systemId: sysId, impulso: game.timeImpulsi
+    });
+  }
+
+  /* M10 Fase E: risoluzione di un RAIDER pirata contro una flotta del
+     giocatore (scaramuccia lampo all'arrivo). Se la preda non è più in orbita
+     nel sistema bersaglio, il raider svanisce (recovery-friendly #22). */
+  function resolvePirateRaider(game, inc, events) {
+    const C = root.ORION.combat;
+    if (!C) return;
+    const fleet = (game.fleets || []).filter(function (f) {
+      return f && f.id === inc.targetFleetId && f.location &&
+             f.location.systemId === inc.targetSysId && f.location.status === 'orbiting';
+    })[0];
+    if (!fleet) {                       // preda fuggita → raider a vuoto
+      events.push({ kind: 'raider-fizzle', targetSysId: inc.targetSysId, impulso: game.timeImpulsi });
+      return;
+    }
+    const raider = C.forceFromPirateNest({ level: inc.level || 1 });
+    raider.side = 'A'; raider.formation = 'balanced';
+    const B = C.forceFromFleet(game, fleet, 'B');
+    const battleId = 'raider:' + inc.id;
+    const report = C.resolve(game, battleId, raider, B);
+    report.kind = 'raider'; report.systemId = inc.targetSysId; report.enemyKind = 'pirate';
+    const outcome = C.applyOutcomeToFleet(game, fleet, B);
+    const playerWon = (report.winner === 'B');
+    if (outcome.lost > 0) warRegisterLoss(game, outcome.lost * CFG.WAR_MORALE_PER_SHIP, outcome.lost * CFG.WAR_PRESSURE_PER_LOSS);
+    if (playerWon) warRegisterWin(game);
+    else warRegisterLoss(game, CFG.WAR_MORALE_PER_DEFEAT, CFG.WAR_PRESSURE_PER_LOSS);
+    // flotta annientata → Comandante in salvo, rimuovi
+    if (fleet.ships.length === 0) {
+      if (fleet.commander && root.ORION.commander && root.ORION.commander.releaseFromFleet) {
+        root.ORION.commander.releaseFromFleet(game, fleet);
+      }
+      game.fleets = game.fleets.filter(function (f) { return f !== fleet; });
+    }
+    events.push({
+      kind: 'raider-hit', report: report,
+      fleetId: fleet.id, fleetName: fleet.name,
+      playerWon: playerWon, lost: outcome.lost, promoted: outcome.promoted,
+      systemId: inc.targetSysId, impulso: game.timeImpulsi
+    });
+  }
+
   /* M09 Fase B (decisione #49): esito di una vittoria attaccante. I pirati
      SACCHEGGIANO (non tengono territorio); le civiltà AI CONQUISTANO o
      RADONO secondo l'allineamento (predoni → rasa; altri → conquista).
@@ -1282,6 +1367,11 @@
   function applySiegeWin(game, battle, colony, colonyKey, events) {
     if (battle.attackerKind === 'ai') {
       const civ = (game.civs || []).filter(function (c) { return c.id === battle.attackerCiv; })[0];
+      /* M10 Fase C (decisione #47): l'assedio AI è andato a segno → intel
+         "sconfitta subita" nel dossier (perdita dal punto di vista del giocatore). */
+      if (root.ORION.ai && root.ORION.ai.recordBattle) {
+        root.ORION.ai.recordBattle(game, battle.attackerCiv, 'loss', 'siege-attack', colony.systemId);
+      }
       const wasCapital = isCapitalColony(game, colonyKey);
       const sysId = colony.systemId;
       const raze = civ && civ.trait === 'predoni';
