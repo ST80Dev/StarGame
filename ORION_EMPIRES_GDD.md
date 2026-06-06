@@ -623,11 +623,98 @@ Le **4 Costanti** sono visibili in sezione fissa con nome+ruolo sempre noti, dos
 
 ## 15. COMMERCIO
 
-- Rotte commerciali per singola risorsa, frutto di accordi diplomatici
-- Gestione non dettagliata: si attivano, generano flusso automatico ogni Impulso
-- **Eventi perturbativi:** Pirati, embargo, crisi di produzione, guerra nel sistema di transito
-- Mercato interno tra propri pianeti: automatico, influenzato da distanza
-- Commercio esterno con AI: proposta semplice (risorsa X per risorsa Y, durata accordo)
+> Questa sezione riflette la **versione leggera** del commercio (decisione #53): baratto come spina dorsale, rotte come flusso passivo per Impulso (no microgestione), valute regionali leggere come integrazione, mercantili a livelli con xp come navi commerciali dedicate. Niente sistemi tipo EVE.
+
+### 15.1 Principi guida
+- **Baratto risorsa↔risorsa** resta la spina dorsale degli accordi diplomatici (eredità §13.4).
+- **Valute regionali leggere** integrano il baratto dove il baratto è poco adatto (servizi, accessi, beni esclusivi, mercenari).
+- **Rotte** = flusso automatico per Impulso (no microgestione). Capacità dimensionata dal Mercato §10. Nessun consumo Energia (le navi mercantili sono già un costo + portano usura + rischiano pirati).
+- **Mercantili a livelli** come classe nave dedicata: range e capacità dipendono da livello costruttivo + xp viaggi.
+- **Rischi**: pirati §17.5, embargo diplomatico (M11), crisi di produzione locali, guerra nel sistema di transito, sistemi coesi (§13.6).
+
+### 15.2 Mercato interno (rotte colonia↔colonia)
+- **Capacità totale**: ogni Mercato §10 contribuisce **N rotte massime** + **throughput/Ι**, sommato sulle colonie del giocatore.
+  - Mercato lvl 1: 2 rotte, 8 unità/Ι
+  - Mercato lvl 3: 4 rotte, 18 unità/Ι
+  - Mercato lvl 5: 7 rotte, 36 unità/Ι
+- **Distanza** modulata dal **livello di costruzione del mercantile** (vedi §15.6), non da decadimento del throughput.
+- **Risorse trasportabili**: 4 base (met/en/food/water) + risorse avanzate §7.2 (in lotti, con prerequisiti tech).
+- **Uso primario early-game**: spostare cibo/acqua dai mondi-giardino ai mondi-fabbrica/lune che ne sono carenti → sblocca la saturazione del cap popolazione (emenda decisione #45/#37 — i grandi mondi raggiungono il cap pieno solo con import).
+- **Configurazione rotta**: scegli pianeta sorgente + pianeta destinazione + risorsa + quantità target/Ι. La rotta resta attiva finché non la cancelli o la sorgente esaurisce stock.
+
+### 15.3 Commercio esterno con AI
+- **Accordo bilaterale**: proposta diplomatica "risorsa X per risorsa Y in proporzione P:Q, durata D Ι". Gate sulla relazione (vedi tabella sotto).
+- **Reputazione modula i prezzi** a **soglie discrete** (no curva continua, leggibile):
+
+| Reputazione del giocatore | Modificatore prezzo |
+|---|---|
+| ≥ 70 | −15% (sconto buona fama) |
+| 50-69 | 0% (mercato standard) |
+| 30-49 | +10% (sovrapprezzo diffidenza) |
+| < 30 | +25% (paghi caro per la reputazione torbida) |
+
+- **Gate diplomatico**: accordi possibili solo in pace/alleanza. Tregua = no nuovi accordi (vecchi proseguono). Guerra/embargo = sospensione automatica.
+- **Allineamento del partner** modula la **disponibilità delle risorse**: una AI Bene non commercia in risorse vietate (reliquie maligne, contrabbando), una AI Male le offre con sovrapprezzo.
+
+### 15.4 Tesoreria & valute regionali
+- **Una valuta per regione** (cluster stellare, decisione #9), nome generato dal seed (es. *Stilla di Vega*, *Lama Keth*, *Voto Serenthal*). Tematiche di tono SW-flavor (decisione #34).
+- **Tesoreria** (vista dedicata, sezione della Plancia d'Impero sx): portfolio di tutte le valute possedute, tassi di cambio correnti, comando "Cambia X di valuta A in valuta B".
+- **Cambio sempre disponibile** (digitale, no banca fisica da raggiungere): cambi quando vuoi dalla Tesoreria → semplifica il flusso, elimina friction inutile.
+- **Spread = f(Reputazione + Mekhari)**:
+  - Reputazione ≥ 70: spread base ridotto del 30%
+  - Reputazione 30-69: spread standard
+  - Reputazione < 30: spread base aumentato del 30%
+  - **Bonus Mekhari**: nei cluster dove i Mekhari (4 Costanti, §13.7) sono presenti, lo spread è strutturalmente più basso (−30% addizionale) perché loro fanno arbitraggio.
+- **Come si ottiene valuta locale**:
+  - **Vendendo** risorse in regione (rotte commerciali con AI di quel cluster)
+  - **Missioni** per civiltà di quel cluster (M17)
+  - **Cambio** dalla Tesoreria con altre valute possedute (sempre disponibile)
+- **Come si spende**: per **beni e servizi esclusivi della regione** (motivo unico per averla):
+  - Beni rari della cultura locale (tech regionali in M13)
+  - Accessi a porti/stazioni AI di quel cluster
+  - Ingaggi mercenari, contrabbandieri, figure speciali (M14)
+  - Pagamento tributi/dazi su rotte attraverso territorio AI
+
+### 15.5 Sindacato Mekhari come fixer del mercato grigio
+Una delle 4 Costanti (§13.7). Funzione **non bancaria** (il cambio è digitale e sempre disponibile), ma **fixer**:
+- **(a) Mercato secondario**: gli unici a vendere certe risorse avanzate §7.2 in lotti grossi (cristalli rari, dati antichi, reliquie). Chi non ha un osservatorio fortunato passa da loro.
+- **(b) Contrabbando**: aggirano embarghi diplomatici (M11/M17). Se sei in guerra con una civiltà che ti embargo'a, i Mekhari ti rivendono comunque le sue risorse con sovrapprezzo + costo reputazione. Pista Tiranno (#23).
+- **(c) Contratti mercenari** (gancio M14): hub naturale per ingaggiare Comandanti freelance, Contrabbandieri, Cacciatori di taglie.
+- **(d) Taglie pirata** (gancio M17): mettono taglie sui covi e pagano in valuta locale + reputazione mista.
+- **(e) Intel grigia** (gancio M19): vendono informazioni su flotte/colonie altrui — costoso e meno affidabile dello spionaggio vero, ma "passivo".
+- **(f) Spread "convenienza locale"**: effetto sistemico passivo (vedi §15.4) — non un servizio da richiedere.
+
+### 15.6 Mercantili come classe nave dedicata
+**Nuova classe nave** in `fleet.js` (§11): **Mercantile**, accanto a caccia/intercettore/corvetta/fregata. Caratteristiche:
+- **Cargo come stat propria** (non fp, non corazza): unità trasportate per viaggio
+- **Livello tecnico di costruzione 1-3** (Cargo leggero / Cargo pesante / Convoglio iperspaziale), determinato dal livello dell'Hangar di costruzione che lo vara + tech M13 quando arriverà
+- **Range = funzione di livello + xp**:
+  - Lvl 1: 1 hop
+  - Lvl 2: 3 hop
+  - Lvl 3: galassia diametrale (richiede iperguida M13)
+  - +1 hop bonus a xp veterana, +2 a leggendaria
+- **Esperienza individuale (analogia con M07 equipaggi e M09 veteranità navi)**: ogni viaggio completato = +1 xp. Bonus: +10% cargo a esperta, −% rischio pirati con xp.
+- **Comandante Logista** (decisione #43, gancio M12): assegnato alla flotta mercantile, dà +X% cargo / +Y% velocità (parametri da tarare, gancio M14).
+
+### 15.7 Eventi perturbativi (§17 gancio)
+Le rotte sono soggette a:
+- **Razzia pirata** (§17.5): cargo perso, mercantile danneggiato (wear+), xp comunque guadagnata se sopravvive
+- **Embargo diplomatico** (M11): la rotta passa per territorio di una civiltà che ha embargo'a → sospesa automaticamente
+- **Crisi di produzione locale**: sorgente esaurisce → la rotta si interrompe per N Ι, cronaca segnala
+- **Guerra nel sistema di transito**: la rotta si interrompe finché la guerra non finisce o cambi destinazione
+- **Sistema coeso ostile** (§13.6): il transito attraverso un sistema coeso non-alleato cala disposizione del consorzio + +5% rischio incidente
+
+### 15.8 Confine M12 vs futuro
+- **M12 Fase A** (prima implementazione codice): §15.2 (mercato interno) + accordi base §15.3 + Tesoreria §15.4 + Mercantili classe nave §15.6
+- **M12 Fase B**: §15.5 funzioni Mekhari complete (contrabbando, contratti mercenari, intel grigia), eventi perturbativi avanzati §15.7
+- **Mercato nero / contrabbando come sistema pieno** → M17 (Eventi e narrazione)
+- **Tassi di cambio dinamici come vettore eventi** → M17
+
+### 15.9 Ganci futuri
+- **Porto stellare orbitale** (M16, stazioni spaziali): hub portuale di grande stazza, bonus throughput rispetto agli Hangar planetari (decisione #41).
+- **Logista Comandante** (M14): cargo flotte mercantili.
+- **Rifiuti come commodity** (decisione #48 Fase 2): export rifiuti come asse diplomatico/commerciale con AI.
+- **Tech M13** che sbloccano: rotte a lungo raggio, riduzione costo costruzione mercantili, sblocco lvl 3 mercantile.
 
 ---
 
