@@ -40,7 +40,9 @@
   /* --- Costanti di bilanciamento (centralizzate per future tarature) --- */
   const CFG = {
     /* Scarsità §7.4 — frizione graduale, mai game-over */
-    SCARCITY_LOW_STOCK: 20,     // soglia "allerta" se netto negativo
+    /* Decisione #45 v3: SCARCITY_LOW_STOCK rimosso — soglie assolute non
+       scalano. Lo state 'low'/'crit' ora deriva da POP_RUNWAY_LOW/CRIT
+       (Ι rimanenti al ritmo attuale di drenaggio), gestito in processScarcity. */
     PROD_MALUS_LOW:   0.10,     // −10% produzione globale in allerta
     PROD_MALUS_CRIT:  0.30,     // −30% in critico (stock=0, netto<0)
     RECOVERY_IMPULSI: 3,        // I di netto positivo per uscire dallo stato
@@ -64,6 +66,12 @@
        Il consumo si applica solo in fase `operational` (non durante settling). */
     POP_FOOD_PER_UNIT:  2.5,    // cibo consumato per unità di pop / Impulso (decisione #38: ritarato sul modello a moduli)
     POP_WATER_PER_UNIT: 2.0,    // acqua consumata per unità di pop / Impulso
+    /* Decisione #45 emenda v3: gating della crescita pop per RUNWAY (Ι che
+       le scorte coprono al ritmo attuale di consumo), non per stato assoluto
+       del magazzino. Soglie scelte per coerenza con POP_FAMINE_AFTER (30 Ι):
+       l'allerta scatta quando ti resta meno del tempo di reazione famine. */
+    POP_RUNWAY_LOW:  30,        // < 30 Ι di scorte → crescita rallentata
+    POP_RUNWAY_CRIT: 10,        // < 10 Ι di scorte → crescita ferma
     POP_SUPPLY_REF:     3,      // surplus locale che dà crescita a velocità piena
     POP_LEVEL_COST:     0.6,    // freno temporale: ogni livello costa 1+0.6·(pop−1) accumulo
 
@@ -502,7 +510,15 @@
   }
 
   /* 4) Aggiorna stato di scarsità per ogni risorsa base.
-     Recovery automatico dopo N Impulsi di rete positiva. */
+     Recovery automatico dopo N Impulsi di rete positiva.
+
+     DECISIONE #45 emenda v3: le soglie sono RELATIVE al consumo (runway in Ι)
+     non più assolute. Una soglia 20 cibo è banale per pop bassa e si esaurisce
+     in 1 Ι con miliardi di abitanti — non scalabile. Ora:
+       - crit: stock = 0 (esaurito) E saldo neg
+       - low:  runway < POP_RUNWAY_LOW (30 Ι) E saldo neg
+     Coerente con processPopulation (stesso threshold runway).
+     Per metalli/energia, il drain è l'upkeep strutture: stesso meccanismo. */
   function processScarcity(game, colony, planet, prod, events) {
     if (!prod) return;
     const scar = ensureScarcity(colony);
@@ -512,6 +528,8 @@
       const cur = scar[k];
       const s = stock[k];
       const n = net[k];
+      const drain = n < 0 ? -n : 0;
+      const runway = drain > 0 ? s / drain : Infinity;
       // Crit: stock a 0 e ancora in negativo
       if (s <= 0 && n < 0) {
         if (cur.state !== 'crit') {
@@ -525,7 +543,7 @@
             });
           }
         }
-      } else if (s <= CFG.SCARCITY_LOW_STOCK && n < 0) {
+      } else if (runway < CFG.POP_RUNWAY_LOW && n < 0) {
         if (cur.state === 'ok') {
           cur.state = 'low';
           cur.recover = 0;
@@ -638,21 +656,30 @@
       let growth = CFG.POP_GROWTH_BASE * morale;
       if (colony.structures['ospedale']) growth *= (1 + CFG.POP_GROWTH_HOSPITAL);
 
-      /* Capacità di carico (DECISIONE #45, emenda v2): il consumo pop è
-         drenato in processProduction → prod.net include già la richiesta.
-         MA gating della crescita NON è sul saldo istantaneo: se lo stock
-         è in stato 'ok' (riserve abbondanti) la pop cresce a pieno regime
-         anche con saldo leggermente negativo — sta usando il magazzino.
-         Solo quando le scorte calano davvero (stato 'low' o 'crit') la
-         crescita rallenta/si ferma. Recovery-friendly (#22): il buffer
-         30 Ι di pop-loss resta sopra (`scar.famineI`). */
+      /* Capacità di carico (DECISIONE #45 emenda v3): il consumo pop è
+         drenato in processProduction. La crescita NON è gata sul saldo
+         istantaneo né su soglie assolute (es. "20 cibo" è banale per pop
+         bassa, esaurito in 1 Ι con miliardi) — ma sul RUNWAY: quanti Ι
+         di consumo coprono le scorte attuali.
+           - runway > POP_RUNWAY_LOW (30 Ι): pieno regime
+           - runway POP_RUNWAY_CRIT..POP_RUNWAY_LOW (10..30): rallentato 0.3
+           - runway < POP_RUNWAY_CRIT (10 Ι) o stock=0: fermo
+         Threshold relativo: scala automaticamente da pop piccola a miliardi.
+         Buffer 30 Ι di pop-loss (#22) resta sopra (`scar.famineI`). */
+      const drainF = Math.max(0, -(prod.net.food || 0));
+      const drainW = Math.max(0, -(prod.net.water || 0));
+      const runwayF = drainF > 0 ? (colony.stock.food || 0) / drainF : Infinity;
+      const runwayW = drainW > 0 ? (colony.stock.water || 0) / drainW : Infinity;
+      const runway = Math.min(runwayF, runwayW);
       let supplyFactor;
-      if (scar.food.state === 'crit' || scar.water.state === 'crit') {
+      if ((colony.stock.food || 0) <= 0 || (colony.stock.water || 0) <= 0) {
         supplyFactor = 0;
-      } else if (scar.food.state === 'low' || scar.water.state === 'low') {
-        supplyFactor = 0.3;   // segnale: scorte basse, crescita rallentata
+      } else if (runway < CFG.POP_RUNWAY_CRIT) {
+        supplyFactor = 0;
+      } else if (runway < CFG.POP_RUNWAY_LOW) {
+        supplyFactor = 0.3;
       } else {
-        supplyFactor = 1;     // scorte ok: pieno regime, anche con saldo < 0
+        supplyFactor = 1;
       }
 
       growth *= supplyFactor;

@@ -3320,26 +3320,27 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
   if (sustainable < 0) sustainable = 0;
   if (sustainable > cap) sustainable = cap;
   const limitRes = sustWater <= sustFood ? 'acqua' : 'cibo';
-  /* Saldo reale comprensivo di drenaggio pop (per il display "consuma riserve"). */
+  /* Saldo reale comprensivo di drenaggio pop. */
   const realFoodNet = foodNet - total * CFG.POP_FOOD_PER_UNIT;
   const realWaterNet = waterNet - total * CFG.POP_WATER_PER_UNIT;
-  /* Stato stock: gating della crescita (allineato a time.js processPopulation). */
-  const stockState = scar
-    ? ((scar.food.state === 'crit' || scar.water.state === 'crit') ? 'crit'
-       : (scar.food.state === 'low' || scar.water.state === 'low') ? 'low' : 'ok')
-    : 'ok';
-  let supplyFactor;
-  if (stockState === 'crit') supplyFactor = 0;
-  else if (stockState === 'low') supplyFactor = 0.3;
-  else supplyFactor = 1;
-  /* Stima quanti Ι le scorte coprono al ritmo attuale (solo info). */
+  /* Runway (Ι rimanenti al ritmo di consumo) — gating relativo, scala da
+     pop piccola a miliardi (decisione #45 emenda v3). */
   const drainFood = Math.max(0, -realFoodNet);
   const drainWater = Math.max(0, -realWaterNet);
-  const bufferFood = drainFood > 0 ? Math.floor((colony.stock.food || 0) / drainFood) : Infinity;
-  const bufferWater = drainWater > 0 ? Math.floor((colony.stock.water || 0) / drainWater) : Infinity;
-  const buffer = Math.min(bufferFood, bufferWater);
-
-  const critFW = stockState === 'crit';
+  const runwayFood = drainFood > 0 ? Math.floor((colony.stock.food || 0) / drainFood) : Infinity;
+  const runwayWater = drainWater > 0 ? Math.floor((colony.stock.water || 0) / drainWater) : Infinity;
+  const runway = Math.min(runwayFood, runwayWater);
+  const RUNWAY_LOW = CFG.POP_RUNWAY_LOW || 30;
+  const RUNWAY_CRIT = CFG.POP_RUNWAY_CRIT || 10;
+  /* Stock esaurito? identifica anche quale risorsa. */
+  const foodOut = (colony.stock.food || 0) <= 0;
+  const waterOut = (colony.stock.water || 0) <= 0;
+  const critFW = foodOut || waterOut || runway < RUNWAY_CRIT;
+  let supplyFactor;
+  if (critFW) supplyFactor = 0;
+  else if (runway < RUNWAY_LOW) supplyFactor = 0.3;
+  else supplyFactor = 1;
+  const limitRunway = runwayFood <= runwayWater ? 'cibo' : 'acqua';
   const canGrow = !settling && total < cap && supplyFactor > 0;
   // Morale: calcolato sempre (anche se la crescita è bloccata) per dare
   // visibilità della leva §9.3. Breakdown dei contributi mostrato sotto.
@@ -3390,23 +3391,26 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
     const unitCost = 1 + CFG.POP_LEVEL_COST * (total - 1);
     const marginal = peopleNow * slope * growthEst / Math.max(1, unitCost);
     let suffix = '';
-    /* Decisione #45 emenda v2: comunica al giocatore COSA sta succedendo.
-       - scorte ok ma saldo negativo: "consuma riserve" (informativo)
-       - scorte basse: "rallentata, scorte basse" (warning)
-       - scorte abbondanti e saldo positivo: nessun suffisso. */
-    if (stockState === 'low') {
-      suffix = ' · rallentata, scorte ' + limitRes + ' basse';
-    } else if (drainFood > 0 || drainWater > 0) {
-      const bufStr = isFinite(buffer) ? buffer + ' Ι al ritmo attuale' : '—';
-      suffix = ' · consuma riserve (' + bufStr + ')';
+    /* Decisione #45 emenda v3: messaggio runway-based.
+       - saldo positivo (runway infinito): pulito, nessun suffisso
+       - saldo neg ma runway > 30 Ι: "consuma riserve (X Ι rimanenti)"
+       - runway 10-30 Ι: "rallentata · scorte basse (X Ι rimanenti)" */
+    if (runway < RUNWAY_LOW && isFinite(runway)) {
+      suffix = ' · rallentata · scorte ' + limitRunway + ' basse (' + runway + ' Ι rimanenti)';
+    } else if ((drainFood > 0 || drainWater > 0) && isFinite(runway)) {
+      suffix = ' · consuma riserve (' + runway + ' Ι rimanenti)';
     }
     growthStr = '+' + ORION.planet.formatPeople(marginal) + ' / Impulso' + suffix;
   } else if (settling) {
     growthStr = 'ferma (Insediamento)';
   } else if (total >= cap) {
     growthStr = 'al cap del pianeta';
+  } else if (foodOut) {
+    growthStr = 'ferma · scorte cibo esaurite';
+  } else if (waterOut) {
+    growthStr = 'ferma · scorte acqua esaurite';
   } else if (critFW) {
-    growthStr = 'ferma · scorte ' + limitRes + ' esaurite';
+    growthStr = 'ferma · scorte ' + limitRunway + ' critiche (' + runway + ' Ι rimanenti)';
   } else {
     growthStr = 'plateau';
   }
