@@ -248,6 +248,21 @@
         'in un colpo. Ma una <strong>catena di sconfitte</strong> abbassa il <strong>morale d\'impero</strong> (produzione in calo) e ' +
         'alza la <strong>pressione</strong> nemica: reagisci con scelte oculate o rischi una spirale.</p>'
     },
+    {
+      id: 'decline',
+      tag: 'Guerra · Declino',
+      title: 'La spirale e come spezzarla',
+      body:
+        '<p>Quando perdi colonie e flotte, il <strong>morale d\'impero</strong> crolla e la <strong>pressione</strong> sale: le AI ostili ' +
+        'fiutano la debolezza e attaccano di più. Una civiltà <em>predatrice</em> può <strong>radere</strong> una colonia, una ' +
+        '<em>espansionista</em> <strong>conquistarla</strong> (il sistema passa a lei). È la spirale del declino.</p>' +
+        '<p><strong>Spezzala con scelte oculate</strong> (nella vista Flotta): <strong>⟲ Richiama flotte</strong> per concentrare la difesa ' +
+        'sulla capitale · <strong>Evacua colonia</strong> indifendibile recuperando metà delle risorse · <strong>Tributo → tregua</strong> per ' +
+        'comprare tempo contro un\'AI · trasferisci la capitale su un mondo più sicuro.</p>' +
+        '<p><strong>Fine partita:</strong> di default la partita è <strong>infinita</strong> — a 0 colonie vai in "Esilio" ma puoi risorgere. ' +
+        'Solo in modalità <em>Incubo</em> (o col toggle game-over) perdere l\'ultima colonia chiude la run. Quando ti stanchi, ' +
+        '"Nuova partita" dal menu chiude sempre la corrente.</p>'
+    },
 
     /* ================================================================
        Lezioni per-struttura (M06.7). Una scheda per ogni voce del

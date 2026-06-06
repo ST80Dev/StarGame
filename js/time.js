@@ -122,6 +122,7 @@
        viaggio (recovery-friendly: il giocatore vede l'incursione arrivare). */
     PIRATE_INCURSION_BASE: 0.05, // prob. base/covo/AI-tick (a pressione 0)
     PIRATE_INCURSION_PRESSURE: 0.25, // +prob a pressione 1.0
+    AI_INCURSION_BASE: 0.05,     // M09 Fase B: prob. base incursione AI ostile/AI-tick
     PIRATE_RAID_LOOT_FRAC: 0.18, // frazione di stock saccheggiata se i predoni vincono (bounded)
     PIRATE_RAID_STRUCT_DMG: 35,  // hp tolti a una struttura colpita
     PIRATE_RAID_POP_LOSS:   1,   // unità pop perse in un saccheggio
@@ -985,6 +986,26 @@
       } else if (enemyKind === 'ai' && root.ORION.ai.demobilize) {
         // indebolisce la civiltà (la perdita di potenza vive in demobilize)
         root.ORION.ai.demobilize(game, civ, { winner: playerWon ? 'player' : 'civ', report: report });
+        /* M09 Fase B (decisione #49): se il giocatore VINCE in un sistema
+           POSSEDUTO dalla civiltà, ne arretra il confine (il sistema torna
+           neutrale — l'occupazione vera è M11/M12). Verbo morale
+           (ALIGNMENT_IMPACT #23): liberare un sistema da una civiltà MALIGNA
+           è "light"; aggredire una buona/neutrale è "dark". */
+        if (playerWon && civ.systems.indexOf(sysId) >= 0) {
+          civ.systems = civ.systems.filter(function (s) { return s !== sysId; });
+          civ.power = Math.max(0, civ.power - 8);
+          const impact = (civ.alignment === 'male') ? 'light' : 'dark';
+          if (root.ORION.victory && root.ORION.victory.applyAlignment) {
+            root.ORION.victory.applyAlignment(game, impact, 1);
+          }
+          if (impact === 'light') bumpIcg(game, -2); else bumpIcg(game, 2);
+          report.rolledBackSystem = sysId;
+          report.alignmentImpact = impact;
+          if (civ.systems.length === 0) {
+            civ.alive = false;
+            events.push({ kind: 'civ-fallen', civName: civ.name, conqueror: 'le tue forze', impulso: game.timeImpulsi });
+          }
+        }
       }
 
       // Stato di guerra d'impero (catena di sconfitte → spirale)
@@ -1024,12 +1045,23 @@
       // arrivo: la colonia esiste ancora?
       const colonyKey = playerColonyKeyForSystem(game, inc.targetSysId);
       if (!colonyKey || !C) continue;     // bersaglio sparito → incursione svanisce
-      // crea la battaglia d'assedio
-      const nest = { level: inc.level || 1 };
-      const atkForce = C.forceFromPirateNest(nest);
-      atkForce.formation = 'balanced';    // i predoni si sganciano se mauled
+      /* Forza attaccante: pirati (Fase A) o civiltà AI materializzata (Fase B).
+         Gli AI possono CONQUISTARE/RADERE; i pirati solo saccheggiare. */
+      let atkForce, attackerKind, attackerCiv = null;
+      if (inc.kind === 'ai' && root.ORION.ai && root.ORION.ai.materialize) {
+        const civ = (game.civs || []).filter(function (c) { return c.id === inc.civId; })[0];
+        const desc = root.ORION.ai.materialize(game, civ || { power: (inc.level || 1) * 30, civName: inc.civName, color: inc.civColor }, inc.targetSysId);
+        atkForce = C.forceFromMaterialized(desc, 'A');
+        atkForce.formation = 'balanced';
+        attackerKind = 'ai'; attackerCiv = inc.civId;
+      } else {
+        atkForce = C.forceFromPirateNest({ level: inc.level || 1 });
+        atkForce.formation = 'balanced';    // i predoni si sganciano se mauled
+        attackerKind = 'pirate';
+      }
       const battle = {
-        id: inc.id, kind: 'siege-pirate',
+        id: inc.id, kind: (attackerKind === 'ai') ? 'siege-ai' : 'siege-pirate',
+        attackerKind: attackerKind, attackerCiv: attackerCiv,
         systemId: inc.targetSysId, colonyKey: colonyKey,
         attacker: { name: atkForce.name, color: atkForce.color, formation: 'balanced',
                     combatants: atkForce.combatants },
@@ -1093,10 +1125,10 @@
         combatants: defDef.combatants.concat(defShips)
       };
 
-      // niente difensori → saccheggio diretto
+      // niente difensori → vittoria attaccante diretta
       if (def.combatants.length === 0) {
-        applyLoot(game, colony, colonyKey, events);
-        events.push({ kind: 'siege-end', battleId: battle.id, outcome: 'looted',
+        const oc = applySiegeWin(game, battle, colony, colonyKey, events);
+        events.push({ kind: 'siege-end', battleId: battle.id, outcome: oc,
           colonyKey: colonyKey, systemId: battle.systemId, impulso: game.timeImpulsi });
         continue;
       }
@@ -1132,19 +1164,24 @@
         continue;
       }
       if (defWiped) {
-        applyLoot(game, colony, colonyKey, events);
-        events.push({ kind: 'siege-end', battleId: battle.id, outcome: 'looted',
+        const oc = applySiegeWin(game, battle, colony, colonyKey, events);
+        events.push({ kind: 'siege-end', battleId: battle.id, outcome: oc,
           colonyKey: colonyKey, systemId: battle.systemId, impulso: game.timeImpulsi });
         continue;
       }
       // cap di sicurezza
       if (battle.round >= 12) {
         const win = C.totalHp(def) >= C.totalHp(atk);
-        if (win) { warRegisterWin(game); }
-        else { applyLoot(game, colony, colonyKey, events); }
-        events.push({ kind: 'siege-end', battleId: battle.id, outcome: win ? 'repelled' : 'looted',
-          colonyKey: colonyKey, systemId: battle.systemId, impulso: game.timeImpulsi });
-        if (win) grantSiegeVeterancy(game, present);
+        if (win) {
+          warRegisterWin(game);
+          events.push({ kind: 'siege-end', battleId: battle.id, outcome: 'repelled',
+            colonyKey: colonyKey, systemId: battle.systemId, impulso: game.timeImpulsi });
+          grantSiegeVeterancy(game, present);
+        } else {
+          const oc = applySiegeWin(game, battle, colony, colonyKey, events);
+          events.push({ kind: 'siege-end', battleId: battle.id, outcome: oc,
+            colonyKey: colonyKey, systemId: battle.systemId, impulso: game.timeImpulsi });
+        }
         continue;
       }
       still.push(battle);
@@ -1186,6 +1223,116 @@
     }
     warRegisterLoss(game, CFG.WAR_MORALE_PER_LOOT, CFG.WAR_PRESSURE_PER_LOSS);
     events.push({ kind: 'colony-looted', colonyKey: colonyKey, colony: colony, looted: looted, impulso: game.timeImpulsi });
+  }
+
+  /* M09 Fase B (decisione #49): esito di una vittoria attaccante. I pirati
+     SACCHEGGIANO (non tengono territorio); le civiltà AI CONQUISTANO o
+     RADONO secondo l'allineamento (predoni → rasa; altri → conquista).
+     Ritorna l'outcome ('looted'|'conquered'|'razed'). */
+  function applySiegeWin(game, battle, colony, colonyKey, events) {
+    if (battle.attackerKind === 'ai') {
+      const civ = (game.civs || []).filter(function (c) { return c.id === battle.attackerCiv; })[0];
+      const wasCapital = isCapitalColony(game, colonyKey);
+      const sysId = colony.systemId;
+      const raze = civ && civ.trait === 'predoni';
+      // morale crollo (catena della spirale C): doppio + extra se capitale
+      warRegisterLoss(game, CFG.WAR_MORALE_PER_LOOT * 2 + (wasCapital ? 0.10 : 0), CFG.WAR_PRESSURE_PER_LOSS * 1.5);
+      if (raze) {
+        removeColony(game, colonyKey);
+        bumpIcg(game, 3);
+        events.push({ kind: 'colony-razed', colonyKey: colonyKey, systemId: sysId,
+          civName: civ ? civ.name : battle.attacker.name, wasCapital: wasCapital, impulso: game.timeImpulsi });
+        return 'razed';
+      }
+      // conquista: il sistema passa alla civiltà
+      if (civ && civ.alive) { civ.systems.push(sysId); civ.power += 15; }
+      removeColony(game, colonyKey);
+      bumpIcg(game, 4);
+      events.push({ kind: 'colony-conquered', colonyKey: colonyKey, systemId: sysId,
+        civName: civ ? civ.name : battle.attacker.name, wasCapital: wasCapital, impulso: game.timeImpulsi });
+      return 'conquered';
+    }
+    // pirati → saccheggio
+    applyLoot(game, colony, colonyKey, events);
+    return 'looted';
+  }
+
+  function isCapitalColony(game, colonyKey) {
+    if (!game.capitals) return false;
+    const gids = Object.keys(game.capitals);
+    for (let i = 0; i < gids.length; i++) if (game.capitals[gids[i]] === colonyKey) return true;
+    return false;
+  }
+
+  /* Rimozione di una colonia dal gioco (conquista/rasa/evacuazione).
+     Pulisce il mapping capitale e le incursioni/assedi che la puntavano.
+     Recovery-friendly: le flotte NON vengono distrutte (restano operative,
+     orfane della base). */
+  function removeColony(game, colonyKey) {
+    if (game.capitals) {
+      Object.keys(game.capitals).forEach(function (gid) {
+        if (game.capitals[gid] === colonyKey) delete game.capitals[gid];
+      });
+    }
+    if (game.colonies) delete game.colonies[colonyKey];
+    game.incursions = (game.incursions || []).filter(function (inc) { return inc.targetColonyKey !== colonyKey; });
+    game.battles = (game.battles || []).filter(function (b) { return b.colonyKey !== colonyKey || b.status === 'done'; });
+  }
+
+  function bumpIcg(game, n) {
+    if (typeof game.icg !== 'number') game.icg = 20;
+    game.icg = Math.max(0, Math.min(100, game.icg + n));
+  }
+
+  /* M09 Fase B: rilevamento sconfitta. 0 colonie operative → "esilio"
+     (default, partita infinita) o "gameover" (se mode.modifiers.gameOver,
+     es. preset Incubo). Emette empire-fallen una sola volta. */
+  function checkDefeat(game, events) {
+    if (game.defeated) return;
+    const cols = game.colonies || {};
+    let alive = 0;
+    Object.keys(cols).forEach(function (k) {
+      const c = cols[k];
+      if (c && (c.colonized || c.colonizing)) alive++;
+    });
+    if (alive > 0) return;
+    const hard = !!(game.mode && game.mode.modifiers && game.mode.modifiers.gameOver);
+    game.defeated = hard ? 'gameover' : 'exile';
+    bumpIcg(game, 6);
+    events.push({ kind: 'empire-fallen', hard: hard, impulso: game.timeImpulsi });
+  }
+
+  /* M09 Fase B — leva di recovery "Evacua colonia" (scelta utente):
+     abbandono volontario. Recupera una frazione dello stock verso la
+     capitale (o la prima colonia disponibile), poi rimuove la colonia
+     (sistema neutrale). Recovery-friendly: niente perdita di flotte. */
+  function evacuateColony(game, colonyKey) {
+    const colony = game.colonies && game.colonies[colonyKey];
+    if (!colony) return { ok: false, reason: 'Colonia inesistente' };
+    // destinazione: una capitale diversa, altrimenti la prima colonia diversa
+    let destKey = null;
+    if (game.capitals) {
+      Object.keys(game.capitals).forEach(function (gid) {
+        const ck = game.capitals[gid];
+        if (ck && ck !== colonyKey && game.colonies[ck]) destKey = destKey || ck;
+      });
+    }
+    if (!destKey) {
+      Object.keys(game.colonies).forEach(function (k) {
+        if (k !== colonyKey && game.colonies[k] && game.colonies[k].colonized) destKey = destKey || k;
+      });
+    }
+    const recovered = {};
+    if (destKey) {
+      const dest = game.colonies[destKey];
+      ['met', 'en', 'food', 'water'].forEach(function (kk) {
+        const amt = Math.floor((colony.stock[kk] || 0) * 0.5);   // recuperi metà
+        dest.stock[kk] = (dest.stock[kk] || 0) + amt;
+        recovered[kk] = amt;
+      });
+    }
+    removeColony(game, colonyKey);
+    return { ok: true, destKey: destKey, recovered: recovered };
   }
 
   /* Decadimento dello stato di guerra (recovery passivo) + riparazione
@@ -1273,6 +1420,8 @@
     processIncursions(game, events);
     processBattles(game, events);
     processWarState(game);
+    /* M09 Fase B: rilevamento sconfitta (0 colonie → esilio/gameover). */
+    checkDefeat(game, events);
     /* Decisione #45: Capitale di Gruppo — avanza timer di transizione
        (pre-capital → capital · decommissioning → null). Emette eventi
        a fine transizione. */
@@ -1372,6 +1521,7 @@
     for (let i = 0; i < effective; i++) {
       tick(game, events);
       if (maybeCheckVictory(game, events)) break;   // stop alla prima pista chiusa
+      if (game.defeated === 'gameover') break;        // M09 Fase B: fine partita (hard)
     }
     return { events: events, impulsi: effective };
   }
@@ -1503,6 +1653,9 @@
     ensureWaste: ensureWaste,
     wasteCapacity: wasteCapacity,
     wasteMalus: wasteMalus,
-    wasteStatus: wasteStatus
+    wasteStatus: wasteStatus,
+    /* M09 Fase B — leve di recovery / esiti esposti per la UI */
+    evacuateColony: evacuateColony,
+    ensureWarState: ensureWarState
   };
 })(typeof window !== 'undefined' ? window : this);

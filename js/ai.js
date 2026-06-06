@@ -487,6 +487,12 @@
        → più attacchi) + grazia iniziale: niente assedi a freddo. --- */
     maybePirateIncursion(game, grng, events);
 
+    /* --- M09 Fase B (decisione #49): incursione AI STRATEGICA. Una civiltà
+       ostile che confina col giocatore può lanciare una forza di conquista.
+       Gated da disposizione molto bassa + pressione + grazia iniziale più
+       lunga (niente guerra a freddo), e rispetta le tregue (truceUntil). --- */
+    maybeAiIncursion(game, grng, events);
+
     /* --- ICG §5.4: applica i contributi dell'AI-tick + un decadimento
        dolce verso il basale "stabile" (20), così l'indice respira invece
        di salire monotòno. M18 sistematizzerà l'indice. --- */
@@ -696,6 +702,79 @@
       });
     }
   }
+
+  /* M09 Fase B: una civiltà AI ostile lancia un'incursione di conquista
+     verso una colonia del giocatore. Più tardiva e più rara dei pirati
+     (la guerra vera non scoppia a freddo). Rispetta le tregue. */
+  function maybeAiIncursion(game, rng, events) {
+    if ((game.timeImpulsi || 0) < 160) return;     // grazia iniziale più lunga
+    const civs = (game.civs || []).filter(function (c) { return c.alive && c.systems.length; });
+    if (!civs.length) return;
+    const T = ORION.time, cfg = (T && T.CFG) || {};
+    const pressure = (game.warState && game.warState.pressure) || 0;
+    const cols = [];
+    Object.keys(game.colonies || {}).forEach(function (k) {
+      const c = game.colonies[k];
+      if (c && c.colonized && c.phase !== 'settling') cols.push({ key: k, sysId: c.systemId });
+    });
+    if (!cols.length) return;
+    if (!Array.isArray(game.incursions)) game.incursions = [];
+    const players = playerSystems(game);
+    /* Soglia di ostilità RILASSATA dalla pressione (decisione #49): a impero
+       in difficoltà (catena di sconfitte → pressione alta) anche civiltà
+       moderatamente ostili "fiutano il sangue" e attaccano. Realizza la
+       spirale: la debolezza invita all'aggressione. */
+    const threshold = -50 + pressure * 20;     // pressione 1.0 → fino a -30
+    for (let i = 0; i < civs.length; i++) {
+      const civ = civs[i];
+      if (civ.disposition > threshold) continue;
+      if ((civ.truceUntil || 0) > (game.timeImpulsi || 0)) continue;  // tregua in corso
+      if (!civBordersPlayer(game, civ)) continue;                // deve confinare
+      // probabilità: bassa, cresce con ostilità + pressione
+      const hostility = Math.min(1, Math.max(0, (-civ.disposition - 30) / 50));   // 0..1
+      const base = (cfg.AI_INCURSION_BASE != null ? cfg.AI_INCURSION_BASE : 0.05);
+      const chance = base * (0.5 + hostility) + pressure * 0.18;
+      if (!rng.chance(chance)) continue;
+      // bersaglio: colonia del giocatore confinante più vicina a un sistema della civ
+      let best = null, bestHops = Infinity;
+      for (let s = 0; s < civ.systems.length; s++) {
+        const links = galaxyOf(game).systems[civ.systems[s]].links || [];
+        for (let c = 0; c < cols.length; c++) {
+          if (incursionTargeting(game, cols[c].sysId) || siegeActiveAt(game, cols[c].sysId)) continue;
+          if (links.indexOf(cols[c].sysId) >= 0) {
+            const hops = 1;
+            if (hops < bestHops) { bestHops = hops; best = cols[c]; }
+          }
+        }
+      }
+      // se non confina direttamente, prova la più vicina raggiungibile
+      if (!best) {
+        for (let c = 0; c < cols.length; c++) {
+          if (incursionTargeting(game, cols[c].sysId) || siegeActiveAt(game, cols[c].sysId)) continue;
+          const path = (ORION.fleet && ORION.fleet.computePath)
+            ? ORION.fleet.computePath(galaxyOf(game), civ.systems[0], cols[c].sysId) : null;
+          if (!path) continue;
+          const hops = path.length - 1;
+          if (hops < bestHops) { bestHops = hops; best = cols[c]; }
+        }
+      }
+      if (!best) continue;
+      const eta = Math.max(25, Math.min(90, 25 + bestHops * 12));
+      const id = 'inc-ai-' + (game.timeImpulsi || 0) + '-' + i;
+      const level = Math.max(1, Math.round(civ.power / 30));
+      game.incursions.push({
+        id: id, kind: 'ai', civId: civ.id, civName: civ.name, civColor: civ.color,
+        fromSysId: civ.systems[0], targetSysId: best.sysId, targetColonyKey: best.key,
+        level: level, eta: eta, launchedAt: game.timeImpulsi || 0
+      });
+      events.push({
+        kind: 'incursion-inbound', incursionId: id, attackerKind: 'ai',
+        civName: civ.name, targetColonyKey: best.key, targetSysId: best.sysId,
+        eta: eta, impulso: game.timeImpulsi
+      });
+    }
+  }
+  function galaxyOf(game) { return game.galaxy; }
 
   function maybePirateRaid(game, rng, events) {
     const nests = game.piracy && game.piracy.nests;

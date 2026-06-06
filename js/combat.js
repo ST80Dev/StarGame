@@ -509,6 +509,26 @@
   /* Helpers UI/test esposti. */
   function isDefenseStruct(def) { return !!(def && def.defense); }
 
+  /* M09 Fase B (decisione #49): presenza ostile in un sistema (covo pirata
+     o civiltà AI ostile), escludendo i sistemi-colonia del giocatore. Usata
+     dall'interrupt di rotta (imboscata) e dai trigger di scaramuccia. */
+  function hostilePresenceAt(game, sysId) {
+    if (!game) return null;
+    // pirati
+    const nests = game.piracy && game.piracy.nests;
+    if (nests) {
+      for (let i = 0; i < nests.length; i++) {
+        if (nests[i].sysId === sysId) return { kind: 'pirate', nest: nests[i] };
+      }
+    }
+    // civiltà AI ostile che possiede il sistema
+    if (ORION.ai && ORION.ai.civForSystem) {
+      const civ = ORION.ai.civForSystem(game, sysId);
+      if (civ && civ.alive && (civ.disposition <= -40)) return { kind: 'ai', civ: civ };
+    }
+    return null;
+  }
+
   ORION.combat = {
     CFG: CFG,
     SHIP_NAMES: SHIP_NAMES,
@@ -533,6 +553,7 @@
     applyOutcomeToDefenses: applyOutcomeToDefenses,
     applyDefenderWriteback: applyDefenderWriteback,
     grantVeterancy: grantVeterancy,
-    isDefenseStruct: isDefenseStruct
+    isDefenseStruct: isDefenseStruct,
+    hostilePresenceAt: hostilePresenceAt
   };
 })(typeof window !== 'undefined' ? window : this);

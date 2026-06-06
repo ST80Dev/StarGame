@@ -74,6 +74,17 @@
     return CLASSES[kind] || null;
   }
 
+  /* La flotta ha potenza di fuoco? (almeno una nave con fp > 0). Usato
+     dall'interrupt di rotta (M09 Fase B): le disarmate non ingaggiano. */
+  function fleetHasGunsLocal(fleet) {
+    if (!fleet || !Array.isArray(fleet.ships)) return false;
+    for (let i = 0; i < fleet.ships.length; i++) {
+      const c = CLASSES[fleet.ships[i].kind];
+      if (c && (c.fp || 0) > 0) return true;
+    }
+    return false;
+  }
+
   function dangerOf(galaxy, sysId) {
     const s = galaxy && galaxy.systems && galaxy.systems[sysId];
     if (!s) return 0.5;
@@ -582,6 +593,28 @@
         systemId: arrivedAt,
         impulso: game.timeImpulsi
       });
+      /* M09 Fase B (decisione #49): imboscata in rotta. Se la flotta armata
+         transita per un sistema con presenza ostile (covo pirata o civiltà
+         AI ostile), l'avvistamento INTERROMPE la rotta: si ferma in orbita
+         (ordine idle) e lo scontro viene risolto dal loop (processSkirmishes).
+         Lo stato dei waypoint successivi viene perso: l'utente ridà l'ordine
+         dopo lo scontro (recovery-friendly). Le flotte disarmate proseguono. */
+      const CO = ORION.combat;
+      if (CO && CO.hostilePresenceAt && CO.hostilePresenceAt(game, arrivedAt)
+          && fleetHasGunsLocal(fleet)) {
+        fleet.location.status = 'orbiting';
+        fleet.etaImpulsi = 0;
+        fleet.route = [arrivedAt];
+        fleet.routeIdx = 0;
+        fleet.orders = { type: 'idle' };
+        fleet.combatResolvedAt = null;
+        events.push({
+          kind: 'fleet-intercepted',
+          fleetId: fleet.id, fleetName: fleet.name,
+          systemId: arrivedAt, impulso: game.timeImpulsi
+        });
+        return;
+      }
       fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
       return;
     }

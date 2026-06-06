@@ -73,11 +73,14 @@
                            in coda, crescita pop bloccata)
        - startStockMul:    moltiplicatore dello stock iniziale di colonia
        - startPopBase:     popolazione totale iniziale (unità intere) */
+  /* M09 Fase B (decisione #49): `gameOver` abilita la fine partita "hard"
+     (§19: 0 colonie → fine). OFF di default (partita infinita / esilio),
+     ON solo per Incubo (chi vuole la posta in gioco). M20 esporrà il toggle. */
   const PRESETS = {
-    classic:    { galaxySize: 1.0,  hostility: 1.0, tsgSpeed: 1, ironman: false, settlingDuration: 60,  startStockMul: 1.0, startPopBase: 1 },
-    speedrun:   { galaxySize: 0.65, hostility: 1.0, tsgSpeed: 4, ironman: false, settlingDuration: 30,  startStockMul: 1.5, startPopBase: 1 },
-    nightmare:  { galaxySize: 1.0,  hostility: 2.0, tsgSpeed: 1, ironman: true,  settlingDuration: 90,  startStockMul: 0.5, startPopBase: 1 },
-    longBreath: { galaxySize: 1.5,  hostility: 0.7, tsgSpeed: 1, ironman: false, settlingDuration: 120, startStockMul: 1.2, startPopBase: 1 }
+    classic:    { galaxySize: 1.0,  hostility: 1.0, tsgSpeed: 1, ironman: false, gameOver: false, settlingDuration: 60,  startStockMul: 1.0, startPopBase: 1 },
+    speedrun:   { galaxySize: 0.65, hostility: 1.0, tsgSpeed: 4, ironman: false, gameOver: false, settlingDuration: 30,  startStockMul: 1.5, startPopBase: 1 },
+    nightmare:  { galaxySize: 1.0,  hostility: 2.0, tsgSpeed: 1, ironman: true,  gameOver: true,  settlingDuration: 90,  startStockMul: 0.5, startPopBase: 1 },
+    longBreath: { galaxySize: 1.5,  hostility: 0.7, tsgSpeed: 1, ironman: false, gameOver: false, settlingDuration: 120, startStockMul: 1.2, startPopBase: 1 }
   };
 
   function defaultMode() {
@@ -117,6 +120,18 @@
     if (impact === 'light' || impact === 'dark') {
       ALIGNMENT_IMPACT[actionId] = impact;
     }
+  }
+
+  /* M09 Fase B (decisione #49): accumulatore delle azioni morali del
+     giocatore. I verbi di M09 (liberare/aggredire un sistema) lo alimentano;
+     M11/M19 aggiungeranno i propri. `check()` lo mappa sulle piste
+     reputationLight/reputationDark. Soglia placeholder (M20 calibrerà). */
+  const ALIGNMENT_TRACK_THRESHOLD = 50;
+  function applyAlignment(game, impact, amount) {
+    if (!game) return;
+    if (!game.alignmentDeeds) game.alignmentDeeds = { light: 0, dark: 0 };
+    if (impact === 'light') game.alignmentDeeds.light += (amount || 1);
+    else if (impact === 'dark') game.alignmentDeeds.dark += (amount || 1);
   }
 
   /* Schedule eventi ancorati a DS specifiche (decisione #23 — Sopravvissuto):
@@ -186,10 +201,11 @@
     }
     game.victoryTracks.tech = Math.min(1, researchSum / 10000);
 
-    /* --- reputation light/dark: ganci ALIGNMENT_IMPACT (M09/M11/M19) ---
-       In M05 nessuna azione li alimenta → restano 0. */
-    if (game.victoryTracks.reputationLight == null) game.victoryTracks.reputationLight = 0;
-    if (game.victoryTracks.reputationDark  == null) game.victoryTracks.reputationDark  = 0;
+    /* --- reputation light/dark: alimentate dalle azioni morali (M09 Fase B:
+       liberare/aggredire sistemi; M11/M19 aggiungeranno altri verbi). --- */
+    const deeds = game.alignmentDeeds || { light: 0, dark: 0 };
+    game.victoryTracks.reputationLight = Math.min(1, (deeds.light || 0) / ALIGNMENT_TRACK_THRESHOLD);
+    game.victoryTracks.reputationDark  = Math.min(1, (deeds.dark || 0) / ALIGNMENT_TRACK_THRESHOLD);
 
     /* --- survival: pop+stock alla soglia critica → cresce solo se in crisi.
        In M05 placeholder: zero finché M17 non inietta la crisi alla DS 0. */
@@ -224,6 +240,7 @@
     defaultMode: defaultMode,
     defaultTracks: defaultTracks,
     registerAction: registerAction,
+    applyAlignment: applyAlignment,
     ensureEventSchedule: ensureEventSchedule,
     check: check,
     migrate: migrate

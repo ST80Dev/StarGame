@@ -43,7 +43,10 @@
      stato di guerra d'impero morale/pressione (game.warState). La veteranità
      delle navi vive dentro fleet.ships[*] (auto-serializzata via game.fleets);
      l'hp delle strutture danneggiate vive in colony.structures (auto). */
-  const SCHEMA_VERSION = 9;
+  /* Schema 10 (M09 Fase B, decisione #49): aggiunge `defeated` (esilio/
+     gameover) e `alignmentDeeds` (verbi morali → piste reputation). Le
+     tregue AI (civ.truceUntil) vivono dentro game.civs (auto). */
+  const SCHEMA_VERSION = 10;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -119,7 +122,10 @@
          stato di guerra d'impero (morale/pressione). */
       incursions: Array.isArray(game.incursions) ? game.incursions : [],
       battles: Array.isArray(game.battles) ? game.battles : [],
-      warState: (game.warState && typeof game.warState === 'object') ? game.warState : { morale: 1.0, pressure: 0 }
+      warState: (game.warState && typeof game.warState === 'object') ? game.warState : { morale: 1.0, pressure: 0 },
+      /* M09 Fase B (decisione #49): stato di sconfitta + verbi morali. */
+      defeated: game.defeated || null,
+      alignmentDeeds: (game.alignmentDeeds && typeof game.alignmentDeeds === 'object') ? game.alignmentDeeds : { light: 0, dark: 0 }
     };
   }
 
@@ -244,6 +250,19 @@
         payload.warState = { morale: 1.0, pressure: 0 };
       }
       payload.schema = 9;
+    }
+    /* v9 → v10 (M09 Fase B): aggiungi `defeated` + `alignmentDeeds`, e
+       garantisci `mode.modifiers.gameOver` (default false; i save vecchi
+       restano in modalità infinita finché l'utente non cambia preset). */
+    if ((payload.schema || 9) < 10) {
+      if (payload.defeated === undefined) payload.defeated = null;
+      if (!payload.alignmentDeeds || typeof payload.alignmentDeeds !== 'object') {
+        payload.alignmentDeeds = { light: 0, dark: 0 };
+      }
+      if (payload.mode && payload.mode.modifiers && payload.mode.modifiers.gameOver === undefined) {
+        payload.mode.modifiers.gameOver = false;
+      }
+      payload.schema = 10;
     }
     return payload;
   }

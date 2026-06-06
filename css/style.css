@@ -3943,3 +3943,11 @@ select.main-menu__input { cursor: pointer; }
 .battle-modal__log { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
 .battle-modal__log th, .battle-modal__log td { padding: 3px 6px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.06); }
 .battle-modal__log th { color: var(--c-text-faint); font-weight: 600; }
+
+/* M09 Fase B — esilio, assedio AI, leve di recovery */
+.war-exile {
+  margin: 0 0 10px; padding: 8px 10px; border-radius: 6px;
+  background: rgba(224, 85, 110, 0.14); border: 1px solid rgba(224,85,110,0.4);
+  color: #f0a6b4; font-size: 0.86rem;
+}
+.war-siege--ai { border-left-color: #8a6cff; background: rgba(138, 108, 255, 0.10); }
