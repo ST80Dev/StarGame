@@ -46,7 +46,7 @@
   /* Schema 10 (M09 Fase B, decisione #49): aggiunge `defeated` (esilio/
      gameover) e `alignmentDeeds` (verbi morali → piste reputation). Le
      tregue AI (civ.truceUntil) vivono dentro game.civs (auto). */
-  const SCHEMA_VERSION = 10;
+  const SCHEMA_VERSION = 11;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -125,7 +125,10 @@
       warState: (game.warState && typeof game.warState === 'object') ? game.warState : { morale: 1.0, pressure: 0 },
       /* M09 Fase B (decisione #49): stato di sconfitta + verbi morali. */
       defeated: game.defeated || null,
-      alignmentDeeds: (game.alignmentDeeds && typeof game.alignmentDeeds === 'object') ? game.alignmentDeeds : { light: 0, dark: 0 }
+      alignmentDeeds: (game.alignmentDeeds && typeof game.alignmentDeeds === 'object') ? game.alignmentDeeds : { light: 0, dark: 0 },
+      /* M11 Fase A (decisione #51): reputazione globale §14 sistematizzata.
+         Lo stato diplomatico civ.relation vive dentro game.civs (auto). */
+      reputation: (typeof game.reputation === 'number') ? game.reputation : 50
     };
   }
 
@@ -263,6 +266,17 @@
         payload.mode.modifiers.gameOver = false;
       }
       payload.schema = 10;
+    }
+    /* v10 → v11 (M11 Fase A, decisione #51): reputazione globale §14 + stato
+       diplomatico per civiltà. Le civiltà già nel payload ricevono
+       relation='peace' (default lazy); se il payload non ha civs (regen dal
+       seed) ORION.ai.generate le crea già con relation='peace'. */
+    if ((payload.schema || 10) < 11) {
+      if (typeof payload.reputation !== 'number') payload.reputation = 50;
+      if (Array.isArray(payload.civs)) {
+        payload.civs.forEach(function (c) { if (c && !c.relation) c.relation = 'peace'; });
+      }
+      payload.schema = 11;
     }
     return payload;
   }

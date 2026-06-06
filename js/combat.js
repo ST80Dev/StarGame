@@ -524,7 +524,14 @@
     // civiltà AI ostile che possiede il sistema
     if (ORION.ai && ORION.ai.civForSystem) {
       const civ = ORION.ai.civForSystem(game, sysId);
-      if (civ && civ.alive && (civ.disposition <= -40)) return { kind: 'ai', civ: civ };
+      if (civ && civ.alive) {
+        /* M11 (#51): pace/tregua/alleanza = non-ostile (niente imboscate o
+           scaramucce contro chi non è in guerra con te). */
+        const rel = (ORION.diplomacy && ORION.diplomacy.effectiveRelation)
+          ? ORION.diplomacy.effectiveRelation(game, civ) : null;
+        if (rel === 'peace' || rel === 'truce' || rel === 'alliance') return null;
+        if (rel === 'war' || civ.disposition <= -40) return { kind: 'ai', civ: civ };
+      }
     }
     return null;
   }

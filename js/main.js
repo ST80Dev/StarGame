@@ -245,7 +245,10 @@ function newGame(seed, opts) {
     /* M09 Fase B (decisione #49): stato di sconfitta (null/esilio/gameover)
        + accumulatore verbi morali (→ piste reputation). */
     defeated: null,
-    alignmentDeeds: { light: 0, dark: 0 }
+    alignmentDeeds: { light: 0, dark: 0 },
+    /* M11 Fase A (decisione #51): reputazione globale §14 (neutra all'avvio).
+       Lo stato diplomatico per-civiltà vive in game.civs (relation). */
+    reputation: 50
   };
   // startDS = Data Stellare INIZIALE (epoca .00), fissa per la partita.
   ORION.game.startDS = ORION.time.format(startOrbita * 100);
@@ -292,6 +295,9 @@ function newGame(seed, opts) {
     /* M09 Fase B: sconfitta + verbi morali. */
     if (saved.defeated !== undefined) ORION.game.defeated = saved.defeated;
     if (saved.alignmentDeeds && typeof saved.alignmentDeeds === 'object') ORION.game.alignmentDeeds = saved.alignmentDeeds;
+    /* M11 Fase A (decisione #51): reputazione globale (relation per-civ è
+       dentro saved.civs). */
+    if (typeof saved.reputation === 'number') ORION.game.reputation = saved.reputation;
     /* Tutorial: rispetta lo stato del payload se presente. */
     if (saved.tutorial && typeof saved.tutorial === 'object') {
       ORION.game.tutorial = {
@@ -317,6 +323,11 @@ function newGame(seed, opts) {
      sistemi del giocatore non vengono mai annessi alle AI. */
   if (ORION.ai && ORION.ai.ensure) {
     ORION.ai.ensure(ORION.game);
+  }
+  /* M11 Fase A (decisione #51): inizializza la reputazione globale §14 se
+     assente (save pre-schema-11 → parte dall'anteprima M10). Idempotente. */
+  if (ORION.diplomacy && ORION.diplomacy.ensureReputation) {
+    ORION.diplomacy.ensureReputation(ORION.game);
   }
 
   setHudDate(ORION.time.currentDS(ORION.game));
@@ -416,8 +427,14 @@ function updateGlobalIndicesHud() {
   const icgEl = document.querySelector('[data-bind="icg"]');
   if (icgEl && typeof g.icg === 'number') icgEl.textContent = Math.round(g.icg).toString();
   const repEl = document.querySelector('[data-bind="reputazione"]');
-  if (repEl && ORION.ai && ORION.ai.reputationPreview) {
-    repEl.textContent = ORION.ai.reputationPreview(g).toString();
+  if (repEl) {
+    /* M11 (#51): Reputazione §14 sistematizzata (game.reputation). Fallback
+       all'anteprima M10 per save non ancora migrati. */
+    if (ORION.diplomacy && ORION.diplomacy.reputation) {
+      repEl.textContent = ORION.diplomacy.reputation(g).toString();
+    } else if (ORION.ai && ORION.ai.reputationPreview) {
+      repEl.textContent = ORION.ai.reputationPreview(g).toString();
+    }
   }
 }
 
@@ -3138,7 +3155,8 @@ function renderCivView(stage) {
   const ALIGN_LABEL = { bene: 'Bene', male: 'Male', neutrale: 'Neutrale' };
   const contacted = ORION.ai.contactedCivs(g);
   const icg = (typeof g.icg === 'number') ? Math.round(g.icg) : '—';
-  const rep = ORION.ai.reputationPreview ? ORION.ai.reputationPreview(g) : '—';
+  const DIP = ORION.diplomacy;
+  const rep = DIP ? DIP.reputation(g) : (ORION.ai.reputationPreview ? ORION.ai.reputationPreview(g) : '—');
 
   /* Card dossier per ogni civiltà contattata. */
   let cards;
@@ -3156,11 +3174,33 @@ function renderCivView(stage) {
       const known = ORION.ai.knownSystemsCount(g, c);
       const ptier = ORION.ai.powerTier(c.power || 0);
       const seat = (g.galaxy.groups.find(function (gp) { return gp.id === c.homeGroupId; }) || {});
-      /* M10 Fase C: intel combat-aware (relazione, forza stimata, ultimo
-         scontro, "perché" della disposizione). */
-      const rel = ORION.ai.relationStatus ? ORION.ai.relationStatus(g, c) : { id: 'neutral', label: 'Neutrale' };
+      /* M10 Fase C: intel combat-aware (forza stimata, ultimo scontro,
+         "perché" della disposizione). */
       const force = ORION.ai.forceEstimate ? ORION.ai.forceEstimate(g, c) : 0;
       const reason = ORION.ai.dispositionReason ? ORION.ai.dispositionReason(g, c) : '';
+      /* M11 (#51): chip stato diplomatico FORMALE (civ.relation, autoritativo)
+         + pulsanti proposta. Sostituisce il chip situazionale di Fase C. */
+      let relChip = '', dipActions = '';
+      if (DIP) {
+        const drel = DIP.effectiveRelation(g, c);
+        relChip = '<span class="dip-relchip ' + DIP.relationStateClass(drel) + '" title="Stato diplomatico">' +
+          escapeHtml(DIP.relationLabel(drel)) + '</span>';
+        const acts = DIP.availableActions(g, c);
+        const onCd = DIP.onCooldown(g, c);
+        dipActions = '<div class="dip-actions">' + acts.map(function (a) {
+          const ev = DIP.evaluate(g, c, a);
+          const danger = (a === 'declare-war' || a === 'break-alliance');
+          const hint = ev.unilateral ? 'Effetto immediato'
+            : (onCd ? 'Dispaccio inviato di recente — attendi'
+                    : 'Esito ' + ev.likelihood + ' · ' + ev.reason);
+          return '<button type="button" class="dip-btn' + (danger ? ' dip-btn--danger' : '') + '"' +
+            ' data-dip-civ="' + escapeHtml(c.id) + '" data-dip-act="' + a + '"' +
+            (onCd && !ev.unilateral ? ' disabled' : '') +
+            ' title="' + escapeHtml(hint) + '">' + escapeHtml(DIP.actionLabel(a)) +
+            (ev.unilateral ? '' : ' <span class="dip-btn__odds">' + ev.likelihood + '</span>') +
+            '</button>';
+        }).join('') + '</div>';
+      }
       let lastB = '';
       if (c.lastBattle) {
         const lb = c.lastBattle;
@@ -3177,7 +3217,7 @@ function renderCivView(stage) {
           '<span class="civ-card__swatch" aria-hidden="true"></span>' +
           '<span class="civ-card__name">' + escapeHtml(c.name) + '</span>' +
           '<span class="civ-chip civ-chip--' + c.alignment + '">' + (ALIGN_LABEL[c.alignment] || c.alignment) + '</span>' +
-          '<span class="civ-rel civ-rel--' + rel.id + '">' + escapeHtml(rel.label) + '</span>' +
+          relChip +
         '</div>' +
         '<div class="civ-card__row"><span class="civ-card__k">Tratto</span><span>' + escapeHtml(c.traitLabel) + '</span></div>' +
         '<div class="civ-card__row"><span class="civ-card__k">Sede</span><span>' +
@@ -3193,6 +3233,7 @@ function renderCivView(stage) {
             '<span class="civ-disp__fill civ-disp__fill--' + dispCls + '" style="width:' + pct.toFixed(0) + '%"></span></div>' +
           (reason ? '<div class="civ-disp__reason">' + escapeHtml(reason) + '</div>' : '') +
         '</div>' +
+        dipActions +
       '</li>';
     }).join('') + '</ul>';
   }
@@ -3225,22 +3266,63 @@ function renderCivView(stage) {
   stage.innerHTML =
     '<div class="civ-view">' +
       '<header class="fleet-view__head">' +
-        '<h2 class="fleet-view__title">Civiltà della galassia <span class="fleet-view__sub">M10 · Fase E</span></h2>' +
+        '<h2 class="fleet-view__title">Civiltà della galassia <span class="fleet-view__sub">M10 · M11 Diplomazia</span></h2>' +
         '<div class="civ-indices">' +
           '<span class="civ-index" title="Indice Corruzione Galattica (§5.4)">ICG <strong>' + icg + '</strong></span>' +
-          '<span class="civ-index" title="Reputazione — anteprima (§14)">Reputazione <strong>' + rep + '</strong></span>' +
+          '<span class="civ-index" title="Reputazione globale (§14)">Reputazione <strong>' + rep + '</strong></span>' +
           '<span class="civ-index" title="Morale d\'impero (M09): cala con le sconfitte, riduce la produzione">Morale <strong>' + moralePct + '%</strong></span>' +
           '<span class="civ-index" title="Pressione nemica (M09): sale con le sconfitte, attira più attacchi">Pressione <strong>' + pressure + '</strong></span>' +
         '</div>' +
       '</header>' +
       '<p class="panel__note">Le civiltà vivono in <strong>background</strong> (espandono, si fanno guerra, cadono e ' +
-        'nascono). Dossier <strong>combat-aware</strong>: relazione (guerra/tregua/ostile), forza stimata, ultimo scontro ' +
-        'e il <em>perché</em> della disposizione. Le tue azioni morali finora — <span class="civ-deeds civ-deeds--light">' + (deeds.light || 0) + ' luce</span> · ' +
+        'nascono). Dossier <strong>combat-aware</strong> con <strong>stato diplomatico</strong>: puoi <strong>dichiarare guerra</strong>, ' +
+        '<strong>proporre pace</strong> o <strong>alleanza</strong> (non-aggressione) — l\'esito dipende da disposizione, ' +
+        '<strong>reputazione</strong> e allineamento. Le tue azioni morali finora — <span class="civ-deeds civ-deeds--light">' + (deeds.light || 0) + ' luce</span> · ' +
         '<span class="civ-deeds civ-deeds--dark">' + (deeds.dark || 0) + ' ombra</span>. ' +
-        'Trattati e alleanze arrivano con la <strong>Diplomazia</strong> (M11).</p>' +
+        'Gli scontri si risolvono col <strong>Combattimento</strong> (M09).</p>' +
       nestsHtml +
       cards +
     '</div>';
+
+  /* M11 (#51): handler delle proposte diplomatiche (delega sul contenitore). */
+  if (DIP) {
+    if (ORION.tutorial) ORION.tutorial.fire('diplomacy');
+    stage.querySelectorAll('[data-dip-act]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const civ = (g.civs || []).filter(function (c) { return c.id === btn.dataset.dipCiv; })[0];
+        if (!civ) return;
+        runDiplomacyAction(civ, btn.dataset.dipAct);
+      });
+    });
+  }
+}
+
+/* M11 (#51): esegue un'azione diplomatica, registra in cronaca, persiste e
+   ri-renderizza la vista Civiltà. Le azioni unilaterali (guerra/rottura)
+   chiedono conferma per via degli effetti su reputazione. */
+function runDiplomacyAction(civ, actionId) {
+  const g = ORION.game;
+  const DIP = ORION.diplomacy;
+  if (!g || !DIP) return;
+  const danger = (actionId === 'declare-war' || actionId === 'break-alliance');
+  if (danger) {
+    const msg = (actionId === 'declare-war')
+      ? 'Dichiarare guerra a ' + civ.name + '?' +
+        (civ.alignment !== 'male' ? ' (aggredire una civiltà non maligna costa reputazione)' : '')
+      : 'Rompere l\'alleanza con ' + civ.name + '? Costa reputazione.';
+    if (!window.confirm(msg)) return;
+  }
+  const events = [];
+  const res = DIP.apply(g, civ, actionId, events);
+  if (!res.ok) { showToast(res.reason || 'Dispaccio rifiutato'); return; }
+  /* Riusa il pipeline eventi → cronaca/auto-pausa (coerente col resto). */
+  events.forEach(function (ev) { chronicleEvent(ev); });
+  persistGame(g);
+  updateGlobalIndicesHud();
+  const stage = document.querySelector('[data-view-stage]');
+  if (stage && ORION._currentView === 'civ') renderCivView(stage);
+  if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+  if (res.accepted === false) showToast(civ.name + ' ha respinto la proposta');
 }
 
 function findFleet(id) {
@@ -3986,7 +4068,13 @@ const DEFAULT_AUTOPAUSE = {
   'colony-conquered': true,
   'colony-razed': true,
   'empire-fallen': true,
-  'fleet-intercepted': true
+  'fleet-intercepted': true,
+  /* M11 Fase A (decisione #51): le transizioni diplomatiche sono atti
+     dell'utente (proposte) → niente auto-pausa sulle proprie azioni. La
+     scadenza di una tregua → guerra è invece una sorpresa rilevante. */
+  'diplo-war': false, 'diplo-peace': false, 'diplo-alliance': false,
+  'diplo-alliance-broken': false, 'diplo-rejected': false,
+  'diplo-truce-expired': true
 };
 
 ORION.timer = {
@@ -4226,7 +4314,13 @@ function showEventOverlay(events) {
     'colony-conquered': 'Colonia conquistata',
     'colony-razed': 'Colonia rasa al suolo',
     'empire-fallen': 'Civiltà caduta',
-    'fleet-intercepted': 'Flotta intercettata'
+    'fleet-intercepted': 'Flotta intercettata',
+    'diplo-war': 'Guerra dichiarata',
+    'diplo-peace': 'Pace stipulata',
+    'diplo-alliance': 'Alleanza stretta',
+    'diplo-alliance-broken': 'Alleanza rotta',
+    'diplo-rejected': 'Proposta respinta',
+    'diplo-truce-expired': 'Tregua scaduta'
   };
   /* Raggruppa per kind: una checkbox per categoria, una sola voce di sintesi. */
   const byKind = {};
@@ -4502,6 +4596,22 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — Una nuova potenza emerge nel/nella ' + escapeHtml(ev.regionLabel) + ': <strong>' + escapeHtml(ev.civName) + '</strong>.', 'civ');
   } else if (ev.kind === 'pirate-raid') {
     pushChronicle(ds + ' — Predoni hanno colpito una rotta nel/nella ' + escapeHtml(ev.regionLabel) + '.', 'system');
+  } else if (ev.kind === 'diplo-war') {
+    /* M11 Fase A (decisione #51): transizioni diplomatiche. */
+    pushChronicle(ds + ' — <strong>Guerra dichiarata</strong> a <strong>' + escapeHtml(ev.civName) + '</strong>.', 'civ');
+    if (ORION.tutorial) ORION.tutorial.fire('diplomacy');
+  } else if (ev.kind === 'diplo-peace') {
+    pushChronicle(ds + ' — <strong>Pace</strong> stipulata con <strong>' + escapeHtml(ev.civName) + '</strong> · ostilità sospese.', 'civ');
+    if (ORION.tutorial) ORION.tutorial.fire('diplomacy');
+  } else if (ev.kind === 'diplo-alliance') {
+    pushChronicle(ds + ' — <strong>Alleanza</strong> stretta con <strong>' + escapeHtml(ev.civName) + '</strong> · patto di non-aggressione.', 'civ');
+    if (ORION.tutorial) ORION.tutorial.fire('diplomacy');
+  } else if (ev.kind === 'diplo-alliance-broken') {
+    pushChronicle(ds + ' — <strong>Alleanza rotta</strong> con <strong>' + escapeHtml(ev.civName) + '</strong> · reputazione intaccata.', 'civ');
+  } else if (ev.kind === 'diplo-rejected') {
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.civName) + '</strong> ha respinto la tua proposta diplomatica.', 'civ');
+  } else if (ev.kind === 'diplo-truce-expired') {
+    pushChronicle(ds + ' — La tregua con <strong>' + escapeHtml(ev.civName) + '</strong> è scaduta · stato di guerra ripristinato.', 'civ');
   } else if (ev.kind === 'pirate-cleared') {
     /* M10 Fase E: covo sgominato → taglia. */
     const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
@@ -5156,8 +5266,9 @@ function renderContextActionBar(ctx) {
     } else if (isForeign) {
       buttons.push('<button class="actionbar__btn actionbar__btn--primary btn--with-icon" data-action="ctx-civ-dossier" data-civ="' + escapeHtml(civ.id) + '">' +
         icnHtml('civ', 'pink') + ' Apri dossier civiltà</button>');
-      buttons.push('<button class="actionbar__btn btn--with-icon" disabled title="Richiede M11 Diplomazia">' +
-        icnHtml('diplomacy', 'pink') + ' Proponi accordo (M11)</button>');
+      /* M11 (#51): diplomazia attiva — apre la vista Civiltà sulle proposte. */
+      buttons.push('<button class="actionbar__btn btn--with-icon" data-action="ctx-diplomacy" data-civ="' + escapeHtml(civ.id) + '" title="Apri la diplomazia con questa civiltà">' +
+        icnHtml('diplomacy', 'pink') + ' Diplomazia</button>');
       /* M09 (decisione #49): attacco offensivo. Abilitato se c'è almeno una
          flotta armata che può raggiungere il sistema. */
       const strikers = attackCapableFleets(g, sysId);
@@ -5183,6 +5294,8 @@ function renderContextActionBar(ctx) {
   });
   const dBtn = host.querySelector('[data-action="ctx-civ-dossier"]');
   if (dBtn) dBtn.addEventListener('click', function () { navigateView('civ'); });
+  const dipBtn = host.querySelector('[data-action="ctx-diplomacy"]');
+  if (dipBtn) dipBtn.addEventListener('click', function () { navigateView('civ'); });
   const aBtn = host.querySelector('[data-action="ctx-attack"]');
   if (aBtn) aBtn.addEventListener('click', function () {
     openAttackPicker(parseInt(aBtn.dataset.sys, 10), aBtn.dataset.civ);
