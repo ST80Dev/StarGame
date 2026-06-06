@@ -159,6 +159,24 @@
       '<polyline points="7,3 7,8 15,8"/>'
     ),
 
+    /* Resources — barili/canisters impilati (estrattive/economia). */
+    resources: svg(
+      '<ellipse cx="12" cy="5" rx="9" ry="3"/>' +
+      '<path d="M3 5v6c0 1.7 4 3 9 3s9-1.3 9-3V5"/>' +
+      '<path d="M3 11v6c0 1.7 4 3 9 3s9-1.3 9-3v-6"/>'
+    ),
+
+    /* Forces — scudo militare (Forze e reclutamento). */
+    forces: svg(
+      '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>'
+    ),
+
+    /* Home — casa (alternativa a roster per "colonia in focus"). */
+    home: svg(
+      '<path d="M3 12l9-9 9 9"/>' +
+      '<path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10"/>'
+    ),
+
     /* Warning — triangolo allerta. */
     warning: svg(
       '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>' +

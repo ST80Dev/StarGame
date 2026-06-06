@@ -292,10 +292,22 @@ button { font-family: inherit; }
   text-transform: uppercase;
   color: var(--c-accent);
   text-shadow: 0 0 8px rgba(47, 230, 224, 0.25);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.panel__title-icon {
+  color: #f0a868;        /* "casa" = ambra, coerente con roster/colonia */
+  font-size: 0.95rem;
 }
 .panel__content { padding: 12px 14px; overflow-y: auto; flex: 1; }
 .panel__note { margin-top: 14px; font-size: 0.84rem; color: var(--c-text-soft); line-height: 1.55; }
 .panel__note--target { margin-top: 8px; font-size: 0.78rem; color: var(--c-text-faint); font-style: italic; }
+/* PR-B: panel note con icona inline (warning, info, …) — UI_GUIDE §3 */
+.panel__note--warn { color: var(--c-text); }
+.panel__note-icon { font-size: 0.95rem; vertical-align: -0.18em; margin-right: 3px; }
+.panel__note-icon--warn { color: #f0d670; }
+.panel__note-icon--info { color: #80c8e6; }
 
 /* --- Lista di navigazione --- */
 .nav-list { display: flex; flex-direction: column; gap: 4px; }
@@ -906,7 +918,23 @@ button { font-family: inherit; }
 .planet-tab.is-active {
   flex: 1 1 auto;
 }
-.planet-tab__icon { font-size: 1rem; line-height: 1; }
+/* PR-B: planet-tab icone SVG con tinta tematica (UI_GUIDE §3).
+   Il color: <hex> propaga a currentColor sull'SVG stroke; il glow è
+   morbido (drop-shadow 3px) come da specifica canonica. */
+.planet-tab__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+.planet-tab__icon--amber  { color: #f0a868; }
+.planet-tab__icon--gold   { color: #f0d670; }
+.planet-tab__icon--cyan   { color: #2fe6e0; }
+.planet-tab__icon--pink   { color: #f08296; }
+.planet-tab__icon--red    { color: #f08296; }
+.planet-tab__icon--violet { color: #b89cff; }
+.planet-tab__icon--green  { color: #6fe0b8; }
 .planet-tab__label { white-space: nowrap; }
 .planet-tab:hover:not(:disabled) {
   color: #fff;
@@ -4317,17 +4345,26 @@ select.main-menu__input { cursor: pointer; }
   outline: none; border-color: var(--c-accent);
 }
 .dx-selector__pin {
-  font-size: 0.7rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
   color: var(--c-text-faint);
-  padding: 2px 5px;
+  padding: 4px 7px;
   border: 1px solid var(--c-border-soft);
   border-radius: 8px;
   background: rgba(8,12,30,0.5);
   cursor: pointer;
+  transition: var(--transition);
+}
+.dx-selector__pin:hover {
+  color: var(--c-text);
+  border-color: var(--c-accent-dim);
 }
 .dx-selector__pin.is-pinned {
-  color: var(--c-amber);
-  border-color: rgba(255,174,92,0.4);
+  color: #f0a868;
+  border-color: rgba(240,168,104,0.45);
+  background: rgba(240,168,104,0.08);
 }
 
 /* =====================================================================
