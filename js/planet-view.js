@@ -525,9 +525,23 @@
       this.canvas.height = Math.round(h * this.dpr);
       this.canvas.style.width = w + 'px';
       this.canvas.style.height = h + 'px';
-      /* M07.2 polish iter 2: card laterali compattate → sfera può tornare
-         più grande senza coprire i widget (decisione #44). 0.28 → 0.32. */
-      this.fitR = Math.min(w, h) * 0.32;
+      /* M07.2 iter 3: la sfera si dimensiona sull'altezza EFFETTIVA della
+         scena (centrale) — sottrae top breadcrumb (~56px) e bottom band
+         del deck (popolazione+strutture+cronaca, ~190px) se il deck è
+         montato. cy viene shiftato verso l'alto della metà del reserve
+         così la sfera resta visivamente al centro della porzione visibile.
+         Misura il deck via DOM se presente. */
+      const topReserve = 56;
+      let bottomReserve = 0;
+      const deck = document.querySelector('.colony-deck:not([hidden])');
+      if (deck) {
+        const struct = deck.querySelector('.deck-structures');
+        if (struct) bottomReserve = struct.getBoundingClientRect().height + 18;
+        else bottomReserve = 190; /* fallback se misurazione non disponibile */
+      }
+      const effH = Math.max(140, h - topReserve - bottomReserve);
+      this.fitR = Math.min(w, effH) * 0.36;
+      this._cyOffset = -bottomReserve / 2 + topReserve / 2;
       if (!hadFit) this.resetView();
       this.requestRender();
     }
@@ -624,7 +638,7 @@
     _pickMoon(sx, sy) {
       if (!this.moonTex.length) return null;
       const r = this.fitR * this.scale;
-      const cx = this.cssW / 2 + this.offX, cy = this.cssH / 2 + this.offY;
+      const cx = this.cssW / 2 + this.offX, cy = this.cssH / 2 + (this._cyOffset || 0) + this.offY;
       for (let i = 0; i < this.moonTex.length; i++) {
         const m = this.moonTex[i];
         const mx = cx + Math.cos(m.angle) * r * m.orbit;
@@ -650,8 +664,10 @@
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
       ctx.clearRect(0, 0, this.cssW, this.cssH);
 
-      // sfondo: polvere stellare
-      const cx = this.cssW / 2, cy = this.cssH / 2;
+      // sfondo: polvere stellare. cy shiftato verso l'alto in base al
+      // reserve del deck (M07.2 iter 3) — la sfera resta al centro della
+      // porzione visibile, non del canvas raw.
+      const cx = this.cssW / 2, cy = this.cssH / 2 + (this._cyOffset || 0);
       for (let i = 0; i < this.dust.length; i++) {
         const d = this.dust[i];
         const x = cx + d.x * this.fitR * 1.6;

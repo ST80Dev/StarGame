@@ -674,8 +674,14 @@ button { font-family: inherit; }
   border-radius: 999px;
   backdrop-filter: blur(5px);
   z-index: 4;             /* sopra Plancia di Colonia (z=3) */
-  max-width: 96%;
-  overflow: hidden;
+  max-width: calc(100% - 28px);
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+.galaxy-breadcrumb .breadcrumb__type,
+.galaxy-breadcrumb .crumb,
+.galaxy-breadcrumb .crumb-chip {
+  white-space: nowrap;
 }
 /* M07.2 (decisione #44): wrapper presente solo a livello pianeta —
    raggruppa i crumb sinistri per separarli visivamente dal blocco info dx. */
@@ -3044,17 +3050,17 @@ select.main-menu__input { cursor: pointer; }
 }
 .colony-deck[hidden] { display: none; }
 
-/* M07.2 polish (decisione #44): grid senza topbar — le info di intestazione
-   vivono nella breadcrumb estesa. Colonne laterali compatte per lasciare
-   massima visibilità alla sfera planet sotto. */
+/* M07.2 iter 3 (decisione #44): 2 righe — top fascia "scena" (risorse +
+   coda con la sfera al centro), bottom 3 colonne pop|strutture|cronaca.
+   La sfera al centro respira di più; cronaca allargata, popolazione
+   compatta verticale a sinistra. */
 .deck-grid {
   display: grid;
-  grid-template-columns: 132px 1fr 192px;
-  grid-template-rows: 1fr auto auto;
+  grid-template-columns: 132px 1fr 252px;
+  grid-template-rows: 1fr auto;
   grid-template-areas:
     "resources .          queue"
-    "structs   structs    structs"
-    "pop       pop        footer";
+    "pop       structs    footer";
   gap: 6px;
   height: 100%;
   max-width: 1500px;
@@ -3210,35 +3216,52 @@ select.main-menu__input { cursor: pointer; }
   box-shadow: inset 0 0 0 1px rgba(255, 92, 108, 0.28);
 }
 
-/* ---- Strutture costruite (riga centrale ampia) ------------------ */
+/* ---- Strutture costruite (centro riga inferiore) ----------------
+   M07.2 iter 3: card compatte con info verticale (glifo+nome top,
+   livello+costo+expand bottom). Etichette abbreviate via SHORT_LABEL
+   in colony-deck.js. */
 .deck-structures {
   grid-area: structs;
-  padding: 6px 10px 8px;
+  padding: 6px 8px;
   background: rgba(14, 20, 44, 0.72);
   border: 1px solid var(--c-border-soft);
   border-radius: var(--radius);
   backdrop-filter: blur(6px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 .deck-struct-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
   gap: 4px;
 }
 .deck-struct {
   position: relative;
-  display: grid;
-  grid-template-columns: 22px 1fr auto;
-  align-items: center;
-  column-gap: 8px;
-  padding: 5px 6px 5px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 18px 5px 5px;
   background: rgba(8, 12, 30, 0.55);
   border: 1px solid var(--c-border-soft);
   border-left: 3px solid var(--c-border);
   border-radius: var(--radius-sm);
-  min-height: 40px;
+  min-height: 64px;
+}
+.deck-struct__top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.deck-struct__bot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
 }
 .deck-struct.is-busy { opacity: 0.92; }
 .deck-cat--estrattiva { border-left-color: var(--c-accent-warm); }
@@ -3250,10 +3273,10 @@ select.main-menu__input { cursor: pointer; }
 
 .deck-struct__info {
   position: absolute;
-  top: 2px;
+  top: 3px;
   left: 4px;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -3271,36 +3294,32 @@ select.main-menu__input { cursor: pointer; }
   color: var(--c-text);
 }
 .deck-struct__glyph {
-  font-size: 1.05rem;
+  font-size: 0.98rem;
   color: var(--c-text);
   text-align: center;
-}
-.deck-struct__main {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex: 0 0 14px;
 }
 .deck-struct__name {
-  font-size: 0.82rem;
+  flex: 1;
+  font-size: 0.76rem;
   color: var(--c-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.15;
+  line-height: 1.1;
 }
 .deck-struct__lvl {
   color: var(--c-accent);
   font-family: var(--font-data, inherit);
-  font-size: 0.74rem;
-  margin-left: 2px;
+  font-size: 0.72rem;
+  flex: 0 0 auto;
 }
 .deck-struct__pips {
   display: inline-flex;
-  gap: 3px;
+  gap: 2px;
 }
 .deck-pip {
-  width: 7px;
+  width: 5px;
   height: 3px;
   background: rgba(120, 160, 255, 0.18);
   border-radius: 1px;
@@ -3311,8 +3330,8 @@ select.main-menu__input { cursor: pointer; }
 .deck-struct__expand {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 6px;
+  gap: 3px;
+  padding: 2px 5px;
   background: rgba(47, 230, 224, 0.12);
   border: 1px solid var(--c-accent-dim);
   border-radius: var(--radius-sm);
@@ -3320,20 +3339,22 @@ select.main-menu__input { cursor: pointer; }
   cursor: pointer;
   font-family: var(--font-data, inherit);
   white-space: nowrap;
+  flex: 1;
+  justify-content: center;
 }
 .deck-struct__expand:hover:not(.is-locked):not([disabled]) {
   background: rgba(47, 230, 224, 0.22);
   border-color: var(--c-accent);
 }
 .deck-struct__expand-plus {
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   font-weight: 600;
   line-height: 1;
 }
 .deck-struct__expand-cost {
   display: inline-flex;
-  gap: 4px;
-  font-size: 0.62rem;
+  gap: 3px;
+  font-size: 0.6rem;
   color: var(--c-text-soft);
   flex-wrap: nowrap;
 }
@@ -3451,52 +3472,60 @@ select.main-menu__input { cursor: pointer; }
   border-color: var(--c-bad);
 }
 
-/* ---- Popolazione ----------------------------------------------- */
+/* ---- Popolazione (colonna SX, verticale compatta) ---------------
+   M07.2 iter 3: layout verticale per colonna stretta — label sopra,
+   numero grande, barra full-width, % sotto, chip classi a wrap. */
 .deck-population {
   grid-area: pop;
-  padding: 6px 12px 8px;
+  padding: 6px 10px 8px;
   background: rgba(14, 20, 44, 0.72);
   border: 1px solid var(--c-border-soft);
   border-radius: var(--radius);
   backdrop-filter: blur(6px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-self: start;
 }
-/* Totale popolazione: numero grande + barra prominente (richiesta utente).
-   La % è unit-based (pop.total/pop.cap), non persone/cap: la curva persone
-   è esponenziale → un rapporto in persone darebbe ~0% per quasi tutto il game. */
 .deck-pop__total {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 5px;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 2px;
+}
+.deck-pop__total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
 }
 .deck-pop__total-label {
   font-family: var(--font-display, inherit);
-  font-size: 0.7rem;
+  font-size: 0.66rem;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   color: var(--c-text-soft);
 }
 .deck-pop__total-num {
   font-family: var(--font-data, inherit);
-  font-size: 1.05rem;
+  font-size: 0.92rem;
   font-weight: 600;
   color: var(--c-text);
   white-space: nowrap;
 }
-.deck-pop__total-num .sep { color: var(--c-text-faint); margin: 0 4px; }
-.deck-pop__total-num .cap { color: var(--c-text-soft); font-weight: 500; }
+.deck-pop__total-num .sep { color: var(--c-text-faint); margin: 0 3px; }
+.deck-pop__total-num .cap { color: var(--c-text-soft); font-weight: 500; font-size: 0.8rem; }
 .deck-pop__total-pct {
   font-family: var(--font-data, inherit);
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   color: var(--c-accent);
   font-weight: 600;
 }
 .deck-pop__bar {
-  flex: 1;
-  min-width: 80px;
-  height: 8px;
+  width: 100%;
+  height: 6px;
   background: rgba(120, 160, 255, 0.12);
-  border-radius: 4px;
+  border-radius: 3px;
   overflow: hidden;
   border: 1px solid var(--c-border-soft);
 }
@@ -3506,19 +3535,21 @@ select.main-menu__input { cursor: pointer; }
   transition: width 0.4s ease;
 }
 .deck-pop__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 3px;
+  margin-top: 2px;
 }
 .deck-pop__chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 2px 7px;
+  justify-content: space-between;
+  gap: 3px;
+  padding: 2px 6px;
   border-radius: 999px;
   background: rgba(120, 160, 255, 0.08);
   border: 1px solid var(--c-border-soft);
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   font-family: var(--font-data, inherit);
 }
 .deck-pop__chip-label {
@@ -3537,36 +3568,52 @@ select.main-menu__input { cursor: pointer; }
 .deck-pop__chip.class--mercanti    { border-color: rgba(255, 202, 85, 0.4); }
 .deck-pop__chip.class--tecnici     { border-color: rgba(47, 230, 224, 0.4); }
 
-/* ---- Footer cronaca ------------------------------------------- */
+/* ---- Footer cronaca (colonna DX, scrollabile) ------------------
+   M07.2 iter 3: allargata e scrollabile, testi su più righe. */
 .deck-footer {
   grid-area: footer;
-  padding: 4px 10px 6px;
+  padding: 6px 10px 6px;
   background: rgba(14, 20, 44, 0.72);
   border: 1px solid var(--c-border-soft);
   border-radius: var(--radius);
   backdrop-filter: blur(6px);
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
 }
 .deck-footer-log {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 2px 0 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  font-size: 0.78rem;
+  gap: 5px;
+  font-size: 0.76rem;
+  line-height: 1.4;
   color: var(--c-text-soft);
+  overflow-y: auto;
+  flex: 1;
 }
 .deck-footer-log li {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-wrap: break-word;
+  padding-left: 8px;
+  position: relative;
+}
+.deck-footer-log li::before {
+  content: "›";
+  position: absolute;
+  left: 0;
+  color: var(--c-accent);
 }
 .deck-footer-log li strong { color: var(--c-text); }
 
 /* ---- Responsive (decisione #6: ≥768px) ------------------------- */
 @media (max-width: 1199px) {
   .deck-grid {
-    grid-template-columns: 120px 1fr 168px;
+    grid-template-columns: 118px 1fr 216px;
   }
   .deck-res__value { font-size: 0.9rem; }
 }
