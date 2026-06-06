@@ -449,10 +449,15 @@
       // UPKEEP = lineare (×livello, ogni modulo consuma uguale), SLOT = ×livello.
       const msum = S.moduleSum(lvl);
       slotsUsed += S.slotFootprint(def, lvl);
+      /* Decisione #49 (M09, §10.2): le strutture DANNEGGIATE in battaglia
+         producono meno (efficienza ∝ hp/100). Default hp=100 → nessun
+         effetto sui save esistenti. L'upkeep resta pieno (struttura
+         danneggiata costa comunque) → penalità realistica + spinta a riparare. */
+      const hpFactor = Math.max(0, Math.min(1, (ent.hp != null ? ent.hp : 100) / 100));
 
       Object.keys(def.rates || {}).forEach(function (k) {
         // i tassi "risorsa base" sono modulati dal potenziale del pianeta
-        let base = def.rates[k] * msum;
+        let base = def.rates[k] * msum * hpFactor;
         if (k === 'met')   base *= pot.met / 60;
         if (k === 'en')    base *= pot.en  / 60;
         if (k === 'food')  base *= pot.food / 60;

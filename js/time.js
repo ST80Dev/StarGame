@@ -100,6 +100,37 @@
     WASTE_MALUS_SAT:     0.10,   // malus produzione a saturazione = 1.0
     WASTE_MALUS_CRIT:    0.25,   // malus massimo (saturazione ≥ 2.0, overflow ignorato)
 
+    /* Combattimento M09 — Fase A (decisione #49). Filosofia "declino a
+       spirale con leve di recovery": le perdite alimentano un MORALE
+       d'impero in calo (→ moltiplicatore negativo sulla produzione, come
+       scarsità/rifiuti) e una PRESSIONE che alza la frequenza delle razzie.
+       Tutto BOUNDED e recovery-friendly (#22): un singolo scontro perso non
+       è catastrofico, ma una CATENA di sconfitte compone la spirale. La
+       morale risale e la pressione decade da sole nel tempo → recovery
+       passivo; le leve attive (consolidare/abbandonare) sono Fase B. */
+    WAR_MORALE_FLOOR:     0.6,   // pavimento del moltiplicatore produzione da morale
+    WAR_MORALE_RECOVER:   0.004, // /Ι risalita morale verso 1.0
+    WAR_PRESSURE_DECAY:   0.01,  // /Ι decadimento pressione verso 0
+    WAR_MORALE_PER_SHIP:  0.012, // calo morale per nave persa
+    WAR_MORALE_PER_LOOT:  0.04,  // calo morale per colonia saccheggiata
+    WAR_MORALE_PER_DEFEAT:0.02,  // calo morale per battaglia persa dal giocatore
+    WAR_PRESSURE_PER_LOSS:0.06,  // +pressione per evento negativo
+    WAR_MORALE_PER_WIN:   0.015, // risalita morale per battaglia vinta (recupero attivo)
+
+    /* Razzie pirata (incursioni inbound, §17.5). Cadenza all'AI-tick; la
+       probabilità di lancio scala con la pressione. Preavviso = ETA di
+       viaggio (recovery-friendly: il giocatore vede l'incursione arrivare). */
+    PIRATE_INCURSION_BASE: 0.05, // prob. base/covo/AI-tick (a pressione 0)
+    PIRATE_INCURSION_PRESSURE: 0.25, // +prob a pressione 1.0
+    PIRATE_RAID_LOOT_FRAC: 0.18, // frazione di stock saccheggiata se i predoni vincono (bounded)
+    PIRATE_RAID_STRUCT_DMG: 35,  // hp tolti a una struttura colpita
+    PIRATE_RAID_POP_LOSS:   1,   // unità pop perse in un saccheggio
+
+    /* Riparazione passiva (recovery-friendly, §10.2): le strutture
+       danneggiate in battaglia risalgono di hp da sole quando il sistema
+       non è sotto attacco. */
+    STRUCT_REPAIR_PER_I:  1.5,   // hp/Ι recuperati dalle strutture danneggiate
+
     /* Osservatorio §7.3 */
     SCAN_OBSERVATION_I: 10,     // I di osservazione dopo completamento
 
@@ -126,6 +157,8 @@
     'osservatorio':      { scienziati: 2 },
     'cantiere-navale':   { militari: 2, operai: 1 },
     'accademia-militare':{ militari: 3 },
+    'batteria-difesa':   { militari: 2, tecnici: 1 },
+    'scudo-planetario':  { militari: 1, tecnici: 2 },
     'centro-abitativo':  { operai: 1, tecnici: 1, mercanti: 1 },
     'ospedale':          { scienziati: 1, tecnici: 1 },
     'mercato':           { mercanti: 3 },
@@ -272,6 +305,36 @@
     return { stock: w.stock || 0, net: w.net || 0, capacity: cap, saturation: sat, state: state };
   }
 
+  /* Stato di guerra d'impero (decisione #49) — lazy init, serializzato come
+     game.warState (bump schema 9 in save.js). `morale` 0.6..1 modula la
+     produzione globale; `pressure` 0..1 alza la frequenza delle razzie. */
+  function ensureWarState(game) {
+    if (!game.warState || typeof game.warState !== 'object') {
+      game.warState = { morale: 1.0, pressure: 0 };
+    }
+    if (game.warState.morale == null) game.warState.morale = 1.0;
+    if (game.warState.pressure == null) game.warState.pressure = 0;
+    return game.warState;
+  }
+  /* Moltiplicatore di produzione dal morale d'impero (1.0 = nessun malus). */
+  function warMalus(game) {
+    const ws = game && game.warState;
+    if (!ws) return 1;
+    return Math.max(CFG.WAR_MORALE_FLOOR, Math.min(1, ws.morale || 1));
+  }
+  /* Registra un evento negativo (perdita) sullo stato di guerra: cala il
+     morale, sale la pressione. Bounded. */
+  function warRegisterLoss(game, moraleHit, pressureHit) {
+    const ws = ensureWarState(game);
+    ws.morale = Math.max(0.3, ws.morale - (moraleHit || 0));
+    ws.pressure = Math.min(1, ws.pressure + (pressureHit || 0));
+  }
+  /* Registra una vittoria: piccolo recupero morale (leva attiva di recovery). */
+  function warRegisterWin(game) {
+    const ws = ensureWarState(game);
+    ws.morale = Math.min(1, ws.morale + CFG.WAR_MORALE_PER_WIN);
+  }
+
   /* Calcola il malus globale di produzione in base alla scarsità.
      Restituisce un fattore moltiplicativo (1.0 = nessun malus). */
   function scarcityMalus(scar) {
@@ -400,6 +463,9 @@
     /* Decisione #48: la saturazione di rifiuti del tick precedente abbatte
        la produzione in modo progressivo (recovery-friendly, mai fail-state). */
     const wMalus = wasteMalus(colony.waste);
+    /* Decisione #49: il morale d'impero in calo (catena di sconfitte)
+       abbatte la produzione globale — il "declino a spirale". */
+    const warM = warMalus(game);
     const settling = (colony.phase === 'settling') ? 0.5 : 1.0;
     const stock = colony.stock;
     const pop = colony.pop || { total: 0 };
@@ -410,7 +476,7 @@
     const popWaterDemand = (colony.phase !== 'settling') ? (pop.total || 0) * CFG.POP_WATER_PER_UNIT : 0;
     const net = {};
     ['met', 'en', 'food', 'water'].forEach(function (k) {
-      const r = (out.rates[k] || 0) * malus * wMalus * settling;
+      const r = (out.rates[k] || 0) * malus * wMalus * warM * settling;
       const u = out.upkeep[k] || 0;
       let n = r - u;
       if (k === 'food')  n -= popFoodDemand;
@@ -821,6 +887,332 @@
     }
   }
 
+  /* ==================================================================
+     M09 Fase A (decisione #49) — COMBATTIMENTO
+     Tre trigger: scaramuccia anti-pirata [lampo], scaramuccia offensiva
+     vs AI [lampo], assedio pirata a una colonia [multi-Impulso].
+     Tutto deterministico (RNG seedato), recovery-friendly bounded.
+     ================================================================== */
+
+  function playerColonyKeyForSystem(game, sysId) {
+    const cols = game.colonies || {};
+    const keys = Object.keys(cols);
+    for (let i = 0; i < keys.length; i++) {
+      const c = cols[keys[i]];
+      if (c && c.colonized && c.systemId === sysId) return keys[i];
+    }
+    return null;
+  }
+  function pirateNestAt(game, sysId) {
+    const nests = game.piracy && game.piracy.nests;
+    if (!nests) return null;
+    for (let i = 0; i < nests.length; i++) if (nests[i].sysId === sysId) return nests[i];
+    return null;
+  }
+  /* Flotte del giocatore presenti (docked/orbiting, non in transito) in un
+     sistema, con almeno una nave armata. */
+  function fleetsPresentAt(game, sysId) {
+    const out = [];
+    const fleets = game.fleets || [];
+    for (let i = 0; i < fleets.length; i++) {
+      const f = fleets[i];
+      if (!f || !f.location) continue;
+      if (f.location.systemId !== sysId) continue;
+      if (f.location.status === 'in-transit') continue;
+      out.push(f);
+    }
+    return out;
+  }
+  function fleetHasGuns(fleet) {
+    const F = root.ORION.combat;
+    if (!F) return false;
+    const force = F.forceFromFleet(null, fleet, 'A');
+    return F.totalFp(force) > 0;
+  }
+
+  /* 6e) Scaramucce LAMPO: una flotta del giocatore appena giunta (orbiting)
+        in un sistema con presenza ostile (covo pirata o sistema AI ostile,
+        ma NON una colonia del giocatore → quello è un assedio). Risolte in
+        1 Impulso. Flag `combatResolvedAt` evita di rifare lo scontro mentre
+        la flotta staziona; si azzera quando riparte (gestito in fleet.tick
+        non serve: ricontrolliamo systemId). */
+  function processSkirmishes(game, events) {
+    const C = root.ORION.combat;
+    if (!C) return;
+    const fleets = game.fleets || [];
+    for (let i = 0; i < fleets.length; i++) {
+      const fleet = fleets[i];
+      if (!fleet || !fleet.location) continue;
+      if (fleet.location.status === 'in-transit') { fleet.combatResolvedAt = null; continue; }
+      const sysId = fleet.location.systemId;
+      if (fleet.combatResolvedAt === sysId) continue;     // già risolto qui
+      if (!fleetHasGuns(fleet)) continue;
+      // niente scaramuccia nel proprio sistema-colonia (è zona sicura / assedio)
+      if (playerColonyKeyForSystem(game, sysId) != null) continue;
+
+      const nest = pirateNestAt(game, sysId);
+      const civ = (root.ORION.ai && root.ORION.ai.civForSystem) ? root.ORION.ai.civForSystem(game, sysId) : null;
+      const civHostile = civ && civ.alive && (civ.disposition <= -40);
+
+      let enemy = null, enemyKind = null;
+      if (nest) { enemy = C.forceFromPirateNest(nest); enemyKind = 'pirate'; }
+      else if (civHostile && root.ORION.ai.materialize) {
+        enemy = C.forceFromMaterialized(root.ORION.ai.materialize(game, civ, sysId), 'B');
+        enemyKind = 'ai';
+      }
+      if (!enemy) continue;
+
+      fleet.combatResolvedAt = sysId;
+      const A = C.forceFromFleet(game, fleet, 'A');
+      const battleId = (game.timeImpulsi || 0) + ':' + sysId + ':' + fleet.id;
+      const report = C.resolve(game, battleId, A, enemy);
+      report.kind = 'skirmish';
+      report.systemId = sysId;
+      report.enemyKind = enemyKind;
+
+      // Applica esito alla flotta del giocatore (perdite permanenti, +xp)
+      const fleetOutcome = C.applyOutcomeToFleet(game, fleet, A);
+      const playerWon = (report.winner === 'A');
+
+      // Effetti per tipo nemico
+      if (enemyKind === 'pirate') {
+        if (playerWon) {
+          nest.level = (nest.level || 1) - 1;
+          if (nest.level <= 0) {
+            game.piracy.nests = game.piracy.nests.filter(function (n) { return n !== nest; });
+          }
+        }
+      } else if (enemyKind === 'ai' && root.ORION.ai.demobilize) {
+        // indebolisce la civiltà (la perdita di potenza vive in demobilize)
+        root.ORION.ai.demobilize(game, civ, { winner: playerWon ? 'player' : 'civ', report: report });
+      }
+
+      // Stato di guerra d'impero (catena di sconfitte → spirale)
+      if (fleetOutcome.lost > 0) warRegisterLoss(game, fleetOutcome.lost * CFG.WAR_MORALE_PER_SHIP, fleetOutcome.lost * CFG.WAR_PRESSURE_PER_LOSS);
+      if (playerWon) warRegisterWin(game);
+      else warRegisterLoss(game, CFG.WAR_MORALE_PER_DEFEAT, CFG.WAR_PRESSURE_PER_LOSS);
+
+      // Se la flotta è sopravvissuta ma ha perso → rientra alla base
+      if (!playerWon && fleet.ships.length > 0 && root.ORION.fleet) {
+        root.ORION.fleet.setOrder(game, fleet, { type: 'return' });
+      }
+      // Se la flotta è stata annientata → rimuovila
+      if (fleet.ships.length === 0) {
+        game.fleets = game.fleets.filter(function (f) { return f !== fleet; });
+      }
+
+      events.push({
+        kind: 'battle-skirmish', report: report,
+        fleetId: fleet.id, fleetName: fleet.name,
+        playerWon: playerWon, lost: fleetOutcome.lost, promoted: fleetOutcome.promoted,
+        systemId: sysId, impulso: game.timeImpulsi
+      });
+    }
+  }
+
+  /* 6f) Incursioni pirata INBOUND (§17.5): forze in viaggio verso una colonia
+        del giocatore. Spawn in ai.js (gated dalla pressione). Qui le ticchiamo:
+        all'arrivo creano un ASSEDIO (battaglia persistente). */
+  function processIncursions(game, events) {
+    if (!Array.isArray(game.incursions) || !game.incursions.length) return;
+    const C = root.ORION.combat;
+    const still = [];
+    for (let i = 0; i < game.incursions.length; i++) {
+      const inc = game.incursions[i];
+      inc.eta = (inc.eta || 0) - 1;
+      if (inc.eta > 0) { still.push(inc); continue; }
+      // arrivo: la colonia esiste ancora?
+      const colonyKey = playerColonyKeyForSystem(game, inc.targetSysId);
+      if (!colonyKey || !C) continue;     // bersaglio sparito → incursione svanisce
+      // crea la battaglia d'assedio
+      const nest = { level: inc.level || 1 };
+      const atkForce = C.forceFromPirateNest(nest);
+      atkForce.formation = 'balanced';    // i predoni si sganciano se mauled
+      const battle = {
+        id: inc.id, kind: 'siege-pirate',
+        systemId: inc.targetSysId, colonyKey: colonyKey,
+        attacker: { name: atkForce.name, color: atkForce.color, formation: 'balanced',
+                    combatants: atkForce.combatants },
+        startAttackerHp: C.totalHp(atkForce),
+        round: 0, nextRoundAt: (game.timeImpulsi || 0) + C.CFG.ROUND_EVERY_I,
+        status: 'active', log: []
+      };
+      if (!Array.isArray(game.battles)) game.battles = [];
+      game.battles.push(battle);
+      events.push({
+        kind: 'siege-begin', battleId: battle.id,
+        systemId: inc.targetSysId, colonyKey: colonyKey,
+        impulso: game.timeImpulsi
+      });
+    }
+    game.incursions = still;
+  }
+
+  /* 6g) Assedi in corso: avanza 1 round ogni ROUND_EVERY_I Impulsi. Il
+        difensore viene RICOSTRUITO dallo stato vivo (difese + flotte presenti)
+        → rinforzi/ritirate fra i round contano (decisione #49). */
+  function processBattles(game, events) {
+    if (!Array.isArray(game.battles) || !game.battles.length) return;
+    const C = root.ORION.combat;
+    if (!C) return;
+    const still = [];
+    for (let bi = 0; bi < game.battles.length; bi++) {
+      const battle = game.battles[bi];
+      if (battle.status !== 'active') continue;
+      const colonyKey = battle.colonyKey;
+      const colony = game.colonies && game.colonies[colonyKey];
+      // colonia sparita o non più nel sistema → l'assedio decade
+      if (!colony || !colony.colonized || colony.systemId !== battle.systemId) {
+        events.push({ kind: 'siege-end', battleId: battle.id, outcome: 'lifted',
+          colonyKey: colonyKey, impulso: game.timeImpulsi });
+        continue;
+      }
+      if ((game.timeImpulsi || 0) < battle.nextRoundAt) { still.push(battle); continue; }
+
+      battle.round++;
+      battle.nextRoundAt = (game.timeImpulsi || 0) + C.CFG.ROUND_EVERY_I;
+
+      // Ricostruisci attaccante (pirati) dallo stato persistito
+      const atk = {
+        side: 'A', name: battle.attacker.name, color: battle.attacker.color,
+        immobile: false, formation: battle.attacker.formation || 'balanced',
+        combatants: battle.attacker.combatants
+      };
+      // Ricostruisci difensore dallo stato vivo: difese + flotte presenti
+      const defDef = C.forceFromDefenses(game, colony, colonyKey, 'B');
+      const present = fleetsPresentAt(game, battle.systemId);
+      const defShips = [];
+      for (let i = 0; i < present.length; i++) {
+        const ff = C.forceFromFleet(game, present[i], 'B');
+        for (let j = 0; j < ff.combatants.length; j++) defShips.push(ff.combatants[j]);
+      }
+      const def = {
+        side: 'B', name: colony.name || 'Colonia', color: '#3fcaa0',
+        immobile: defShips.length === 0,   // se ci sono flotte, la difesa può ritirarle
+        formation: 'defensive',
+        combatants: defDef.combatants.concat(defShips)
+      };
+
+      // niente difensori → saccheggio diretto
+      if (def.combatants.length === 0) {
+        applyLoot(game, colony, colonyKey, events);
+        events.push({ kind: 'siege-end', battleId: battle.id, outcome: 'looted',
+          colonyKey: colonyKey, systemId: battle.systemId, impulso: game.timeImpulsi });
+        continue;
+      }
+
+      const rng = ORION.rng.makeRng((game.seed || '') + ':battle:' + battle.id + ':' + battle.round);
+      const startAtkHp = C.totalHp(atk);
+      const r = C.resolveRound(rng, atk, def);
+      // scrivi gli esiti del difensore sullo stato vivo
+      const survivorsDef = def.combatants;     // post-purge
+      const wb = C.applyDefenderWriteback(colony, survivorsDef, r.destroyedB);
+      if (wb.shipsLost > 0) warRegisterLoss(game, wb.shipsLost * CFG.WAR_MORALE_PER_SHIP, wb.shipsLost * CFG.WAR_PRESSURE_PER_LOSS);
+      // l'attaccante hp residuo è già persistito (stesso array di oggetti)
+
+      battle.log.push({ round: battle.round, lostDef: r.destroyedB.length, lostAtk: r.destroyedA.length,
+        atkHp: Math.round(C.totalHp(atk)), defHp: Math.round(C.totalHp(def)) });
+
+      events.push({ kind: 'siege-round', battleId: battle.id, round: battle.round,
+        colonyKey: colonyKey, systemId: battle.systemId,
+        atk: C.totalHp(atk), def: C.totalHp(def),
+        lostDef: r.destroyedB.length, lostAtk: r.destroyedA.length,
+        impulso: game.timeImpulsi });
+
+      // fine assedio?
+      const atkWiped = atk.combatants.length === 0;
+      const atkRetreat = C.checkRetreat(atk, startAtkHp);
+      const defWiped = def.combatants.length === 0;
+      if (atkWiped || atkRetreat) {
+        // difensori vincono: razzia respinta, covo indebolito
+        warRegisterWin(game);
+        events.push({ kind: 'siege-end', battleId: battle.id, outcome: 'repelled',
+          colonyKey: colonyKey, systemId: battle.systemId, impulso: game.timeImpulsi });
+        grantSiegeVeterancy(game, present);
+        continue;
+      }
+      if (defWiped) {
+        applyLoot(game, colony, colonyKey, events);
+        events.push({ kind: 'siege-end', battleId: battle.id, outcome: 'looted',
+          colonyKey: colonyKey, systemId: battle.systemId, impulso: game.timeImpulsi });
+        continue;
+      }
+      // cap di sicurezza
+      if (battle.round >= 12) {
+        const win = C.totalHp(def) >= C.totalHp(atk);
+        if (win) { warRegisterWin(game); }
+        else { applyLoot(game, colony, colonyKey, events); }
+        events.push({ kind: 'siege-end', battleId: battle.id, outcome: win ? 'repelled' : 'looted',
+          colonyKey: colonyKey, systemId: battle.systemId, impulso: game.timeImpulsi });
+        if (win) grantSiegeVeterancy(game, present);
+        continue;
+      }
+      still.push(battle);
+    }
+    game.battles = still;
+  }
+
+  function grantSiegeVeterancy(game, fleets) {
+    const C = root.ORION.combat;
+    if (!C) return;
+    for (let i = 0; i < fleets.length; i++) C.grantVeterancy(game, fleets[i]);
+  }
+
+  /* Saccheggio di una colonia (bounded, recovery-friendly #22/#49): ruba una
+     frazione dello stock, danneggia una struttura, perde 1 pop. Niente
+     distruzione totale in Fase A (la conquista/rasa è Fase B). */
+  function applyLoot(game, colony, colonyKey, events) {
+    const looted = {};
+    ['met', 'en', 'food', 'water'].forEach(function (k) {
+      const amt = Math.floor((colony.stock[k] || 0) * CFG.PIRATE_RAID_LOOT_FRAC);
+      colony.stock[k] = Math.max(0, (colony.stock[k] || 0) - amt);
+      looted[k] = amt;
+    });
+    // danneggia una struttura (deterministico: la prima per chiave)
+    const ids = Object.keys(colony.structures || {});
+    if (ids.length) {
+      ids.sort();
+      const st = colony.structures[ids[0]];
+      st.hp = Math.max(5, (st.hp != null ? st.hp : 100) - CFG.PIRATE_RAID_STRUCT_DMG);
+    }
+    // perdita pop
+    if (colony.pop && colony.pop.total > 1) {
+      const old = colony.pop.total;
+      colony.pop.total -= CFG.PIRATE_RAID_POP_LOSS;
+      const ratio = colony.pop.total / old;
+      Object.keys(colony.pop.classes).forEach(function (k) {
+        colony.pop.classes[k] = (colony.pop.classes[k] || 0) * ratio;
+      });
+    }
+    warRegisterLoss(game, CFG.WAR_MORALE_PER_LOOT, CFG.WAR_PRESSURE_PER_LOSS);
+    events.push({ kind: 'colony-looted', colonyKey: colonyKey, colony: colony, looted: looted, impulso: game.timeImpulsi });
+  }
+
+  /* Decadimento dello stato di guerra (recovery passivo) + riparazione
+     passiva delle strutture danneggiate (quando non sotto attacco). */
+  function processWarState(game) {
+    const ws = ensureWarState(game);
+    ws.morale = Math.min(1, ws.morale + CFG.WAR_MORALE_RECOVER);
+    ws.pressure = Math.max(0, ws.pressure - CFG.WAR_PRESSURE_DECAY);
+  }
+  function colonyUnderSiege(game, colonyKey) {
+    const bs = game.battles || [];
+    for (let i = 0; i < bs.length; i++) {
+      if (bs[i].status === 'active' && bs[i].colonyKey === colonyKey) return true;
+    }
+    return false;
+  }
+  function processStructRepair(game, colony, colonyKey) {
+    if (colonyUnderSiege(game, colonyKey)) return;   // niente riparazione sotto assedio
+    const structs = colony.structures || {};
+    Object.keys(structs).forEach(function (id) {
+      const st = structs[id];
+      if (st.hp != null && st.hp < 100) {
+        st.hp = Math.min(100, st.hp + CFG.STRUCT_REPAIR_PER_I);
+      }
+    });
+  }
+
   /* 6) Osservatorio: avanza scansione, sblocca avanzate al traguardo. */
   function processObservatory(game, colony, planet, events) {
     const obs = colony.structures['osservatorio'];
@@ -865,11 +1257,22 @@
       processObservatory(game, colony, planet, events);
       processAssets(game, colony, planet, events);
       processSettling(game, colony, planet, events);
+      /* M09 (decisione #49, §10.2): riparazione passiva delle strutture
+         danneggiate in battaglia, sospesa mentre la colonia è sotto assedio. */
+      processStructRepair(game, colony, keys[i]);
     }
     /* M07: spedizioni in volo (1 tick per ogni Impulso). */
     processExpeditions(game, events);
     /* M08 Fase A: flotte mobili (movimento + ordini). */
     processFleets(game, events);
+    /* M09 Fase A (decisione #49): combattimento. Scaramucce lampo (flotte
+       co-locate con presenza ostile), incursioni pirata inbound, assedi in
+       corso (1 round ogni ROUND_EVERY_I), poi decadimento dello stato di
+       guerra (recovery passivo). L'AI (sotto) può lanciare nuove incursioni. */
+    processSkirmishes(game, events);
+    processIncursions(game, events);
+    processBattles(game, events);
+    processWarState(game);
     /* Decisione #45: Capitale di Gruppo — avanza timer di transizione
        (pre-capital → capital · decommissioning → null). Emette eventi
        a fine transizione. */
@@ -1054,6 +1457,21 @@
     if (root.ORION.capital && root.ORION.capital.nextTransitionDelta) {
       const d = root.ORION.capital.nextTransitionDelta(game);
       if (d > 0 && d < best) best = d;
+    }
+    /* M09 Fase A: incursioni pirata inbound + prossimo round d'assedio. */
+    if (Array.isArray(game.incursions)) {
+      for (let i = 0; i < game.incursions.length; i++) {
+        const d = game.incursions[i].eta || 0;
+        if (d > 0 && d < best) best = d;
+      }
+    }
+    if (Array.isArray(game.battles)) {
+      for (let i = 0; i < game.battles.length; i++) {
+        const b = game.battles[i];
+        if (b.status !== 'active') continue;
+        const d = (b.nextRoundAt || 0) - (game.timeImpulsi || 0);
+        if (d > 0 && d < best) best = d;
+      }
     }
     if (!isFinite(best)) return CFG.NEXT_EVENT_FALLBACK;
     return Math.min(CFG.NEXT_EVENT_HARD_CAP, Math.max(1, best));

@@ -219,6 +219,35 @@
         'le buone stabilizzano. La loro <strong>disposizione</strong> verso di te si forma già ora; la diplomazia vera (trattati, ' +
         'alleanze) arriva più avanti.</p>'
     },
+    {
+      id: 'combat',
+      tag: 'Guerra · Combattimento',
+      title: 'Combattimento',
+      body:
+        '<p>Le navi hanno <strong>potenza di fuoco</strong> e <strong>corazza</strong>; ogni round entrambi i lati infliggono la ' +
+        'loro fp aggregata. Più fp logori il nemico più in fretta, più corazza reggi di più. Conta anche la <strong>fortuna</strong> ' +
+        '(piccola varianza) — il più forte di solito vince, ma gli upset esistono.</p>' +
+        '<p><strong>Veteranità (§12.3):</strong> le navi che <strong>sopravvivono</strong> salgono di grado ' +
+        '(Verde→Veterana→Elite→Leggendaria, +5% fuoco/grado). Tienile vive: una flotta esperta vale doppio. Le Leggendarie ' +
+        'prendono un <strong>nome proprio</strong>.</p>' +
+        '<p><strong>Formazione:</strong> imposta la soglia di ritirata — <em>Aggressiva</em> (combatti fino alla fine), ' +
+        '<em>Bilanciata</em> (ritirata al 30%), <em>Difensiva</em> (al 50%). Gli scontri nello spazio si risolvono in un Impulso.</p>'
+    },
+    {
+      id: 'siege',
+      tag: 'Guerra · Assedi',
+      title: 'Assedi alle colonie',
+      body:
+        '<p>Quando una forza ostile punta una tua colonia ricevi un <strong>preavviso</strong> (incursione in arrivo, con ETA): ' +
+        'preparati. L\'<strong>assedio</strong> dura più Impulsi — un round di scambio ogni ~5 <span class="ds-unit">Ι</span>, con <strong>auto-pausa</strong> ' +
+        'a ogni round per darti tempo di reagire.</p>' +
+        '<p>Difendono le <strong>Batterie ⊕</strong> / <strong>Scudi ◈</strong> della colonia e qualunque <strong>flotta presente</strong>. ' +
+        'A ogni round puoi: <strong>rinforzare</strong> (manda una flotta sul sistema, si unisce al round dopo), <strong>ritirare</strong> ' +
+        'le flotte (le difese restano sole), o <strong>pagare un tributo</strong> ai pirati per farli desistere.</p>' +
+        '<p>Se le difese cadono la colonia viene <strong>saccheggiata</strong> (risorse, danni alle strutture, pop) — mai distrutta ' +
+        'in un colpo. Ma una <strong>catena di sconfitte</strong> abbassa il <strong>morale d\'impero</strong> (produzione in calo) e ' +
+        'alza la <strong>pressione</strong> nemica: reagisci con scelte oculate o rischi una spirale.</p>'
+    },
 
     /* ================================================================
        Lezioni per-struttura (M06.7). Una scheda per ogni voce del
@@ -323,6 +352,24 @@
         'Upkeep moderato (2 en + 1 food/I).</p>' +
         '<p><strong>Sinergia futura:</strong> con l\'<em>Hangar di costruzione</em> alimenta una colonia a vocazione militare. ' +
         'In partite a vocazione <em>Tiranno</em> sarà struttura-chiave.</p>'
+    },
+    {
+      id: 'struct:batteria-difesa', tag: 'Strutture · ⊕', title: 'Batteria di difesa',
+      body:
+        '<p>Difesa planetaria: <strong>torrette e cannoni</strong> che combattono quando il sistema della colonia è ' +
+        'sotto assedio. Ogni modulo aggiunge <strong>fuoco (8 fp)</strong> e <strong>corazza (60 hp)</strong>; salendo di ' +
+        'livello aggiungi moduli (resa cumulata crescente).</p>' +
+        '<p><strong>Le difese non si ritirano mai</strong> (sono immobili): tengono finché reggono. Danneggiate in battaglia ' +
+        'si <strong>riparano da sole</strong> nel tempo (quando non sotto attacco).</p>' +
+        '<p><strong>Quando serve:</strong> sulle colonie esposte (vicine a covi pirata o a vicini ostili). Una colonia ricca e ' +
+        'popolosa è il bersaglio più ambito — proteggila o rischi il saccheggio.</p>'
+    },
+    {
+      id: 'struct:scudo-planetario', tag: 'Strutture · ◈', title: 'Scudo planetario',
+      body:
+        '<p>Schermo deflettore: aggiunge <strong>molta corazza</strong> (90 hp/modulo) alla difesa del sistema, spara poco. ' +
+        'Va affiancato alle Batterie (che fanno il fuoco) per reggere assedi più lunghi.</p>' +
+        '<p>Richiede la <strong>tecnologia degli scudi</strong> (M13): per ora è un gancio, sbloccabile con l\'albero tech.</p>'
     },
     {
       id: 'struct:centro-abitativo', tag: 'Strutture · ⌂', title: 'Centro abitativo',
