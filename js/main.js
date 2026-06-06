@@ -241,7 +241,11 @@ function newGame(seed, opts) {
        assedi in corso, stato di guerra d'impero (morale/pressione). */
     incursions: [],
     battles: [],
-    warState: { morale: 1.0, pressure: 0 }
+    warState: { morale: 1.0, pressure: 0 },
+    /* M09 Fase B (decisione #49): stato di sconfitta (null/esilio/gameover)
+       + accumulatore verbi morali (→ piste reputation). */
+    defeated: null,
+    alignmentDeeds: { light: 0, dark: 0 }
   };
   // startDS = Data Stellare INIZIALE (epoca .00), fissa per la partita.
   ORION.game.startDS = ORION.time.format(startOrbita * 100);
@@ -285,6 +289,9 @@ function newGame(seed, opts) {
     if (Array.isArray(saved.incursions)) ORION.game.incursions = saved.incursions.slice();
     if (Array.isArray(saved.battles)) ORION.game.battles = saved.battles.slice();
     if (saved.warState && typeof saved.warState === 'object') ORION.game.warState = saved.warState;
+    /* M09 Fase B: sconfitta + verbi morali. */
+    if (saved.defeated !== undefined) ORION.game.defeated = saved.defeated;
+    if (saved.alignmentDeeds && typeof saved.alignmentDeeds === 'object') ORION.game.alignmentDeeds = saved.alignmentDeeds;
     /* Tutorial: rispetta lo stato del payload se presente. */
     if (saved.tutorial && typeof saved.tutorial === 'object') {
       ORION.game.tutorial = {
@@ -2715,6 +2722,12 @@ function renderFleetView(stage) {
   stage.querySelectorAll('[data-action="battle-report"]').forEach(function (b) {
     b.addEventListener('click', function () { openBattleReport(); });
   });
+  stage.querySelectorAll('[data-action="siege-evacuate"]').forEach(function (b) {
+    b.addEventListener('click', function () { handleEvacuate(b.dataset.colony, stage); });
+  });
+  stage.querySelectorAll('[data-action="war-recall"]').forEach(function (b) {
+    b.addEventListener('click', function () { handleRecallFleets(stage); });
+  });
   stage.querySelectorAll('[data-action="fleet-orders"]').forEach(function (b) {
     b.addEventListener('click', function () { openFleetOrdersOverlay(b.dataset.fleet); });
   });
@@ -2750,6 +2763,10 @@ function buildWarSection(g) {
   const battles = (g.battles || []).filter(function (b) { return b.status === 'active'; });
 
   let html = '<div class="war-section">';
+  /* M09 Fase B: stato di esilio (0 colonie, partita non-hard). */
+  if (g.defeated === 'exile') {
+    html += '<div class="war-exile">⚑ <strong>Esilio</strong>: la tua civiltà non ha più colonie. Sopravvivi nelle flotte — ricolonizza per risorgere.</div>';
+  }
   html += '<div class="war-meters">' +
     '<div class="war-meter war-meter--' + moraleCls + '"><span class="war-meter__lbl">Morale d\'impero</span>' +
       '<div class="war-meter__bar"><i style="width:' + moralePct + '%"></i></div><span class="war-meter__val">' + moralePct + '%</span></div>' +
@@ -2759,6 +2776,10 @@ function buildWarSection(g) {
 
   if (ORION.lastBattle) {
     html += '<button class="btn btn--mini" data-action="battle-report" type="button">Ultimo report di battaglia ▸</button>';
+  }
+  /* Leva di recovery: richiamo flotte alla capitale (concentra la difesa). */
+  if ((g.fleets || []).length) {
+    html += ' <button class="btn btn--mini" data-action="war-recall" type="button" title="Tutte le flotte rientrano alla colonia origine">⟲ Richiama flotte</button>';
   }
 
   if (incursions.length) {
@@ -2778,14 +2799,18 @@ function buildWarSection(g) {
       const cost = siegeTributeCost(b);
       const costStr = ['met', 'en'].filter(function (k) { return cost[k] > 0; })
         .map(function (k) { return resIcon(k) + ' ' + cost[k]; }).join(' · ');
-      html += '<div class="war-siege">' +
+      const isAi = b.attackerKind === 'ai';
+      const who = isAi ? escapeHtml(b.attacker.name) : 'predoni';
+      const tributeLbl = isAi ? 'Tributo → tregua' : 'Paga tributo';
+      html += '<div class="war-siege' + (isAi ? ' war-siege--ai' : '') + '">' +
         '<div class="war-siege__head">Assedio di ' + colonyNameFromKey(b.colonyKey) +
-          ' · round ' + (b.round | 0) + ' · predoni ' + atkHp + ' hp</div>' +
+          ' · round ' + (b.round | 0) + ' · ' + who + ' ' + atkHp + ' hp</div>' +
         '<div class="war-siege__actions">' +
           '<button class="btn btn--mini" data-action="siege-retreat" data-battle="' + escapeHtml(b.id) + '" type="button">Ritira flotte</button>' +
-          '<button class="btn btn--mini btn--danger" data-action="siege-tribute" data-battle="' + escapeHtml(b.id) + '" type="button">Paga tributo (' + (costStr || 'gratis') + ')</button>' +
+          '<button class="btn btn--mini" data-action="siege-tribute" data-battle="' + escapeHtml(b.id) + '" type="button">' + tributeLbl + ' (' + (costStr || 'gratis') + ')</button>' +
+          '<button class="btn btn--mini btn--danger" data-action="siege-evacuate" data-colony="' + escapeHtml(b.colonyKey) + '" type="button" title="Abbandona la colonia recuperando metà delle risorse alla capitale">Evacua colonia</button>' +
         '</div>' +
-        '<p class="war-siege__hint">Rinforza spostando una flotta su questo sistema dalla lista qui sotto (si unisce alla difesa al prossimo round).</p>' +
+        '<p class="war-siege__hint">Rinforza spostando una flotta su questo sistema (si unisce alla difesa al prossimo round); oppure consolida altrove.</p>' +
       '</div>';
     });
     html += '</div>';
@@ -2847,10 +2872,75 @@ function handleSiegeTribute(battleId, stage) {
   colony.stock.met -= cost.met; colony.stock.en -= cost.en;
   battle.status = 'done';
   g.battles = (g.battles || []).filter(function (b) { return b !== battle; });
-  pushChronicle(ORION.time.currentDS(g) + ' — Tributo pagato: i predoni revocano l\'assedio di ' +
-    colonyNameFromKey(battle.colonyKey) + '.', 'system');
+  let extra = '';
+  if (battle.attackerKind === 'ai' && battle.attackerCiv) {
+    /* Tregua breve con la civiltà: non riattacca per un po' (leva di
+       recovery; la diplomazia piena è M11). */
+    const civ = (g.civs || []).filter(function (c) { return c.id === battle.attackerCiv; })[0];
+    if (civ) { civ.truceUntil = (g.timeImpulsi || 0) + 200; extra = ' Tregua di 200 ' + iU() + '.'; }
+  }
+  pushChronicle(ORION.time.currentDS(g) + ' — Tributo pagato: assedio revocato su ' +
+    colonyNameFromKey(battle.colonyKey) + '.' + extra, 'system');
   persistGame(g);
   renderFleetView(stage);
+}
+
+/* Leva di recovery: evacua una colonia (recupera metà risorse alla capitale,
+   sistema neutrale). Recovery-friendly: le flotte non si perdono. */
+function handleEvacuate(colonyKey, stage) {
+  const g = ORION.game;
+  if (!confirm('Evacuare ' + colonyNameFromKey(colonyKey).replace(/<[^>]+>/g, '') +
+    '? Recuperi metà delle risorse alla capitale; la colonia viene abbandonata.')) return;
+  const r = ORION.time.evacuateColony(g, colonyKey);
+  if (!r.ok) { showToast(r.reason || 'Evacuazione fallita'); return; }
+  const parts = ['met', 'en', 'food', 'water'].filter(function (k) { return (r.recovered || {})[k] > 0; })
+    .map(function (k) { return resGlyph(k) + ' ' + r.recovered[k]; });
+  pushChronicle(ORION.time.currentDS(g) + ' — Colonia evacuata: ' +
+    (parts.length ? 'recuperati ' + parts.join(' · ') + ' alla capitale' : 'nessuna risorsa recuperata') + '.', 'system');
+  /* L'evacuazione può portare a 0 colonie → controlla la sconfitta. */
+  if (ORION.time.tick) { /* no-op: il controllo avviene al prossimo tick */ }
+  persistGame(g);
+  renderFleetView(stage);
+  if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+}
+
+/* Leva di recovery: richiama tutte le flotte alla colonia origine. */
+function handleRecallFleets(stage) {
+  const g = ORION.game;
+  let n = 0;
+  (g.fleets || []).forEach(function (f) {
+    if (f.location && f.location.status === 'docked') return;   // già a casa
+    const r = ORION.fleet.setOrder(g, f, { type: 'return' });
+    if (r.ok) n++;
+  });
+  showToast(n ? (n + ' flotta/e in rientro alla base') : 'Nessuna flotta da richiamare');
+  persistGame(g);
+  renderFleetView(stage);
+}
+
+/* M09 Fase B: schermata di fine partita (solo modalità gameOver). */
+function showDefeatModal() {
+  const g = ORION.game;
+  const html =
+    '<div class="battle-modal" data-defeat-modal>' +
+      '<div class="battle-modal__panel">' +
+        '<header class="battle-modal__head"><h3>La civiltà è caduta</h3></header>' +
+        '<p class="battle-modal__verdict battle-modal__verdict--lose">Sconfitta</p>' +
+        '<p>Senza più colonie, il tuo impero si dissolve negli annali galattici. ' +
+        'La galassia continua a vivere senza di te.</p>' +
+        '<div class="battle-modal__sides"><button class="btn btn--primary" data-defeat-menu type="button">Torna al menu</button></div>' +
+      '</div>' +
+    '</div>';
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  const node = wrap.firstChild;
+  document.body.appendChild(node);
+  const btn = node.querySelector('[data-defeat-menu]');
+  if (btn) btn.addEventListener('click', function () {
+    if (node.parentNode) node.parentNode.removeChild(node);
+    if (typeof stopTimerIfRunning === 'function') stopTimerIfRunning();
+    if (typeof showMainMenu === 'function') showMainMenu('home');
+  });
 }
 
 function handleSiegeRetreat(battleId, stage) {
@@ -3701,7 +3791,13 @@ const DEFAULT_AUTOPAUSE = {
   'siege-round': true,
   'siege-end': true,
   'battle-skirmish': true,
-  'colony-looted': true
+  'colony-looted': true,
+  /* M09 Fase B: la spirale C — perdita/conquista di colonie, esilio,
+     imboscata in rotta: tutti notevoli → auto-pausa ON. */
+  'colony-conquered': true,
+  'colony-razed': true,
+  'empire-fallen': true,
+  'fleet-intercepted': true
 };
 
 ORION.timer = {
@@ -3927,7 +4023,11 @@ function showEventOverlay(events) {
     'siege-round': 'Assedio: round',
     'siege-end': 'Assedio concluso',
     'battle-skirmish': 'Scontro nello spazio',
-    'colony-looted': 'Colonia saccheggiata'
+    'colony-looted': 'Colonia saccheggiata',
+    'colony-conquered': 'Colonia conquistata',
+    'colony-razed': 'Colonia rasa al suolo',
+    'empire-fallen': 'Civiltà caduta',
+    'fleet-intercepted': 'Flotta intercettata'
   };
   /* Raggruppa per kind: una checkbox per categoria, una sola voce di sintesi. */
   const byKind = {};
@@ -4194,18 +4294,29 @@ function chronicleEvent(ev) {
     const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
     const verb = ev.playerWon ? 'respinge il nemico' : 'è costretta alla ritirata';
     const losses = ev.lost > 0 ? ' · ' + ev.lost + ' nave/i perdute' : ' · nessuna perdita';
+    /* Fase B: se lo scontro ha arretrato il confine di una civiltà AI. */
+    let rollback = '';
+    if (ev.report && ev.report.rolledBackSystem != null) {
+      rollback = (ev.report.alignmentImpact === 'light')
+        ? ' · <strong>sistema liberato</strong> (reputazione luminosa)'
+        : ' · <strong>sistema strappato</strong> (reputazione oscura)';
+    }
     pushChronicle(ds + ' — Scontro presso <strong>' + (sys ? sys.name : '—') + '</strong>' + stag + ': <strong>' +
-      escapeHtml(ev.fleetName) + '</strong> ' + verb + losses + '.', ev.playerWon ? 'explore' : 'system');
+      escapeHtml(ev.fleetName) + '</strong> ' + verb + losses + rollback + '.', ev.playerWon ? 'explore' : 'system');
     ORION.lastBattle = ev.report || null;
     if (ORION.tutorial) ORION.tutorial.fire('combat');
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
   } else if (ev.kind === 'incursion-inbound') {
-    /* Preavviso (recovery-friendly #22): l'incursione arriva fra ETA Ι. */
+    /* Preavviso (recovery-friendly #22): l'incursione arriva fra ETA Ι.
+       Fase B: può essere un'incursione AI di conquista (più grave). */
     const cn = colonyNameFromKey(ev.targetColonyKey);
     const tag = ev.targetSysId >= 0 ? bodyTagHtml(ev.targetSysId) : '';
-    pushChronicle(ds + ' — <strong>Incursione pirata</strong> in rotta verso ' + cn + tag +
+    const who = (ev.attackerKind === 'ai')
+      ? ('Forza d\'invasione di <strong>' + escapeHtml(ev.civName || 'una civiltà') + '</strong>')
+      : '<strong>Incursione pirata</strong>';
+    pushChronicle(ds + ' — ' + who + ' in rotta verso ' + cn + tag +
       ' · arrivo stimato fra <strong>' + ev.eta + ' ' + iU() + '</strong>. Prepara le difese.', 'system');
-    if (ORION.tutorial) ORION.tutorial.fire('combat');
+    if (ORION.tutorial) ORION.tutorial.fire(ev.attackerKind === 'ai' ? 'siege' : 'combat');
   } else if (ev.kind === 'siege-begin') {
     const cn = colonyNameFromKey(ev.colonyKey);
     const tag = ev.systemId >= 0 ? bodyTagHtml(ev.systemId) : '';
@@ -4232,6 +4343,31 @@ function chronicleEvent(ev) {
     const parts = ['met', 'en', 'food', 'water'].filter(function (k) { return L[k] > 0; })
       .map(function (k) { return resGlyph(k) + ' ' + L[k]; });
     pushChronicle(ds + ' — Saccheggio di ' + cn + ': ' + (parts.join(' · ') || 'nulla di rilevante') + ' · morale d\'impero in calo.', 'system');
+  } else if (ev.kind === 'colony-conquered') {
+    /* M09 Fase B: colonia conquistata da una civiltà AI. */
+    const cn = colonyNameFromKey(ev.colonyKey);
+    pushChronicle(ds + ' — <strong>' + cn + ' è caduta</strong>: conquistata da <strong>' + escapeHtml(ev.civName || 'una civiltà') + '</strong>' +
+      (ev.wasCapital ? ' — era la tua <strong>capitale</strong>' : '') + '. Il morale d\'impero crolla.', 'system');
+    if (ORION.tutorial) ORION.tutorial.fire('decline');
+    if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+  } else if (ev.kind === 'colony-razed') {
+    const cn = colonyNameFromKey(ev.colonyKey);
+    pushChronicle(ds + ' — <strong>' + cn + ' è stata rasa al suolo</strong> da <strong>' + escapeHtml(ev.civName || 'una civiltà') + '</strong>' +
+      (ev.wasCapital ? ' — era la tua <strong>capitale</strong>' : '') + '. Non resta che cenere.', 'system');
+    if (ORION.tutorial) ORION.tutorial.fire('decline');
+    if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+  } else if (ev.kind === 'fleet-intercepted') {
+    const sys = ORION.game.galaxy.systems[ev.systemId];
+    const stag = ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName) + '</strong> intercettata in rotta presso <strong>' +
+      (sys ? sys.name : '—') + '</strong>' + stag + ': avvistamento ostile, scontro imminente.', 'system');
+  } else if (ev.kind === 'empire-fallen') {
+    if (ev.hard) {
+      pushChronicle(ds + ' — <strong>La tua civiltà è caduta.</strong> Senza più colonie, l\'impero si dissolve negli annali galattici.', 'system');
+      showDefeatModal();
+    } else {
+      pushChronicle(ds + ' — <strong>Esilio.</strong> Hai perso l\'ultima colonia: la tua civiltà sopravvive solo nelle flotte superstiti. Ricolonizza per risorgere.', 'system');
+    }
   }
 }
 
