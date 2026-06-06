@@ -786,7 +786,7 @@ function renderGroupPanel(title, content, groupId) {
   title.innerHTML = grp.name + tagHtml(grp.acronym);
   content.innerHTML =
     '<div class="sysinfo">' +
-      (isHome ? '<p class="sysinfo__home">★ Regione d\'origine</p>' : '') +
+      (isHome ? '<p class="sysinfo__home">' + uiIcon('star', 'amber') + ' Regione d\'origine</p>' : '') +
       '<dl class="sysinfo__list">' +
         row('Sistemi', grp.members.length + ' (' + known + ' noti)') +
         row('Tipi stella', types) +
@@ -827,7 +827,7 @@ function renderSystemPanel(title, content, id) {
   const tierClass = 'tier--' + sys.dangerTier;
   content.innerHTML =
     '<div class="sysinfo">' +
-      (isHome ? '<p class="sysinfo__home">★ Sistema di partenza</p>' : '') +
+      (isHome ? '<p class="sysinfo__home">' + uiIcon('star', 'amber') + ' Sistema di partenza</p>' : '') +
       '<dl class="sysinfo__list">' +
         row('Nome', sys.name + (sys.realName ? ' <span class="sysinfo__tag">reale</span>' : '')) +
         row('Stella', starType ? starType.label : sys.star) +
@@ -1004,7 +1004,7 @@ function renderSystemInteriorPanel(title, content, system, disc) {
 
   content.innerHTML =
     '<div class="sysinfo">' +
-      (system.isHome ? '<p class="sysinfo__home">★ Sistema di partenza</p>' : '') +
+      (system.isHome ? '<p class="sysinfo__home">' + uiIcon('star', 'amber') + ' Sistema di partenza</p>' : '') +
       '<dl class="sysinfo__list">' +
         row('Stella', system.stars.label) +
         row('Corpi', explored ? String(bodyCount) : bodyCount + ' (rilevati)') +
@@ -1044,13 +1044,13 @@ function renderBodyPanel(title, content, system, body) {
   if (def.cat === 'belt') statusLine = '<p class="panel__note">Cintura asteroidale: solo estrazione orbitale.</p>';
   else if (colony && colony.colonized) {
     statusLine = colony.isHomeBase
-      ? '<p class="sysinfo__home">★ Pianeta base</p>'
-      : '<p class="sysinfo__home">◉ Colonia attiva</p>';
+      ? '<p class="sysinfo__home">' + uiIcon('star', 'amber') + ' Pianeta base</p>'
+      : '<p class="sysinfo__home">' + uiIcon('dotCircle', 'cyan') + ' Colonia attiva</p>';
   }
 
   content.innerHTML =
     '<div class="sysinfo">' +
-      (body.homeWorld && !(colony && colony.colonized) ? '<p class="sysinfo__home">★ Mondo natale candidato</p>' : '') +
+      (body.homeWorld && !(colony && colony.colonized) ? '<p class="sysinfo__home">' + uiIcon('star', 'amber') + ' Mondo natale candidato</p>' : '') +
       statusLine +
       '<dl class="sysinfo__list">' +
         row('Tipo', def.label) +
@@ -1252,13 +1252,15 @@ function renderPlanetBreadcrumb() {
     const dur = colony.settlingDuration || 60;
     const elapsed = Math.max(0, (g.timeImpulsi || 0) - colony.settlingStart);
     const pct = Math.min(100, Math.round((elapsed / dur) * 100));
-    phaseChip = '<span class="crumb-chip crumb-chip--phase">⏳ Insediamento · ' + pct + '%</span>';
+    /* PR-D: chip phase con SVG icona (UI_GUIDE §3) — ⏳/◌ erano emoji
+       codepoint con rendering OS-dependent. */
+    phaseChip = '<span class="crumb-chip crumb-chip--phase">' + uiIcon('transition', 'violet') + ' Insediamento · ' + pct + '%</span>';
   } else if (colony && colony.colonizing) {
-    phaseChip = '<span class="crumb-chip crumb-chip--phase">◌ Coloniale in viaggio</span>';
+    phaseChip = '<span class="crumb-chip crumb-chip--phase">' + uiIcon('transition', 'violet') + ' Coloniale in viaggio</span>';
   } else if (colony && colony.isHomeBase) {
-    phaseChip = '<span class="crumb-chip crumb-chip--home">★ Pianeta base · +20%</span>';
+    phaseChip = '<span class="crumb-chip crumb-chip--home">' + uiIcon('star', 'amber') + ' Pianeta base · +20%</span>';
   } else if (colony && colony.colonized) {
-    phaseChip = '<span class="crumb-chip">◉ Operativa</span>';
+    phaseChip = '<span class="crumb-chip">' + uiIcon('dotCircle', 'cyan') + ' Operativa</span>';
   }
 
   const infoHtml =
@@ -1486,7 +1488,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
       const pct = Math.min(100, Math.round((elapsed / dur) * 100));
       settlingBanner =
         '<div class="settle-banner">' +
-          '<p class="settle-banner__title">⏳ Insediamento in corso</p>' +
+          '<p class="settle-banner__title">' + uiIcon('transition', 'violet') + ' Insediamento in corso</p>' +
           '<p class="settle-banner__hint">Produzione al 50% · +50% velocità prima struttura · crescita pop bloccata.</p>' +
           '<dl class="sysinfo__list">' +
             row('Restanti', remain + ' ' + iU()) +
@@ -1501,13 +1503,13 @@ function renderPlanetColoniaTab(host, planet, colony) {
     const capState = colony.capitalState && colony.capitalState.phase;
     let stateLine;
     if (capState === 'capital' || (isCap && !capState)) {
-      stateLine = '<p class="sysinfo__home">★ Capitale di gruppo — bonus +15% produzione, +10 slot</p>';
+      stateLine = '<p class="sysinfo__home">' + uiIcon('star', 'gold') + ' Capitale di gruppo — bonus +15% produzione, +10 slot</p>';
     } else if (capState === 'pre-capital') {
-      stateLine = '<p class="sysinfo__home">◌ In transizione (entrante) — bonus capitale in attivazione</p>';
+      stateLine = '<p class="sysinfo__home">' + uiIcon('transition', 'cyan') + ' In transizione (entrante) — bonus capitale in attivazione</p>';
     } else if (capState === 'decommissioning') {
-      stateLine = '<p class="sysinfo__home">◌ In decommissioning — malus −10% produzione fino al passaggio</p>';
+      stateLine = '<p class="sysinfo__home">' + uiIcon('transition', 'pink') + ' In decommissioning — malus −10% produzione fino al passaggio</p>';
     } else {
-      stateLine = '<p class="sysinfo__home">◉ Colonia attiva</p>';
+      stateLine = '<p class="sysinfo__home">' + uiIcon('dotCircle', 'cyan') + ' Colonia attiva</p>';
     }
     host.innerHTML =
       '<div class="sysinfo">' +
@@ -1988,7 +1990,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
           statusCell = '<span class="struct-item__locked is-demolish" title="In smantellamento (' + remain + ' / ' + total + ' Ι)">🛠 Smantellamento · ' + remain + '/' + total + ' ' + iU() + '</span>';
           extraClass += ' is-building';
         } else if (check.code === 'busy') {
-          statusCell = '<span class="struct-item__locked is-busy" title="' + check.reason + '">⏳ Occupato</span>';
+          statusCell = '<span class="struct-item__locked is-busy" title="' + check.reason + '">' + uiIcon('transition', 'soft') + ' Occupato</span>';
         } else {
           statusCell = '<span class="struct-item__locked" title="' + check.reason + '">◌</span>';
         }
@@ -2151,6 +2153,15 @@ function dsUnit(letter) {
   return '<span class="ds-unit" aria-hidden="true">' + letter + '</span>';
 }
 function iU() { return dsUnit('Ι'); }      /* Impulso */
+
+/* PR-D: helper inline per inserire icona SVG con tinta + glow morbido,
+   coerente con UI_GUIDE §3. Usato dove l'HTML è generato dinamicamente
+   (sysinfo__home, chip, label di stato). Ritorna stringa HTML. */
+function uiIcon(name, tone) {
+  if (!ORION.icon) return '';
+  const cls = tone ? (' ui-icon--' + tone) : '';
+  return '<span class="ui-icon' + cls + '" aria-hidden="true">' + ORION.icon(name) + '</span>';
+}
 function kU() { return dsUnit('Κ'); }      /* Ciclo di nutazione */
 function phU() { return dsUnit('Φ'); }     /* Fase di precessione */
 function omU() { return dsUnit('Ω'); }     /* Eone */
@@ -2325,7 +2336,7 @@ function renderCantieriSection(colony, planet) {
     const totalCrews = crews.length + away.length;
     html += '<div class="cantieri-row">' +
       '<div class="cantieri-row__head">' +
-        '<span class="cantieri-row__glyph" aria-hidden="true">⚔</span>' +
+        '<span class="cantieri-row__glyph ui-icon ui-icon--pink" aria-hidden="true">' + ((ORION.icon && ORION.icon('forces')) || '⚔') + '</span>' +
         '<span class="cantieri-row__name">Accademia militare</span>' +
         '<span class="cantieri-row__counter">Equipaggi: <strong>' + totalCrews + '</strong>' +
           (totalCrews ? ' <span class="xp-chip" title="Esperienza media (a riposo)">xp ' + avg + '</span>' : '') +
@@ -2362,7 +2373,7 @@ function renderCantieriSection(colony, planet) {
       const remain = Math.max(0, q.duration | 0);
       const pct = Math.round(((total - remain) / total) * 100);
       html += '<div class="struct-item is-queue">' +
-        '<span class="struct-item__glyph">⚔</span>' +
+        '<span class="struct-item__glyph ui-icon ui-icon--pink" aria-hidden="true">' + ((ORION.icon && ORION.icon('forces')) || '⚔') + '</span>' +
         '<div class="struct-item__main">' +
           '<div class="struct-item__name">Equipaggio esploratore <span class="struct-item__cat">' + remain + ' / ' + total + '</span> ' + iU() + '</div>' +
           '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
@@ -4579,7 +4590,7 @@ function renderLeftPanel() {
     const sysId = c.systemId;
     const tag = bodyTagHtml(sysId);
     const badges = [];
-    if (c.phase === 'settling') badges.push('<span class="lp-item__badge lp-item__badge--info">⏳</span>');
+    if (c.phase === 'settling') badges.push('<span class="lp-item__badge lp-item__badge--info" title="Insediamento">' + uiIcon('transition') + '</span>');
     if (c.colonizing) badges.push('<span class="lp-item__badge lp-item__badge--info">◌</span>');
     if (ORION.capital && ORION.capital.isCapital && ORION.capital.isCapital(g, k)) {
       badges.push('<span class="lp-item__badge lp-item__badge--ok" title="Capitale">★</span>');
@@ -5006,6 +5017,14 @@ function renderContextActionBar(ctx) {
   const g = ORION.game;
   if (!g) { host.hidden = true; host.innerHTML = ''; return; }
 
+  /* PR-D helper: emette uno <span class="ui-icon"> con SVG inline +
+     tinta. Tonalità per i bottoni dell'action bar segue UI_GUIDE §1. */
+  function icnHtml(name, tone) {
+    const svg = (ORION.icon && ORION.icon(name)) || '';
+    const cls = tone ? (' ui-icon--' + tone) : '';
+    return '<span class="ui-icon' + cls + '" aria-hidden="true">' + svg + '</span>';
+  }
+
   const buttons = [];
   if (ctx && ctx.level === 'planet' && ORION.currentPlanet) {
     const sysId = ctx.systemId;
@@ -5037,20 +5056,26 @@ function renderContextActionBar(ctx) {
       const tooltip = canPay
         ? 'Avvia spedizione coloniale (' + cost.impulsi + ' ' + iU() + ')'
         : 'Risorse insufficienti sulla colonia base' + (costMul > 1 ? ' (×' + costMul + ' per produttiva)' : '');
-      buttons.push('<button class="actionbar__btn actionbar__btn--primary" data-action="ctx-colonize"' +
-        (canPay ? '' : ' disabled') + ' title="' + escapeHtml(tooltip) + '">🏗 Colonizza ' + escapeHtml(planet.name) + '</button>');
+      buttons.push('<button class="actionbar__btn actionbar__btn--primary btn--with-icon" data-action="ctx-colonize"' +
+        (canPay ? '' : ' disabled') + ' title="' + escapeHtml(tooltip) + '">' +
+        icnHtml('build', 'cyan') + ' Colonizza ' + escapeHtml(planet.name) + '</button>');
     } else if (isForeign) {
-      buttons.push('<button class="actionbar__btn actionbar__btn--primary" data-action="ctx-civ-dossier" data-civ="' + escapeHtml(civ.id) + '">Apri dossier civiltà</button>');
-      buttons.push('<button class="actionbar__btn" disabled title="Richiede M11 Diplomazia">⚑ Proponi accordo (M11)</button>');
+      buttons.push('<button class="actionbar__btn actionbar__btn--primary btn--with-icon" data-action="ctx-civ-dossier" data-civ="' + escapeHtml(civ.id) + '">' +
+        icnHtml('civ', 'pink') + ' Apri dossier civiltà</button>');
+      buttons.push('<button class="actionbar__btn btn--with-icon" disabled title="Richiede M11 Diplomazia">' +
+        icnHtml('diplomacy', 'pink') + ' Proponi accordo (M11)</button>');
       /* M09 (decisione #49): attacco offensivo. Abilitato se c'è almeno una
          flotta armata che può raggiungere il sistema. */
       const strikers = attackCapableFleets(g, sysId);
       if (strikers.length) {
-        buttons.push('<button class="actionbar__btn actionbar__btn--danger" data-action="ctx-attack" data-sys="' + sysId + '" data-civ="' + escapeHtml(civ.id) + '" title="Ordina a una flotta armata di attaccare questo sistema">⚔ Attacca</button>');
+        buttons.push('<button class="actionbar__btn actionbar__btn--danger btn--with-icon" data-action="ctx-attack" data-sys="' + sysId + '" data-civ="' + escapeHtml(civ.id) + '" title="Ordina a una flotta armata di attaccare questo sistema">' +
+          icnHtml('sword', 'pink') + ' Attacca</button>');
       } else {
-        buttons.push('<button class="actionbar__btn" disabled title="Serve una flotta armata che possa raggiungere il sistema">⚔ Attacca</button>');
+        buttons.push('<button class="actionbar__btn btn--with-icon" disabled title="Serve una flotta armata che possa raggiungere il sistema">' +
+          icnHtml('sword', 'soft') + ' Attacca</button>');
       }
-      buttons.push('<button class="actionbar__btn" disabled title="Richiede M19 Spionaggio">🕵 Pianifica spionaggio (M19)</button>');
+      buttons.push('<button class="actionbar__btn btn--with-icon" disabled title="Richiede M19 Spionaggio">' +
+        icnHtml('spy', 'violet') + ' Pianifica spionaggio (M19)</button>');
     }
   }
 
@@ -5108,7 +5133,10 @@ function openAttackPicker(sysId, civId) {
   const html =
     '<div class="attack-overlay" data-attack-overlay>' +
       '<div class="attack-overlay__panel">' +
-        '<header class="attack-overlay__head"><h3>⚔ Attacca ' + escapeHtml(sys ? sys.name : 'sistema') + '</h3>' +
+        '<header class="attack-overlay__head"><h3>' +
+          '<span class="ui-icon ui-icon--pink" aria-hidden="true">' + ((ORION.icon && ORION.icon('sword')) || '') + '</span> ' +
+          'Attacca ' + escapeHtml(sys ? sys.name : 'sistema') +
+        '</h3>' +
           '<button class="attack-overlay__x" data-attack-close type="button" aria-label="Chiudi">' +
             '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
           '</button></header>' +
@@ -5189,21 +5217,23 @@ function refreshForeignDeck() {
         '<span class="deck-foreign__chip">' + (ALIGN_LABEL[civ.alignment] || civ.alignment) + '</span>' +
         '<span class="deck-foreign__chip">' + escapeHtml(civ.traitLabel || '—') + '</span>' +
       '</div>' +
+      /* PR-D: emoji sostituiti da SVG inline (UI_GUIDE §3 strategia B).
+         Cross-OS rendering consistente, glow morbido coerente. */
       '<section class="deck-foreign__section">' +
-        '<h4>📡 Info pubbliche</h4>' +
+        '<h4><span class="ui-icon ui-icon--blue deck-foreign__h4-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('info')) || '') + '</span> Info pubbliche</h4>' +
         '<div class="deck-foreign__row"><span class="deck-foreign__k">Tipo corpo</span><span class="deck-foreign__v">' + escapeHtml(def ? def.label : planet.type) + '</span></div>' +
         '<div class="deck-foreign__row"><span class="deck-foreign__k">Regione</span><span class="deck-foreign__v">' + escapeHtml(tier.name || '—') + ' · ' + escapeHtml(tier.tierLabel || '—') + '</span></div>' +
         '<div class="deck-foreign__row"><span class="deck-foreign__k">Proprietario</span><span class="deck-foreign__v">' + escapeHtml(civ.name) + '</span></div>' +
       '</section>' +
       '<section class="deck-foreign__section">' +
-        '<h4>📊 Stima impero</h4>' +
+        '<h4><span class="ui-icon ui-icon--gold deck-foreign__h4-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('resources')) || '') + '</span> Stima impero</h4>' +
         '<div class="deck-foreign__row"><span class="deck-foreign__k">Potenza percepita</span><span class="deck-foreign__v">' + escapeHtml(ptier) + '</span></div>' +
         '<div class="deck-foreign__row"><span class="deck-foreign__k">Sistemi noti</span><span class="deck-foreign__v">' + known + '</span></div>' +
         '<div class="deck-foreign__row"><span class="deck-foreign__k">Sede</span><span class="deck-foreign__v">' + escapeHtml(seat.name || '—') + '</span></div>' +
         '<div class="deck-foreign__row"><span class="deck-foreign__k">Struttura stimata</span><span class="deck-foreign__v">tra ' + lo + ' e ' + hi + ' insediamenti</span></div>' +
       '</section>' +
       '<section class="deck-foreign__section">' +
-        '<h4>🕵 Intel dettagliato</h4>' +
+        '<h4><span class="ui-icon ui-icon--violet deck-foreign__h4-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('spy')) || '') + '</span> Intel dettagliato</h4>' +
         '<div class="deck-foreign__placeholder">Spionaggio (M19) — richiede una missione di intel attiva su questo mondo.</div>' +
       '</section>' +
     '</div>';
