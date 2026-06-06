@@ -1363,22 +1363,26 @@ function renderPlanetPanel(title, content) {
     '</div>' +
     '<nav class="planet-tabs" role="tablist">' +
       tabs.map(function (t) {
+        /* PR-B: icone SVG via ORION.icon + classe colore tematico
+           coerente con UI_GUIDE §3 (un concetto = una tinta). */
         const meta = {
-          colonia:      { icon: '⚑', label: 'Colonia',  full: 'Colonia' },
-          risorse:      { icon: '⛁', label: 'Risorse',  full: 'Risorse' },
-          strutture:    { icon: '⚒', label: 'Strutt.',  full: 'Strutture' },
-          popolazione:  { icon: '♟', label: 'Pop.',     full: 'Popolazione' },
-          forze:        { icon: '⚔', label: 'Forze',    full: 'Forze e reclutamento' },
-          esplorazione: { icon: '✦', label: 'Esplor.',  full: 'Esplorazione' }
+          colonia:      { iconName: 'home',      tone: 'amber',  label: 'Colonia',  full: 'Colonia' },
+          risorse:      { iconName: 'resources', tone: 'gold',   label: 'Risorse',  full: 'Risorse' },
+          strutture:    { iconName: 'build',     tone: 'cyan',   label: 'Strutt.',  full: 'Strutture' },
+          popolazione:  { iconName: 'civ',       tone: 'pink',   label: 'Pop.',     full: 'Popolazione' },
+          forze:        { iconName: 'forces',    tone: 'red',    label: 'Forze',    full: 'Forze e reclutamento' },
+          esplorazione: { iconName: 'fleet',     tone: 'cyan',   label: 'Esplor.',  full: 'Esplorazione' }
         }[t];
+        const iconSvg = (ORION.icon && ORION.icon(meta.iconName)) || '';
         const disabled = (!colony.colonized && t !== 'colonia');
         const isActive = (t === activeTab);
         const alert = alerts[t];
         const alertCls = (alert && !isActive) ? ' has-alert has-alert--' + alert : '';
         const titleFull = meta.full + (alert ? ' · ' + alertTitle(t, colony, alert) : '');
+        const iconHtml = '<span class="planet-tab__icon ui-icon planet-tab__icon--' + meta.tone + '" aria-hidden="true">' + iconSvg + '</span>';
         const inner = isActive
-          ? '<span class="planet-tab__icon">' + meta.icon + '</span><span class="planet-tab__label">' + meta.label + '</span>'
-          : '<span class="planet-tab__icon">' + meta.icon + '</span>';
+          ? iconHtml + '<span class="planet-tab__label">' + meta.label + '</span>'
+          : iconHtml;
         return '<button class="planet-tab' + (isActive ? ' is-active' : '') + alertCls + '" data-tab="' + t + '" type="button"' +
           ' title="' + titleFull + '" aria-label="' + titleFull + '"' +
           (disabled ? ' disabled' : '') + '>' + inner + '</button>';
@@ -1574,7 +1578,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
         row('Ostilità ' + hostilityNoun(planet), hostility) +
       '</dl>' +
       (costMul > 1 ? '<p class="panel__note">×' + costMul + ' perché la colonia primaria è ancora produttiva.</p>' : '') +
-      (homeInTrouble ? '<p class="panel__note">⚠ Crisi sulla colonia primaria: costo di migrazione ridotto.</p>' : '') +
+      (homeInTrouble ? '<p class="panel__note panel__note--warn"><span class="ui-icon panel__note-icon panel__note-icon--warn" aria-hidden="true">' + ((ORION.icon && ORION.icon('warning')) || '') + '</span> Crisi sulla colonia primaria: costo di migrazione ridotto.</p>' : '') +
       (reasons.length ? '<p class="panel__note">' + reasons.join(' ') + '</p>' : '') +
       '<button class="btn btn--mini btn--enter" data-action="colonize" type="button"' +
         (canPay && def.habitable ? '' : ' disabled') + '>◉ Colonizza ▸</button>' +
@@ -1712,7 +1716,7 @@ function renderGovernorSection(colony, planet) {
   return '<div class="gov-section" data-bind="gov-section">' +
     '<div class="gov-section__head">' +
       '<p class="sysinfo__sub gov-section__title">' +
-        '<span class="gov-section__glyph" aria-hidden="true">⚙</span> ' +
+        '<span class="gov-section__glyph ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('settings')) || '') + '</span> ' +
         'Governatore <em>(Tier 1 · Vigile)</em>' +
       '</p>' +
       '<label class="gov-toggle">' +
@@ -4685,8 +4689,11 @@ function renderDxPanel() {
       const sysId = c.systemId;
       const acr = regionAcronymFor(sysId);
       const tag = acr ? ' [' + acr + ']' : '';
+      /* PR-B: dingbat consistenti cross-OS (no emoji codepoints come ⏳).
+         ◐ semicircolo per Insediamento, ◌ cerchio puntinato per viaggio,
+         ★ stella per capitale/base. */
       let stChip = '';
-      if (c.phase === 'settling') stChip = ' ⏳';
+      if (c.phase === 'settling') stChip = ' ◐';
       else if (c.colonizing) stChip = ' ◌';
       else if (ORION.capital && ORION.capital.isCapital && ORION.capital.isCapital(g, k)) stChip = ' ★';
       else if (c.isHomeBase) stChip = ' ★';
@@ -4694,11 +4701,16 @@ function renderDxPanel() {
       return '<option value="' + escapeHtml(k) + '"' + sel + '>' + escapeHtml(name + tag + stChip) + '</option>';
     }).join('');
     const pinned = ORION.dxIsPinned;
+    /* PR-B: pin button con SVG icon (UI_GUIDE §3). Stato pinned vs free
+       differenziato dal colore (ambra = pin, soft = libero) e dalla
+       classe is-pinned che il CSS usa per il bordo. */
+    const pinIcon = (ORION.icon && ORION.icon('pin')) || '';
     selectorHost.innerHTML =
       '<select class="dx-selector__select" data-action="dx-pick" aria-label="Colonia in focus">' + opts + '</select>' +
       '<button class="dx-selector__pin' + (pinned ? ' is-pinned' : '') + '" data-action="dx-pin-toggle" type="button" ' +
-        'title="' + (pinned ? 'Pin attivo — la dx non segue la navigazione' : 'Pin disattivo — segue il pianeta navigato') + '">' +
-        (pinned ? '📌' : '⛓') +
+        'title="' + (pinned ? 'Pin attivo — la dx non segue la navigazione' : 'Pin disattivo — segue il pianeta navigato') + '" ' +
+        'aria-label="Pin colonia">' +
+        '<span class="ui-icon" aria-hidden="true">' + pinIcon + '</span>' +
       '</button>';
     const sel = selectorHost.querySelector('[data-action="dx-pick"]');
     if (sel) sel.addEventListener('change', function () {
