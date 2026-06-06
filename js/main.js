@@ -164,6 +164,73 @@ function cloneMode(m) {
   };
 }
 
+/* Recovery best-effort della nebbia di guerra per save pre-schema-11.
+   Promuove a EXPLORED ogni sistema deducibile dalle fonti del payload
+   (e DETECTED i loro vicini, come fa revealSystem). Idempotente, mai
+   downgrade. */
+function recoverDiscoveryFromPayload(game, saved) {
+  if (!game || !saved || !game.galaxy || !game.state) return;
+  const D = ORION.galaxy.DISCOVERY;
+  const galaxy = game.galaxy;
+  const reveal = function (sid) {
+    if (!Number.isInteger(sid) || sid < 0 || sid >= galaxy.count) return;
+    ORION.galaxy.revealSystem(galaxy, sid, game.state);
+  };
+  /* (1) colonie: la chiave è "<sysId>:<bodyKey>" → ogni sysId è esplorato. */
+  if (saved.colonies && typeof saved.colonies === 'object') {
+    Object.keys(saved.colonies).forEach(function (k) {
+      const sid = parseInt(String(k).split(':')[0], 10);
+      reveal(sid);
+    });
+  }
+  /* (2) flotte: posizione corrente + waypoint/loop + colonia origine. */
+  if (Array.isArray(saved.fleets)) {
+    saved.fleets.forEach(function (f) {
+      if (!f) return;
+      if (f.location && Number.isInteger(f.location.systemId)) reveal(f.location.systemId);
+      if (f.ownerColonyKey) {
+        const sid = parseInt(String(f.ownerColonyKey).split(':')[0], 10);
+        reveal(sid);
+      }
+      if (f.orders) {
+        if (Array.isArray(f.orders.waypoints)) f.orders.waypoints.forEach(reveal);
+        if (Array.isArray(f.orders.loop)) f.orders.loop.forEach(reveal);
+        if (Number.isInteger(f.orders.toSysId)) reveal(f.orders.toSysId);
+      }
+      if (Array.isArray(f.route)) f.route.forEach(reveal);
+    });
+  }
+  /* (3) spedizioni attive: il target è (o è stato) esplorato a destinazione. */
+  if (Array.isArray(saved.expeditions)) {
+    saved.expeditions.forEach(function (e) {
+      if (e && Number.isInteger(e.targetSystemId)) reveal(e.targetSystemId);
+    });
+  }
+  /* (4) cronaca: parsing dei nomi di sistema (<strong>NOME</strong>).
+     Indicizza i nomi → systemId una volta, poi cerca le occorrenze in
+     contesti che implicano scoperta ("esplorato", "in orbita di",
+     "Salto iperspaziale verso"). */
+  if (Array.isArray(saved.chronicle) && saved.chronicle.length) {
+    const nameToId = Object.create(null);
+    for (let i = 0; i < galaxy.systems.length; i++) {
+      const sn = galaxy.systems[i].name;
+      if (sn) nameToId[sn] = i;
+    }
+    const strongRe = /<strong>([^<]+)<\/strong>/g;
+    const hints = /(esplorato|in orbita di|Salto iperspaziale|rientrata da|Rotta completata)/i;
+    saved.chronicle.forEach(function (entry) {
+      const html = entry && entry.html ? entry.html : (typeof entry === 'string' ? entry : '');
+      if (!html || !hints.test(html)) return;
+      let m;
+      strongRe.lastIndex = 0;
+      while ((m = strongRe.exec(html)) !== null) {
+        const sid = nameToId[m[1]];
+        if (Number.isInteger(sid)) reveal(sid);
+      }
+    });
+  }
+}
+
 function newGame(seed, opts) {
   opts = opts || {};
   /* Se ci viene passato un payload (load slot / import .json), il seed
@@ -303,6 +370,11 @@ function newGame(seed, opts) {
           ORION.game.state.discovery[i] = v;
         }
       }
+    } else {
+      /* Save pre-schema-11: la nebbia di guerra non era persistita.
+         Best-effort recovery dalle altre fonti del payload (colonie,
+         flotte, spedizioni, parsing nomi sistema in cronaca). */
+      recoverDiscoveryFromPayload(ORION.game, saved);
     }
     if (Number.isInteger(saved.selectedId) && saved.selectedId >= 0 && saved.selectedId < ORION.game.state.discovery.length) {
       ORION.game.state.selectedId = saved.selectedId;
