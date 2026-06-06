@@ -1891,7 +1891,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
           '<div class="struct-item__name">' + label + ' <span class="struct-item__cat">' + remain + ' / ' + total + '</span> ' + iU() + '</div>' +
           '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
         '</div>' +
-        '<button class="btn btn--mini struct-item__cancel" data-cancel="' + idx + '" type="button" title="' + cancelTitle + '">×</button>' +
+        '<button class="btn btn--mini btn--icon-only struct-item__cancel" data-cancel="' + idx + '" type="button" title="' + cancelTitle + '" aria-label="Annulla">' + uiIcon('close', 'pink') + '</button>' +
       '</li>';
     });
     html += '</ul>';
@@ -1938,8 +1938,8 @@ function renderPlanetStruttureTab(host, planet, colony) {
         const maxL = def.maxLevel || 1;
         const demoCheck = ORION.planet.canDemolish(colony, planet, def.id);
         const demoBtn = demoCheck.ok
-          ? '<button class="btn btn--mini struct-item__demolish" data-demolish="' + def.id + '" type="button" title="Smantella (rimborso 50% · 70% sulla colonia natale · morale −0,10 per 30 Ι)">🗑</button>'
-          : '<span class="struct-item__locked is-busy" title="' + demoCheck.reason + '">🗑</span>';
+          ? '<button class="btn btn--mini btn--icon-only struct-item__demolish" data-demolish="' + def.id + '" type="button" title="Smantella (rimborso 50% · 70% sulla colonia natale · morale −0,10 per 30 Ι)" aria-label="Smantella">' + uiIcon('trash', 'pink') + '</button>'
+          : '<span class="struct-item__locked is-busy" title="' + demoCheck.reason + '">' + uiIcon('trash', 'soft') + '</span>';
         let upBtn, infoLine, timeChip = '';
         if (lvl >= maxL) {
           upBtn = '<span class="struct-item__locked" title="Livello massimo (' + maxL + ')">max</span>';
@@ -2246,7 +2246,7 @@ function renderCantieriSection(colony, planet) {
     const cantieriCls = active >= buildSlots ? ' cantieri-cap--full' : '';
     const portCls = bound >= docks ? ' cantieri-cap--full' : '';
     const techHtml = techBonus > 0
-      ? ' <span class="cantieri-tech-chip" title="Bonus tecnici: ' + (E.techCountOf ? E.techCountOf(colony) : 0) + ' tecnici → −' + Math.round(techBonus * 100) + '% tempo costruzione">⚙ −' + Math.round(techBonus * 100) + '%</span>'
+      ? ' <span class="cantieri-tech-chip" title="Bonus tecnici: ' + (E.techCountOf ? E.techCountOf(colony) : 0) + ' tecnici → −' + Math.round(techBonus * 100) + '% tempo costruzione">' + uiIcon('settings', 'soft') + ' −' + Math.round(techBonus * 100) + '%</span>'
       : '';
     const hangarLvl = (colony.structures['cantiere-navale'] && colony.structures['cantiere-navale'].level) || 1;
 
@@ -2300,7 +2300,7 @@ function renderCantieriSection(colony, planet) {
           '<div class="struct-item__name">' + escapeHtml(qCls.name) + ' <span class="struct-item__cat">' + remain + ' / ' + total + '</span> ' + iU() + '</div>' +
           '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
         '</div>' +
-        '<button class="btn btn--mini struct-item__cancel" data-cancel-ship="' + idx + '" type="button" title="Annulla (rimborso 50%)">×</button>' +
+        '<button class="btn btn--mini btn--icon-only struct-item__cancel" data-cancel-ship="' + idx + '" type="button" title="Annulla (rimborso 50%)" aria-label="Annulla">' + uiIcon('close', 'pink') + '</button>' +
       '</div>';
     });
 
@@ -2378,7 +2378,7 @@ function renderCantieriSection(colony, planet) {
           '<div class="struct-item__name">Equipaggio esploratore <span class="struct-item__cat">' + remain + ' / ' + total + '</span> ' + iU() + '</div>' +
           '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
         '</div>' +
-        '<button class="btn btn--mini struct-item__cancel" data-cancel-crew="' + idx + '" type="button" title="Annulla (rimborso 50%)">×</button>' +
+        '<button class="btn btn--mini btn--icon-only struct-item__cancel" data-cancel-crew="' + idx + '" type="button" title="Annulla (rimborso 50%)" aria-label="Annulla">' + uiIcon('close', 'pink') + '</button>' +
       '</div>';
     });
     html += '<div class="cantieri-row__build">' +
@@ -2476,7 +2476,7 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
             '<span class="wear-bar__label">scafo ' + wear + '%</span>' +
           '</div>' +
           '<span class="xp-chip" title="' + enr.label + '">xp ' + xp + ' · ' + enr.label + '</span>' +
-          (incCount ? '<span class="expedition-item__inc" title="Incidenti accumulati">⚠ ' + incCount + '</span>' : '') +
+          (incCount ? '<span class="expedition-item__inc" title="Incidenti accumulati">' + uiIcon('warning', 'gold') + ' ' + incCount + '</span>' : '') +
         '</div>' +
       '</li>';
     }).join('') + '</ul>';
@@ -2696,12 +2696,17 @@ function renderFleetView(stage) {
       const formation = (f.formation) || 'balanced';
       /* M09 (#43/#49): Comandante assegnato → bonus di specializzazione. */
       const cmd = f.commander;
+      /* PR-E: ★ → SVG star ambra per il Comandante (Figura nominata
+         emergente dagli equipaggi veterani, decisione #43). */
+      const starHtml = uiIcon('star', 'amber');
       const cmdHtml = cmd
-        ? '<div class="fleet-item__cmd">★ <strong>' + escapeHtml(cmd.rank + ' ' + cmd.name) + '</strong> · ' +
+        ? '<div class="fleet-item__cmd">' + starHtml + ' <strong>' + escapeHtml(cmd.rank + ' ' + cmd.name) + '</strong> · ' +
             escapeHtml(cmd.specializationLabel || cmd.specialization) +
             ' <span class="fleet-item__cmdbonus">' + escapeHtml(ORION.commander ? ORION.commander.bonusLabel(cmd) : '') + '</span></div>'
         : '';
-      const cmdBtnLabel = cmd ? ('★ ' + escapeHtml(cmd.name)) : '★ Comandante';
+      const cmdBtnLabel = cmd
+        ? (starHtml + ' ' + escapeHtml(cmd.name))
+        : (starHtml + ' Comandante');
       return '<li class="fleet-item" data-fleet-id="' + escapeHtml(f.id) + '">' +
         '<div class="fleet-item__head">' +
           '<span class="fleet-item__name"><strong>' + escapeHtml(f.name) + '</strong> ' +
@@ -3550,7 +3555,7 @@ function openFleetOrdersOverlay(fleetId) {
         '<span class="fleet-route-item__n">' + (i + 1) + '.</span>' +
         '<span class="fleet-route-item__name">' + escapeHtml(sysShort(sid)) + '</span>' +
         '<span class="fleet-route-item__dwell">' + (store.dwell[i] || 0) + ' Ι</span>' +
-        '<button class="btn btn--mini" data-action="' + removeAction + '" data-idx="' + i + '" type="button" title="Rimuovi tappa">×</button>' +
+        '<button class="btn btn--mini btn--icon-only" data-action="' + removeAction + '" data-idx="' + i + '" type="button" title="Rimuovi tappa" aria-label="Rimuovi">' + uiIcon('close', 'pink') + '</button>' +
       '</li>';
     }).join('');
     ul.querySelectorAll('[data-action="' + removeAction + '"]').forEach(function (b) {
@@ -4091,7 +4096,12 @@ function renderTimeControls() {
   const host = document.querySelector('[data-bind="time-controls"]');
   if (!host) return;
   const playing = ORION.timer.playing;
-  const glyph = playing ? '⏸' : '▶';
+  /* PR-E: SVG icons per i 5 controlli tempo (UI_GUIDE §3). Tinte:
+     play/pause/step = ciano (azioni temporali); skipNext = oro (evento
+     notevole). */
+  const playSvg  = uiIcon(playing ? 'pause' : 'play', 'cyan');
+  const stepSvg  = uiIcon('step', 'cyan');
+  const eventSvg = uiIcon('skipNext', 'gold');
   const label = timerLabel();
   const idx = PLAY_LEVELS.indexOf(ORION.timer.level);
   const atMin = idx <= 0, atMax = idx >= PLAY_LEVELS.length - 1;
@@ -4099,16 +4109,16 @@ function renderTimeControls() {
     '<button class="btn btn--mini btn--play-step" data-action="play-slower" type="button"' +
     (atMin ? ' disabled' : '') + ' title="Rallenta (-)">−</button>' +
     '<button class="btn btn--play" data-action="play-toggle" type="button" title="Play/Pause (Space)">' +
-      '<span class="btn__glyph" aria-hidden="true">' + glyph + '</span>' +
+      '<span class="btn__glyph">' + playSvg + '</span>' +
       '<span class="btn__label">' + escapeHtml(label) + '</span>' +
     '</button>' +
     '<button class="btn btn--mini btn--play-step" data-action="play-faster" type="button"' +
     (atMax ? ' disabled' : '') + ' title="Accelera (+)">+</button>' +
     '<button class="btn btn--mini" data-action="play-step" type="button" title="Singolo Impulso (→)">' +
-      '<span class="btn__glyph" aria-hidden="true">⏵Ι</span>' +
+      '<span class="btn__glyph">' + stepSvg + '</span>' +
     '</button>' +
     '<button class="btn btn--primary btn--next-event" data-action="advance-to-event" type="button" title="Prossimo evento (E)">' +
-      '<span class="btn__glyph" aria-hidden="true">⏭</span>' +
+      '<span class="btn__glyph">' + eventSvg + '</span>' +
       '<span class="btn__label">Evento</span>' +
       '<span class="time-control__delta" data-bind="event-delta">+— Ι</span>' +
     '</button>';
@@ -4621,10 +4631,10 @@ function renderLeftPanel() {
       else if (worst === 'low') badges.push('<span class="lp-item__badge lp-item__badge--warn" title="Scarsità">!</span>');
     }
     if (c.queue && c.queue.length) {
-      badges.push('<span class="lp-item__badge lp-item__badge--info" title="Coda di costruzione">⚒</span>');
+      badges.push('<span class="lp-item__badge lp-item__badge--info" title="Coda di costruzione">' + uiIcon('build') + '</span>');
     }
     if (c.governor && Array.isArray(c.governor.recent) && c.governor.recent.length) {
-      badges.push('<span class="lp-item__badge lp-item__badge--warn" title="Segnalazione del governatore">⚙</span>');
+      badges.push('<span class="lp-item__badge lp-item__badge--warn" title="Segnalazione del governatore">' + uiIcon('settings') + '</span>');
     }
     const isFocus = (k === dxKey);
     const icon = (ORION.icon && ORION.icon('roster')) || '';
@@ -5705,21 +5715,25 @@ function renderMainMenuHome(body) {
 
   body.innerHTML =
     '<div class="main-menu__actions">' +
+      /* PR-E: emoji codepoint (📂, ⓘ, ✦) → SVG inline coerente con
+         UI_GUIDE §3. Tinte: Continua=verde (azione positiva),
+         Nuova=ambra (warm/scoperta), Carica=ciano (utility),
+         Info=azzurro (informativo). */
       '<button class="btn btn--menu btn--menu-primary' + (hasAuto ? '' : ' is-disabled') + '" ' +
         'data-action="menu-continue" type="button"' + (hasAuto ? '' : ' disabled') + '>' +
-        '<span class="btn__glyph">▶</span> Continua' +
+        '<span class="btn__glyph">' + uiIcon('play', 'green') + '</span> Continua' +
         (meta ? '<span class="btn__sub">' + escapeHtml(meta) + '</span>' : '<span class="btn__sub">nessun autosave</span>') +
       '</button>' +
       '<button class="btn btn--menu" data-action="menu-new" type="button">' +
-        '<span class="btn__glyph">✦</span> Nuova partita' +
+        '<span class="btn__glyph">' + uiIcon('plus', 'amber') + '</span> Nuova partita' +
         '<span class="btn__sub">scegli seed, preset, ironman</span>' +
       '</button>' +
       '<button class="btn btn--menu" data-action="menu-load" type="button">' +
-        '<span class="btn__glyph">📂</span> Carica partita' +
+        '<span class="btn__glyph">' + uiIcon('folder', 'cyan') + '</span> Carica partita' +
         '<span class="btn__sub">slot + import .json</span>' +
       '</button>' +
       '<button class="btn btn--menu" data-action="menu-info" type="button">' +
-        '<span class="btn__glyph">ⓘ</span> Info' +
+        '<span class="btn__glyph">' + uiIcon('info', 'blue') + '</span> Info' +
         '<span class="btn__sub">crediti e progetto</span>' +
       '</button>' +
     '</div>';

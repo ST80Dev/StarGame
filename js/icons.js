@@ -245,6 +245,44 @@
     /* Transition — cerchio puntinato per "in transizione". */
     transition: svg(
       '<circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/>'
+    ),
+
+    /* Pause — due barre verticali (HUD time controls). */
+    pause: svg(
+      '<rect x="6" y="4" width="4" height="16" fill="currentColor" stroke="none"/>' +
+      '<rect x="14" y="4" width="4" height="16" fill="currentColor" stroke="none"/>'
+    ),
+
+    /* Step — triangolo + barra verticale (singolo Impulso, ⏵Ι). */
+    step: svg(
+      '<polygon points="5,4 16,12 5,20" fill="currentColor" stroke="none"/>' +
+      '<line x1="19" y1="5" x2="19" y2="19"/>'
+    ),
+
+    /* SkipNext — due triangoli + barra ("Prossimo evento", ⏭). */
+    skipNext: svg(
+      '<polygon points="5,4 13,12 5,20" fill="currentColor" stroke="none"/>' +
+      '<polygon points="13,4 19,12 13,20" fill="currentColor" stroke="none"/>'
+    ),
+
+    /* Folder — cartella aperta (Carica partita da slot). */
+    folder: svg(
+      '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'
+    ),
+
+    /* Plus — segno + per "nuovo" (nuova partita, espandi modulo). */
+    plus: svg(
+      '<line x1="12" y1="5" x2="12" y2="19"/>' +
+      '<line x1="5" y1="12" x2="19" y2="12"/>'
+    ),
+
+    /* Trash — cestino per smantellamento. */
+    trash: svg(
+      '<polyline points="3,6 5,6 21,6"/>' +
+      '<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>' +
+      '<path d="M10 11v6"/>' +
+      '<path d="M14 11v6"/>' +
+      '<path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>'
     )
   };
 

@@ -2603,6 +2603,9 @@ select.main-menu__input { cursor: pointer; }
   border-radius: 10px;
   color: #a8d4ee;
   font-family: var(--font-mono, monospace);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* Roster equipaggi (tab Forze): lista per-equipaggio a riposo / in missione */
@@ -4295,7 +4298,12 @@ select.main-menu__input { cursor: pointer; }
   border-radius: 9px;
   background: rgba(255,255,255,0.06);
   color: var(--c-text-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  line-height: 1;
 }
+.lp-item__badge .ui-icon { font-size: 0.78rem; }
 .lp-item__badge--ok   { background: rgba(95,200,140,0.18); color: #6fe0b8; }
 .lp-item__badge--warn { background: rgba(240,210,100,0.18); color: #f0d670; }
 .lp-item__badge--crit { background: rgba(240,130,150,0.20); color: #f08296; }
@@ -4575,6 +4583,7 @@ select.main-menu__input { cursor: pointer; }
 /* M09 — Comandante assegnato alla flotta (#43/#49) */
 .fleet-item__cmd {
   margin: 4px 0 2px; font-size: 0.8rem; color: #d7c9a6;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
 }
 .fleet-item__cmdbonus { color: var(--c-text-faint); font-size: 0.74rem; }
 .cmd-pick__current {
