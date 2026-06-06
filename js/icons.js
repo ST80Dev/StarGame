@@ -283,6 +283,43 @@
       '<path d="M10 11v6"/>' +
       '<path d="M14 11v6"/>' +
       '<path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>'
+    ),
+
+    /* Refresh — freccia circolare per "richiama/aggiorna". */
+    refresh: svg(
+      '<polyline points="23 4 23 10 17 10"/>' +
+      '<polyline points="1 20 1 14 7 14"/>' +
+      '<path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/>' +
+      '<path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/>'
+    ),
+
+    /* Crown — corona per Comandante/leader (alternativa a star). */
+    crown: svg(
+      '<polygon points="2 18 5 7 12 12 19 7 22 18 2 18" fill="currentColor" fill-opacity="0.15"/>' +
+      '<polygon points="2 18 5 7 12 12 19 7 22 18 2 18"/>'
+    ),
+
+    /* Tag — etichetta/tag (slot save, metadata). */
+    tag: svg(
+      '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>' +
+      '<line x1="7" y1="7" x2="7.01" y2="7"/>'
+    ),
+
+    /* Clock — orologio per timestamp save. */
+    clock: svg(
+      '<circle cx="12" cy="12" r="10"/>' +
+      '<polyline points="12 6 12 12 16 14"/>'
+    ),
+
+    /* Check — segno di spunta (tutorial "vista", azione completata). */
+    check: svg(
+      '<polyline points="20 6 9 17 4 12"/>'
+    ),
+
+    /* Book — libro (tutorial, indice schede). */
+    book: svg(
+      '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>' +
+      '<path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>'
     )
   };
 

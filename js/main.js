@@ -2201,7 +2201,7 @@ function renderCantieriSection(colony, planet) {
   if (hasCommanders) {
     html += '<div class="cantieri-row commander-row">' +
       '<div class="cantieri-row__head">' +
-        '<span class="cantieri-row__glyph" aria-hidden="true">★</span>' +
+        '<span class="cantieri-row__glyph ui-icon ui-icon--amber" aria-hidden="true">' + ((ORION.icon && ORION.icon('star')) || '★') + '</span>' +
         '<span class="cantieri-row__name">Comandanti</span>' +
         '<span class="cantieri-row__counter">In organico: <strong>' + commanders.length + '</strong></span>' +
       '</div>' +
@@ -2812,7 +2812,7 @@ function buildWarSection(g) {
   let html = '<div class="war-section">';
   /* M09 Fase B: stato di esilio (0 colonie, partita non-hard). */
   if (g.defeated === 'exile') {
-    html += '<div class="war-exile">⚑ <strong>Esilio</strong>: la tua civiltà non ha più colonie. Sopravvivi nelle flotte — ricolonizza per risorgere.</div>';
+    html += '<div class="war-exile">' + uiIcon('warning', 'gold') + ' <strong>Esilio</strong>: la tua civiltà non ha più colonie. Sopravvivi nelle flotte — ricolonizza per risorgere.</div>';
   }
   html += '<div class="war-meters">' +
     '<div class="war-meter war-meter--' + moraleCls + '"><span class="war-meter__lbl">Morale d\'impero</span>' +
@@ -2822,17 +2822,21 @@ function buildWarSection(g) {
     '</div>';
 
   if (ORION.lastBattle) {
-    html += '<button class="btn btn--mini" data-action="battle-report" type="button">Ultimo report di battaglia ▸</button>';
+    html += '<button class="btn btn--mini btn--with-icon" data-action="battle-report" type="button">' +
+      uiIcon('sword', 'pink') + ' Ultimo report di battaglia ' + uiIcon('chevronRight', 'soft') +
+    '</button>';
   }
   /* Leva di recovery: richiamo flotte alla capitale (concentra la difesa). */
   if ((g.fleets || []).length) {
-    html += ' <button class="btn btn--mini" data-action="war-recall" type="button" title="Tutte le flotte rientrano alla colonia origine">⟲ Richiama flotte</button>';
+    html += ' <button class="btn btn--mini btn--with-icon" data-action="war-recall" type="button" title="Tutte le flotte rientrano alla colonia origine">' +
+      uiIcon('refresh', 'cyan') + ' Richiama flotte' +
+    '</button>';
   }
 
   if (incursions.length) {
     html += '<div class="war-incursions"><h4 class="war-h">Incursioni in arrivo</h4><ul>';
     incursions.forEach(function (inc) {
-      html += '<li>⚠ Predoni verso ' + colonyNameFromKey(inc.targetColonyKey) +
+      html += '<li>' + uiIcon('warning', 'gold') + ' Predoni verso ' + colonyNameFromKey(inc.targetColonyKey) +
         ' · arrivo fra <strong>' + (inc.eta | 0) + ' ' + iU() + '</strong></li>';
     });
     html += '</ul></div>';
@@ -2853,9 +2857,12 @@ function buildWarSection(g) {
         '<div class="war-siege__head">Assedio di ' + colonyNameFromKey(b.colonyKey) +
           ' · round ' + (b.round | 0) + ' · ' + who + ' ' + atkHp + ' hp</div>' +
         '<div class="war-siege__actions">' +
-          '<button class="btn btn--mini" data-action="siege-retreat" data-battle="' + escapeHtml(b.id) + '" type="button">Ritira flotte</button>' +
-          '<button class="btn btn--mini" data-action="siege-tribute" data-battle="' + escapeHtml(b.id) + '" type="button">' + tributeLbl + ' (' + (costStr || 'gratis') + ')</button>' +
-          '<button class="btn btn--mini btn--danger" data-action="siege-evacuate" data-colony="' + escapeHtml(b.colonyKey) + '" type="button" title="Abbandona la colonia recuperando metà delle risorse alla capitale">Evacua colonia</button>' +
+          '<button class="btn btn--mini btn--with-icon" data-action="siege-retreat" data-battle="' + escapeHtml(b.id) + '" type="button">' +
+            uiIcon('refresh', 'cyan') + ' Ritira flotte</button>' +
+          '<button class="btn btn--mini btn--with-icon" data-action="siege-tribute" data-battle="' + escapeHtml(b.id) + '" type="button">' +
+            uiIcon('diplomacy', 'amber') + ' ' + tributeLbl + ' (' + (costStr || 'gratis') + ')</button>' +
+          '<button class="btn btn--mini btn--with-icon btn--danger" data-action="siege-evacuate" data-colony="' + escapeHtml(b.colonyKey) + '" type="button" title="Abbandona la colonia recuperando metà delle risorse alla capitale">' +
+            uiIcon('warning', 'pink') + ' Evacua colonia</button>' +
         '</div>' +
         '<p class="war-siege__hint">Rinforza spostando una flotta su questo sistema (si unisce alla difesa al prossimo round); oppure consolida altrove.</p>' +
       '</div>';
@@ -2915,25 +2922,28 @@ function openCommanderPicker(fleetId, stage) {
   const avail = ORION.commander.assignableOf(g);
   const cur = fleet.commander;
   if (!avail.length && !cur) { showToast('Nessun Comandante disponibile — emergono dagli equipaggi veterani (xp≥5)'); return; }
+  const starHtml = uiIcon('star', 'amber');
   const rows = avail.map(function (a) {
     const c = a.commander;
     return '<button class="cmd-pick__row" data-cmd="' + escapeHtml(c.id) + '" type="button">' +
-      '<span class="cmd-pick__name">★ ' + escapeHtml(c.rank + ' ' + c.name) + '</span>' +
+      '<span class="cmd-pick__name">' + starHtml + ' ' + escapeHtml(c.rank + ' ' + c.name) + '</span>' +
       '<span class="cmd-pick__meta">' + escapeHtml(c.specializationLabel || c.specialization) +
         ' · ' + escapeHtml(ORION.commander.bonusLabel(c)) + ' · ' + escapeHtml(c.traitLabel || '') +
         ' · da ' + escapeHtml(colonyName(a.colonyKey)) + '</span>' +
     '</button>';
   }).join('') || '<p class="cmd-pick__empty">Nessun Comandante in panchina.</p>';
   const curHtml = cur
-    ? '<div class="cmd-pick__current">Assegnato: <strong>★ ' + escapeHtml(cur.rank + ' ' + cur.name) + '</strong> · ' +
+    ? '<div class="cmd-pick__current">Assegnato: <strong>' + starHtml + ' ' + escapeHtml(cur.rank + ' ' + cur.name) + '</strong> · ' +
         escapeHtml(cur.specializationLabel || cur.specialization) +
-        ' <button class="btn btn--mini btn--danger" data-cmd-release type="button">Rimuovi</button></div>'
+        ' <button class="btn btn--mini btn--with-icon btn--danger" data-cmd-release type="button">' +
+        uiIcon('close', 'pink') + ' Rimuovi</button></div>'
     : '';
   const html =
     '<div class="attack-overlay" data-cmd-overlay>' +
       '<div class="attack-overlay__panel">' +
-        '<header class="attack-overlay__head"><h3>★ Comandante di ' + escapeHtml(fleet.name) + '</h3>' +
-          '<button class="attack-overlay__x" data-cmd-close type="button" aria-label="Chiudi">✕</button></header>' +
+        '<header class="attack-overlay__head"><h3>' + starHtml + ' Comandante di ' + escapeHtml(fleet.name) + '</h3>' +
+          '<button class="attack-overlay__x btn--icon-only" data-cmd-close type="button" aria-label="Chiudi">' +
+            uiIcon('close') + '</button></header>' +
         curHtml +
         '<p class="attack-overlay__sub">Specializzazioni: <strong>Tattico</strong> +10% fuoco · <strong>Navigatore</strong> −15% durata viaggio · <strong>Logista</strong> (gancio M12).</p>' +
         '<div class="cmd-pick__list">' + rows + '</div>' +
@@ -3029,8 +3039,12 @@ function showDefeatModal() {
   const html =
     '<div class="battle-modal" data-defeat-modal>' +
       '<div class="battle-modal__panel">' +
-        '<header class="battle-modal__head"><h3>La civiltà è caduta</h3></header>' +
-        '<p class="battle-modal__verdict battle-modal__verdict--lose">Sconfitta</p>' +
+        '<header class="battle-modal__head"><h3>' +
+          uiIcon('warning', 'pink') + ' La civiltà è caduta' +
+        '</h3></header>' +
+        '<p class="battle-modal__verdict battle-modal__verdict--lose">' +
+          uiIcon('sword', 'pink') + ' Sconfitta' +
+        '</p>' +
         '<p>Senza più colonie, il tuo impero si dissolve negli annali galattici. ' +
         'La galassia continua a vivere senza di te.</p>' +
         '<div class="battle-modal__sides"><button class="btn btn--primary" data-defeat-menu type="button">Torna al menu</button></div>' +
@@ -5450,9 +5464,12 @@ function renderSaveModal() {
      da dentro partita (altrimenti il main menu è già aperto). */
   const hasGame = !!ORION.game;
   html += '<section class="save-section save-section--actions">' +
-    (hasGame ? '<button class="btn" data-action="save-export" type="button">⬇ Esporta .json</button>' : '') +
-    '<button class="btn" data-action="save-import" type="button">⬆ Importa .json</button>' +
-    (hasGame ? '<button class="btn btn--danger" data-action="save-newgame" type="button">✦ Nuova partita</button>' : '') +
+    (hasGame ? '<button class="btn btn--with-icon" data-action="save-export" type="button">' +
+      uiIcon('save', 'cyan') + ' Esporta .json</button>' : '') +
+    '<button class="btn btn--with-icon" data-action="save-import" type="button">' +
+      uiIcon('folder', 'cyan') + ' Importa .json</button>' +
+    (hasGame ? '<button class="btn btn--with-icon btn--danger" data-action="save-newgame" type="button">' +
+      uiIcon('plus', 'amber') + ' Nuova partita</button>' : '') +
     '</section>';
 
   body.innerHTML = html;
@@ -5467,10 +5484,14 @@ function saveCardHtml(meta, perms) {
   if (perms.canLoad) buttons.push('<button class="btn btn--mini" data-action="save-load" data-idx="' + meta.idx + '" type="button">Carica</button>');
   if (perms.canSave) buttons.push('<button class="btn btn--mini" data-action="save-overwrite" data-idx="' + meta.idx + '" type="button">Sovrascrivi</button>');
   if (perms.canErase) buttons.push('<button class="btn btn--mini" data-action="save-erase" data-idx="' + meta.idx + '" type="button">Cancella</button>');
+  /* PR-F: icone tematiche per i metadati save (UI_GUIDE §3). */
   return '<div class="save-card' + (perms.isAuto ? ' save-card--auto' : '') + '">' +
-    '<div class="save-card__name">' + escapeHtml(meta.name) + '</div>' +
+    '<div class="save-card__name">' +
+      (perms.isAuto ? uiIcon('refresh', 'cyan') + ' ' : uiIcon('tag', 'amber') + ' ') +
+      escapeHtml(meta.name) +
+    '</div>' +
     '<dl class="save-card__meta">' +
-      '<div><dt>Data Stellare</dt><dd>' + ds + '</dd></div>' +
+      '<div><dt>' + uiIcon('clock', 'soft') + ' Data Stellare</dt><dd>' + ds + '</dd></div>' +
       '<div><dt>Seed</dt><dd><code>' + escapeHtml(meta.seed) + '</code></dd></div>' +
       '<div><dt>Colonie</dt><dd>' + meta.colonies + '</dd></div>' +
       '<div><dt>Modalità</dt><dd>' + escapeHtml(meta.mode) + preset + '</dd></div>' +
