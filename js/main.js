@@ -836,7 +836,10 @@ function renderSystemPanel(title, content, id) {
         row('Pericolo',
           '<span class="danger-badge ' + tierClass + '">' + sys.danger + ' · ' + sys.dangerTier + '</span>') +
       '</dl>' +
-      '<button class="btn btn--mini btn--enter" data-action="enter-system" type="button">◉ Apri sistema ▸</button>' +
+      '<button class="btn btn--mini btn--enter btn--with-icon" data-action="enter-system" type="button">' +
+        '<span class="ui-icon ui-icon--amber" aria-hidden="true">' + ((ORION.icon && ORION.icon('system')) || '') + '</span> Apri sistema' +
+        '<span class="ui-icon ui-icon--soft" aria-hidden="true">' + ((ORION.icon && ORION.icon('chevronRight')) || '') + '</span>' +
+      '</button>' +
       '<p class="panel__note">Vista interna: stella/e, corpi celesti in orbita e anomalie. Doppio click sul nodo per entrare.</p>' +
     '</div>';
 
@@ -1061,7 +1064,10 @@ function renderBodyPanel(title, content, system, body) {
         row('Svantaggi', def.svantaggi) +
       '</dl>' +
       (def.cat !== 'belt'
-        ? '<button class="btn btn--mini btn--enter" data-action="enter-planet" type="button">○ Apri pianeta ▸</button>' +
+        ? '<button class="btn btn--mini btn--enter btn--with-icon" data-action="enter-planet" type="button">' +
+            '<span class="ui-icon ui-icon--blue" aria-hidden="true">' + ((ORION.icon && ORION.icon('planet')) || '') + '</span> Apri pianeta' +
+            '<span class="ui-icon ui-icon--soft" aria-hidden="true">' + ((ORION.icon && ORION.icon('chevronRight')) || '') + '</span>' +
+          '</button>' +
           '<p class="panel__note">Vista pianeta: sfera procedurale, risorse, strutture, popolazione.</p>'
         : '') +
     '</div>';
@@ -2479,10 +2485,11 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
         row('Equipaggi', crews.length + (crews.length ? ' (xp medio ' + xpAvg + ')' : '')) +
         row('Sistemi raggiungibili', String(reachable.length)) +
       '</dl>' +
-      '<button class="btn btn--mini btn--enter" data-action="exp-organize" type="button"' +
+      '<button class="btn btn--mini btn--enter btn--with-icon" data-action="exp-organize" type="button"' +
         ((canOrganize && hasTargets) ? '' : ' disabled') +
         ' title="' + (canOrganize ? (hasTargets ? 'Pianifica un salto iperspaziale' : 'Nessuna rotta inesplorata adiacente') : 'Servono uno scafo e un equipaggio') + '">' +
-        '✦ Organizza spedizione ▸' +
+        '<span class="ui-icon ui-icon--cyan" aria-hidden="true">' + ((ORION.icon && ORION.icon('fleet')) || '') + '</span> Organizza spedizione' +
+        '<span class="ui-icon ui-icon--soft" aria-hidden="true">' + ((ORION.icon && ORION.icon('chevronRight')) || '') + '</span>' +
       '</button>' +
       '<p class="sysinfo__sub">Spedizioni attive</p>' +
       listHtml +
@@ -2536,7 +2543,9 @@ function openExpeditionPicker(colony) {
         '<div><dt>Rischio incidente</dt><dd>' + Math.round(chance * 100) + '%</dd></div>' +
       '</dl>' +
       '<div class="expedition-card__actions">' +
-        '<button class="btn btn--mini btn--primary" data-action="exp-launch" data-sys="' + sid + '" type="button">✦ Invia</button>' +
+        '<button class="btn btn--mini btn--primary btn--with-icon" data-action="exp-launch" data-sys="' + sid + '" type="button">' +
+          '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('send')) || '') + '</span> Invia' +
+        '</button>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -2545,7 +2554,9 @@ function openExpeditionPicker(colony) {
     '<div class="expedition-pick-overlay__panel" role="document">' +
       '<header class="expedition-pick-overlay__head">' +
         '<h2 class="expedition-pick-overlay__title">Organizza spedizione</h2>' +
-        '<button class="btn btn--mini" data-action="exp-pick-close" type="button" aria-label="Chiudi">✕</button>' +
+        '<button class="btn btn--mini btn--icon-only" data-action="exp-pick-close" type="button" aria-label="Chiudi">' +
+          '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+        '</button>' +
       '</header>' +
       '<p class="panel__note">Scafi disponibili: <strong>' + ships + '</strong> · ' +
         'Equipaggi: <strong>' + crews.length + '</strong>. Verrà impegnato il primo equipaggio in lista (' +
@@ -2697,7 +2708,9 @@ function renderFleetView(stage) {
         cmdHtml +
         '<div class="fleet-item__actions">' +
           '<button class="btn btn--mini" data-action="fleet-orders" data-fleet="' + escapeHtml(f.id) + '" type="button">Ordini ▸</button>' +
-          '<button class="btn btn--mini" data-action="fleet-formation" data-fleet="' + escapeHtml(f.id) + '" type="button" title="Soglia di ritirata in battaglia">⚑ ' + FORM_LABEL[formation] + '</button>' +
+          '<button class="btn btn--mini btn--with-icon" data-action="fleet-formation" data-fleet="' + escapeHtml(f.id) + '" type="button" title="Soglia di ritirata in battaglia">' +
+            '<span class="ui-icon ui-icon--pink" aria-hidden="true">' + ((ORION.icon && ORION.icon('forces')) || '') + '</span> ' + FORM_LABEL[formation] +
+          '</button>' +
           '<button class="btn btn--mini" data-action="fleet-commander" data-fleet="' + escapeHtml(f.id) + '" type="button" title="Assegna un Comandante alla flotta">' + cmdBtnLabel + '</button>' +
           '<button class="btn btn--mini" data-action="fleet-manage" data-fleet="' + escapeHtml(f.id) + '" type="button">Gestisci navi/eq.</button>' +
           '<button class="btn btn--mini btn--danger" data-action="fleet-dissolve" data-fleet="' + escapeHtml(f.id) + '" type="button">Dissolvi</button>' +
@@ -3049,10 +3062,17 @@ function openBattleReport() {
   const html =
     '<div class="battle-modal" data-battle-modal>' +
       '<div class="battle-modal__panel">' +
-        '<header class="battle-modal__head"><h3>Report di battaglia — ' + escapeHtml(sys) + '</h3>' +
-          '<button class="btn btn--mini" data-close-battle type="button">✕</button></header>' +
-        '<p class="battle-modal__verdict battle-modal__verdict--' + (rep.winner === 'A' ? 'win' : 'lose') + '">' + winLabel +
-          ' in ' + rep.rounds + ' round</p>' +
+        '<header class="battle-modal__head"><h3>' +
+          '<span class="ui-icon ui-icon--pink" aria-hidden="true">' + ((ORION.icon && ORION.icon('sword')) || '') + '</span> ' +
+          'Report di battaglia — ' + escapeHtml(sys) +
+        '</h3>' +
+          '<button class="btn btn--mini btn--icon-only" data-close-battle type="button" aria-label="Chiudi">' +
+            '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+          '</button></header>' +
+        '<p class="battle-modal__verdict battle-modal__verdict--' + (rep.winner === 'A' ? 'win' : 'lose') + '">' +
+          '<span class="ui-icon ' + (rep.winner === 'A' ? 'ui-icon--gold' : 'ui-icon--pink') + '" aria-hidden="true">' +
+            ((ORION.icon && ORION.icon(rep.winner === 'A' ? 'trophy' : 'sword')) || '') +
+          '</span> ' + winLabel + ' in ' + rep.rounds + ' round</p>' +
         '<div class="battle-modal__sides">' +
           '<span><strong>' + escapeHtml(rep.sideA.name) + '</strong>: ' + rep.sideA.before.ships + '→' + rep.sideA.after.ships + ' navi</span>' +
           '<span><strong>' + escapeHtml(rep.sideB.name) + '</strong>: ' + rep.sideB.before.ships + '→' + rep.sideB.after.ships + ' unità</span>' +
@@ -3185,7 +3205,9 @@ function openFleetCreateOverlay(eligibleColonies) {
     '<div class="fleet-create-overlay__panel" role="document">' +
       '<header class="fleet-create-overlay__head">' +
         '<h2>Crea flotta</h2>' +
-        '<button class="btn btn--mini" data-action="fleet-overlay-close" type="button" aria-label="Chiudi">✕</button>' +
+        '<button class="btn btn--mini btn--icon-only" data-action="fleet-overlay-close" type="button" aria-label="Chiudi">' +
+          '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+        '</button>' +
       '</header>' +
       '<label class="fleet-field">Colonia origine' +
         '<select data-bind="fleet-create-colony">' + colonyOptions + '</select>' +
@@ -3264,7 +3286,9 @@ function openFleetManageOverlay(fleetId) {
     '<div class="fleet-create-overlay__panel" role="document">' +
       '<header class="fleet-create-overlay__head">' +
         '<h2>Gestisci ' + escapeHtml(fleet.name) + '</h2>' +
-        '<button class="btn btn--mini" data-action="fleet-overlay-close" type="button" aria-label="Chiudi">✕</button>' +
+        '<button class="btn btn--mini btn--icon-only" data-action="fleet-overlay-close" type="button" aria-label="Chiudi">' +
+          '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+        '</button>' +
       '</header>' +
       '<p class="panel__note">La flotta deve essere all\'attracco della colonia origine per assegnare/restituire navi. ' +
         'Stato attuale: <strong>' + (fleet.location.status === 'docked' && fleet.location.systemId === colony.systemId
@@ -3357,7 +3381,9 @@ function openFleetOrdersOverlay(fleetId) {
     '<div class="fleet-orders-overlay__panel" role="document">' +
       '<header class="fleet-orders-overlay__head">' +
         '<h2>Ordini · ' + escapeHtml(fleet.name) + '</h2>' +
-        '<button class="btn btn--mini" data-action="fleet-overlay-close" type="button" aria-label="Chiudi">✕</button>' +
+        '<button class="btn btn--mini btn--icon-only" data-action="fleet-overlay-close" type="button" aria-label="Chiudi">' +
+          '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+        '</button>' +
       '</header>' +
       '<p class="panel__note">Posizione: <strong>' + escapeHtml(g.galaxy.systems[fleet.location.systemId].name) + '</strong>. ' +
         'Equipaggio: ' + fleet.crew.length + ' / ' + ORION.fleet.fleetCrewRequired(fleet) + ' richiesti. ' +
@@ -4108,8 +4134,12 @@ function showEventOverlay(events) {
   /* Raggruppa per kind: una checkbox per categoria, una sola voce di sintesi. */
   const byKind = {};
   triggered.forEach(function (e) { (byKind[e.kind] = byKind[e.kind] || []).push(e); });
+  const pauseIcon = (ORION.icon && ORION.icon('warning')) || '';
   let html = '<div class="event-overlay__panel" role="alertdialog" aria-label="Evento — tempo in pausa">' +
-    '<h3 class="event-overlay__title">⏸ Tempo in pausa</h3>' +
+    '<h3 class="event-overlay__title">' +
+      '<span class="ui-icon ui-icon--gold event-overlay__title-icon" aria-hidden="true">' + pauseIcon + '</span> ' +
+      'Tempo in pausa' +
+    '</h3>' +
     '<ul class="event-overlay__list">';
   Object.keys(byKind).forEach(function (kind) {
     const list = byKind[kind];
@@ -5050,7 +5080,9 @@ function openAttackPicker(sysId, civId) {
     '<div class="attack-overlay" data-attack-overlay>' +
       '<div class="attack-overlay__panel">' +
         '<header class="attack-overlay__head"><h3>⚔ Attacca ' + escapeHtml(sys ? sys.name : 'sistema') + '</h3>' +
-          '<button class="attack-overlay__x" data-attack-close type="button" aria-label="Chiudi">✕</button></header>' +
+          '<button class="attack-overlay__x" data-attack-close type="button" aria-label="Chiudi">' +
+            '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+          '</button></header>' +
         '<p class="attack-overlay__sub">Bersaglio: <strong>' + escapeHtml(civ ? civ.name : '—') + '</strong>' +
           (aggressive ? ' · <span class="attack-warn">aggressione contro una civiltà non ostile → reputazione oscura</span>' : ' · liberazione di un sistema maligno → reputazione luminosa') + '</p>' +
         '<div class="attack-pick__list">' + rows + '</div>' +

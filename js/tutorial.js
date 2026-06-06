@@ -699,7 +699,9 @@
         '<header class="tutorial-card__head">' +
           '<span class="tutorial-card__tag">' + escapeText(lesson.tag) + '</span>' +
           '<h2 class="tutorial-card__title">' + escapeText(lesson.title) + '</h2>' +
-          '<button class="btn btn--mini tutorial-card__close" data-action="tut-close" type="button" aria-label="Chiudi">✕</button>' +
+          '<button class="btn btn--mini btn--icon-only tutorial-card__close" data-action="tut-close" type="button" aria-label="Chiudi">' +
+            '<span class="ui-icon" aria-hidden="true">' + ((typeof ORION !== 'undefined' && ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+          '</button>' +
         '</header>' +
         '<div class="tutorial-card__body">' + lesson.body + '</div>' +
         '<footer class="tutorial-card__foot">' +
@@ -768,7 +770,9 @@
         '<header class="tutorial-card__head">' +
           '<span class="tutorial-card__tag">Tutorial</span>' +
           '<h2 class="tutorial-card__title">Tutorial — indice</h2>' +
-          '<button class="btn btn--mini tutorial-card__close" data-action="tut-close" type="button" aria-label="Chiudi">✕</button>' +
+          '<button class="btn btn--mini btn--icon-only tutorial-card__close" data-action="tut-close" type="button" aria-label="Chiudi">' +
+            '<span class="ui-icon" aria-hidden="true">' + ((typeof ORION !== 'undefined' && ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+          '</button>' +
         '</header>' +
         '<div class="tutorial-card__body">' +
           '<p class="tut-hint">Riapri qualsiasi scheda per rileggerla. Le schede non viste si aprono comunque da sole se il tutorial è attivo.</p>' +
