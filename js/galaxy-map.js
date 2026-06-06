@@ -528,10 +528,15 @@
       const dx = p.x - prev.x, dy = p.y - prev.y;
       if (Math.abs(dx) + Math.abs(dy) > 1) this.dragMoved = true;
 
-      if (this.rollModifier) {
+      /* Stato modificatori letto direttamente dall'evento (robusto a
+         perdite di focus del window: il flag tastiera può "rimanere stuck"
+         se il keyup avviene fuori dalla mappa). */
+      const altDown = e.altKey || this.rollModifier;
+      const shiftDown = e.shiftKey || this.rotateModifier;
+      if (altDown) {
         // Alt + drag orizzontale = roll (asse Z della vista)
         this._applyRoll(dx * 0.012);
-      } else if (this.rotateModifier) {
+      } else if (shiftDown) {
         // Shift + drag = arcball: rotazione attorno a un asse perpendicolare
         // al movimento del puntatore, sul piano dello schermo.
         // Drag orizzontale → asse Y schermo → ruota in "yaw" rispetto al
