@@ -142,14 +142,15 @@ button { font-family: inherit; }
 /* =====================================================================
    Shell — griglia generale
    ===================================================================== */
+/* Decisione #50: rimosso hud-bottom — cronaca migrata in sx come sezione
+   collassabile. La griglia ora è solo 2 righe (top + body). */
 .app-shell {
   display: grid;
   grid-template-columns: var(--panel-left-w) 1fr var(--panel-right-w);
-  grid-template-rows: var(--hud-top-h) 1fr var(--hud-bottom-h);
+  grid-template-rows: var(--hud-top-h) 1fr;
   grid-template-areas:
     "top   top   top"
-    "left  view  right"
-    "chron chron right";
+    "left  view  right";
   height: 100vh;
   height: 100dvh;
   padding: var(--gap);
@@ -159,10 +160,8 @@ button { font-family: inherit; }
 .hud-top { grid-area: top; }
 .hud-body { display: contents; }
 .panel--left { grid-area: left; }
-.viewport { grid-area: view; }
+.viewport { grid-area: view; position: relative; }
 .panel--right { grid-area: right; }
-.hud-bottom { display: contents; }
-.chronicle { grid-area: chron; }
 
 /* =====================================================================
    HUD superiore
@@ -3989,3 +3988,305 @@ select.main-menu__input { cursor: pointer; }
 .battle-modal__log { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
 .battle-modal__log th, .battle-modal__log td { padding: 3px 6px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.06); }
 .battle-modal__log th { color: var(--c-text-faint); font-weight: 600; }
+
+/* =====================================================================
+   Decisione #50 — Refactor sidebar architecture
+   Sx = launcher (Roster + Nav + Diplomazia/Ricerca/Mercato + Cronaca)
+   Dx = Plancia Operativa con selector colonia pinnata, indipendente dalla nav
+   Centro = scena + action bar contestuale (Colonizza / Apri dossier / ...)
+   ===================================================================== */
+
+.panel__content--launcher {
+  padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 10px;
+  min-height: 0;
+}
+
+/* --- Sezione generica del launcher --- */
+.lp-section { display: flex; flex-direction: column; min-height: 0; }
+.lp-section__head {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 4px 4px 2px;
+  font-family: var(--font-display);
+  font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--c-text-soft);
+  cursor: pointer; user-select: none;
+  border-bottom: 1px solid var(--c-border-soft);
+  margin-bottom: 4px;
+}
+.lp-section__head:hover { color: var(--c-text); }
+.lp-section__caret { color: var(--c-accent); font-size: 0.7rem; width: 10px; }
+.lp-section__title { flex: 1; }
+.lp-section__count {
+  font-family: var(--font-data);
+  color: var(--c-text-faint);
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 0.72rem;
+}
+.lp-section__body { display: flex; flex-direction: column; gap: 3px; min-height: 0; }
+.lp-section.is-collapsed .lp-section__body { display: none; }
+.lp-section.is-collapsed .lp-section__caret::before { content: '▸'; }
+.lp-section:not(.is-collapsed) .lp-section__caret::before { content: '▾'; }
+
+/* Roster cronaca scrollabile */
+.lp-section--chron { flex: 1 1 auto; min-height: 120px; }
+.lp-section--chron .lp-section__body {
+  max-height: 240px;
+  overflow-y: auto;
+  font-size: 0.78rem; line-height: 1.5;
+  padding: 4px 2px;
+  background: rgba(8,12,30,0.4);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+}
+.lp-section--chron.is-collapsed .lp-section__body { display: none; }
+.lp-section--chron .chronicle__log {
+  display: flex; flex-direction: column; gap: 5px;
+  margin: 0; padding: 0 4px;
+  list-style: none;
+}
+.lp-section--chron .chronicle__entry {
+  padding-left: 12px; position: relative;
+  color: var(--c-text-soft);
+  white-space: normal;
+  word-wrap: break-word;
+}
+.lp-section--chron .chronicle__entry::before {
+  content: "›"; position: absolute; left: 0; color: var(--c-accent);
+}
+.lp-section--chron .chronicle__entry--system { color: var(--c-text-faint); font-style: italic; }
+.lp-section--chron .chronicle__entry--explore { color: var(--c-text); }
+.lp-section--chron .chronicle__entry--explore::before { color: var(--c-accent-warm); }
+.lp-section--chron .chronicle__entry--civ { color: var(--c-text); }
+.lp-section--chron .chronicle__entry--civ::before { color: #9d7bff; }
+
+/* --- Item del roster (colonia/flotta) --- */
+.lp-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  background: rgba(8,12,30,0.45);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.82rem;
+  color: var(--c-text);
+  transition: var(--transition);
+}
+.lp-item:hover {
+  background: rgba(47,230,224,0.08);
+  border-color: var(--c-accent-dim);
+}
+.lp-item.is-focus {
+  border-color: var(--c-accent);
+  box-shadow: inset 2px 0 0 var(--c-accent);
+}
+.lp-item__glyph { color: var(--c-accent); width: 14px; text-align: center; }
+.lp-item__name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-item__name strong { font-weight: 600; }
+.lp-item__sub {
+  font-size: 0.72rem;
+  color: var(--c-text-faint);
+  margin-left: 4px;
+}
+.lp-item__badges { display: flex; gap: 3px; }
+.lp-item__badge {
+  font-size: 0.68rem;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.06);
+  color: var(--c-text-soft);
+}
+.lp-item__badge--ok   { background: rgba(95,200,140,0.15); color: #6fe0b8; }
+.lp-item__badge--warn { background: rgba(240,210,100,0.15); color: #f0d670; }
+.lp-item__badge--crit { background: rgba(240,130,150,0.18); color: #f08296; }
+.lp-item__badge--info { background: rgba(120,180,240,0.15); color: #80c8e6; }
+
+.lp-empty {
+  font-size: 0.78rem;
+  color: var(--c-text-faint);
+  font-style: italic;
+  padding: 4px 6px;
+}
+
+/* --- Nav compatta (Galassia/Gruppo/Sistema/Pianeta) --- */
+.lp-nav { display: flex; flex-direction: column; gap: 3px; }
+.lp-nav .nav-item {
+  padding: 6px 10px;
+  font-size: 0.82rem;
+}
+
+/* --- Launcher buttons (Diplomazia / Ricerca / Mercato) --- */
+.lp-launcher { display: flex; flex-direction: column; gap: 4px; }
+.lp-launcher__btn {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: rgba(8,12,30,0.45);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.82rem;
+  color: var(--c-text);
+  transition: var(--transition);
+}
+.lp-launcher__btn:hover {
+  background: rgba(47,230,224,0.08);
+  border-color: var(--c-accent-dim);
+}
+.lp-launcher__btn[disabled] { opacity: 0.55; cursor: default; }
+.lp-launcher__glyph { color: var(--c-accent-warm); width: 14px; text-align: center; }
+.lp-launcher__sub { margin-left: auto; font-size: 0.72rem; color: var(--c-text-faint); }
+
+/* =====================================================================
+   Plancia Operativa (dx) — selector colonia pinnata
+   ===================================================================== */
+.panel__header--dx {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.dx-selector { display: flex; gap: 6px; align-items: center; }
+.dx-selector__select {
+  flex: 1;
+  background: rgba(8,12,30,0.65);
+  border: 1px solid var(--c-border);
+  color: var(--c-text);
+  padding: 5px 8px;
+  font-size: 0.82rem;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  cursor: pointer;
+}
+.dx-selector__select:focus {
+  outline: none; border-color: var(--c-accent);
+}
+.dx-selector__pin {
+  font-size: 0.7rem;
+  color: var(--c-text-faint);
+  padding: 2px 5px;
+  border: 1px solid var(--c-border-soft);
+  border-radius: 8px;
+  background: rgba(8,12,30,0.5);
+  cursor: pointer;
+}
+.dx-selector__pin.is-pinned {
+  color: var(--c-amber);
+  border-color: rgba(255,174,92,0.4);
+}
+
+/* =====================================================================
+   Action bar contestuale (centro, sotto la scena)
+   ===================================================================== */
+.viewport__actionbar {
+  position: absolute;
+  bottom: 12px; left: 12px; right: 12px;
+  display: flex; gap: 8px; flex-wrap: wrap;
+  padding: 8px 10px;
+  background: rgba(8,12,30,0.78);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  backdrop-filter: blur(6px);
+  z-index: 5;
+  box-shadow: var(--shadow-panel);
+}
+.viewport__actionbar[hidden] { display: none; }
+.actionbar__btn {
+  font-family: inherit;
+  font-size: 0.82rem;
+  padding: 6px 12px;
+  background: rgba(8,12,30,0.7);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.actionbar__btn:hover:not([disabled]) {
+  background: rgba(47,230,224,0.12);
+  border-color: var(--c-accent);
+}
+.actionbar__btn[disabled] {
+  opacity: 0.45; cursor: not-allowed;
+}
+.actionbar__btn--primary {
+  background: rgba(47,230,224,0.18);
+  border-color: var(--c-accent);
+  color: var(--c-text);
+  font-weight: 600;
+}
+.actionbar__btn--primary:hover:not([disabled]) {
+  background: rgba(47,230,224,0.28);
+  box-shadow: 0 0 12px rgba(47,230,224,0.4);
+}
+
+/* =====================================================================
+   Plancia AI (decisione #50, Punto 3) — read-only viola/grigia
+   ===================================================================== */
+.colony-deck--foreign .deck-grid,
+.colony-deck--foreign .deck-resources,
+.colony-deck--foreign .deck-structures,
+.colony-deck--foreign .deck-queue,
+.colony-deck--foreign .deck-population,
+.colony-deck--foreign .deck-footer {
+  filter: grayscale(0.4) hue-rotate(225deg);
+  opacity: 0.85;
+}
+.deck-foreign {
+  position: absolute;
+  inset: 56px 12px 80px 12px;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 14px 16px;
+  background: rgba(20, 14, 36, 0.78);
+  border: 1px solid rgba(157, 123, 255, 0.35);
+  border-radius: var(--radius);
+  backdrop-filter: blur(5px);
+  pointer-events: auto;
+  overflow-y: auto;
+  color: var(--c-text);
+  z-index: 3;
+}
+.deck-foreign__head {
+  display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid rgba(157,123,255,0.25);
+  padding-bottom: 8px;
+}
+.deck-foreign__swatch {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--civ-color, #9d7bff);
+  box-shadow: 0 0 8px var(--civ-color, #9d7bff);
+}
+.deck-foreign__name {
+  font-family: var(--font-display);
+  font-size: 1.0rem;
+  letter-spacing: 0.08em;
+}
+.deck-foreign__chip {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(157,123,255,0.15);
+  color: #c8b7ff;
+}
+.deck-foreign__section {
+  display: flex; flex-direction: column; gap: 6px;
+  padding-top: 6px;
+}
+.deck-foreign__section h4 {
+  margin: 0; font-size: 0.72rem; letter-spacing: 0.14em;
+  text-transform: uppercase; color: #c8b7ff;
+  font-family: var(--font-display);
+}
+.deck-foreign__row {
+  display: flex; gap: 10px; font-size: 0.84rem;
+}
+.deck-foreign__k { color: var(--c-text-faint); min-width: 110px; }
+.deck-foreign__v { color: var(--c-text); }
+.deck-foreign__placeholder {
+  padding: 10px;
+  background: rgba(255,255,255,0.03);
+  border: 1px dashed rgba(157,123,255,0.3);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem; color: var(--c-text-faint); font-style: italic;
+}
