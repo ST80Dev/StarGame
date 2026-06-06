@@ -4001,15 +4001,14 @@ function initTimeControls() {
     else if (act === 'play-step')   { stopPlay(); runAdvance(1); }
     else if (act === 'advance-to-event') { stopPlay(); runAdvance(null); }
   });
-  /* Shortcuts globali (decisione #31): Space play/pause · +/- speed
-     · → singolo Ι · E prossimo evento. Ignorati su input/textarea. */
+  /* Shortcuts globali (decisione #31): Space play/pause · → singolo Ι ·
+     E prossimo evento. Ignorati su input/textarea.
+     +/- rimossi: confliggevano con Ctrl + +/- (zoom browser). */
   document.addEventListener('keydown', function (e) {
     if (!ORION.game) return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
     if (e.target.isContentEditable) return;
     if (e.key === ' ') { e.preventDefault(); togglePlay(); }
-    else if (e.key === '+' || e.key === '=') { e.preventDefault(); changeSpeed(+1); }
-    else if (e.key === '-' || e.key === '_') { e.preventDefault(); changeSpeed(-1); }
     else if (e.key === 'ArrowRight') { e.preventDefault(); stopPlay(); runAdvance(1); }
     else if (e.key === 'e' || e.key === 'E') { e.preventDefault(); stopPlay(); runAdvance(null); }
   });
