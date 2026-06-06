@@ -3305,10 +3305,12 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
   const scar = colony._scar;
   const settling = colony.phase === 'settling';
 
-  // Capacità di carico locale (decisione #37): il consumo pro-capite è una
-  // RICHIESTA sulla produzione di cibo/acqua, non un drenaggio dello stock.
-  // La popolazione cresce finché produzione > consumo e si stabilizza in
-  // plateau quando si pareggiano — senza carestia. Legge del minimo.
+  // Capacità di carico locale (decisione #45, emenda v2): il consumo pop
+  // drena lo stock (vedi time.js processProduction). MA la crescita NON è
+  // gata sul saldo istantaneo: se lo stock è in stato 'ok' (riserve
+  // abbondanti) la pop cresce a pieno regime anche con saldo negativo —
+  // sta consumando il magazzino. Solo se le scorte scendono davvero
+  // (low/crit) la crescita rallenta/si ferma. Coerente col motore.
   const out = ORION.planet.structureOutput(colony, planet, ORION.game);
   const foodNet = (out.rates.food || 0) - (out.upkeep.food || 0);
   const waterNet = (out.rates.water || 0) - (out.upkeep.water || 0);
@@ -3318,13 +3320,27 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
   if (sustainable < 0) sustainable = 0;
   if (sustainable > cap) sustainable = cap;
   const limitRes = sustWater <= sustFood ? 'acqua' : 'cibo';
-  const foodSurplus = foodNet - total * CFG.POP_FOOD_PER_UNIT;
-  const waterSurplus = waterNet - total * CFG.POP_WATER_PER_UNIT;
-  const surplus = Math.min(foodSurplus, waterSurplus);
-  const supplyFactor = surplus <= 0 ? 0 : Math.min(1, surplus / CFG.POP_SUPPLY_REF);
+  /* Saldo reale comprensivo di drenaggio pop (per il display "consuma riserve"). */
+  const realFoodNet = foodNet - total * CFG.POP_FOOD_PER_UNIT;
+  const realWaterNet = waterNet - total * CFG.POP_WATER_PER_UNIT;
+  /* Stato stock: gating della crescita (allineato a time.js processPopulation). */
+  const stockState = scar
+    ? ((scar.food.state === 'crit' || scar.water.state === 'crit') ? 'crit'
+       : (scar.food.state === 'low' || scar.water.state === 'low') ? 'low' : 'ok')
+    : 'ok';
+  let supplyFactor;
+  if (stockState === 'crit') supplyFactor = 0;
+  else if (stockState === 'low') supplyFactor = 0.3;
+  else supplyFactor = 1;
+  /* Stima quanti Ι le scorte coprono al ritmo attuale (solo info). */
+  const drainFood = Math.max(0, -realFoodNet);
+  const drainWater = Math.max(0, -realWaterNet);
+  const bufferFood = drainFood > 0 ? Math.floor((colony.stock.food || 0) / drainFood) : Infinity;
+  const bufferWater = drainWater > 0 ? Math.floor((colony.stock.water || 0) / drainWater) : Infinity;
+  const buffer = Math.min(bufferFood, bufferWater);
 
-  const critFW = scar && (scar.food.state === 'crit' || scar.water.state === 'crit');
-  const canGrow = !settling && total < cap && supplyFactor > 0 && !critFW;
+  const critFW = stockState === 'crit';
+  const canGrow = !settling && total < cap && supplyFactor > 0;
   // Morale: calcolato sempre (anche se la crescita è bloccata) per dare
   // visibilità della leva §9.3. Breakdown dei contributi mostrato sotto.
   const moraleParts = [];
@@ -3373,19 +3389,26 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
     const slope = M > 0 ? Math.log(M / ORION.planet.POP_FLOOR) / (refCap - 1) : 0;
     const unitCost = 1 + CFG.POP_LEVEL_COST * (total - 1);
     const marginal = peopleNow * slope * growthEst / Math.max(1, unitCost);
-    growthStr = '+' + ORION.planet.formatPeople(marginal) + ' / Impulso';
+    let suffix = '';
+    /* Decisione #45 emenda v2: comunica al giocatore COSA sta succedendo.
+       - scorte ok ma saldo negativo: "consuma riserve" (informativo)
+       - scorte basse: "rallentata, scorte basse" (warning)
+       - scorte abbondanti e saldo positivo: nessun suffisso. */
+    if (stockState === 'low') {
+      suffix = ' · rallentata, scorte ' + limitRes + ' basse';
+    } else if (drainFood > 0 || drainWater > 0) {
+      const bufStr = isFinite(buffer) ? buffer + ' Ι al ritmo attuale' : '—';
+      suffix = ' · consuma riserve (' + bufStr + ')';
+    }
+    growthStr = '+' + ORION.planet.formatPeople(marginal) + ' / Impulso' + suffix;
   } else if (settling) {
     growthStr = 'ferma (Insediamento)';
   } else if (total >= cap) {
     growthStr = 'al cap del pianeta';
   } else if (critFW) {
-    growthStr = 'ferma (carenza critica)';
+    growthStr = 'ferma · scorte ' + limitRes + ' esaurite';
   } else {
-    /* Decisione #45: la pop drena davvero lo stock. Se siamo qui (supplyFactor=0)
-       significa surplus locale ≤ 0: la richiesta pop supera la produzione e lo
-       stock cala. Differenziato dal vecchio "al limite" che faceva pensare a
-       un pareggio. */
-    growthStr = 'plateau · richiesta pop > produzione ' + limitRes + ' locale (lo stock cala)';
+    growthStr = 'plateau';
   }
 
   // Target classi suggerito dalle strutture
