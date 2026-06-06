@@ -326,10 +326,11 @@
        ha un glifo dedicato per sostituire la lettera greca nel testo,
        più colore tematico per scansione rapida. */
 
-    /* Iota (Ι) — Impulso atomico (battito). Punto + tick verticale. */
+    /* Iota (Ι) — Impulso atomico (battito). PR-J: linea ECG/onda
+       di impulso → orizzontale, niente più tratti verticali confondibili
+       con la lettera "I" o un divisorio. */
     iota: svg(
-      '<circle cx="12" cy="6" r="2" fill="currentColor" stroke="none"/>' +
-      '<line x1="12" y1="10" x2="12" y2="20"/>'
+      '<polyline points="2,12 7,12 9,7 11,17 13,7 15,17 17,12 22,12"/>'
     ),
 
     /* Kappa (Κ) — Ciclo (50 Ι). Cerchio chiuso = oscillazione breve. */

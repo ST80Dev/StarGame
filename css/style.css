@@ -2800,6 +2800,34 @@ select.main-menu__input { cursor: pointer; }
 .ds-unit--phi   { color: #f0a868; }            /* ambra: fase, periodo medio */
 .ds-unit--omega { color: #b89cff; }            /* viola: eone, scala rara */
 
+/* PR-J: pill compatto per durate/rate in Impulsi (X Ι o X/Y Ι).
+   Numero + separatore (opzionale "/") + glifo iota strettamente
+   uniti, tutti in ciano (UI_GUIDE §1: Ι = atomic, ciano).
+   Risolve l'effetto "I isolata che sembra divisorio". */
+.imp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--c-accent);
+  font-family: var(--font-data, monospace);
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 1px 6px;
+  background: rgba(47, 230, 224, 0.08);
+  border: 1px solid rgba(47, 230, 224, 0.22);
+  border-radius: 4px;
+  font-size: 0.92em;
+}
+.imp-pill__n { color: var(--c-accent); }
+.imp-pill__sep {
+  color: var(--c-accent);
+  opacity: 0.55;
+  margin: 0 2px;
+  font-weight: 400;
+}
+.imp-pill__u { color: var(--c-accent); font-size: 0.95em; line-height: 1; }
+.imp-pill__u .ui-icon-svg { width: 1em; height: 1em; }
+
 /* PR-H: HUD DATA Stellare — i 4 valori posizionali colorati
    coerenti con le sigle .ds-unit. Stesso ordine Ω·Φ·Κ·Ι. */
 .ds-val {
