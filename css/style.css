@@ -5019,3 +5019,20 @@ select.main-menu__input { cursor: pointer; }
 .bank-row { display: flex; align-items: center; gap: 6px; }
 .bank-row__res { flex: 1; font-size: 0.8rem; }
 .bank-row__stock { color: var(--c-text-dim); font-size: 0.72rem; }
+
+/* ----- M12 Fase A2: accordi commerciali AI (decisione #56 §15.3) ----- */
+.civ-trade {
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px dashed rgba(255,255,255,0.1);
+  display: flex; flex-direction: column; gap: 5px;
+}
+.agr-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.agr-item {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 4px 8px; border-radius: 6px;
+  background: rgba(240, 214, 112, 0.05); border: 1px solid rgba(240, 214, 112, 0.16);
+}
+.agr-item__deal { font-size: 0.8rem; }
+.agr-item__dur { font-size: 0.72rem; color: var(--c-text-dim); }
+.agr-item .route-item__status { margin-left: auto; }
+.agr-note { margin: 0; }

@@ -562,6 +562,18 @@
         'Beni e servizi esclusivi regionali (tech, figure, accessi) arriveranno con M13/M14.</p>'
     },
     {
+      id: 'trade-ai', tag: 'Commercio · ⬡', title: 'Accordi commerciali con le AI',
+      body:
+        '<p>Oltre alle rotte interne, puoi stipulare <strong>accordi bilaterali</strong> con le civiltà AI ' +
+        '(vista Civiltà ⬡): "do tot di X per Impulso, ricevo tot di Y" da una tua colonia.</p>' +
+        '<p><strong>Gate diplomatico:</strong> solo in <em>pace o alleanza</em>. In <em>tregua</em> non ne stipuli di nuovi ' +
+        '(i vecchi proseguono); in <em>guerra</em> si <strong>sospendono</strong> e riprendono appena torna la pace.</p>' +
+        '<p><strong>Termini:</strong> il rapporto di scambio è <strong>bloccato alla stipula</strong> e dipende dalla tua ' +
+        '<em>reputazione</em> §14 a soglie (≥70 ricevi di più · &lt;30 di meno) e dall\'allineamento del partner ' +
+        '(Bene equo, Male più caro). Completare scambi versa anche una piccola <em>commissione</em> nella valuta della loro regione.</p>' +
+        '<p><strong>Recovery-friendly:</strong> se la colonia esaurisce la risorsa l\'accordo si interrompe e riparte da solo.</p>'
+    },
+    {
       id: 'mercantili', tag: 'Commercio · ◈', title: 'Mercantili',
       body:
         '<p>Il <strong>mercantile</strong> è una nave dedicata al carico (niente armi): la costruisci all\'<em>Hangar di costruzione</em> ' +

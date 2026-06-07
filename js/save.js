@@ -55,7 +55,7 @@
      DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
      nuovo gioco la preserva e una recovery best-effort prova a dedurla
      da colonie/flotte/spedizioni/cronaca. */
-  const SCHEMA_VERSION = 17;
+  const SCHEMA_VERSION = 18;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -165,7 +165,10 @@
          balances sono persistite — le valute (nome/simbolo/valore) si
          rigenerano dal seed (cache non salvata, come la galassia). */
       treasury: (game.treasury && typeof game.treasury === 'object')
-        ? { balances: game.treasury.balances || {} } : { balances: {} }
+        ? { balances: game.treasury.balances || {} } : { balances: {} },
+      /* Schema 18 (M12 Fase A2, decisione #56 §15.3): accordi commerciali
+         bilaterali con le AI. La relazione/disposizione vive in game.civs. */
+      tradeAgreements: Array.isArray(game.tradeAgreements) ? game.tradeAgreements : []
     };
   }
 
@@ -395,6 +398,12 @@
       if (!payload.treasury || typeof payload.treasury !== 'object') payload.treasury = { balances: {} };
       if (!payload.treasury.balances || typeof payload.treasury.balances !== 'object') payload.treasury.balances = {};
       payload.schema = 17;
+    }
+    /* v17 → v18 (M12 Fase A2, decisione #56 §15.3): accordi commerciali AI.
+       Save vecchi caricano con 0 accordi. */
+    if ((payload.schema || 17) < 18) {
+      if (!Array.isArray(payload.tradeAgreements)) payload.tradeAgreements = [];
+      payload.schema = 18;
     }
     return payload;
   }

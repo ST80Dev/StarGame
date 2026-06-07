@@ -334,7 +334,10 @@ function newGame(seed, opts) {
     /* M12 Fase A2 (decisione #56 §15.4): Tesoreria — portfolio valute
        regionali. Solo le balances sono persistite; le valute si rigenerano
        dal seed. */
-    treasury: { balances: {} }
+    treasury: { balances: {} },
+    /* M12 Fase A2 (decisione #56 §15.3): accordi commerciali bilaterali
+       con le civiltà AI. */
+    tradeAgreements: []
   };
   // startDS = Data Stellare INIZIALE (epoca .00), fissa per la partita.
   ORION.game.startDS = ORION.time.format(startOrbita * 100);
@@ -408,6 +411,8 @@ function newGame(seed, opts) {
     if (saved.treasury && typeof saved.treasury === 'object' && saved.treasury.balances) {
       ORION.game.treasury = { balances: Object.assign({}, saved.treasury.balances) };
     }
+    /* M12 Fase A2 (decisione #56 §15.3): accordi commerciali AI. */
+    if (Array.isArray(saved.tradeAgreements)) ORION.game.tradeAgreements = saved.tradeAgreements.slice();
     /* Schema 12: ripristina nebbia di guerra (sistemi esplorati/rilevati).
        Prima del fix la scoperta veniva persa al load → i sistemi esplorati
        tornavano grigi. Validazione difensiva: deve essere un array della
@@ -3975,7 +3980,8 @@ function renderCivView(stage) {
           '<div class="civ-disp__bar"><span class="civ-disp__mid" aria-hidden="true"></span>' +
             '<span class="civ-disp__fill civ-disp__fill--' + dispCls + '" style="width:' + pct.toFixed(0) + '%"></span></div>' +
         '</div>' +
-        dipActions;
+        dipActions +
+        civTradeHtml(g, c);
     }
     /* KNOWN+ — vocazione + tratto + intel forza. */
     if (rank >= KNOWLEDGE.known) {
@@ -4156,6 +4162,150 @@ function renderCivView(stage) {
       });
     });
   }
+  /* M12 Fase A2 (#56 §15.3): handler accordi commerciali. */
+  stage.querySelectorAll('[data-action="agr-propose"]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const civ = (g.civs || []).filter(function (c) { return c.id === btn.dataset.civ; })[0];
+      if (civ) openAgreementPicker(civ, stage);
+    });
+  });
+  stage.querySelectorAll('[data-action="agr-cancel"]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const r = ORION.agreements.cancel(g, btn.dataset.agr);
+      if (!r.ok) { showToast(r.reason || 'Annullamento rifiutato'); return; }
+      showToast('Accordo chiuso');
+      persistGame(g);
+      renderCivView(stage);
+    });
+  });
+}
+
+/* M12 Fase A2 (#56 §15.3): blocco "Commercio" nella card civiltà. */
+function civTradeHtml(g, civ) {
+  const AG = ORION.agreements;
+  if (!AG) return '';
+  const rel = ORION.diplomacy ? ORION.diplomacy.effectiveRelation(g, civ) : (civ.relation || 'peace');
+  const list = AG.agreementsFor(g, civ.id);
+  let inner = '';
+  if (list.length) {
+    inner += '<ul class="agr-list">' + list.map(function (a) {
+      const stCls = a.status === 'active' ? 'ok' : (a.status === 'suspended' ? 'crit' : 'warn');
+      const stLbl = a.status === 'active' ? 'attivo' : (a.status === 'suspended' ? 'sospeso' : 'interrotto');
+      return '<li class="agr-item">' +
+        '<span class="agr-item__deal">' + resIcon(a.giveRes) + ' ' + a.flow + ' → ' + resIcon(a.getRes) + ' ' + (Math.round(a.flow * a.ratio * 10) / 10) + ' /' + iU() + '</span>' +
+        '<span class="agr-item__dur">' + (a.duration | 0) + ' ' + iU() + '</span>' +
+        '<span class="route-item__status is-' + stCls + '">' + stLbl + '</span>' +
+        '<button class="btn btn--mini btn--danger" data-action="agr-cancel" data-agr="' + a.id + '" type="button" title="Chiudi accordo">×</button>' +
+      '</li>';
+    }).join('') + '</ul>';
+  }
+  const canTrade = (rel === 'peace' || rel === 'alliance');
+  const full = list.length >= AG.MAX_PER_CIV;
+  if (canTrade && !full) {
+    inner += '<button class="btn btn--mini" data-action="agr-propose" data-civ="' + escapeHtml(civ.id) + '" type="button">+ Proponi accordo</button>';
+  } else if (!canTrade) {
+    inner += '<p class="panel__note agr-note">Il commercio richiede <strong>pace o alleanza</strong>.</p>';
+  }
+  return '<div class="civ-trade"><span class="civ-card__k">Commercio</span>' + inner + '</div>';
+}
+
+/* Overlay proposta accordo commerciale (M12 Fase A2, §15.3). */
+function openAgreementPicker(civ, civStage) {
+  const g = ORION.game;
+  const AG = ORION.agreements;
+  if (!AG) return;
+  const mine = myColonyKeys().filter(function (k) { const c = g.colonies[k]; return c && c.colonized; });
+  if (!mine.length) { showToast('Nessuna colonia operativa'); return; }
+  let colonyKey = mine[0];
+  let giveRes = 'met', getRes = 'food';
+  let flow = 10;
+
+  let host = document.querySelector('[data-bind="agr-picker"]');
+  if (!host) {
+    host = document.createElement('div');
+    host.className = 'expedition-pick-overlay';
+    host.setAttribute('data-bind', 'agr-picker');
+    host.setAttribute('role', 'dialog');
+    host.setAttribute('aria-modal', 'true');
+    host.setAttribute('aria-label', 'Proponi accordo commerciale');
+    document.body.appendChild(host);
+  }
+
+  function render() {
+    const colOpts = mine.map(function (k) {
+      return '<option value="' + k + '"' + (k === colonyKey ? ' selected' : '') + '>' + colonyNameFromKey(k) + '</option>';
+    }).join('');
+    function resOpts(sel) {
+      return AG.TRADE_RES.map(function (r) {
+        return '<option value="' + r + '"' + (r === sel ? ' selected' : '') + '>' + tradeResLabel(r) + '</option>';
+      }).join('');
+    }
+    host.innerHTML =
+      '<div class="expedition-pick-overlay__panel" role="document">' +
+        '<header class="expedition-pick-overlay__head">' +
+          '<h2 class="expedition-pick-overlay__title">Accordo commerciale · ' + escapeHtml(civ.name) + '</h2>' +
+          '<button class="btn btn--mini btn--icon-only" data-action="agr-close" type="button" aria-label="Chiudi">' +
+            '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+          '</button>' +
+        '</header>' +
+        '<div class="route-picker__controls">' +
+          '<label class="route-picker__field">Colonia <select data-bind="agr-col">' + colOpts + '</select></label>' +
+          '<label class="route-picker__field">Dai <select data-bind="agr-give">' + resOpts(giveRes) + '</select></label>' +
+          '<label class="route-picker__field">Ricevi <select data-bind="agr-get">' + resOpts(getRes) + '</select></label>' +
+          '<label class="route-picker__field">Flusso/' + iU() + ' <input type="number" min="' + AG.FLOW_MIN + '" max="' + AG.FLOW_MAX + '" step="1" data-bind="agr-flow" value="' + flow + '"></label>' +
+        '</div>' +
+        '<p class="panel__note" data-bind="agr-preview"></p>' +
+        '<div class="expedition-card__actions">' +
+          '<button class="btn btn--mini btn--primary" data-action="agr-do" type="button">Proponi</button>' +
+        '</div>' +
+        '<p class="panel__note">I termini sono <strong>bloccati</strong> alla stipula e dipendono dalla tua reputazione §14 (soglie discrete) e dall\'allineamento del partner. Durata ' + AG.DURATION_DEFAULT + ' ' + iU() + '. In guerra l\'accordo si sospende; riprende a pace.</p>' +
+      '</div>';
+
+    /* Aggiorna solo preview + bottone (no full re-render sul tasto del flusso). */
+    function refreshPreview() {
+      const line = host.querySelector('[data-bind="agr-preview"]');
+      const doBtn2 = host.querySelector('[data-action="agr-do"]');
+      const chk = AG.canPropose(g, civ.id, colonyKey, giveRes, getRes, flow);
+      if (giveRes === getRes) {
+        line.innerHTML = 'Scegli due risorse diverse.';
+        doBtn2.disabled = true;
+        return;
+      }
+      const ratio = AG.termsRatio(g, civ, giveRes, getRes);
+      const getQty = Math.round(flow * ratio * 10) / 10;
+      const verdict = chk.ok ? ('esito <strong>' + chk.likelihood + '</strong>') : ('<strong>' + escapeHtml(chk.reason) + '</strong>');
+      line.innerHTML = 'Dai <strong>' + flow + '</strong> ' + tradeResLabel(giveRes) + '/' + iU() +
+        ' → ricevi <strong>' + getQty + '</strong> ' + tradeResLabel(getRes) + '/' + iU() + ' · ' + verdict;
+      doBtn2.disabled = !chk.ok;
+    }
+    refreshPreview();
+
+    host.querySelector('[data-bind="agr-col"]').addEventListener('change', function () { colonyKey = this.value; refreshPreview(); });
+    host.querySelector('[data-bind="agr-give"]').addEventListener('change', function () { giveRes = this.value; refreshPreview(); });
+    host.querySelector('[data-bind="agr-get"]').addEventListener('change', function () { getRes = this.value; refreshPreview(); });
+    host.querySelector('[data-bind="agr-flow"]').addEventListener('input', function () { flow = Math.max(AG.FLOW_MIN, Math.min(AG.FLOW_MAX, parseInt(this.value, 10) || AG.FLOW_MIN)); refreshPreview(); });
+    host.querySelector('[data-action="agr-close"]').addEventListener('click', closeAgreementPicker);
+    const doBtn = host.querySelector('[data-action="agr-do"]');
+    doBtn.addEventListener('click', function () {
+      if (doBtn.disabled) return;
+      const r = AG.propose(g, civ.id, colonyKey, giveRes, getRes, flow);
+      if (!r.ok) { showToast(r.reason || 'Proposta rifiutata'); return; }
+      pushChronicle(ORION.time.currentDS(g) + ' — Accordo commerciale con <strong>' + escapeHtml(civ.name) + '</strong>: ' +
+        flow + ' ' + tradeResLabel(giveRes) + '/' + iU() + ' ↔ ' + (Math.round(flow * r.agreement.ratio * 10) / 10) + ' ' + tradeResLabel(getRes) + '/' + iU() + '.', 'explore');
+      if (ORION.tutorial) ORION.tutorial.fire('trade-ai');
+      showToast('Accordo stipulato');
+      persistGame(g);
+      closeAgreementPicker();
+      if (civStage) renderCivView(civStage);
+    });
+  }
+  host.addEventListener('click', function (e) { if (e.target === host) closeAgreementPicker(); });
+  render();
+  host.hidden = false;
+}
+function closeAgreementPicker() {
+  const host = document.querySelector('[data-bind="agr-picker"]');
+  if (host) { host.hidden = true; host.innerHTML = ''; }
 }
 
 /* M11 (#51): esegue un'azione diplomatica, registra in cronaca, persiste e
@@ -4984,7 +5134,10 @@ const DEFAULT_AUTOPAUSE = {
      ripartono da sole). L'utente può accenderli dall'overlay. */
   'mercantile-built': false, 'mercantile-promoted': false,
   'trade-route-interrupted': false, 'trade-route-resumed': false,
-  'trade-route-closed': false
+  'trade-route-closed': false,
+  /* M12 Fase A2 (§15.3): accordi commerciali AI. Tutti OFF (atmosferici,
+     recovery-friendly: le sospensioni riprendono da sole). */
+  'agreement-suspended': false, 'agreement-resumed': false, 'agreement-ended': false
 };
 
 ORION.timer = {
@@ -5288,7 +5441,10 @@ function showEventOverlay(events) {
     'mercantile-promoted': 'Mercantile promosso',
     'trade-route-interrupted': 'Rotta commerciale interrotta',
     'trade-route-resumed': 'Rotta commerciale ripresa',
-    'trade-route-closed': 'Rotta commerciale chiusa'
+    'trade-route-closed': 'Rotta commerciale chiusa',
+    'agreement-suspended': 'Accordo commerciale sospeso',
+    'agreement-resumed': 'Accordo commerciale ripreso',
+    'agreement-ended': 'Accordo commerciale concluso'
   };
   /* Raggruppa per kind: una checkbox per categoria, una sola voce di sintesi. */
   const byKind = {};
@@ -5450,6 +5606,11 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — Rotta ' + colonyNameFromKey(ev.src) + ' → ' + colonyNameFromKey(ev.dst) + ' di nuovo <strong>operativa</strong>.', 'system');
   } else if (ev.kind === 'trade-route-closed') {
     pushChronicle(ds + ' — Rotta commerciale chiusa.', 'system');
+  } else if (ev.kind === 'agreement-suspended' || ev.kind === 'agreement-resumed' || ev.kind === 'agreement-ended') {
+    const civ = (ORION.game.civs || []).filter(function (c) { return c.id === ev.civId; })[0];
+    const cname = civ ? civ.name : 'una civiltà';
+    const verb = ev.kind === 'agreement-suspended' ? 'sospeso' : (ev.kind === 'agreement-resumed' ? 'ripreso' : 'concluso');
+    pushChronicle(ds + ' — Accordo commerciale con <strong>' + escapeHtml(cname) + '</strong> ' + verb + '.', 'explore');
   } else if (ev.kind === 'commander-promoted') {
     /* Decisione #43: la promozione di una figura Comandante è il
        "punto di nascita" dei soggetti militari nominati (gancio M14). */
