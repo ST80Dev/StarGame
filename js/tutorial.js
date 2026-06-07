@@ -61,6 +61,20 @@
         '<p class="tut-hint">Tocca di nuovo una voce o lo sfondo per chiudere un pannello.</p>'
     },
     {
+      id: 'empire-dashboard',
+      tag: 'Impero',
+      title: 'Dashboard Impero',
+      body:
+        '<p>A livello <strong>Galassia</strong> il centro mostra la <strong>Dashboard Impero</strong>: una griglia di ' +
+        'card, una per colonia, con il colpo d\'occhio su <strong>popolazione, morale e scorte</strong>. Ogni metrica ' +
+        'ha una <strong>sparkline</strong> che traccia l\'andamento degli ultimi rilevamenti man mano che avanzi nel tempo.</p>' +
+        '<p>I <strong>badge</strong> ripetono lo stato del roster (capitale ★, scarsità !, coda di costruzione, ' +
+        'segnalazioni del governatore). <strong>Click su una card</strong> inquadra il sistema sulla mappa; ' +
+        '<strong>"Apri"</strong> porta la colonia nella Plancia Operativa a destra.</p>' +
+        '<p class="tut-hint">Il bottone <strong>Impero</strong> in alto a sinistra mostra/nasconde la dashboard per ' +
+        'tornare alla mappa. È solo un\'interfaccia: non cambia nulla nel gioco.</p>'
+    },
+    {
       id: 'galaxy',
       tag: 'Galassia',
       title: 'Mappa galattica',

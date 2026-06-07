@@ -598,6 +598,47 @@
     scar.famineI = famish ? scar.famineI + 1 : 0;
   }
 
+  /* Morale di colonia §9.3 — funzione PURA (nessuna scrittura sullo stato),
+     single source of truth riusata sia dal loop crescita popolazione sia
+     dalla Dashboard Impero (M07.3, decisione #62). Replica esatta del
+     calcolo storico inline: base + pianeta base + centri abitativi (cap),
+     malus temporaneo da smantellamento (decadimento lineare), penalità
+     "allerta" su cibo/acqua, crollo da sovraffollamento. Read-only: legge
+     `colony._scar` senza forzarne la creazione (così una chiamata di display
+     non muta lo stato → determinismo #5 preservato). */
+  function colonyMorale(game, colony) {
+    if (!colony) return 1;
+    const scar = colony._scar || { food: { state: 'ok' }, water: { state: 'ok' } };
+    const pop = colony.pop || { total: 0 };
+    const structures = colony.structures || {};
+    let morale = 1.0;
+    if (colony.isHomeBase) morale += CFG.POP_MORALE_HOMEBASE;
+    const habit = (structures['centro-abitativo'] && structures['centro-abitativo'].level) || 0;
+    morale += Math.min(CFG.POP_MORALE_MAX - 1.0, habit * CFG.POP_MORALE_HABITATION);
+    if (morale > CFG.POP_MORALE_MAX) morale = CFG.POP_MORALE_MAX;
+    // malus temporaneo da smantellamento: decadimento lineare (solo se ancora attivo)
+    if (colony.moraleMalus && game && game.timeImpulsi < colony.moraleMalus.expiresAt) {
+      const mm = colony.moraleMalus;
+      const span = mm.expiresAt - mm.startedAt;
+      const left = mm.expiresAt - game.timeImpulsi;
+      morale -= mm.amount * (left / span);
+      if (morale < 0.2) morale = 0.2;
+    }
+    // penalità "allerta" su cibo/acqua
+    if (scar.food.state === 'low' || scar.water.state === 'low') morale *= 0.6;
+    // sovraffollamento (cancello strutturale implicito, decisione #37bis)
+    const hosp = (structures['ospedale'] && structures['ospedale'].level) || 0;
+    const Sm = root.ORION.structures;
+    const housingCap = CFG.POP_HOUSING_BASE
+      + (habit > 0 ? Sm.moduleSum(habit) : 0) * CFG.POP_HOUSING_PER_LEVEL
+      + (hosp > 0 ? Sm.moduleSum(hosp) : 0) * CFG.POP_HOSPITAL_HOUSING;
+    const crowd = housingCap > 0 ? (pop.total || 0) / housingCap : 99;
+    if (crowd > CFG.POP_CROWD_START) {
+      morale *= Math.max(0.05, 1 - (crowd - CFG.POP_CROWD_START) * CFG.POP_CROWD_SLOPE);
+    }
+    return morale;
+  }
+
   /* 5) Crescita popolazione §9.3. Recovery-friendly:
         - cresce solo con cibo+acqua disponibili
         - decremento SOLO dopo carestia prolungata (>= POP_FAMINE_AFTER I)
@@ -636,40 +677,14 @@
                  && colony.stock.food > 0 && colony.stock.water > 0
                  && pop.total < pop.cap;
     if (canGrow) {
-      // morale: base + homebase + centri abitativi, capped
-      let morale = 1.0;
-      if (colony.isHomeBase) morale += CFG.POP_MORALE_HOMEBASE;
-      const habit = (colony.structures['centro-abitativo'] && colony.structures['centro-abitativo'].level) || 0;
-      morale += Math.min(CFG.POP_MORALE_MAX - 1.0, habit * CFG.POP_MORALE_HABITATION);
-      if (morale > CFG.POP_MORALE_MAX) morale = CFG.POP_MORALE_MAX;
-      // malus temporaneo da smantellamento: decadimento lineare su 30 Ι
-      if (colony.moraleMalus) {
-        const mm = colony.moraleMalus;
-        if (game.timeImpulsi >= mm.expiresAt) {
-          colony.moraleMalus = null;
-        } else {
-          const span = mm.expiresAt - mm.startedAt;
-          const left = mm.expiresAt - game.timeImpulsi;
-          morale -= mm.amount * (left / span);
-          if (morale < 0.2) morale = 0.2;
-        }
+      /* Morale (decisione #62): calcolato dall'helper puro `colonyMorale`
+         (single source riusata dalla Dashboard Impero). Prima azzeriamo
+         l'eventuale malus scaduto — side-effect storico del loop, mantenuto
+         qui per preservare il comportamento esatto (l'helper è read-only). */
+      if (colony.moraleMalus && game.timeImpulsi >= colony.moraleMalus.expiresAt) {
+        colony.moraleMalus = null;
       }
-      // penalità "allerta" su cibo/acqua
-      if (scar.food.state === 'low' || scar.water.state === 'low') morale *= 0.6;
-
-      /* Sovraffollamento (cancello strutturale implicito, decisione #37bis):
-         oltre la capacità abitativa la morale crolla → crescita in plateau.
-         Il giocatore lo deduce vedendo la morale calare; si rialza sviluppando
-         l'habitat (centro abitativo, ospedale, future strutture M13). */
-      const hosp = (colony.structures['ospedale'] && colony.structures['ospedale'].level) || 0;
-      const Sm = root.ORION.structures;
-      const housingCap = CFG.POP_HOUSING_BASE
-        + (habit > 0 ? Sm.moduleSum(habit) : 0) * CFG.POP_HOUSING_PER_LEVEL
-        + (hosp > 0 ? Sm.moduleSum(hosp) : 0) * CFG.POP_HOSPITAL_HOUSING;
-      const crowd = housingCap > 0 ? pop.total / housingCap : 99;
-      if (crowd > CFG.POP_CROWD_START) {
-        morale *= Math.max(0.05, 1 - (crowd - CFG.POP_CROWD_START) * CFG.POP_CROWD_SLOPE);
-      }
+      const morale = colonyMorale(game, colony);
 
       let growth = CFG.POP_GROWTH_BASE * morale;
       if (colony.structures['ospedale']) growth *= (1 + CFG.POP_GROWTH_HOSPITAL);
@@ -1899,6 +1914,7 @@
     nextSeqId: nextSeqId,
     nextCrewId: nextCrewId,
     targetClassWeights: targetClassWeights,
+    colonyMorale: colonyMorale,
     ensureScarcity: ensureScarcity,
     /* Decisione #48 — gestione rifiuti (Fase 0) */
     ensureWaste: ensureWaste,

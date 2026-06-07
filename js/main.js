@@ -57,6 +57,19 @@ ORION.chronicleCollapsed = false;
 /* Stato delle sezioni roster nel launcher sx (id → bool collassato). */
 ORION.lpSectionCollapsed = { roster: false, nav: false, launcher: false };
 
+/* =====================================================================
+   Decisione #62 — Dashboard Impero (M07.3)
+   Overlay al centro a livello Galassia/Gruppo: griglia di card-colonia
+   con sparkline (telemetria volatile) + badge + click→focus mappa.
+   `empireDeckOpen` è una preferenza UI (persistita in uiprefs, NON nel
+   save). La telemetria vive in `ORION._empireTel` (volatile, ricostruita
+   giocando — coerente con UI_GUIDE §9: non è stato di gioco).
+   ===================================================================== */
+ORION.empireDeck = null;
+ORION.empireDeckOpen = true;       /* default aperto: il centro a galassia è altrimenti "freddo" */
+ORION._empireTel = {};             /* { colonyKey: { pop:[], morale:[], stock:[], lastI } } */
+const EMPIRE_TEL_MAX = 50;         /* finestra di rilevamenti per le sparkline */
+
 /* Persistenza preferenze UI (NON nel save: vivono solo in localStorage,
    sono scelte di interfaccia indipendenti dalla partita). */
 function loadUiPrefs() {
@@ -68,6 +81,7 @@ function loadUiPrefs() {
     if (d.lpSectionCollapsed && typeof d.lpSectionCollapsed === 'object') {
       Object.assign(ORION.lpSectionCollapsed, d.lpSectionCollapsed);
     }
+    if (d.empireDeckOpen != null) ORION.empireDeckOpen = !!d.empireDeckOpen;
     /* La pin si recupera per partita (chiave seed-aware), perché un
        seed diverso → colonie diverse → il pin vecchio non è valido. */
   } catch (_) { /* niente */ }
@@ -76,7 +90,8 @@ function saveUiPrefs() {
   try {
     localStorage.setItem('orion.uiprefs', JSON.stringify({
       chronicleCollapsed: ORION.chronicleCollapsed,
-      lpSectionCollapsed: ORION.lpSectionCollapsed
+      lpSectionCollapsed: ORION.lpSectionCollapsed,
+      empireDeckOpen: ORION.empireDeckOpen
     }));
   } catch (_) { /* niente */ }
 }
@@ -557,6 +572,9 @@ function updateGlobalResourceHud() {
   if (ORION.game && document.querySelector('[data-bind="dx-content"]')) {
     renderDxPanel();
   }
+  /* M07.3 (decisione #62): rinfresca la Dashboard Impero se visibile
+     (no-op se la scena non è la mappa o il deck è chiuso). */
+  updateEmpireDeck();
 }
 
 /* M10 Fase A (decisione #47): ICG §5.4 + Reputazione §14 come ANTEPRIMA.
@@ -719,6 +737,9 @@ function renderGalaxyView(stage) {
       '<div class="system-holder" data-system-holder hidden></div>' +
       '<div class="planet-holder" data-planet-holder hidden></div>' +
       '<div class="colony-deck" data-colony-deck hidden aria-label="Plancia di colonia"></div>' +
+      /* M07.3 (decisione #62): Dashboard Impero — overlay al centro a livello galassia. */
+      '<div class="empire-deck" data-empire-deck hidden aria-label="Dashboard Impero"></div>' +
+      '<button class="empire-deck-toggle" data-empire-toggle type="button" hidden aria-label="Mostra/nascondi Dashboard Impero"></button>' +
       '<nav class="galaxy-breadcrumb" data-breadcrumb aria-label="Percorso di navigazione"></nav>' +
       '<div class="galaxy-hint">Trascina · zoom rotella/pinch · <kbd>Shift</kbd>+trascina = ruota libera · <kbd>Alt</kbd>+trascina = roll · pinch a 2 dita ruota su touch</div>' +
     '</div>';
@@ -748,6 +769,11 @@ function renderGalaxyView(stage) {
       showToast('Seed: ' + seed);
     }
   });
+
+  /* M07.3 (decisione #62): Dashboard Impero — toggle + prima render. */
+  const eToggle = stage.querySelector('[data-empire-toggle]');
+  if (eToggle) eToggle.addEventListener('click', toggleEmpireDeck);
+  updateEmpireDeck();
 }
 
 /* ---------------------------------------------------------------------
@@ -768,6 +794,7 @@ function onMapContext(ctx) {
      Aggiorniamo solo l'action bar centro qui (e renderLeftPanel per refresh). */
   renderContextActionBar(ctx);
   renderLeftPanel();
+  updateEmpireDeck();   /* #62: galassia↔gruppo restano scena mappa */
 }
 
 function renderBreadcrumb(ctx) {
@@ -1069,6 +1096,7 @@ function openSystem(id) {
   setNavActive('system');
   setGalaxyHint('system');
   updateSystemUI(system, null);
+  updateEmpireDeck();   /* #62: scena = sistema → nascondi Dashboard Impero */
 
   /* M06.6: tutorial — prima apertura di un sistema. */
   if (ORION.tutorial) ORION.tutorial.fire('system');
@@ -1088,6 +1116,7 @@ function closeSystem() {
   }
   setNavActive('galaxy');
   setGalaxyHint('galaxy');
+  updateEmpireDeck();   /* #62: tornati alla mappa → ri-mostra Dashboard se aperta */
 }
 
 function updateSystemUI(system, bodyKey) {
@@ -1309,6 +1338,7 @@ function openPlanet(sysId, bodyKey) {
   setNavActive('planet');
   setGalaxyHint('planet');
   updatePlanetUI();
+  updateEmpireDeck();   /* #62: scena = pianeta → nascondi Dashboard Impero */
 
   pushChronicle(ORION.time.currentDS(g) + ' — Apertura scheda planetaria di <strong>' + body.name + '</strong>' + bodyTagHtml(sysId) + '.', 'planet');
 
@@ -5859,6 +5889,9 @@ function runAdvance(impulsi) {
   const skipPulse = ORION.timer && ORION.timer.playing &&
                     secPerImpulse(ORION.timer.level) >= PLAY_ANIM_THRESHOLD;
   if (!skipPulse) pulseHud();
+  /* M07.3 (decisione #62): un rilevamento di telemetria per batch, prima
+     del refresh dell'HUD (così la Dashboard mostra l'ultimo punto). */
+  sampleEmpireTelemetry();
   updateGlobalResourceHud();
   if (ORION.openPlanetKey) updatePlanetUI();
   updateTimeControlsHint();
@@ -6317,6 +6350,230 @@ function setNavActive(view) {
   document.querySelectorAll('.nav-item').forEach((i) => {
     i.classList.toggle('is-active', i.dataset.view === view);
   });
+}
+
+/* =====================================================================
+   Decisione #62 — Dashboard Impero (M07.3)
+   Griglia di card-colonia al centro a livello Galassia/Gruppo. È UI pura:
+   nessun motore, nessun bump di schema, telemetria volatile per le
+   sparkline. Click su card → focus mappa (onFocus); "Apri" → scheda
+   colonia (onOpen). Toggle per mostrare/nascondere la mappa sotto.
+   ===================================================================== */
+
+/* Telemetria: campiona pop/morale/scorte di ogni colonia operativa. Chiamata
+   dopo un avanzamento del tempo (runAdvance) → ~1 rilevamento per Ι a ritmo
+   normale, più rado a velocità alte o su "Prossimo evento". Volatile. */
+function sampleEmpireTelemetry() {
+  const g = ORION.game;
+  if (!g || !g.colonies) return;
+  if (!ORION._empireTel) ORION._empireTel = {};
+  const tel = ORION._empireTel;
+  const live = {};
+  function push(arr, v) { arr.push(v); if (arr.length > EMPIRE_TEL_MAX) arr.shift(); }
+  myColonyKeys().forEach(function (k) {
+    const c = g.colonies[k];
+    if (!c || !c.colonized) return;   /* solo colonie operative hanno telemetria */
+    const planet = planetForColony(c);
+    if (!planet) return;
+    live[k] = true;
+    let t = tel[k];
+    if (!t) t = tel[k] = { pop: [], morale: [], stock: [], lastI: -1 };
+    if (t.lastI === g.timeImpulsi) return;  /* dedupe: un campione per Ι */
+    t.lastI = g.timeImpulsi;
+    const people = ORION.planet.peopleAt(ORION.planet.popUnits(c), planet);
+    const morale = ORION.time.colonyMorale ? ORION.time.colonyMorale(g, c) : 1;
+    const stock = (c.stock.met || 0) + (c.stock.en || 0) + (c.stock.food || 0) + (c.stock.water || 0);
+    push(t.pop, people); push(t.morale, morale); push(t.stock, stock);
+  });
+  /* Pulisci la telemetria delle colonie non più mie/operative (perse, evacuate). */
+  Object.keys(tel).forEach(function (k) { if (!live[k]) delete tel[k]; });
+}
+
+/* Stato peggiore di scarsità su una colonia (riusa la logica del roster sx). */
+function colonyWorstScarcity(c) {
+  let worst = 'ok';
+  if (!c || !c._scar) return worst;
+  ['met', 'en', 'food', 'water'].forEach(function (rk) {
+    const s = c._scar[rk] && c._scar[rk].state;
+    if (s === 'crit') worst = 'crit';
+    else if (s === 'low' && worst !== 'crit') worst = 'low';
+  });
+  return worst;
+}
+
+/* Formatta un numero di scorte in forma compatta (k). */
+function fmtStock(v) {
+  if (v == null || !isFinite(v)) return '—';
+  const av = Math.abs(v);
+  if (av >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+  if (av >= 1000) return (v / 1000).toFixed(1) + 'k';
+  return Math.round(v).toString();
+}
+
+/* Costruisce i dati delle card per la Dashboard Impero (controller → view). */
+function buildEmpireState() {
+  const g = ORION.game;
+  const cards = [];
+  if (!g) return { cards: cards, summary: {} };
+  const dxKey = resolveDxColonyKey();
+  const CFG = ORION.time && ORION.time.CFG;
+  let alertCount = 0, totalPeople = 0;
+
+  myColonyKeys().forEach(function (k) {
+    const c = g.colonies[k];
+    const planet = planetForColony(c);
+    if (!planet) return;
+    const sysId = c.systemId;
+    const scarState = colonyWorstScarcity(c);
+    if (scarState !== 'ok') alertCount++;
+
+    /* Badge (coerenti col roster sx). */
+    const badges = [];
+    const isCapital = (ORION.capital && ORION.capital.isCapital && ORION.capital.isCapital(g, k));
+    if (isCapital) badges.push('<span class="lp-item__badge lp-item__badge--ok" title="Capitale">★</span>');
+    else if (c.isHomeBase) badges.push('<span class="lp-item__badge lp-item__badge--ok" title="Pianeta base">★</span>');
+    if (scarState === 'crit') badges.push('<span class="lp-item__badge lp-item__badge--crit" title="Scarsità critica">!</span>');
+    else if (scarState === 'low') badges.push('<span class="lp-item__badge lp-item__badge--warn" title="Scarsità">!</span>');
+    if (c.queue && c.queue.length) badges.push('<span class="lp-item__badge lp-item__badge--info" title="Coda di costruzione">' + uiIcon('build') + '</span>');
+    if (c.governor && Array.isArray(c.governor.recent) && c.governor.recent.length) {
+      badges.push('<span class="lp-item__badge lp-item__badge--warn" title="Segnalazione del governatore">' + uiIcon('settings') + '</span>');
+    }
+
+    /* Fase (insediamento / in arrivo). */
+    let phaseLabel = '';
+    if (c.phase === 'settling' && c.settlingStart != null) {
+      const dur = c.settlingDuration || 60;
+      const pct = Math.min(100, Math.round(((g.timeImpulsi - c.settlingStart) / dur) * 100));
+      phaseLabel = '<span class="ecard__phase-chip">⏳ Insediamento · ' + pct + '%</span>';
+    } else if (c.colonizing) {
+      phaseLabel = '<span class="ecard__phase-chip">◌ Coloniale in viaggio</span>';
+    }
+
+    /* Popolazione (persone reali + maturità). */
+    const peopleNow = ORION.planet.peopleAt(ORION.planet.popUnits(c), planet);
+    totalPeople += peopleNow;
+    const dev = Math.round(ORION.planet.popMaturity(c, planet) * 100);
+
+    /* Morale (helper puro). */
+    const morale = ORION.time.colonyMorale ? ORION.time.colonyMorale(g, c) : 1;
+    const moraleState = morale >= 0.9 ? 'ok' : morale >= 0.65 ? 'low' : 'crit';
+
+    /* Scorte totali + saldo netto/Ι (incluso drenaggio pop come nel deck). */
+    const out = ORION.planet.structureOutput(c, planet, g);
+    const popTotal = (c.pop && c.pop.total) || 0;
+    const opPhase = c.phase !== 'settling';
+    const popFood = (opPhase && CFG && popTotal > 0) ? popTotal * CFG.POP_FOOD_PER_UNIT : 0;
+    const popWater = (opPhase && CFG && popTotal > 0) ? popTotal * CFG.POP_WATER_PER_UNIT : 0;
+    let stockTotal = 0, stockNet = 0;
+    ['met', 'en', 'food', 'water'].forEach(function (rk) {
+      stockTotal += (c.stock[rk] || 0);
+      const drain = rk === 'food' ? popFood : rk === 'water' ? popWater : 0;
+      stockNet += (out.rates[rk] || 0) - (out.upkeep[rk] || 0) - drain;
+    });
+
+    const tel = (ORION._empireTel && ORION._empireTel[k]) || { pop: [], morale: [], stock: [] };
+
+    cards.push({
+      key: k, sysId: sysId, name: planet.name, tag: bodyTagHtml(sysId),
+      badges: badges.join(''), phaseLabel: phaseLabel,
+      people: peopleNow, peopleStr: ORION.planet.formatPeople(peopleNow), dev: dev,
+      morale: morale, moraleState: moraleState,
+      stockTotal: stockTotal, stockTotalStr: fmtStock(stockTotal), stockNet: stockNet,
+      scarState: scarState,
+      isCapital: !!isCapital,
+      focused: (k === dxKey),
+      spark: { pop: tel.pop, morale: tel.morale, stock: tel.stock }
+    });
+  });
+
+  /* Ordine: capitale prima, poi per popolazione decrescente. */
+  cards.sort(function (a, b) {
+    if (a.isCapital !== b.isCapital) return a.isCapital ? -1 : 1;
+    return b.people - a.people;
+  });
+
+  const totalsHtml =
+    '<span class="empire-deck__total">' + uiIcon('home', 'cyan') + ' ' +
+      escapeHtml(ORION.planet.formatPeople(totalPeople)) + ' ab.</span>' +
+    (alertCount ? '<span class="empire-deck__total is-crit">' + uiIcon('warning') + ' ' + alertCount + ' in allerta</span>' : '');
+
+  return {
+    cards: cards,
+    summary: { colonies: cards.length, fleets: (g.fleets || []).length, totalsHtml: totalsHtml }
+  };
+}
+
+/* Scena "mappa" = livello Galassia/Gruppo senza sistema/pianeta aperto. */
+function empireSceneIsMap() {
+  return !!(ORION.map && document.querySelector('.galaxy-root') &&
+            ORION.openSystemId < 0 && !ORION.openPlanetKey);
+}
+
+/* Mostra/aggiorna/nasconde la Dashboard Impero in base alla scena + alla
+   preferenza `empireDeckOpen`. Chiamata da tutti i punti di lifecycle che
+   cambiano la scena al centro. */
+function updateEmpireDeck() {
+  const root = document.querySelector('.galaxy-root');
+  if (!root) return;
+  const deckHolder = root.querySelector('[data-empire-deck]');
+  const toggle = root.querySelector('[data-empire-toggle]');
+  const onMap = empireSceneIsMap();
+
+  /* Toggle: visibile solo a livello mappa. */
+  if (toggle) {
+    toggle.hidden = !onMap;
+    if (onMap) {
+      const n = myColonyKeys().length;
+      toggle.classList.toggle('is-active', !!ORION.empireDeckOpen);
+      toggle.innerHTML = uiIcon('grid') +
+        '<span class="empire-deck-toggle__lbl">Impero</span>' +
+        '<span class="empire-deck-toggle__n">' + n + '</span>';
+      toggle.title = ORION.empireDeckOpen ? 'Nascondi Dashboard Impero (mostra la mappa)' : 'Mostra Dashboard Impero';
+    }
+  }
+
+  const shouldShow = onMap && !!ORION.empireDeckOpen;
+  if (!shouldShow) {
+    if (ORION.empireDeck) { ORION.empireDeck.destroy(); ORION.empireDeck = null; }
+    if (deckHolder) deckHolder.hidden = true;
+    return;
+  }
+  if (!deckHolder || !ORION.EmpireDeck) return;
+  const state = buildEmpireState();
+  const opts = {
+    onClose: function () { ORION.empireDeckOpen = false; saveUiPrefs(); updateEmpireDeck(); },
+    onFocus: function (sysId, key) {
+      /* Inquadrare ha senso solo se la mappa è visibile: chiudiamo la
+         dashboard (resta riapribile dal toggle "Impero"). */
+      if (sysId < 0 || !ORION.map) return;
+      ORION.empireDeckOpen = false; saveUiPrefs(); updateEmpireDeck();
+      ORION.map.focusSystem(sysId); ORION.map.selectSystem(sysId);
+      const c = key && ORION.game.colonies[key];
+      const planet = c && planetForColony(c);
+      if (planet) showToast('Inquadrato ' + planet.name);
+    },
+    onOpen: function (key) {
+      if (!key) return;
+      const parts = key.split(':');
+      const sid = Number(parts[0]); const bk = parts[1];
+      navigateView('planet');
+      if (ORION.openSystemId !== sid) openSystem(sid);
+      openPlanet(sid, bk);
+    }
+  };
+  if (!ORION.empireDeck) {
+    ORION.empireDeck = new ORION.EmpireDeck().mount(deckHolder, state, opts);
+  } else {
+    ORION.empireDeck.refresh(state);
+  }
+}
+
+function toggleEmpireDeck() {
+  ORION.empireDeckOpen = !ORION.empireDeckOpen;
+  saveUiPrefs();
+  updateEmpireDeck();
+  /* M06.6/#29: tutorial — concetto Dashboard Impero alla prima apertura. */
+  if (ORION.empireDeckOpen && ORION.tutorial) ORION.tutorial.fire('empire-dashboard');
 }
 
 /* =====================================================================
@@ -7523,6 +7780,10 @@ function enterGame() {
   /* Decisione #50: ripristina il pin della dx per questo seed (se presente). */
   loadDxPin(ORION.game);
   hideMainMenu();
+  /* M07.3 (decisione #62): primo rilevamento telemetria → la Dashboard
+     Impero ha già un punto al primo render (sparkline non vuote). */
+  ORION._empireTel = {};
+  sampleEmpireTelemetry();
   const stage = document.querySelector('[data-view-stage]');
   if (stage) renderGalaxyView(stage);
   setNavActive('galaxy');

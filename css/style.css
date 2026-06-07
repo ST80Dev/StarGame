@@ -1710,6 +1710,8 @@ button { font-family: inherit; }
   .viewport__actionbar { bottom: calc(var(--mnav-h, 60px) + 8px); }
   /* il deck colonia in-mappa (overlay sopra la sfera) non finisce sotto la nav */
   .colony-deck { padding-bottom: calc(var(--mnav-h, 60px) + 16px); }
+  /* idem per la Dashboard Impero (#62) a livello galassia */
+  .empire-deck { padding-bottom: calc(var(--mnav-h, 60px) + 16px); }
 
   /* Le due plance → sheet a tutto schermo (overlay), nascoste di default */
   .panel--left,
@@ -4005,6 +4007,285 @@ select.main-menu__input { cursor: pointer; }
     flex-wrap: wrap;
   }
   .deck-res { flex: 1 1 110px; min-width: 110px; }
+}
+
+/* =====================================================================
+   M07.3 (decisione #62) — Dashboard Impero
+   Overlay al centro a livello Galassia/Gruppo: griglia di card-colonia
+   con sparkline + badge. Tinta colonie = ambra (UI_GUIDE §1). z=3 come
+   la Plancia di Colonia (sotto la breadcrumb z=4).
+   ===================================================================== */
+.empire-deck {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  padding: 52px 12px 16px;       /* top per non incappare nella breadcrumb */
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, rgba(6, 9, 22, 0.9), rgba(6, 9, 22, 0.82));
+  backdrop-filter: blur(3px);
+}
+.empire-deck[hidden] { display: none; }
+
+.empire-deck__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px 8px;
+  border-bottom: 1px solid var(--c-border-soft);
+  flex: 0 0 auto;
+}
+.empire-deck__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--c-text);
+}
+.empire-deck__title-icon { font-size: 1.05rem; }
+.empire-deck__count {
+  font-family: var(--font-data);
+  font-size: 0.72rem;
+  color: var(--c-text-soft);
+  padding: 1px 8px;
+  border: 1px solid var(--c-border-soft);
+  border-radius: 999px;
+}
+.empire-deck__totals {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+.empire-deck__total {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-data);
+  font-size: 0.76rem;
+  color: var(--c-text-soft);
+}
+.empire-deck__total .ui-icon { font-size: 0.95rem; }
+.empire-deck__total.is-crit { color: var(--c-bad); }
+.empire-deck__close {
+  background: transparent;
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+  color: var(--c-text-soft);
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.empire-deck__close:hover { color: var(--c-accent); border-color: var(--c-accent); }
+
+.empire-deck__scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 10px 4px 4px;
+}
+
+.empire-deck__empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--c-text-soft);
+  text-align: center;
+}
+.empire-deck__empty .ui-icon { font-size: 2rem; opacity: 0.6; }
+.empire-deck__empty p { margin: 0; }
+.empire-deck__empty-sub { font-size: 0.78rem; color: var(--c-text-faint); }
+
+.empire-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+  max-width: 1500px;
+  margin: 0 auto;
+}
+
+/* --- Card colonia --- */
+.ecard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 11px 10px;
+  background: var(--c-panel);
+  border: 1px solid var(--c-border-soft);
+  border-left: 3px solid var(--c-accent-warm);  /* colonia = ambra */
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+  transition: var(--transition);
+}
+.ecard:hover { border-color: var(--c-border-strong); box-shadow: 0 0 0 1px var(--c-border-soft); }
+.ecard:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 1px; }
+.ecard.is-focus { box-shadow: inset 3px 0 0 var(--c-accent); border-left-color: var(--c-accent); }
+.ecard.is-low { border-left-color: var(--c-warn); }
+.ecard.is-crit { border-left-color: var(--c-bad); }
+
+.ecard__head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.ecard__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.88rem;
+  color: var(--c-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ecard__name strong { font-weight: 600; }
+.ecard__badges { display: inline-flex; gap: 3px; flex: 0 0 auto; }
+
+.ecard__phase {
+  margin-top: -2px;
+}
+.ecard__phase-chip {
+  display: inline-block;
+  font-family: var(--font-data);
+  font-size: 0.66rem;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(138, 108, 255, 0.16);
+  border: 1px solid rgba(138, 108, 255, 0.4);
+  color: var(--c-violet);
+}
+
+.ecard__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.ecard__metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ecard__metric-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+}
+.ecard__metric-label {
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-text-faint);
+}
+.ecard__metric-val {
+  font-family: var(--font-data);
+  font-size: 0.78rem;
+  color: var(--c-text);
+  white-space: nowrap;
+}
+.ecard__metric-val.is-ok { color: var(--c-good); }
+.ecard__metric-val.is-low { color: var(--c-warn); }
+.ecard__metric-val.is-crit { color: var(--c-bad); }
+.ecard__metric-sub {
+  font-family: var(--font-data);
+  font-size: 0.62rem;
+  color: var(--c-text-faint);
+}
+.ecard__metric-sub.is-pos { color: var(--c-good); }
+.ecard__metric-sub.is-neg { color: var(--c-bad); }
+
+/* --- Sparkline --- */
+.espark {
+  width: 100%;
+  height: 22px;
+  display: block;
+}
+.espark__line {
+  fill: none;
+  stroke: var(--c-text-soft);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.espark__area { fill: rgba(179, 190, 224, 0.1); stroke: none; }
+.espark__flat {
+  stroke: var(--c-border-soft);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 3 3;
+}
+.espark--pop .espark__line { stroke: var(--c-accent); }
+.espark--pop .espark__area { fill: rgba(47, 230, 224, 0.12); }
+.espark--morale .espark__line { stroke: var(--c-good); }
+.espark--morale .espark__area { fill: rgba(79, 224, 138, 0.12); }
+.espark--stock .espark__line { stroke: var(--c-accent-warm); }
+.espark--stock .espark__area { fill: rgba(255, 157, 60, 0.12); }
+
+.ecard__open {
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 1px;
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+  color: var(--c-text-soft);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.ecard__open:hover { color: var(--c-accent); border-color: var(--c-accent); }
+.ecard__open .ui-icon { font-size: 0.85rem; }
+
+/* --- Toggle flottante (mostra/nascondi dashboard) --- */
+.empire-deck-toggle {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 6;             /* sopra deck (3) e breadcrumb (4) */
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  background: rgba(8, 11, 26, 0.82);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 999px;
+  backdrop-filter: blur(5px);
+  color: var(--c-text-soft);
+  font-family: var(--font-display);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.empire-deck-toggle[hidden] { display: none; }
+.empire-deck-toggle:hover { color: var(--c-accent-warm); border-color: var(--c-accent-warm); }
+.empire-deck-toggle.is-active { color: var(--c-accent-warm); border-color: var(--c-accent-warm); }
+.empire-deck-toggle .ui-icon { font-size: 0.95rem; }
+.empire-deck-toggle__n {
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 157, 60, 0.18);
+  color: var(--c-accent-warm);
+}
+
+@media (max-width: 900px) {
+  .empire-deck { padding: 50px 8px 12px; }
+  .empire-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+  .empire-deck__totals { display: none; }
 }
 
 /* =====================================================================
