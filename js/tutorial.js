@@ -549,6 +549,19 @@
         '<p><strong>In arrivo (Fase A2):</strong> Tesoreria + valute regionali, accordi commerciali con le AI.</p>'
     },
     {
+      id: 'treasury', tag: 'Commercio · ⇄', title: 'Tesoreria e valute regionali',
+      body:
+        '<p>Ogni <strong>regione</strong> (gruppo stellare) ha la sua <strong>valuta</strong>, col nome dal seed ' +
+        '(es. <em>Stilla di Vega</em>, <em>Lama Keth</em>). La <strong>Tesoreria</strong> (vista Mercato) è il portfolio ' +
+        'di tutte le valute che possiedi.</p>' +
+        '<p><strong>Come la ottieni:</strong> vendendo risorse al <em>Banco regionale</em> (tab Rotte di una colonia) ottieni ' +
+        'la valuta della sua regione; col <strong>cambio</strong> (sempre disponibile, digitale) la converti in un\'altra valuta.</p>' +
+        '<p><strong>Spread:</strong> ogni conversione ha una frizione che <strong>cala con reputazione alta</strong> (§14) e dove ' +
+        'è presente il <strong>Sindacato Mekhari</strong> (arbitraggio). Reputazione bassa → paghi di più.</p>' +
+        '<p><strong>A cosa serve:</strong> oggi soprattutto come cuscinetto (vendi l\'eccedenza, compra dove sei carente). ' +
+        'Beni e servizi esclusivi regionali (tech, figure, accessi) arriveranno con M13/M14.</p>'
+    },
+    {
       id: 'mercantili', tag: 'Commercio · ◈', title: 'Mercantili',
       body:
         '<p>Il <strong>mercantile</strong> è una nave dedicata al carico (niente armi): la costruisci all\'<em>Hangar di costruzione</em> ' +
