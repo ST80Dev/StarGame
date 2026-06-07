@@ -1735,7 +1735,9 @@ button { font-family: inherit; }
     padding-bottom: calc(var(--mnav-h, 60px) + 20px);
   }
 
-  /* HUD top compatto: indici+tempo+azioni su una riga, risorse scrollabili */
+  /* HUD top compatto: indici+tempo+azioni su una riga, risorse scrollabili.
+     position+z-index: resta SOPRA le sheet a tutto schermo (che partono a
+     --hud-h) → risorse/controlli tempo sempre visibili e cliccabili. */
   .hud-top {
     flex-wrap: wrap;
     height: auto;
@@ -1743,6 +1745,8 @@ button { font-family: inherit; }
     padding: 5px 8px;
     gap: 6px;
     border-radius: 0;
+    position: relative;
+    z-index: 160;
   }
   .brand-title { display: none; }                 /* resta solo il segno ◈ */
   .hud-top__indices { gap: 4px; }
@@ -1798,7 +1802,8 @@ button { font-family: inherit; }
   .panel--left,
   .panel--right {
     position: fixed;
-    left: 0; right: 0; top: 0;
+    left: 0; right: 0;
+    top: var(--hud-h, 96px);   /* sotto l'HUD: risorse/tempo restano visibili */
     bottom: var(--mnav-h, 60px);
     z-index: 140;
     border: none;
@@ -1829,6 +1834,7 @@ button { font-family: inherit; }
     display: block;
     position: fixed;
     inset: 0;
+    top: var(--hud-h, 96px);     /* l'HUD resta sopra lo scrim */
     bottom: var(--mnav-h, 60px);
     z-index: 135;
     background: rgba(2, 5, 16, 0.5);
