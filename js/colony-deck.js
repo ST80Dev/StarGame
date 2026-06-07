@@ -157,6 +157,7 @@
           this._renderFooter() +
         '</div>';
       this.host.innerHTML = html;
+      if (typeof ORION.ensurePopAnim === 'function') ORION.ensurePopAnim();
     }
 
     /* Top-bar: nome + tag regione + fase + morale. */
@@ -415,9 +416,15 @@
       if (!pop) return '';
       const total = pop.total || 0;
       const cap = pop.cap || 0;
-      const peopleNow = ORION.planet.peopleAt(total + (pop.accum || 0), planet);
+      const peopleNow = ORION.planet.peopleAt(ORION.planet.popUnits(colony), planet);
       const peopleCap = ORION.planet.peopleAt(cap, planet);
-      const pctCap = cap > 0 ? Math.min(100, Math.round(total * 100 / cap)) : 0;
+      /* Barra = maturità demografica (posizione sulla curva-S), NON rapporto
+         lineare di unità: così riempimento e numero di persone restano
+         coerenti (niente più "29% di barra ma 285 persone su 7 Mld"). */
+      const dev = Math.round(ORION.planet.popMaturity(colony, planet) * 100);
+      const numSpan = (typeof ORION.popAnimSpan === 'function')
+        ? ORION.popAnimSpan('pop:' + colony.systemId + ':' + colony.bodyKey, peopleNow)
+        : escapeHtml(ORION.planet.formatPeople(peopleNow));
 
       let chips = '<div class="deck-pop__chips">';
       CLASS_ORDER.forEach(function (k) {
@@ -433,17 +440,17 @@
       /* Layout verticale per colonna stretta (M07.2 iter 3):
          label · numero+cap · barra full-width · % unit-based. */
       const totalHtml =
-        '<div class="deck-pop__total" title="Popolazione totale / capacità · ' + pctCap + '% (unità)">' +
+        '<div class="deck-pop__total" title="Abitanti · sviluppo ' + dev + '% verso il tetto del pianeta">' +
           '<div class="deck-pop__total-row">' +
             '<span class="deck-pop__total-label">Popolazione</span>' +
-            '<span class="deck-pop__total-pct">' + pctCap + '%</span>' +
+            '<span class="deck-pop__total-pct">' + dev + '%</span>' +
           '</div>' +
           '<span class="deck-pop__total-num">' +
-            escapeHtml(ORION.planet.formatPeople(peopleNow)) +
+            numSpan +
             '<span class="sep">/</span>' +
             '<span class="cap">' + escapeHtml(ORION.planet.formatPeople(peopleCap)) + '</span>' +
           '</span>' +
-          '<div class="deck-pop__bar"><div class="deck-pop__bar-fill" style="width:' + pctCap + '%"></div></div>' +
+          '<div class="deck-pop__bar"><div class="deck-pop__bar-fill" style="width:' + dev + '%"></div></div>' +
         '</div>';
 
       return '<section class="deck-population" aria-label="Popolazione">' +

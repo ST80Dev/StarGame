@@ -3726,6 +3726,11 @@ select.main-menu__input { cursor: pointer; }
 }
 .deck-pop__total-num .sep { color: var(--c-text-faint); margin: 0 3px; }
 .deck-pop__total-num .cap { color: var(--c-text-soft); font-weight: 500; font-size: 0.8rem; }
+
+/* Contatore popolazione animato (fix scalini): larghezza fissa per non
+   sfarfallare mentre il numero scorre. Il tetto è secondario (asintoto). */
+.pop-anim { font-variant-numeric: tabular-nums; }
+.pop-ceiling { color: var(--c-text-soft); font-weight: 500; }
 .deck-pop__total-pct {
   font-family: var(--font-data, inherit);
   font-size: 0.74rem;
