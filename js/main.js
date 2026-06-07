@@ -8255,7 +8255,22 @@ function initMobileNav() {
   });
   const scrim = document.querySelector('[data-bind="mobile-scrim"]');
   if (scrim) scrim.addEventListener('click', function () { closeMobileSheets(); });
+  window.addEventListener('resize', function () {
+    updateHudHeightVar();
+    updateMobileNavActive();
+  });
+  updateHudHeightVar();
   updateMobileNav();
+}
+
+/* Misura l'altezza reale dell'HUD top (varia col wrap su mobile) e la
+   espone come `--hud-h`: le sheet a tutto schermo partono SOTTO l'HUD così
+   risorse/controlli tempo restano visibili anche con una scheda aperta. */
+function updateHudHeightVar() {
+  const hud = document.querySelector('.hud-top');
+  if (!hud) return;
+  const h = hud.offsetHeight || 0;
+  if (h) document.documentElement.style.setProperty('--hud-h', h + 'px');
 }
 
 function onMobileNav(which) {
@@ -8276,6 +8291,7 @@ function toggleMobileSheet(side) {
 
 function setMobileSheet(side) {
   ORION._mobileSheet = side || null;
+  if (side) updateHudHeightVar();   /* l'HUD può aver cambiato altezza (wrap) */
   const left  = document.querySelector('.panel--left');
   const right = document.querySelector('.panel--right');
   const scrim = document.querySelector('[data-bind="mobile-scrim"]');
