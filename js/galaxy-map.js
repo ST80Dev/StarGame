@@ -929,6 +929,10 @@
       if (regionAlpha > 0.01) this._drawRegions(ctx, regionAlpha);
       if (reveal > 0.01) {
         this._drawEdges(ctx, reveal);
+        /* M12 (decisione #56): rotte commerciali interne come tessuto
+           galattico — linea pulsante tinta dalla risorsa, spessore ∝ portata,
+           glifo ☠ se la tratta è minacciata/interrotta. Sotto i nodi. */
+        this._drawTradeRoutes(ctx, reveal);
         this._drawNodes(ctx, reveal);
         /* M10 Fase A (decisione #47): confini delle civiltà AI. Visibili solo
            sui sistemi che il giocatore ha DETECTED/EXPLORED (scoperta-guidata). */
@@ -1425,6 +1429,122 @@
         ctx.fillText('☠', p.x, p.y - (r + 9));
       }
       ctx.restore();
+    }
+
+    /* M12 (decisione #56): rotte commerciali interne sulla mappa galassia.
+       Finora vivevano solo nella tab Rotte / vista Mercato → il commercio era
+       invisibile come fenomeno galattico. Qui:
+       - polilinea lungo il percorso reale (hop dai sistemi attraversati);
+       - tinta = colore della risorsa trasportata (coerente con res-icon);
+       - spessore ∝ portata (route.rate);
+       - flusso animato (dash che scorre src→dst) per leggere la direzione;
+       - glifo ☠ sul tratto se la rotta è minacciata o interrotta (§15.7).
+       Solo rotte con entrambi gli estremi DETECTED+ (scoperta-guidata).
+       Niente RNG, tutto derivato dallo stato — replay-safe. */
+    _drawTradeRoutes(ctx, reveal) {
+      const game = root.ORION && root.ORION.game;
+      if (!game || !Array.isArray(game.tradeRoutes) || !game.tradeRoutes.length) return;
+      const alpha = clamp(reveal, 0, 1);
+      if (alpha < 0.05) return;
+      const TR = root.ORION.trade;
+      const g = this.galaxy;
+      const cols = game.colonies || {};
+      const disc = this.state.discovery;
+      const DET = DISCOVERY.DETECTED;
+      const TINT = { met: '#c8d2e4', en: '#f0d670', food: '#9fd0a8', water: '#80c8e6' };
+
+      /* Animazione del flusso (dash scorrevole) + pulse leggero dell'alpha. */
+      const now = Date.now();
+      const dashShift = -(now % 1600) / 1600 * 14;
+      const pulse = 0.78 + 0.22 * Math.sin(now / 360);
+
+      /* Path/minaccia non dipendono dalla camera (solo la proiezione cambia) →
+         li ricalcoliamo al più ogni ~400ms, non a ogni frame d'animazione. */
+      if (!this._tradeCache || now - this._tradeCache.t > 400) {
+        const map = {};
+        for (let i = 0; i < game.tradeRoutes.length; i++) {
+          const r = game.tradeRoutes[i];
+          if (!r) continue;
+          const s = cols[r.src], d = cols[r.dst];
+          if (!s || !d) continue;
+          let path = (TR && TR.routePath) ? TR.routePath(game, r) : null;
+          if (!Array.isArray(path) || path.length < 2) path = [s.systemId, d.systemId];
+          const interrupted = typeof r.status === 'string' && r.status.indexOf('interrupted') === 0;
+          const threat = (TR && TR.routeThreat) ? TR.routeThreat(game, path) : 0;
+          map[r.id] = { path: path, danger: interrupted || threat > 0.12, interrupted: interrupted };
+        }
+        this._tradeCache = { t: now, map: map };
+      }
+      const cache = this._tradeCache.map;
+
+      let drawnAny = false;
+      ctx.save();
+      for (let i = 0; i < game.tradeRoutes.length; i++) {
+        const route = game.tradeRoutes[i];
+        if (!route) continue;
+        const src = cols[route.src], dst = cols[route.dst];
+        if (!src || !dst) continue;
+        const srcSys = src.systemId, dstSys = dst.systemId;
+        if (srcSys == null || dstSys == null) continue;
+        if (disc[srcSys] < DET || disc[dstSys] < DET) continue;   // scoperta-guidata
+
+        const entry = cache[route.id] || { path: [srcSys, dstSys], danger: false, interrupted: false };
+        const path = entry.path;
+
+        /* Punti proiettati. */
+        const pts = [];
+        for (let k = 0; k < path.length; k++) {
+          const s = g.systems[path[k]];
+          if (!s) { pts.length = 0; break; }
+          pts.push(this.project(s.x, s.y, s.z || 0));
+        }
+        if (pts.length < 2) continue;
+
+        const tint = TINT[route.resource] || '#a9c0d8';
+        const interrupted = entry.interrupted;
+        const danger = entry.danger;
+        /* Spessore ∝ portata, cappato. Interrotta → più sottile e desaturata. */
+        const lw = clamp(1.2 + (route.rate || 1) * 0.18, 1.2, 4.5);
+
+        /* Sottostrato glow morbido. */
+        ctx.globalAlpha = alpha * 0.22 * (interrupted ? 0.5 : 1);
+        ctx.strokeStyle = tint;
+        ctx.lineWidth = lw + 2.4;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k].x, pts[k].y);
+        ctx.stroke();
+
+        /* Linea principale con flusso animato. */
+        ctx.globalAlpha = alpha * (interrupted ? 0.40 : pulse);
+        ctx.strokeStyle = danger ? '#ff7a6e' : tint;
+        ctx.lineWidth = lw;
+        ctx.setLineDash([7, 6]);
+        ctx.lineDashOffset = interrupted ? 0 : dashShift;
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k].x, pts[k].y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.lineDashOffset = 0;
+
+        /* Glifo minaccia sul punto mediano della polilinea. */
+        if (danger) {
+          const mid = pts[Math.floor(pts.length / 2)];
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = '#ff5a5a';
+          ctx.font = '11px monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('☠', mid.x, mid.y - 7);
+        }
+        drawnAny = true;
+      }
+      ctx.restore();
+
+      /* Mantieni viva l'animazione del flusso finché ci sono rotte visibili. */
+      if (drawnAny) this.requestRender();
     }
 
     /* M08 Fase B (decisione #46): rendering delle flotte sulla mappa.
