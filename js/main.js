@@ -241,6 +241,12 @@ function newGame(seed, opts) {
   if (opts.payload && opts.payload.homeWorld) opts.homeWorld = opts.payload.homeWorld;
   seed = seed || ORION.rng.newSeed();
   const galaxy = ORION.galaxy.generate(seed);
+  /* M10 Fase B punto 3 (decisione #52 §6.1): algoritmo di generazione
+     sistemi. Nuove partite usano V2 (5-10 pianeti, 8 configurazioni,
+     marginali); save legacy (schema ≤ 14) restano su V1 per preservare
+     i body keys delle colonie esistenti (legacy snapshot per-galassia,
+     non per-sistema, per semplicità d'implementazione). Override da payload. */
+  galaxy.systemAlgVersion = (opts.payload && opts.payload.systemAlgVersion === 1) ? 1 : 2;
   /* M06.5: se il giocatore ha scelto un home diverso dal default
      generato (decisione #27), ricalibra prima di createState così la
      nebbia di guerra rispetta la nuova origine. */
