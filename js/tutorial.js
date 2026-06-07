@@ -139,7 +139,9 @@
           '<li><strong>Φ</strong> (phi) — Fase, 20 Κ = 1000 Ι</li>' +
           '<li><strong>Ω</strong> (omega) — Eone, 100 Φ = 100 000 Ι</li>' +
         '</ul>' +
-        '<p>La Data Stellare in alto è in formato compatto <code>Ω·Φ·Κ·Ι</code> (es. <code>1·87·6·47</code>). ' +
+        '<p>La Data Stellare in alto è in formato compatto <code>Ω·Φ·Κ·Ι</code>. ' +
+        'Ogni partita parte da <code>0·0·0·0</code> e scorre da lì (es. dopo ' +
+        '2 Fasi e qualche Ciclo vedrai <code>0·2·5·12</code>). ' +
         'Le durate omettono gli zeri di testa (es. una colonizzazione di 120 Ι = <code>2Κ·20Ι</code>).</p>' +
         '<p>Il tempo scorre <strong>automaticamente</strong> con <strong>▶</strong> nella barra in alto. ' +
         'Cambia velocità con <kbd>+</kbd>/<kbd>−</kbd> (7 livelli, default 1× = 30s reali per Ι), ' +

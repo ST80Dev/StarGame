@@ -289,10 +289,12 @@ function newGame(seed, opts) {
   }
   const state = ORION.galaxy.createState(galaxy);
 
-  // Epoca d'inizio randomizzata DS 800.00–3000.00 (decisione #4), derivata
-  // dal seed così da restare deterministica (parte del seed+delta).
-  const erng = ORION.rng.makeRng(seed + ':epoch');
-  const startOrbita = erng.int(800, 3000);
+  // Decisione di sessione: il tempo parte sempre da Ω0·Φ0·Κ0·Ι0.
+  // L'idea originaria della decisione #4 (epoca random per dare il feel
+  // "galassia preesistente") creava una zavorra cognitiva — meglio
+  // raccontare il passato della galassia con rovine/lore/eventi (M17).
+  // Il campo resta nel payload (compat di shape) ma non viene letto.
+  const startOrbita = 0;
 
   /* Tutorial (M06.5, decisione #27). Il flag arriva da:
        - opts.tutorialEnabled (form "Nuova partita" del main menu)
@@ -2030,7 +2032,7 @@ function renderGovernorSection(colony, planet) {
 
   const recentHtml = recent.length
     ? '<ul class="gov-log">' + recent.slice(0, 5).map(function (a) {
-        const ds = ORION.time.format((g.startEpochOrbita || 0) * 100 + a.impulso, 'compact');
+        const ds = ORION.time.format(a.impulso, 'compact');
         const sub = (a.kind === 'gov-supply-falling' && a.sub)
           ? ' · ' + (a.sub === 'food' ? 'cibo' : 'acqua') : '';
         return '<li class="gov-log__item"><span class="gov-log__ds">' + ds + '</span>' +
@@ -2041,7 +2043,7 @@ function renderGovernorSection(colony, planet) {
   const isOperative = (level === 'operativo-cauto' || level === 'operativo-attivo');
   const decisionsHtml = isOperative ? (decisions.length
     ? '<ul class="gov-decisions__log">' + decisions.slice(0, 5).map(function (d) {
-        const ds = ORION.time.format((g.startEpochOrbita || 0) * 100 + d.impulso, 'compact');
+        const ds = ORION.time.format(d.impulso, 'compact');
         const SDEF = ORION.structures && ORION.structures.get(d.structId);
         const sname = SDEF ? SDEF.name : (d.structId || '—');
         const verb = d.kind === 'expand' ? 'Espande' : 'Costruisce';
@@ -4338,7 +4340,7 @@ function renderCivView(stage) {
         const sys = (lb.sysId != null && lb.sysId >= 0 && g.galaxy.systems[lb.sysId]) ? g.galaxy.systems[lb.sysId].name : null;
         const verdict = lb.result === 'win' ? 'vittoria tua' : 'sconfitta tua';
         const where = sys ? ' a <strong>' + escapeHtml(sys) + '</strong>' : '';
-        const when = ORION.time ? ORION.time.format((g.startEpochOrbita || 0) * 100 + lb.impulso) : '';
+        const when = ORION.time ? ORION.time.format(lb.impulso) : '';
         lastB = '<div class="civ-card__row civ-lastbattle civ-lastbattle--' + (lb.result === 'win' ? 'win' : 'loss') + '">' +
           '<span class="civ-card__k">Ultimo scontro</span><span>' + verdict + where +
           (when ? ' · <span class="civ-card__when">' + escapeHtml(when) + '</span>' : '') + '</span></div>';
@@ -5682,7 +5684,7 @@ function startDateInterpolation() {
     const ms = secPerImpulse(ORION.timer.level) * 1000;
     const elapsed = performance.now() - ORION.timer.lastTickReal;
     const frac = Math.max(0, Math.min(0.999, elapsed / ms));
-    const base = (g.startEpochOrbita || 0) * 100 + (g.timeImpulsi || 0);
+    const base = g.timeImpulsi || 0;
     /* mostra l'Ι "in transito": la cifra Ι scorre verso la successiva */
     setHudDate(ORION.time.format(base + Math.floor(frac), 'compact'));
     ORION.timer.rafId = requestAnimationFrame(frame);
@@ -5958,7 +5960,7 @@ function runAdvance(impulsi) {
 }
 
 function chronicleEvent(ev) {
-  const ds = ORION.time.format((ORION.game.startEpochOrbita || 0) * 100 + ev.impulso);
+  const ds = ORION.time.format(ev.impulso);
   const pname = (ev.planet && ev.planet.name) || '—';
   // Decisione #26: aggiungiamo il tag di appartenenza accanto al nome
   // del pianeta nelle voci di cronaca, così "Zaffiro" diventa subito
@@ -7908,9 +7910,8 @@ function handleImport() {
 
 function currentDsOfPayload(p) {
   if (!p || !ORION.time) return '—';
-  const orb = p.startEpochOrbita || 0;
-  const i = p.timeImpulsi || 0;
-  return ORION.time.format(orb * 100 + i, 'compact');
+  /* Decisione di sessione: ignoriamo startEpochOrbita (era offset random). */
+  return ORION.time.format(p.timeImpulsi || 0, 'compact');
 }
 
 function handleNewGame() {

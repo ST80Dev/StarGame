@@ -186,10 +186,10 @@
      di 10: l'occhio non collassa più i campi a un decimale e ogni unità
      "conta" davvero (vedi discussione di sessione → CLAUDE.md decisione #30).
 
-     Retro-compatibilità con il delta serializzato (schema 4): manteniamo
-     il campo `startEpochOrbita` come SEME NUMERICO dell'epoca d'inizio
-     — vecchia semantica "Orbita = 100 I": startEpochOrbita * 100 = absI(0).
-     Niente bump di schema, save esistenti restano compatibili. */
+     Decisione di sessione: il tempo parte da 0 per ogni partita.
+     `startEpochOrbita` resta nel payload per retro-compat di shape, ma
+     non viene più letto dal formatter — i save vecchi mostrano la loro
+     `timeImpulsi` netta (equivalente a sottrarre l'offset iniziale). */
   const I_PER_K = 50;
   const K_PER_PHI = 20;
   const PHI_PER_OMEGA = 100;
@@ -232,13 +232,15 @@
 
   function currentDS(game) {
     if (!game) return '—';
-    const base = (game.startEpochOrbita || 0) * 100;
-    return format(base + (game.timeImpulsi || 0), 'compact');
+    /* Decisione di sessione: il tempo parte da 0 per ogni partita
+       (timeImpulsi=0 al new), ignoriamo startEpochOrbita anche per i
+       save vecchi — equivalente a "sottrarre l'offset iniziale". Niente
+       migrazione: il campo resta sul disco ma non viene letto. */
+    return format(game.timeImpulsi || 0, 'compact');
   }
   function currentDSFull(game) {
     if (!game) return '—';
-    const base = (game.startEpochOrbita || 0) * 100;
-    return format(base + (game.timeImpulsi || 0), 'full');
+    return format(game.timeImpulsi || 0, 'full');
   }
 
   /* PR-H: versione HTML del formato compact con i 4 valori colorati
@@ -247,8 +249,7 @@
      dove ogni segmento ha significato posizionale fisso. */
   function currentDSHtml(game) {
     if (!game) return '—';
-    const base = (game.startEpochOrbita || 0) * 100;
-    const p = splitFaro(base + (game.timeImpulsi || 0));
+    const p = splitFaro(game.timeImpulsi || 0);
     return '<span class="ds-val ds-val--omega">' + p.O + '</span>' +
       '<span class="ds-sep">·</span>' +
       '<span class="ds-val ds-val--phi">' + p.F + '</span>' +
