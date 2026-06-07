@@ -135,12 +135,14 @@
         '<p>Il tempo è ancorato a una pulsar (il <em>Faro di Orion</em>) e si misura su 4 unità:</p>' +
         '<ul>' +
           '<li><strong>Ι</strong> (iota) — Impulso, il battito atomico</li>' +
-          '<li><strong>Κ</strong> (kappa) — Ciclo, 50 Ι</li>' +
-          '<li><strong>Φ</strong> (phi) — Fase, 20 Κ = 1000 Ι</li>' +
-          '<li><strong>Ω</strong> (omega) — Eone, 100 Φ = 100 000 Ι</li>' +
+          '<li><strong>Κ</strong> (kappa) — Ciclo, 10 Ι (≈ 5 min reali a 1×)</li>' +
+          '<li><strong>Φ</strong> (phi) — Fase, 12 Κ = 120 Ι (≈ 1 ora a 1×)</li>' +
+          '<li><strong>Ω</strong> (omega) — Eone, 20 Φ = 2400 Ι (≈ 20 ore a 1×)</li>' +
         '</ul>' +
-        '<p>La Data Stellare in alto è in formato compatto <code>Ω·Φ·Κ·Ι</code> (es. <code>1·87·6·47</code>). ' +
-        'Le durate omettono gli zeri di testa (es. una colonizzazione di 120 Ι = <code>2Κ·20Ι</code>).</p>' +
+        '<p>La Data Stellare in alto è in formato compatto <code>Ω·Φ·Κ·Ι</code>. ' +
+        'Ogni partita parte da <code>0·0·0·0</code> e scorre da lì (es. dopo qualche ora ' +
+        'vedrai <code>0·3·5·7</code>). ' +
+        'Le durate omettono gli zeri di testa (es. una colonizzazione di 120 Ι = <code>1Φ</code>).</p>' +
         '<p>Il tempo scorre <strong>automaticamente</strong> con <strong>▶</strong> nella barra in alto. ' +
         'Cambia velocità con <kbd>+</kbd>/<kbd>−</kbd> (7 livelli, default 1× = 30s reali per Ι), ' +
         'pausa con <kbd>Spazio</kbd>, singolo Ι con <kbd>→</kbd>, salta al prossimo evento con <kbd>E</kbd>. ' +
