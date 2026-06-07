@@ -724,7 +724,11 @@ function renderGalaxyView(stage) {
   const holder = stage.querySelector('.galaxy-holder');
   ORION.map = new ORION.GalaxyMap().mount(holder, g.galaxy, g.state, {
     onContext: onMapContext,
-    onActivateSystem: (id) => openSystem(id)   // doppio click → vista interna (M03)
+    onActivateSystem: (id) => openSystem(id),  // doppio click → vista interna (M03)
+    // M08 polish (decisione #61): drag&drop dal canvas per ordinare flotte.
+    onFleetPicked: (fleetId) => enterFleetPicker(fleetId),
+    onFleetOrderRequest: (req) => applyFleetOrderFromMap(req),
+    onFleetPickerCancel: () => exitFleetPicker(true)
   });
 
   setNavActive('galaxy');
@@ -6895,6 +6899,122 @@ function attackCapableFleets(g, sysId) {
     if (F.computePath(g.galaxy, f.location.systemId, sysId)) out.push(f);
   });
   return out;
+}
+
+/* =====================================================================
+   M08 polish (decisione #61) — drag&drop dal canvas per ordinare flotte.
+   Click su marker flotta → modalità picker → click su sistema target →
+   applica ordine (default move, Shift=attack, Alt=explore). Esc annulla.
+   Stato volatile in ORION._fleetPickerMode (non salvato).
+   ===================================================================== */
+function enterFleetPicker(fleetId) {
+  const g = ORION.game;
+  if (!g) return;
+  const fleet = (g.fleets || []).filter(function (f) { return f.id === fleetId; })[0];
+  if (!fleet) return;
+  /* BFS dei sistemi raggiungibili dalla posizione corrente della flotta. */
+  const F = ORION.fleet;
+  if (!F) return;
+  const from = fleet.location && fleet.location.systemId;
+  if (from == null) return;
+  const reachable = new Set();
+  const sys = g.galaxy.systems;
+  for (let i = 0; i < sys.length; i++) {
+    if (i === from) continue;
+    if (F.computePath(g.galaxy, from, i)) reachable.add(i);
+  }
+  ORION._fleetPickerMode = { fleetId: fleetId, fleetName: fleet.name };
+  if (ORION.map && ORION.map.setFleetPickerMode) {
+    ORION.map.setFleetPickerMode(fleetId, reachable);
+  }
+  showFleetPickerHint(fleet);
+}
+
+function exitFleetPicker(silent) {
+  ORION._fleetPickerMode = null;
+  if (ORION.map && ORION.map.setFleetPickerMode) {
+    ORION.map.setFleetPickerMode(null);
+  }
+  hideFleetPickerHint();
+  if (!silent) showToast('Modalità ordini annullata');
+}
+
+function showFleetPickerHint(fleet) {
+  hideFleetPickerHint();
+  const node = document.createElement('div');
+  node.className = 'fleet-picker-hint';
+  node.id = 'fleet-picker-hint';
+  node.innerHTML = '<strong>' + escapeHtml(fleet.name) + '</strong>' +
+    ' — click su un sistema per dare l\'ordine · ' +
+    '<kbd>Shift</kbd>=attacca · <kbd>Alt</kbd>=esplora · <kbd>Esc</kbd>=annulla';
+  document.body.appendChild(node);
+}
+
+function hideFleetPickerHint() {
+  const ex = document.getElementById('fleet-picker-hint');
+  if (ex && ex.parentNode) ex.parentNode.removeChild(ex);
+}
+
+function applyFleetOrderFromMap(req) {
+  const g = ORION.game;
+  if (!g || !req) return;
+  const fleet = (g.fleets || []).filter(function (f) { return f.id === req.fleetId; })[0];
+  if (!fleet) { exitFleetPicker(true); return; }
+  const F = ORION.fleet;
+  if (!F) { exitFleetPicker(true); return; }
+  const sysId = req.sysId;
+  const sys = g.galaxy.systems[sysId];
+  if (!sys) { exitFleetPicker(true); return; }
+
+  /* Validazione raggiungibilità. */
+  if (!F.computePath(g.galaxy, fleet.location.systemId, sysId)) {
+    showToast('Sistema non raggiungibile');
+    return; /* resta in picker mode → l'utente può scegliere un altro target */
+  }
+
+  /* Determina il tipo ordine dai modifiers. Shift=attack, Alt=explore, default=move. */
+  let order;
+  let orderLabelText;
+  if (req.shiftKey) {
+    /* Attack richiede potenza di fuoco. */
+    const fp = (fleet.ships || []).reduce(function (a, s) {
+      const c = F.getClass(s.kind); return a + (c ? c.fp || 0 : 0);
+    }, 0);
+    if (fp <= 0) {
+      showToast('Flotta disarmata: non può attaccare');
+      return;
+    }
+    order = { type: 'attack', toSysId: sysId };
+    orderLabelText = 'attacco';
+  } else if (req.altKey) {
+    /* Explore: rifiuta sistemi già EXPLORED. */
+    const discovery = g.state && g.state.discovery;
+    const EXPLORED = ORION.galaxy && ORION.galaxy.DISCOVERY && ORION.galaxy.DISCOVERY.EXPLORED;
+    if (discovery && EXPLORED != null && discovery[sysId] === EXPLORED) {
+      showToast('Sistema già esplorato');
+      return;
+    }
+    order = { type: 'explore', toSysId: sysId };
+    orderLabelText = 'esplorazione';
+  } else {
+    order = { type: 'move', toSysId: sysId };
+    orderLabelText = 'rotta';
+  }
+
+  const r = F.setOrder(g, fleet, order);
+  if (!r.ok) {
+    showToast(r.reason || 'Ordine rifiutato');
+    return;
+  }
+  pushChronicle(ORION.time.currentDS(g) + ' — Ordine via mappa: <strong>' +
+    escapeHtml(fleet.name) + '</strong> · ' + orderLabelText + ' verso <strong>' +
+    escapeHtml(sys.name) + '</strong>.', 'system');
+  persistGame(g);
+  exitFleetPicker(true);
+  showToast(fleet.name + ' · ' + orderLabelText);
+  if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+  /* Refresh sidebar che mostra l'ordine. */
+  if (typeof renderLeftPanel === 'function') renderLeftPanel();
 }
 
 /* Overlay di scelta flotta per un attacco offensivo su un sistema AI. */

@@ -213,6 +213,11 @@
       this.state = state;
       this.onContext = opts.onContext || null;
       this.onActivateSystem = opts.onActivateSystem || null;
+      /* M08 polish (decisione #61): callback per il drag&drop ordini flotte. */
+      this.onFleetPicked = opts.onFleetPicked || null;
+      this.onFleetOrderRequest = opts.onFleetOrderRequest || null;
+      this.onFleetPickerCancel = opts.onFleetPickerCancel || null;
+      this._fleetPicker = null;
 
       container.innerHTML = '';
       const canvas = document.createElement('canvas');
@@ -406,6 +411,76 @@
     }
 
     /* ---- Hit testing (su coordinate proiettate) ---- */
+    /* M08 polish (decisione #61): posizione schermo di un marker flotta.
+       Riproduce la geometria di `_drawFleets` (interpolazione in transito
+       + offset deterministico statico) → hit-test e render concordano. */
+    _fleetScreenPos(f) {
+      const g = this.galaxy;
+      if (!f || !f.location) return null;
+      const curSysId = f.location.systemId;
+      const curSys = g.systems[curSysId];
+      if (!curSys) return null;
+      const inTransit = f.location.status === 'in-transit'
+                    && Array.isArray(f.route) && f.routeIdx + 1 < f.route.length;
+      if (inTransit) {
+        const fromId = f.route[f.routeIdx];
+        const toId   = f.route[f.routeIdx + 1];
+        const fromS = g.systems[fromId];
+        const toS   = g.systems[toId];
+        if (!fromS || !toS) return null;
+        const ORN = root.ORION;
+        const minSpd = (ORN && ORN.fleet && ORN.fleet.fleetMinSpeed) ? ORN.fleet.fleetMinSpeed(f) : 1;
+        const total = (ORN && ORN.fleet && ORN.fleet.tempoLeg)
+                    ? ORN.fleet.tempoLeg(g, fromId, toId, minSpd) : 60;
+        const remain = Math.max(0, f.etaImpulsi || 0);
+        const t = total > 0 ? clamp(1 - remain / total, 0, 1) : 1;
+        const wx = fromS.x + (toS.x - fromS.x) * t;
+        const wy = fromS.y + (toS.y - fromS.y) * t;
+        const wz = (fromS.z || 0) + ((toS.z || 0) - (fromS.z || 0)) * t;
+        return this.project(wx, wy, wz);
+      }
+      const p = this.project(curSys.x, curSys.y, curSys.z || 0);
+      const hash = hashStr(f.id || 'f');
+      const ang  = (hash % 360) * Math.PI / 180;
+      const rad  = 14 + ((hash >> 8) % 6);
+      return { x: p.x + Math.cos(ang) * rad, y: p.y + Math.sin(ang) * rad,
+               depth: p.depth, parallax: p.parallax };
+    }
+
+    /* Hit-test marker flotta. Cerca la più vicina al puntatore entro un
+       raggio espanso (marker + alone + tolerance). Ritorna id o null. */
+    pickFleet(sx, sy) {
+      const game = root.ORION && root.ORION.game;
+      if (!game || !Array.isArray(game.fleets) || !game.fleets.length) return null;
+      let best = null, bestD = Infinity;
+      const R = 14;
+      for (let i = 0; i < game.fleets.length; i++) {
+        const f = game.fleets[i];
+        const pos = this._fleetScreenPos(f);
+        if (!pos) continue;
+        const dx = pos.x - sx, dy = pos.y - sy;
+        const d = dx * dx + dy * dy;
+        if (d <= R * R && d < bestD) { bestD = d; best = f.id; }
+      }
+      return best;
+    }
+
+    /* Entra/esce dalla modalità "scegli destinazione" per una flotta.
+       `reachable` = Set<sysId> raggiungibili (BFS dal chiamante). */
+    setFleetPickerMode(fleetId, reachable) {
+      if (fleetId == null) {
+        this._fleetPicker = null;
+      } else {
+        this._fleetPicker = {
+          fleetId: fleetId,
+          reachable: reachable instanceof Set ? reachable : new Set(reachable || []),
+          hoverSys: -1
+        };
+      }
+      this.canvas.style.cursor = this._fleetPicker ? 'crosshair' : 'grab';
+      this.requestRender();
+    }
+
     pickSystem(sx, sy) {
       const sys = this.galaxy.systems;
       let best = -1, bestD = Infinity;
@@ -446,6 +521,12 @@
     }
 
     _handleKeyDown(e) {
+      /* M08 polish (decisione #61): Esc annulla la modalità picker */
+      if (e.key === 'Escape' && this._fleetPicker) {
+        this.setFleetPickerMode(null);
+        if (this.onFleetPickerCancel) this.onFleetPickerCancel();
+        return;
+      }
       if (e.key === 'Shift') this.rotateModifier = true;
       if (e.key === 'Alt') this.rollModifier = true;
       // Q/E yaw (asse Y schermo) · R/F roll (asse Z vista) · T/G pitch (asse X)
@@ -494,6 +575,19 @@
         if (this.nodeReveal() >= 0.5) hs = this.pickSystem(p.x, p.y);
         else hg = this.pickGroup(p.x, p.y);
         const hc = hs >= 0 ? this.galaxy.systems[hs].cluster : -1;
+        /* M08 polish (decisione #61): in picker mode l'hover su un sistema
+           ne marca il target; cursor riflette se è raggiungibile o no. */
+        if (this._fleetPicker) {
+          const oldHover = this._fleetPicker.hoverSys;
+          this._fleetPicker.hoverSys = hs;
+          if (hs >= 0) {
+            this.canvas.style.cursor = this._fleetPicker.reachable.has(hs) ? 'pointer' : 'not-allowed';
+          } else {
+            this.canvas.style.cursor = 'crosshair';
+          }
+          if (oldHover !== hs) this.requestRender();
+          return;
+        }
         if (hs !== this.hoverSystem || hg !== this.hoverGroup || hc !== this.hoverCluster) {
           this.hoverSystem = hs; this.hoverGroup = hg; this.hoverCluster = hc;
           this.canvas.style.cursor = (hs >= 0 || hg >= 0) ? 'pointer' : 'grab';
@@ -560,11 +654,43 @@
       if (this.pointers.size < 2) this.lastPinchDist = 0;
       if (this.pointers.size === 0) this.dragging = false;
 
-      if (!wasDrag && e.pointerType !== undefined) this._handleClick(p.x, p.y);
+      if (!wasDrag && e.pointerType !== undefined) {
+        /* M08 polish (decisione #61): modifiers per il picker (move/attack/explore) */
+        this._lastClickShift = !!e.shiftKey;
+        this._lastClickAlt = !!e.altKey;
+        this._handleClick(p.x, p.y);
+      }
     }
 
     _handleClick(sx, sy) {
+      /* M08 polish (decisione #61): picker mode ha priorità.
+         Se è attiva la modalità "scegli destinazione", il click su un
+         sistema invia l'ordine; il click sul vuoto annulla la modalità. */
+      if (this._fleetPicker) {
+        const sysId = this.pickSystem(sx, sy);
+        if (sysId >= 0) {
+          if (this.onFleetOrderRequest) {
+            this.onFleetOrderRequest({
+              fleetId: this._fleetPicker.fleetId,
+              sysId: sysId,
+              shiftKey: !!this._lastClickShift,
+              altKey: !!this._lastClickAlt
+            });
+          }
+          return;
+        }
+        /* click nel vuoto in picker mode = annulla */
+        this.setFleetPickerMode(null);
+        if (this.onFleetPickerCancel) this.onFleetPickerCancel();
+        return;
+      }
+      /* Stato idle: prima prova picking flotta, poi sistema/gruppo. */
       if (this.nodeReveal() >= 0.5) {
+        const fleetId = this.pickFleet(sx, sy);
+        if (fleetId != null) {
+          if (this.onFleetPicked) this.onFleetPicked(fleetId);
+          return;
+        }
         const id = this.pickSystem(sx, sy);
         if (id >= 0) { this.selectSystem(id); return; }
       } else {
@@ -817,8 +943,9 @@
         /* M10 Fase E: covi pirata noti (DETECTED+) — bersagli raidabili. */
         this._drawPirateNests(ctx, reveal);
         /* M08 Fase B (decisione #46): markers flotte + rotte in transito.
-           Visualizzazione read-only: il drag&drop ordini è polish successivo. */
+           M08 polish (decisione #61): drag&drop dal canvas per ordinare. */
         this._drawFleets(ctx, reveal);
+        if (this._fleetPicker) this._drawFleetPickerOverlay(ctx, reveal);
       }
 
       this._emitContext(false);
@@ -1431,6 +1558,46 @@
       ctx.strokeStyle = hexA(color, 0.35);
       ctx.lineWidth = 1;
       ctx.stroke();
+    }
+
+    /* M08 polish (decisione #61): overlay highlight per la modalità picker.
+       Anello ciano lampeggiante sui sistemi raggiungibili dalla flotta;
+       reticolo sul sistema sotto il puntatore. Niente fullscreen dimming
+       per non rompere la leggibilità della mappa. */
+    _drawFleetPickerOverlay(ctx, reveal) {
+      const pk = this._fleetPicker;
+      if (!pk) return;
+      const sys = this.galaxy.systems;
+      ctx.save();
+      ctx.globalAlpha = clamp(reveal, 0, 1);
+      /* Pulse deterministico via timestamp */
+      const t = (Date.now() % 1200) / 1200;
+      const pulse = 0.6 + 0.4 * Math.abs(0.5 - t) * 2;
+      pk.reachable.forEach((sysId) => {
+        const s = sys[sysId];
+        if (!s) return;
+        const pp = this.project(s.x, s.y, s.z || 0);
+        if (pp.x < -20 || pp.x > this.cssW + 20 || pp.y < -20 || pp.y > this.cssH + 20) return;
+        const r = this.nodeRadius(pp.parallax) + 6;
+        ctx.strokeStyle = 'rgba(110,220,255,' + (0.45 * pulse).toFixed(3) + ')';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(pp.x, pp.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+      });
+      /* Reticolo sotto al puntatore */
+      if (pk.hoverSys >= 0) {
+        const s = sys[pk.hoverSys];
+        if (s) {
+          const pp = this.project(s.x, s.y, s.z || 0);
+          const r = this.nodeRadius(pp.parallax) + 12;
+          const ok = pk.reachable.has(pk.hoverSys);
+          this._reticle(ctx, pp, r, ok ? 'rgba(110,220,255,0.9)' : 'rgba(255,92,108,0.85)');
+        }
+      }
+      /* Animation tick: continua a richiedere render finché picker è attivo. */
+      this.requestRender();
+      ctx.restore();
     }
 
     _ring(ctx, p, radius, color, width) {

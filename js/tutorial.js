@@ -806,7 +806,11 @@
         '</ul>' +
         '<p>Senza consumo né uso, una flotta può <strong>vagare a lungo</strong> tra i sistemi favorevoli. ' +
         'I rifugi presso popoli terzi (recupero/rifornimento) arriveranno con <strong>M10 Civiltà AI</strong> + ' +
-        '<strong>M11 Diplomazia</strong> (diritto di passaggio/d\'attracco) + <strong>M16 Stazioni orbitali</strong>.</p>'
+        '<strong>M11 Diplomazia</strong> (diritto di passaggio/d\'attracco) + <strong>M16 Stazioni orbitali</strong>.</p>' +
+        '<p><strong>Anche dalla mappa:</strong> click su una flotta (il pallino colorato) → ' +
+        'i sistemi raggiungibili si accendono → click sul sistema target per dare l\'ordine. ' +
+        'Default <em>rotta</em>; con <kbd>Shift</kbd>=<em>attacca</em>, con <kbd>Alt</kbd>=<em>esplora</em>; ' +
+        '<kbd>Esc</kbd> annulla. È un secondo entry-point — l\'overlay sidebar resta per gli ordini composti.</p>'
     }
   ];
 
