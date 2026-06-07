@@ -5166,3 +5166,38 @@ select.main-menu__input { cursor: pointer; }
 /* ----- M12 Fase B slice 2 (§15.5): mercato grigio Mekhari ----- */
 .mek-cost { color: var(--c-text-dim); font-size: 0.72rem; }
 .market-view .route-picker__field { margin: 0 0 6px; }
+
+/* ----- M08 polish (decisione #61): drag&drop dal canvas per ordinare flotte ----- */
+.fleet-picker-hint {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 220;
+  max-width: 380px;
+  padding: 10px 14px;
+  background: rgba(10, 16, 30, 0.92);
+  border: 1px solid var(--c-accent, #5cd0ff);
+  border-radius: 8px;
+  color: var(--c-text, #e8eef8);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(110, 220, 255, 0.18) inset;
+  backdrop-filter: blur(6px);
+  animation: fleet-picker-pulse 1.6s ease-in-out infinite;
+}
+.fleet-picker-hint strong { color: var(--c-accent, #5cd0ff); }
+.fleet-picker-hint kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  margin: 0 1px;
+  border: 1px solid rgba(110, 220, 255, 0.4);
+  border-radius: 3px;
+  background: rgba(110, 220, 255, 0.08);
+  font-family: ui-monospace, monospace;
+  font-size: 0.72rem;
+  color: var(--c-text, #e8eef8);
+}
+@keyframes fleet-picker-pulse {
+  0%, 100% { box-shadow: 0 6px 24px rgba(0,0,0,0.55), 0 0 0 1px rgba(110,220,255,0.18) inset; }
+  50%      { box-shadow: 0 6px 32px rgba(0,0,0,0.55), 0 0 0 2px rgba(110,220,255,0.45) inset; }
+}
