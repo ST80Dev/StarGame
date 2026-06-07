@@ -5036,3 +5036,13 @@ select.main-menu__input { cursor: pointer; }
 .agr-item__dur { font-size: 0.72rem; color: var(--c-text-dim); }
 .agr-item .route-item__status { margin-left: auto; }
 .agr-note { margin: 0; }
+
+/* ----- M12 Fase B (§15.7): eventi perturbativi — usura mercantile + rischio rotta ----- */
+.merc-roster__wear {
+  font-size: 0.72rem; padding: 1px 6px; border-radius: 4px;
+  background: rgba(240, 214, 112, 0.14); color: #f0d670;
+}
+.merc-roster__wear.is-high { background: rgba(255, 92, 108, 0.16); color: var(--c-bad); }
+.route-item__threat { font-size: 0.72rem; }
+.route-item__threat.is-warn { color: #f0d670; }
+.route-item__threat.is-crit { color: var(--c-bad); }

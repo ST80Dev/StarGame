@@ -574,6 +574,17 @@
         '<p><strong>Recovery-friendly:</strong> se la colonia esaurisce la risorsa l\'accordo si interrompe e riparte da solo.</p>'
     },
     {
+      id: 'trade-raids', tag: 'Commercio · ☠', title: 'Razzie sulle rotte',
+      body:
+        '<p>Le rotte che attraversano <strong>spazio infestato dai pirati</strong> (covi M10) o <strong>sistemi coesi non alleati</strong> ' +
+        'rischiano <strong>razzie</strong>: il convoglio viene assalito, il <em>cargo di quel passaggio è perso</em> e il mercantile ' +
+        'accumula <strong>usura</strong>.</p>' +
+        '<p><strong>Usura:</strong> riduce gradualmente il cargo e a <strong>100% ritira</strong> il mercantile dal servizio (la rotta si ' +
+        'chiude: ne costruisci un altro). I <em>veterani</em> sono meno esposti (l\'esperienza riduce la probabilità di razzia).</p>' +
+        '<p><strong>Cosa fare:</strong> la tab Rotte mostra il <em>rischio ☠</em> di ogni rotta e l\'usura di ogni mercantile. ' +
+        'Preferisci percorsi sicuri, manda i veterani sulle tratte pericolose, o ripulisci i covi con una flotta (M09).</p>'
+    },
+    {
       id: 'mercantili', tag: 'Commercio · ◈', title: 'Mercantili',
       body:
         '<p>Il <strong>mercantile</strong> è una nave dedicata al carico (niente armi): la costruisci all\'<em>Hangar di costruzione</em> ' +

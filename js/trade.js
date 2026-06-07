@@ -87,6 +87,18 @@
      stessa nave conta" (decisione #39). */
   const TRIP_PER_HOP = 60;
 
+  /* ------------------------------------------------------------------
+     Eventi perturbativi §15.7 (Fase B). Razzie pirata sulle rotte
+     deterministiche (RNG da seed+rotta+Impulso), mitigate dall'xp del
+     mercantile; usura accumulata che a 100 ritira il mercantile.
+     ------------------------------------------------------------------ */
+  const RAID_BASE = 0.05;            // prob. base/Ι a minaccia piena (× threat × resistenza xp)
+  const RAID_WEAR_MIN = 12;          // usura inflitta da una razzia
+  const RAID_WEAR_MAX = 26;
+  const WEAR_MAX = 100;              // a 100 il mercantile è ritirato dal servizio
+  const WEAR_CARGO_PENALTY = 0.25;   // cargo −25% a usura piena (penalità graduale)
+  const COHESION_THREAT = 0.15;      // bump rischio attraversando un sistema coeso non-alleato
+
   function getTier(tier) {
     for (let i = 0; i < MERCANTILE_TIERS.length; i++) {
       if (MERCANTILE_TIERS[i].tier === tier) return MERCANTILE_TIERS[i];
@@ -160,11 +172,13 @@
   }
 
   /* Cargo effettivo (throughput/Ι) di un mercantile = cargo tier × cargoMul
-     del rango. */
+     del rango. La penalità d'usura (§15.7) riduce gradualmente il cargo. */
+  function mercantileWear(merc) { return Math.max(0, Math.min(WEAR_MAX, merc.wear || 0)); }
   function mercantileCargo(merc) {
     const t = getTier(merc.tier);
     if (!t) return 0;
-    return Math.round(t.cargo * rankForXp(merc.xp).cargoMul * 10) / 10;
+    const wearMul = 1 - WEAR_CARGO_PENALTY * (mercantileWear(merc) / WEAR_MAX);
+    return Math.round(t.cargo * rankForXp(merc.xp).cargoMul * wearMul * 10) / 10;
   }
 
   /* Raggio massimo (hop) di un mercantile = hop del tier + bonus rango. */
@@ -308,6 +322,7 @@
           id: nextMercId(game),
           tier: e.tier,
           xp: 0,
+          wear: 0,
           status: 'idle',
           routeId: null
         };
@@ -474,10 +489,14 @@
         continue;
       }
 
-      /* Interruzione per transito ostile (§15.7 leggero, riusa M09). Se un
-         sistema lungo il percorso ha presenza ostile, la rotta è sospesa
-         finché la minaccia resta. Recovery-friendly: riparte da sola. */
-      if (CO && CO.hostilePresenceAt && routeHasHostileTransit(game, route, CO)) {
+      /* Percorso calcolato UNA volta per Impulso (riusato per transito
+         ostile + minaccia razzia). I sistemi intermedi sono path[1..n-1]. */
+      const path = routePath(game, route);
+
+      /* Interruzione per transito ostile (§15.7, riusa M09). Se un sistema
+         lungo il percorso ha presenza ostile (covo o AI in guerra), la rotta
+         è sospesa finché la minaccia resta. Recovery-friendly: riparte da sola. */
+      if (CO && CO.hostilePresenceAt && path && hasHostileTransit(game, path, CO)) {
         markInterrupt(route, 'interrupted-route', events, game, src, dst);
         continue;
       }
@@ -506,14 +525,62 @@
       if (flow <= 0) continue;
       flow = Math.round(flow * 10) / 10;
 
-      src.stock[route.resource] = (src.stock[route.resource] || 0) - flow;
-      if (!dst.stock) dst.stock = { met: 0, en: 0, food: 0, water: 0 };
-      dst.stock[route.resource] = (dst.stock[route.resource] || 0) + flow;
-      budget -= flow;
-      route.delivered = (route.delivered || 0) + flow;
+      /* §15.7 — Razzia pirata sulla rotta (deterministica). Lungo un percorso
+         minacciato il convoglio può essere assalito: cargo perso (la sorgente
+         lo ha già spedito), usura al mercantile (mitigata dall'xp). A usura
+         100 il mercantile è ritirato e la rotta chiusa (recovery-friendly:
+         se ne costruisce un altro). Le rotte sicure (minaccia 0) non hanno
+         mai razzie. */
+      const threat = path ? routeThreat(game, path) : 0;
+      let raided = false;
+      if (threat > 0) {
+        const rng = ORION.rng.makeRng(game.seed + ':traderaid:' + route.id + ':' + game.timeImpulsi);
+        const pirateMul = rankForXp(merc.xp).pirateMul;   // veterani meno esposti
+        const pRaid = Math.min(0.5, RAID_BASE * threat * pirateMul);
+        if (rng.chance(pRaid)) {
+          raided = true;
+          const wear = RAID_WEAR_MIN + Math.round(rng.range(0, RAID_WEAR_MAX - RAID_WEAR_MIN));
+          merc.wear = mercantileWear(merc) + wear;
+          /* Cargo perso: la sorgente paga, la destinazione non riceve. */
+          src.stock[route.resource] = (src.stock[route.resource] || 0) - flow;
+          events.push({
+            kind: 'trade-raid',
+            routeId: route.id, src: route.src, dst: route.dst,
+            resource: route.resource, lost: flow, wear: wear,
+            sysId: raidSystem(game, path),
+            impulso: game.timeImpulsi
+          });
+          if (merc.wear >= WEAR_MAX) {
+            /* Mercantile ritirato: chiudi la rotta (libera lo slot) e
+               rimuovi l'entità dalla colonia. */
+            events.push({
+              kind: 'trade-mercantile-lost',
+              routeId: route.id, src: route.src, mercId: merc.id,
+              impulso: game.timeImpulsi
+            });
+            const mi = src.mercantili.indexOf(merc);
+            if (mi >= 0) src.mercantili.splice(mi, 1);
+            const ri = activeRoutes(game).indexOf(route);
+            if (ri >= 0) activeRoutes(game).splice(ri, 1);
+            continue;
+          }
+        }
+      }
+
+      if (!raided) {
+        src.stock[route.resource] = (src.stock[route.resource] || 0) - flow;
+        if (!dst.stock) dst.stock = { met: 0, en: 0, food: 0, water: 0 };
+        dst.stock[route.resource] = (dst.stock[route.resource] || 0) + flow;
+        budget -= flow;
+        route.delivered = (route.delivered || 0) + flow;
+      } else {
+        /* La razzia consuma comunque la quota di throughput (il convoglio è
+           partito). */
+        budget -= flow;
+      }
 
       /* Maturazione xp del mercantile: 1 xp ogni TRIP_PER_HOP × hops Ι di
-         servizio effettivo. */
+         servizio effettivo. Anche sopravvivendo a una razzia (§15.7). */
       route.tripProgress = (route.tripProgress || 0) + 1;
       const tripLen = TRIP_PER_HOP * Math.max(1, route.hops || 1);
       if (route.tripProgress >= tripLen) {
@@ -533,19 +600,47 @@
     }
   }
 
-  /* Vera la presenza ostile su un sistema intermedio della rotta (esclusi
-     gli estremi, che sono colonie del giocatore). */
-  function routeHasHostileTransit(game, route, CO) {
+  /* Percorso BFS di una rotta (src → dst). null se non risolvibile. */
+  function routePath(game, route) {
     const F = root.ORION.fleet;
     const cols = game.colonies || {};
     const src = cols[route.src], dst = cols[route.dst];
-    if (!src || !dst || !F || !F.computePath) return false;
-    const path = F.computePath(game.galaxy, src.systemId, dst.systemId);
-    if (!path) return false;
+    if (!src || !dst || !F || !F.computePath) return null;
+    return F.computePath(game.galaxy, src.systemId, dst.systemId);
+  }
+
+  /* Presenza ostile su un sistema intermedio (esclusi gli estremi). */
+  function hasHostileTransit(game, path, CO) {
     for (let i = 1; i < path.length - 1; i++) {
       if (CO.hostilePresenceAt(game, path[i])) return true;
     }
     return false;
+  }
+
+  /* Minaccia razzia sul percorso (§15.7): max pirateThreat sui sistemi
+     intermedi + bump per transito in un sistema coeso non-alleato (§13.6). */
+  function routeThreat(game, path) {
+    const AI = root.ORION.ai;
+    const COH = root.ORION.cohesion;
+    let threat = 0;
+    for (let i = 1; i < path.length - 1; i++) {
+      const sys = path[i];
+      if (AI && AI.pirateThreat) threat = Math.max(threat, AI.pirateThreat(game, sys));
+      if (COH && COH.isCohesive && COH.isCohesive(game, sys)) threat += COHESION_THREAT;
+    }
+    return Math.max(0, Math.min(1, threat));
+  }
+
+  /* Sistema intermedio più minaccioso (per la cronaca della razzia). */
+  function raidSystem(game, path) {
+    const AI = root.ORION.ai;
+    let best = path.length > 2 ? path[1] : path[0];
+    let bestT = -1;
+    for (let i = 1; i < path.length - 1; i++) {
+      const t = (AI && AI.pirateThreat) ? AI.pirateThreat(game, path[i]) : 0;
+      if (t > bestT) { bestT = t; best = path[i]; }
+    }
+    return best;
   }
 
   function markInterrupt(route, status, events, game, src, dst) {
@@ -610,6 +705,10 @@
     buildableTier: buildableTier,
     mercantileCargo: mercantileCargo,
     mercantileMaxHops: mercantileMaxHops,
+    mercantileWear: mercantileWear,
+    routePath: routePath,
+    routeThreat: routeThreat,
+    WEAR_MAX: WEAR_MAX,
     marketCapacity: marketCapacity,
     routesUsed: routesUsed,
     activeRoutes: activeRoutes,

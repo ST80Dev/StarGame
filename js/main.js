@@ -2873,11 +2873,16 @@ function renderPlanetRotteTab(host, planet, colony) {
       const t = T.getTier(m.tier) || {};
       const rank = T.rankLabel(m.xp);
       const onRoute = m.status === 'on-route';
+      const wear = T.mercantileWear ? T.mercantileWear(m) : (m.wear || 0);
+      const wearHtml = wear > 0
+        ? '<span class="merc-roster__wear' + (wear >= 70 ? ' is-high' : '') + '" title="Usura da razzie: a 100% il mercantile è ritirato">usura ' + Math.round(wear) + '%</span>'
+        : '';
       return '<li class="merc-roster__item">' +
         '<span class="merc-roster__glyph" aria-hidden="true">' + (t.glyph || '◈') + '</span>' +
         '<span class="merc-roster__name">' + escapeHtml(t.name || ('Tier ' + m.tier)) + '</span>' +
         '<span class="xp-chip" title="Esperienza viaggi">xp ' + (m.xp | 0) + ' · ' + rank + '</span>' +
         '<span class="merc-roster__cargo" title="Cargo · raggio">cargo ' + T.mercantileCargo(m) + ' · ' + T.mercantileMaxHops(m) + ' salti</span>' +
+        wearHtml +
         '<span class="merc-roster__status merc-roster__status--' + (onRoute ? 'busy' : 'idle') + '">' + (onRoute ? 'in rotta' : 'a riposo') + '</span>' +
       '</li>';
     }).join('') + '</ul>';
@@ -2927,6 +2932,16 @@ function renderPlanetRotteTab(host, planet, colony) {
       const outbound = (r.src === colKey);
       const otherKey = outbound ? r.dst : r.src;
       const dir = outbound ? '→' : '←';
+      /* §15.7: indicatore minaccia razzia sul percorso. */
+      let threatHtml = '';
+      if (T.routePath && T.routeThreat) {
+        const path = T.routePath(g, r);
+        const th = path ? T.routeThreat(g, path) : 0;
+        if (th > 0) {
+          const lvl = th >= 0.4 ? 'crit' : 'warn';
+          threatHtml = ' · <span class="route-item__threat is-' + lvl + '" title="Rischio razzia pirata sul percorso">☠ ' + Math.round(th * 100) + '%</span>';
+        }
+      }
       return '<li class="route-item">' +
         '<div class="route-item__head">' +
           '<span class="route-item__dir">' + dir + '</span>' +
@@ -2935,7 +2950,7 @@ function renderPlanetRotteTab(host, planet, colony) {
           '<span class="route-item__status is-' + meta.cls + '">' + meta.label + '</span>' +
         '</div>' +
         '<div class="route-item__foot">' +
-          '<span class="route-item__hops">' + (r.hops | 0) + ' salti · consegnato ' + Math.round(r.delivered || 0) + '</span>' +
+          '<span class="route-item__hops">' + (r.hops | 0) + ' salti · consegnato ' + Math.round(r.delivered || 0) + threatHtml + '</span>' +
           (outbound ? '<button class="btn btn--mini btn--danger" data-action="route-cancel" data-rid="' + r.id + '" type="button">Chiudi rotta</button>' : '') +
         '</div>' +
       '</li>';
@@ -5135,6 +5150,9 @@ const DEFAULT_AUTOPAUSE = {
   'mercantile-built': false, 'mercantile-promoted': false,
   'trade-route-interrupted': false, 'trade-route-resumed': false,
   'trade-route-closed': false,
+  /* §15.7 (Fase B): razzia sulla rotta = frequente/atmosferica → OFF; la
+     perdita del mercantile è notevole → ON. */
+  'trade-raid': false, 'trade-mercantile-lost': true,
   /* M12 Fase A2 (§15.3): accordi commerciali AI. Tutti OFF (atmosferici,
      recovery-friendly: le sospensioni riprendono da sole). */
   'agreement-suspended': false, 'agreement-resumed': false, 'agreement-ended': false
@@ -5442,6 +5460,8 @@ function showEventOverlay(events) {
     'trade-route-interrupted': 'Rotta commerciale interrotta',
     'trade-route-resumed': 'Rotta commerciale ripresa',
     'trade-route-closed': 'Rotta commerciale chiusa',
+    'trade-raid': 'Razzia pirata su rotta',
+    'trade-mercantile-lost': 'Mercantile perso',
     'agreement-suspended': 'Accordo commerciale sospeso',
     'agreement-resumed': 'Accordo commerciale ripreso',
     'agreement-ended': 'Accordo commerciale concluso'
@@ -5606,6 +5626,14 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — Rotta ' + colonyNameFromKey(ev.src) + ' → ' + colonyNameFromKey(ev.dst) + ' di nuovo <strong>operativa</strong>.', 'system');
   } else if (ev.kind === 'trade-route-closed') {
     pushChronicle(ds + ' — Rotta commerciale chiusa.', 'system');
+  } else if (ev.kind === 'trade-raid') {
+    const sys = ORION.game.galaxy.systems[ev.sysId];
+    const where = sys ? (' presso <strong>' + escapeHtml(sys.name) + '</strong>') : '';
+    pushChronicle(ds + ' — <strong>Razzia pirata</strong> sulla rotta ' + colonyNameFromKey(ev.src) + ' → ' + colonyNameFromKey(ev.dst) +
+      where + ': persi ' + resIcon(ev.resource) + Math.round(ev.lost) + ' · usura mercantile +' + (ev.wear | 0) + '%.', 'system');
+    if (ORION.tutorial) ORION.tutorial.fire('trade-raids');
+  } else if (ev.kind === 'trade-mercantile-lost') {
+    pushChronicle(ds + ' — Mercantile <strong>ritirato</strong> (usura 100%) sulla rotta da ' + colonyNameFromKey(ev.src) + ': rotta chiusa.', 'system');
   } else if (ev.kind === 'agreement-suspended' || ev.kind === 'agreement-resumed' || ev.kind === 'agreement-ended') {
     const civ = (ORION.game.civs || []).filter(function (c) { return c.id === ev.civId; })[0];
     const cname = civ ? civ.name : 'una civiltà';
