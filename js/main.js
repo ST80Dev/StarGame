@@ -241,6 +241,12 @@ function newGame(seed, opts) {
   if (opts.payload && opts.payload.homeWorld) opts.homeWorld = opts.payload.homeWorld;
   seed = seed || ORION.rng.newSeed();
   const galaxy = ORION.galaxy.generate(seed);
+  /* M10 Fase B punto 3 (decisione #52 §6.1): algoritmo di generazione
+     sistemi. Nuove partite usano V2 (5-10 pianeti, 8 configurazioni,
+     marginali); save legacy (schema ≤ 14) restano su V1 per preservare
+     i body keys delle colonie esistenti (legacy snapshot per-galassia,
+     non per-sistema, per semplicità d'implementazione). Override da payload. */
+  galaxy.systemAlgVersion = (opts.payload && opts.payload.systemAlgVersion === 1) ? 1 : 2;
   /* M06.5: se il giocatore ha scelto un home diverso dal default
      generato (decisione #27), ricalibra prima di createState così la
      nebbia di guerra rispetta la nuova origine. */
@@ -3287,33 +3293,54 @@ function renderCivView(stage) {
   if (ORION.tutorial) ORION.tutorial.fire('civilizations');
 
   const ALIGN_LABEL = { bene: 'Bene', male: 'Male', neutrale: 'Neutrale' };
-  const contacted = ORION.ai.contactedCivs(g);
+  const KNOWLEDGE = ORION.ai.KNOWLEDGE || { unknown:0, spotted:1, contacted:2, known:3, familiar:4 };
+  /* M10 Fase B punto 2 (decisione #52 §13.10): scoperta progressiva a 5 gradi.
+     `visibleCivs` ritorna tutte le civiltà ≥ avvistate (esclude le sconosciute).
+     Le **4 Costanti** sono sempre visibili nella loro sezione fissa anche se
+     'unknown' — il nome+ruolo sono sempre noti. */
+  const visible = (ORION.ai.visibleCivs ? ORION.ai.visibleCivs(g) : ORION.ai.contactedCivs(g));
   const icg = (typeof g.icg === 'number') ? Math.round(g.icg) : '—';
   const DIP = ORION.diplomacy;
   const rep = DIP ? DIP.reputation(g) : (ORION.ai.reputationPreview ? ORION.ai.reputationPreview(g) : '—');
 
-  /* Card dossier per ogni civiltà contattata. */
-  let cards;
-  if (!contacted.length) {
-    cards = '<p class="panel__note">Nessuna civiltà ancora identificata. <strong>Esplora la galassia</strong> ' +
-      '(spedizioni M07 / flotte M08): al primo avvistamento di un loro sistema scatta il <strong>primo contatto</strong> ' +
-      'e qui comparirà il dossier. Intanto la Cronaca riporta le <em>voci</em> dei poteri lontani.</p>';
-  } else {
-    cards = '<ul class="civ-list">' + contacted.map(function (c) {
+  /* --- Card adattiva al grado di scoperta ---
+     unknown/spotted: solo nome + sigla regione + chip "grado"
+     contacted: + allineamento + sede + relazione + barra disposizione
+     known: + vocazione + tratto + dossier completo + intel forza
+     familiar: + last battle + reason + chip oro */
+  function renderCivCard(c, fixedShown) {
+    const rank = ORION.ai.knowledgeRank ? ORION.ai.knowledgeRank(c) : (c.contacted ? 2 : 0);
+    const kLabel = ORION.ai.knowledgeLabel ? ORION.ai.knowledgeLabel(c) : null;
+    const seat = (g.galaxy.groups.find(function (gp) { return gp.id === c.homeGroupId; }) || {});
+    const factionDef = (c.faction && ORION.factions && ORION.factions.byId) ? ORION.factions.byId(c.faction) : null;
+
+    /* Header sempre presente: nome, swatch colore, eventuale chip grado.
+       4 Costanti: ruolo SEMPRE noto anche in unknown. */
+    let head = '<div class="civ-card__head">' +
+      '<span class="civ-card__swatch" aria-hidden="true"></span>' +
+      '<span class="civ-card__name">' + escapeHtml(c.name) + '</span>';
+    if (kLabel) head += '<span class="civ-grade civ-grade--' + (c.knowledge || 'unknown') + '">' + escapeHtml(kLabel) + '</span>';
+    /* Ruolo (solo 4 Costanti): visibile sempre. */
+    if (factionDef) head += '<span class="civ-faction-role">' + escapeHtml(factionDef.role) + '</span>';
+    head += '</div>';
+
+    let body = '';
+    /* SPOTTED — minimo: nome + sigla regione. */
+    if (rank >= KNOWLEDGE.spotted && rank < KNOWLEDGE.contacted) {
+      body = '<div class="civ-card__row"><span class="civ-card__k">Regione</span><span>' +
+        escapeHtml(seat.name || '—') + '</span></div>' +
+        '<p class="panel__note civ-card__hint">Hai avvistato un loro sistema. Avvicinati con la diplomazia o uno scontro per ottenere un <strong>dossier completo</strong>.</p>';
+    }
+    /* UNKNOWN (solo 4 Costanti): mostra ruolo + hint contatto. */
+    if (rank < KNOWLEDGE.spotted && factionDef) {
+      body = '<p class="panel__note civ-card__hint">Fazione fissa della galassia · ruolo sempre noto. Per il dossier servono interazioni dirette.</p>';
+    }
+    /* CONTACTED+ — dossier base. */
+    if (rank >= KNOWLEDGE.contacted) {
       const disp = Math.round(c.disposition || 0);
       const dispLabel = ORION.ai.dispositionLabel(disp);
-      // barra disposizione: -100..100 → 0..100% con riempimento da centro
       const pct = Math.max(0, Math.min(100, (disp + 100) / 2));
       const dispCls = disp <= -15 ? 'neg' : (disp >= 15 ? 'pos' : 'mid');
-      const known = ORION.ai.knownSystemsCount(g, c);
-      const ptier = ORION.ai.powerTier(c.power || 0);
-      const seat = (g.galaxy.groups.find(function (gp) { return gp.id === c.homeGroupId; }) || {});
-      /* M10 Fase C: intel combat-aware (forza stimata, ultimo scontro,
-         "perché" della disposizione). */
-      const force = ORION.ai.forceEstimate ? ORION.ai.forceEstimate(g, c) : 0;
-      const reason = ORION.ai.dispositionReason ? ORION.ai.dispositionReason(g, c) : '';
-      /* M11 (#51): chip stato diplomatico FORMALE (civ.relation, autoritativo)
-         + pulsanti proposta. Sostituisce il chip situazionale di Fase C. */
       let relChip = '', dipActions = '';
       if (DIP) {
         const drel = DIP.effectiveRelation(g, c);
@@ -3335,6 +3362,45 @@ function renderCivView(stage) {
             '</button>';
         }).join('') + '</div>';
       }
+      let fedChip = '';
+      if (ORION.federations && ORION.federations.federationOf) {
+        const fed = ORION.federations.federationOf(g, c.id);
+        if (fed) {
+          fedChip = '<span class="civ-fedchip" title="Membro di una federazione emergente" style="--fed-color:' +
+            escapeHtml(fed.color) + '">⬢ ' + escapeHtml(fed.name) + '</span>';
+        }
+      }
+      const alignChip = '<span class="civ-chip civ-chip--' + c.alignment + '">' + (ALIGN_LABEL[c.alignment] || c.alignment) + '</span>';
+      body = '<div class="civ-card__chips">' + alignChip + relChip + fedChip + '</div>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Sede</span><span>' +
+          escapeHtml(seat.tierLabel || '—') + (seat.name ? ' · ' + escapeHtml(seat.name) : '') + '</span></div>' +
+        '<div class="civ-disp">' +
+          '<div class="civ-disp__top"><span class="civ-card__k">Disposizione verso di te</span>' +
+            '<span class="civ-disp__label civ-disp__label--' + dispCls + '">' + dispLabel + '</span></div>' +
+          '<div class="civ-disp__bar"><span class="civ-disp__mid" aria-hidden="true"></span>' +
+            '<span class="civ-disp__fill civ-disp__fill--' + dispCls + '" style="width:' + pct.toFixed(0) + '%"></span></div>' +
+        '</div>' +
+        dipActions;
+    }
+    /* KNOWN+ — vocazione + tratto + intel forza. */
+    if (rank >= KNOWLEDGE.known) {
+      const vocLabel = (ORION.ai.VOCATIONS && c.vocation && ORION.ai.VOCATIONS[c.vocation]) ? ORION.ai.VOCATIONS[c.vocation].label : '—';
+      const affLabel = (ORION.ai.AFFINITIES && c.affinity && ORION.ai.AFFINITIES[c.affinity]) ? ORION.ai.AFFINITIES[c.affinity].label : '—';
+      const known = ORION.ai.knownSystemsCount(g, c);
+      const ptier = ORION.ai.powerTier(c.power || 0);
+      const force = ORION.ai.forceEstimate ? ORION.ai.forceEstimate(g, c) : 0;
+      const extras =
+        '<div class="civ-card__row"><span class="civ-card__k">Vocazione</span><span class="civ-voc">' + escapeHtml(vocLabel) + '</span>' +
+          '<span class="civ-card__k">Affinità</span><span>' + escapeHtml(affLabel) + '</span></div>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Tratto</span><span>' + escapeHtml(c.traitLabel || '—') + '</span></div>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Potenza</span><span class="civ-power civ-power--' + ptier + '">' + ptier + '</span>' +
+          '<span class="civ-card__k">Forza stimata</span><span>≈ ' + force + ' unità</span>' +
+          '<span class="civ-card__k">Sistemi noti</span><span>' + known + '</span></div>';
+      /* Inserisci extras DOPO i chip + sede e PRIMA della barra disposizione. */
+      body = body.replace('<div class="civ-disp">', extras + '<div class="civ-disp">');
+    }
+    /* FAMILIAR — last battle + reason + chip oro. */
+    if (rank >= KNOWLEDGE.familiar) {
       let lastB = '';
       if (c.lastBattle) {
         const lb = c.lastBattle;
@@ -3346,40 +3412,44 @@ function renderCivView(stage) {
           '<span class="civ-card__k">Ultimo scontro</span><span>' + verdict + where +
           (when ? ' · <span class="civ-card__when">' + escapeHtml(when) + '</span>' : '') + '</span></div>';
       }
-      /* M10 Fase B (decisione #52 §13.8): se la civiltà è in federazione,
-         mostra una chip composita col nome federazione. */
-      let fedChip = '';
-      if (ORION.federations && ORION.federations.federationOf) {
-        const fed = ORION.federations.federationOf(g, c.id);
-        if (fed) {
-          fedChip = '<span class="civ-fedchip" title="Membro di una federazione emergente" style="--fed-color:' +
-            escapeHtml(fed.color) + '">⬢ ' + escapeHtml(fed.name) + '</span>';
-        }
+      const reason = ORION.ai.dispositionReason ? ORION.ai.dispositionReason(g, c) : '';
+      const reasonHtml = reason ? '<div class="civ-disp__reason">' + escapeHtml(reason) + '</div>' : '';
+      /* Append reason within disposition + lastBattle before dip-actions. */
+      body = body.replace('</div><div class="dip-actions">', reasonHtml + '</div>' + lastB + '<div class="dip-actions">');
+      if (body.indexOf('dip-actions') < 0) {
+        body += lastB; // fallback
       }
-      return '<li class="civ-card" style="--civ-color:' + escapeHtml(c.color) + '">' +
-        '<div class="civ-card__head">' +
-          '<span class="civ-card__swatch" aria-hidden="true"></span>' +
-          '<span class="civ-card__name">' + escapeHtml(c.name) + '</span>' +
-          '<span class="civ-chip civ-chip--' + c.alignment + '">' + (ALIGN_LABEL[c.alignment] || c.alignment) + '</span>' +
-          relChip + fedChip +
-        '</div>' +
-        '<div class="civ-card__row"><span class="civ-card__k">Tratto</span><span>' + escapeHtml(c.traitLabel) + '</span></div>' +
-        '<div class="civ-card__row"><span class="civ-card__k">Sede</span><span>' +
-          escapeHtml(seat.tierLabel || '—') + (seat.name ? ' · ' + escapeHtml(seat.name) : '') + '</span></div>' +
-        '<div class="civ-card__row"><span class="civ-card__k">Potenza</span><span class="civ-power civ-power--' + ptier + '">' + ptier + '</span>' +
-          '<span class="civ-card__k">Forza stimata</span><span>≈ ' + force + ' unità</span>' +
-          '<span class="civ-card__k">Sistemi noti</span><span>' + known + '</span></div>' +
-        lastB +
-        '<div class="civ-disp">' +
-          '<div class="civ-disp__top"><span class="civ-card__k">Disposizione verso di te</span>' +
-            '<span class="civ-disp__label civ-disp__label--' + dispCls + '">' + dispLabel + '</span></div>' +
-          '<div class="civ-disp__bar"><span class="civ-disp__mid" aria-hidden="true"></span>' +
-            '<span class="civ-disp__fill civ-disp__fill--' + dispCls + '" style="width:' + pct.toFixed(0) + '%"></span></div>' +
-          (reason ? '<div class="civ-disp__reason">' + escapeHtml(reason) + '</div>' : '') +
-        '</div>' +
-        dipActions +
-      '</li>';
-    }).join('') + '</ul>';
+    }
+
+    return '<li class="civ-card civ-card--' + (c.knowledge || 'unknown') + '" style="--civ-color:' + escapeHtml(c.color) + '">' +
+      head + body + '</li>';
+  }
+
+  /* Separa 4 Costanti dalle altre. Le 4 Costanti sono sempre visibili nella
+     loro sezione fissa anche se 'unknown'. */
+  const allCivs = (g.civs || []).filter(function (c) { return c.alive; });
+  const costantiCivs = allCivs.filter(function (c) { return !!c.faction; });
+  const otherVisible = visible.filter(function (c) { return !c.faction; });
+
+  /* Ordina per grado decrescente (familiar → known → contacted → spotted). */
+  function rankOf(c) { return ORION.ai.knowledgeRank ? ORION.ai.knowledgeRank(c) : (c.contacted ? 2 : 0); }
+  otherVisible.sort(function (a, b) { return rankOf(b) - rankOf(a); });
+
+  /* Sezione fissa "Le Quattro Costanti". */
+  let constHtml = '<div class="civ-constants">' +
+    '<h3 class="civ-constants__title">⬡ Le Quattro Costanti</h3>' +
+    '<p class="panel__note">Fazioni fisse della galassia · nome e ruolo <strong>sempre noti</strong> · dossier completo per gradi (avvicinati con diplomazia o scontro).</p>' +
+    '<ul class="civ-list">' + costantiCivs.map(function (c) { return renderCivCard(c, true); }).join('') + '</ul>' +
+  '</div>';
+
+  /* Card per le altre civiltà (visibili = ≥ spotted). */
+  let cards;
+  if (!otherVisible.length) {
+    cards = '<p class="panel__note">Nessuna civiltà ancora <strong>avvistata</strong> oltre le 4 Costanti. <strong>Esplora la galassia</strong> ' +
+      '(spedizioni M07 / flotte M08): vedere un loro sistema scatta l\'<strong>avvistamento</strong>; ' +
+      'un atto formale (diplomazia, scontro) le promuove a <strong>contattate</strong>.</p>';
+  } else {
+    cards = '<ul class="civ-list">' + otherVisible.map(function (c) { return renderCivCard(c, false); }).join('') + '</ul>';
   }
 
   /* Stato di guerra d'impero (§ M09): morale + pressione, contesto globale. */
@@ -3473,6 +3543,7 @@ function renderCivView(stage) {
         '<strong>reputazione</strong> e allineamento. Le tue azioni morali finora — <span class="civ-deeds civ-deeds--light">' + (deeds.light || 0) + ' luce</span> · ' +
         '<span class="civ-deeds civ-deeds--dark">' + (deeds.dark || 0) + ' ombra</span>. ' +
         'Gli scontri si risolvono col <strong>Combattimento</strong> (M09).</p>' +
+      constHtml +
       fedsHtml +
       cohHtml +
       nestsHtml +
@@ -4264,6 +4335,11 @@ const DEFAULT_AUTOPAUSE = {
   /* M10 Fase A (decisione #47): primo contatto, caduta e nascita di una
      civiltà sono notevoli → auto-pausa ON. Espansioni/guerre/razzie sono
      "voci di cronaca" atmosferiche e frequenti → OFF (niente interruzioni). */
+  /* M10 Fase B punto 2 (decisione #52 §13.10): "Avvistata" è il grado
+     atmosferico che precede il primo contatto. OFF di default — basta che
+     compaia in cronaca senza interrompere; il vero contatto (`civ-contact`)
+     resta auto-pausa ON. */
+  'civ-spotted': false,
   'civ-contact': true,
   'civ-fallen': true,
   'civ-emerged': true,
@@ -4525,6 +4601,7 @@ function showEventOverlay(events) {
     'capital-declared': 'Capitale di gruppo dichiarata',
     'capital-transition-end': 'Capitale entrata in carica',
     'capital-decommissioned': 'Vecchia capitale decommissionata',
+    'civ-spotted': 'Civiltà avvistata',
     'civ-contact': 'Primo contatto con una civiltà',
     'civ-expand': 'Civiltà AI: espansione',
     'civ-war': 'Guerra tra civiltà',
@@ -4809,6 +4886,11 @@ function chronicleEvent(ev) {
        La scheda-dossier vera arriva in Fase B; qui è una voce di cronaca. */
     pushChronicle(ds + ' — <strong>Primo contatto</strong> con <strong>' + escapeHtml(ev.civName) + '</strong> nel/nella ' + escapeHtml(ev.regionLabel) + ' · <em>' + escapeHtml(ev.traitLabel) + '</em> · <span class="chronicle__hint">dossier nella vista Civiltà ⬡</span>.', 'civ');
     if (ORION.tutorial) ORION.tutorial.fire('civilizations');
+  } else if (ev.kind === 'civ-spotted') {
+    /* M10 Fase B punto 2 (decisione #52 §13.10): "Avvistata" — esplori un
+       loro sistema, ma nessun atto formale è ancora avvenuto. La vista
+       Civiltà ⬡ mostra solo nome + sigla regione fino al contatto vero. */
+    pushChronicle(ds + ' — Civiltà <strong>' + escapeHtml(ev.civName) + '</strong> avvistata nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">dossier minimo nella vista Civiltà ⬡</span>.', 'civ');
   } else if (ev.kind === 'civ-expand') {
     /* Voce di cronaca "da lontano": effetto senza svelare la mappa. */
     pushChronicle(ds + ' — Voci dal/dalla ' + escapeHtml(ev.regionLabel) + ': <strong>' + escapeHtml(ev.civName) + '</strong> ha annesso un nuovo sistema.', 'civ');
