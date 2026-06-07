@@ -1168,6 +1168,35 @@ Su feedback utente (i gruppi 2D si sovrapponevano, distanze poco leggibili) la m
 
 ---
 
+## Stato di giocabilità e compatibilità save (sintesi 2026-06-07)
+
+> Sezione di **riepilogo trasversale** dopo la chiusura di M12. NON sostituisce le decisioni e gli stati moduli sopra — li richiama per rispondere a tre domande operative: *(a)* il gioco è giocabile ora? *(b)* l'AI riempie già il loop? *(c)* posso iniziare una partita ora senza che M13-M20 me la rompano?
+
+### (a) Cosa è mergiato in `main` (HEAD = PR #109, schema save **18**)
+- **Loop base completo**: M01-M07 + M06.5/M06.6/M06.7 (Insediamento, tutorial, tutorial per-struttura) + M07.1/M07.2 (Governatore Tier 1, Plancia di Colonia + Promozione Comandante) + refactor sidebar #50.
+- **Lato bellico**: M08 Fase A+B (flotta, 5 classi, ordini compound) + M09 Fase A+B (combattimento, difese, assedi, incursioni AI di conquista, esilio/game-over, evacua/richiamo/tributo).
+- **Lato AI/diplomazia/commercio**: M10 Fase A→E + rifondazione #52 Fase A + #54 Fase B (8 vocazioni, 6 affinità, 4 Costanti, frammentazione 16-23 fazioni, scoperta progressiva, coesione, federazioni, sistemi 5-10 corpi V2 con legacy snapshot) + M11 Fase A + M12 Fase A1/A2 + Fase B slice 1/2.
+
+### (b) Cosa l'AI fa già da sola
+**Pieno**: civiltà vivono per vocazione, espandono, si combattono fra loro (anche materializzate col motore M09 se le vedi), nascono e cadono, formano federazioni, si scoprono per gradi, ti contattano, ti attaccano in modo graduato dalla pressione (#49), tirano razzie alle tue rotte (#56 Fase B), hanno covi visibili raidabili con taglia + raider che ti danno la caccia (#47 Fase E), accettano/rifiutano pace/alleanza/guerra con pronostico deterministico (#51), commerciano con te (#56 A2 slice 2), il Sindacato Mekhari ti vende al mercato grigio (#56 Fase B slice 2).
+
+**Buchi "soft"** (meno verbi, non rottura del loop): controfferta diplomatica + dispacci AI proattivi (M11 Fase B); vassallaggio/occupazione vera dei sistemi conquistati (oggi tornano neutrali); bombardamento orbitale; AI-tech-tier (M13 Fase B); eventi narrativi e missioni/taglie formali (M17).
+
+**Limite davvero percepibile**: **M13 Tecnologia non c'è** → i 5 `requires:['tech:*']` cablati (`iperguida`/`scudi`/`esotici`/`bonifica-territoriale`/`terraformazione`) sono permanentemente bloccati, e con loro Mercantile T3, Scudo planetario, Impianto esotico, Centro di ingegneria + Terraformatori. Il gioco funziona senza, ma il late-game (cap pop pieno sui mondi-giardino, viaggio inter-cluster veloce, difese avanzate) **richiede M13** per esprimersi. Sopra M13 esiste solo design (#57), niente codice.
+
+### (c) Save forward-compatibility
+**Sì, le partite di oggi reggono M13-M20**, con due qualifiche.
+
+**Architettura.** Schema 18 con catena `v1→v18` componibile e **lazy** (ogni bump aggiunge campi vuoti, mai distrugge): pattern verificato sotto carico (cronaca · Insediamento · tutorial · expeditions · fleets · capitals · civs/piracy/icg · incursions/battles/warState · defeated/alignmentDeeds · reputation/relation · fog-of-war · civ.planets · cohesion/federations · systemAlgVersion · tradeRoutes/treasury/tradeAgreements). M13-M20 estenderanno con la stessa convenzione.
+
+**Qualifica 1 — legacy snapshot dove serve.** Cambi di **generazione** non retroattivi sono già gestiti col pattern *legacy-snapshot per partita*: vedi `galaxy.systemAlgVersion` (#55: V1 conservato per save schema ≤14, V2 per le nuove). M13 (catalogo tech sorteggiato dal seed, #57) userà `catalogVersion` con lo stesso pattern → una partita di oggi avrà sempre il proprio catalogo coerente, anche se a M13 il catalogo "vero" cambia per chi inizia dopo.
+
+**Qualifica 2 — ribilanciamenti possibili sui numeri**, non sullo schema. Soglie scarsità/morale (M09), curva pop (#37→#45), calibrazione "calma" AI (#52), tarature M12 sono valori in costanti che M20 può ritoccare. Effetto su una partita in corso: galassia "diversa" al caricamento (più/meno aggressiva), senza rompersi. Partite long-haul (10000+ Ι) sono più esposte di quelle early-mid.
+
+**Conclusione operativa.** Iniziare ora è sicuro. Per goderti il late-game è ragionevole non andare troppo in profondità fino a M13 (le strutture tech-gated restano grigie e la pista vittoria *Ascensione tech* è oggi placeholder). Una partita early-mid è completa come esperienza.
+
+---
+
 ## Problemi aperti / da decidere più avanti
 
 - **Gestione rifiuti — Fase 1 e Fase 2 (decisione #48).** Fase 0 (circuito base + Impianto di riciclo) è in codice. Restano: **Fase 1** (con M13) ramo tech "Ecologia/Riciclo" + **colonie riciclanti** vere sui mondi ostili (gassosi/vulcanici/lune con capacità di contenimento e conversione elevate → dare scopo ai mondi-liability); **Fase 2** (con M12, sfruttando le civiltà AI di M10 ora osservabili) **export rifiuti** e mercato con le AI (chi li valorizza / chi va pagato per smaltirli) + il rifiuto come asse diplomatico. I numeri di Fase 0 (`WASTE_*` in `time.js`) andranno ritarati quando l'export sottrarrà pressione. Nessun impatto sui moduli finché non si arriva a M12/M13.
