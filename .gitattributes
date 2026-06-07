@@ -1,0 +1,9 @@
+# CLAUDE.md è un changelog-style log delle decisioni di sviluppo.
+# Ogni PR appende una nuova decisione → senza questa direttiva, 2 PR
+# parallele producono conflitto sulle righe finali. La strategia
+# `union` concatena entrambe le aggiunte automaticamente.
+#
+# Trade-off: append-only è ok. Se due PR modificano la STESSA
+# decisione esistente, la union le include entrambe → review umana.
+# Raro nel flusso del progetto (le decisioni sono fissate al momento).
+CLAUDE.md merge=union
