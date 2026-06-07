@@ -502,7 +502,7 @@ function updateGlobalResourceHud() {
       totals.water += c.stock.water || 0;
       // Popolazione: somma delle PERSONE reali (curva per-pianeta §9).
       const planet = planetForColony(c);
-      if (planet) people += ORION.planet.peopleAt((c.pop.total || 0) + (c.pop.accum || 0), planet);
+      if (planet) people += ORION.planet.peopleAt(ORION.planet.popUnits(c), planet);
     });
   }
   const setVal = function (key, v) {
@@ -514,7 +514,7 @@ function updateGlobalResourceHud() {
   setVal('cibo', totals.food);
   setVal('acqua', totals.water);
   const popEl = document.querySelector('[data-bind="popolazione"]');
-  if (popEl) popEl.textContent = ORION.planet.formatPeople(people);
+  if (popEl) { popEl.innerHTML = popAnimSpan('hud:pop', Math.round(people)); ensurePopAnim(); }
   updateGlobalIndicesHud();
   /* Decisione #50: la dx mostra lo stato della colonia in focus —
      rinfreschiamola con l'HUD globale. La sx (Roster) ha badge che
@@ -776,10 +776,14 @@ function popMaxPeople(planet) {
   const m = ORION.planet.popCeiling(planet);
   return m > 0 ? ORION.planet.formatPeople(m) : '—';
 }
-/* "Persone correnti / tetto del pianeta", con units frazionarie per fluidità. */
+/* "Persone correnti / tetto del pianeta": il valore corrente è uno span
+   animato (scorre verso il bersaglio, niente scatti), il tetto è il
+   massimo demografico del pianeta (asintoto della curva). */
 function popRangePeople(colony, planet) {
-  const u = (colony.pop.total || 0) + (colony.pop.accum || 0);
-  return popPeople(u, planet) + ' / ' + popMaxPeople(planet);
+  const people = ORION.planet.peopleAt(ORION.planet.popUnits(colony), planet);
+  const key = 'pop:' + colony.systemId + ':' + colony.bodyKey;
+  return popAnimSpan(key, people) +
+    ' <span class="pop-ceiling">/ ' + popMaxPeople(planet) + '</span>';
 }
 
 /* Memo runtime dei pianeti generati (deterministici dal seed): serve per
@@ -1655,6 +1659,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
       '</div>';
     bindGovernorHandlers(host, planet, colony);
     bindCapitalHandlers(host, planet, colony);
+    ensurePopAnim();
     return;
   }
 
@@ -4036,7 +4041,7 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
   const cap = colony.pop.cap;
   // Persone correnti (units frazionarie per fluidità): le classi ne sono
   // una quota proporzionale (interi internamente → persone a schermo).
-  const peopleNow = ORION.planet.peopleAt(total + (colony.pop.accum || 0), planet);
+  const peopleNow = ORION.planet.peopleAt(ORION.planet.popUnits(colony), planet);
   const order = ['operai', 'scienziati', 'militari', 'mercanti', 'tecnici'];
   const labels = { operai: 'Operai', scienziati: 'Scienziati', militari: 'Militari', mercanti: 'Mercanti', tecnici: 'Tecnici' };
   let bars = '<ul class="class-list">';
@@ -4195,6 +4200,7 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
       targetHtml +
     '</div>';
 
+  ensurePopAnim();
   if (ORION.tutorial) ORION.tutorial.fire('population');
 }
 
@@ -4526,6 +4532,54 @@ function startDateInterpolation() {
 function stopDateInterpolation() {
   if (ORION.timer.rafId) { cancelAnimationFrame(ORION.timer.rafId); ORION.timer.rafId = null; }
 }
+
+/* ---------------------------------------------------------------
+   Animazione del contatore popolazione (fix scalini, stile #31).
+   Il motore aggiorna pop.total a fine batch; qui il numero MOSTRATO
+   scorre con easing verso il bersaglio invece di scattare. Un solo
+   rAF globale anima tutti gli span [data-pop-key] presenti nel DOM:
+   legge il bersaglio da data-pop-target e tiene il valore "mostrato"
+   in ORION._popAnim.shown[key] (numerico — formatPeople è lossy, non
+   si può rileggere dal testo). Auto-stop quando tutti raggiungono il
+   target. Indipendente dal play-timer: vale anche per il +1 manuale. */
+ORION._popAnim = ORION._popAnim || { shown: {}, rafId: null };
+
+function popAnimSpan(key, people, extraClass) {
+  const a = ORION._popAnim;
+  if (a.shown[key] == null) a.shown[key] = people;   // prima volta: niente animazione da 0
+  return '<span class="pop-anim' + (extraClass ? ' ' + extraClass : '') + '" data-pop-key="' +
+    escapeHtml(key) + '" data-pop-target="' + people + '">' +
+    escapeHtml(ORION.planet.formatPeople(a.shown[key])) + '</span>';
+}
+ORION.popAnimSpan = popAnimSpan;
+
+function popAnimFrame() {
+  const a = ORION._popAnim;
+  const els = document.querySelectorAll('.pop-anim[data-pop-key]');
+  let active = false;
+  els.forEach(function (el) {
+    const key = el.getAttribute('data-pop-key');
+    const target = parseFloat(el.getAttribute('data-pop-target')) || 0;
+    let shown = a.shown[key];
+    if (shown == null) shown = target;
+    const tol = Math.max(1, target * 0.002);
+    if (Math.abs(shown - target) > tol) {
+      shown = shown + (target - shown) * 0.14;       // approccio esponenziale ~liscio
+      if (Math.abs(shown - target) <= tol) shown = target;
+      a.shown[key] = shown;
+      el.textContent = ORION.planet.formatPeople(shown);
+      active = true;
+    } else {
+      a.shown[key] = target;
+    }
+  });
+  a.rafId = active ? requestAnimationFrame(popAnimFrame) : null;
+}
+function ensurePopAnim() {
+  const a = ORION._popAnim;
+  if (!a.rafId) a.rafId = requestAnimationFrame(popAnimFrame);
+}
+ORION.ensurePopAnim = ensurePopAnim;
 
 /* Disegna i 5 controlli compatti (decisione #31) nella barra HUD. */
 function renderTimeControls() {

@@ -114,6 +114,45 @@
     return Math.round(people);
   }
 
+  /* Unità popolazione "frazionarie" per il DISPLAY (fix scalini).
+     Il motore tiene pop.total intero + pop.accum (accumulo verso il prossimo
+     livello, denominato in `unitCost` che CRESCE col livello: 1+0.6·(pop−1)).
+     Sommare accum grezzo a total sfora — accum può valere più di 1 unità — e
+     al level-up il numero mostrato tornava indietro di scatto (dente di sega).
+     Qui normalizziamo l'accumulo a una frazione vera in [0,1) del livello
+     corrente, così il numero scorre monotòno tra un livello e l'altro. Solo
+     presentazione: nessun calcolo tarato dipende da questo. */
+  function popUnits(colony) {
+    if (!colony || !colony.pop) return 0;
+    const total = colony.pop.total || 0;
+    if (total <= 0) return 0;
+    const cap = colony.pop.cap || total;
+    if (total >= cap) return cap;            // al cap l'accumulo non viene drenato: niente frazione
+    const accum = colony.pop.accum || 0;
+    const T = root.ORION && root.ORION.time;
+    const levelCost = (T && T.CFG && typeof T.CFG.POP_LEVEL_COST === 'number') ? T.CFG.POP_LEVEL_COST : 0.6;
+    const unitCost = 1 + levelCost * (total - 1);
+    let frac = unitCost > 0 ? accum / unitCost : 0;
+    if (frac < 0) frac = 0;
+    if (frac > 0.999) frac = 0.999;          // mai "raggiungere" il livello prima del motore
+    return total + frac;
+  }
+
+  /* Maturità demografica t ∈ [0,1]: la posizione lungo la curva-S (lo stesso
+     `t` interno a peopleAt). La barra UI usa QUESTO valore → riempimento e
+     numero di persone restano perceptivamente coerenti: la barra dice "quanto
+     è sviluppata la colonia", non un rapporto lineare di unità (che dava il
+     "29% di barra ma 285 persone su 7 Mld"). */
+  function popMaturity(colony, planet) {
+    const refCap = Math.max(2, (planet && planet.popCap) || (colony && colony.pop && colony.pop.cap) || 2);
+    const u = popUnits(colony);
+    if (u <= 1) return 0;
+    let t = (u - 1) / (refCap - 1);
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
+    return t;
+  }
+
   /* Formattazione italiana compatta: intero < 1.000, migliaia col punto,
      poi "Mln" / "Mld" con max 1 decimale (niente decimale ≥ 100). */
   function formatPeople(n) {
@@ -805,6 +844,8 @@
     POP_CEILING: POP_CEILING,
     popCeiling: popCeiling,
     peopleAt: peopleAt,
+    popUnits: popUnits,
+    popMaturity: popMaturity,
     formatPeople: formatPeople,
     generate: generate,
     createColony: createColony,
