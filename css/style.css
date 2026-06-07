@@ -1678,6 +1678,18 @@ button { font-family: inherit; }
      alzato globalmente; con html a 18px il testo rem sale di misura). */
   .panel--left, .panel--right { line-height: 1.45; }
 
+  /* Anti-overflow orizzontale (testi che sforavano leggermente a destra):
+     il testo va a capo e i flex-child possono restringersi sotto il loro
+     contenuto (min-width:auto è la causa classica dello spill nei flex). */
+  .panel--left, .panel--right, .viewport__stage { overflow-x: hidden; }
+  .panel__content, .fleet-view, .civ-view, .market-view {
+    overflow-wrap: break-word;
+    max-width: 100%;
+  }
+  .panel__content :where(div, p, li, ul, table, h2, h3, h4),
+  .fleet-view :where(div, p, li, ul, table),
+  .civ-view :where(div, p, li, ul, table) { min-width: 0; max-width: 100%; }
+
   /* HUD top compatto: indici+tempo+azioni su una riga, risorse scrollabili */
   .hud-top {
     flex-wrap: wrap;
@@ -1694,10 +1706,17 @@ button { font-family: inherit; }
   .index--date .index__value { font-size: 0.78rem; }
   .btn--save, .btn--tutorial { padding: 6px 8px; }
   .btn--save .btn__label { display: none; }
-  .time-control--inline { padding: 3px 5px; gap: 5px; }
-  .time-control--inline .btn--next-event { padding: 7px 9px; }
+  .time-control--inline { padding: 3px 4px; gap: 4px; flex-wrap: wrap; }
+  .time-control--inline .btn--play { padding: 4px 7px; gap: 4px; }
+  .time-control--inline .btn--play .btn__label { font-size: 0.72rem; letter-spacing: 0; }
+  .time-control--inline .btn--mini,
+  .time-control--inline .btn--play-step,
+  .time-control--inline .btn--step { padding: 5px 7px; min-width: 30px; }
+  .time-control--inline .btn--next-event { padding: 5px 7px; gap: 3px; }
   .time-control--inline .btn--next-event .btn__label { display: none; }
-  .time-control--inline .btn--step { padding: 6px 8px; min-width: 34px; }
+  .time-control--inline .btn--next-event .time-control__delta {
+    margin-left: 3px; padding: 1px 4px; font-size: 0.68rem;
+  }
 
   /* Risorse: riga unica scrollabile in orizzontale (niente wrap verticale) */
   .resource-bar {
