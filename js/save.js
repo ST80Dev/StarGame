@@ -55,7 +55,7 @@
      DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
      nuovo gioco la preserva e una recovery best-effort prova a dedurla
      da colonie/flotte/spedizioni/cronaca. */
-  const SCHEMA_VERSION = 19;
+  const SCHEMA_VERSION = 20;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -175,7 +175,13 @@
          civiltà AI (sostituisce il rollback-a-neutrale). Mappa sysId →
          { fromCivId, fromCivName, fromCivColor, fromAlignment, sinceI }.
          Additivo: i save vecchi caricano con {} (nessuna migrazione). */
-      occupations: (game.occupations && typeof game.occupations === 'object') ? game.occupations : {}
+      occupations: (game.occupations && typeof game.occupations === 'object') ? game.occupations : {},
+      /* Schema 20 (decisione #65): identità del popolo del giocatore —
+         { prefix (archetipo di governo), proper (nome proprio) }. Riconoscibile
+         nelle card di salvataggio + mood di partita. */
+      empire: (game.empire && game.empire.proper)
+        ? { prefix: game.empire.prefix || 'repubblica', proper: String(game.empire.proper) }
+        : null
     };
   }
 
@@ -491,6 +497,13 @@
       payload.expeditions = [];
       payload.schema = 19;
     }
+    /* v19 → v20 (decisione #65): identità del popolo. Save vecchi → null;
+       main.js al load deriva un default dalla colonia natale (es.
+       "Repubblica di <colonia>"). Niente di perso. */
+    if ((payload.schema || 19) < 20) {
+      if (payload.empire === undefined) payload.empire = null;
+      payload.schema = 20;
+    }
     return payload;
   }
 
@@ -599,12 +612,23 @@
       ts: slot.ts || 0,
       seed: p.seed || '—',
       galaxyName: gname,
+      empire: empireLabelOf(p),     /* decisione #65: nome del popolo */
       ds: ds,
       colonies: colonies,
       mode: (p.mode && p.mode.startedAs) || 'sandbox',
       preset: (p.mode && p.mode.preset) || 'classic',
       schema: p.schema || 0
     };
+  }
+  /* Etichetta identità popolo da un payload (decisione #65), riusando il
+     pool archetipi di ai.js. Null se assente (save < schema 20). */
+  function empireLabelOf(p) {
+    const e = p && p.empire;
+    if (!e || !e.proper) return null;
+    const A = (ORION.ai && ORION.ai.ARCHETYPES) || {};
+    const all = [].concat(A.bene || [], A.neutrale || [], A.male || []);
+    const a = all.find(function (x) { return x.id === e.prefix; }) || { noun: 'Repubblica' };
+    return a.noun + ' ' + (a.direct ? '' : 'di ') + e.proper;
   }
   function currentDsLabel(payload) {
     if (!payload || !ORION.time || !ORION.time.format) return '—';

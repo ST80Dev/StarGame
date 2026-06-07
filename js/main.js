@@ -374,7 +374,13 @@ function newGame(seed, opts) {
     tradeAgreements: [],
     /* M11 Fase B parziale: sistemi occupati dopo vittoria su civiltà AI.
        Lazy, additivo; nessun bump di schema. */
-    occupations: {}
+    occupations: {},
+    /* Identità del popolo del giocatore (decisione #65): { prefix, proper }.
+       Default derivato dalla colonia natale dopo colonizeHomePlanet se non
+       passato dal menu. Persistito (schema 20). */
+    empire: (opts.empire && opts.empire.proper)
+      ? { prefix: opts.empire.prefix || 'repubblica', proper: String(opts.empire.proper) }
+      : null
   };
   // startDS = Data Stellare INIZIALE (epoca .00), fissa per la partita.
   ORION.game.startDS = ORION.time.format(startOrbita * 100);
@@ -454,6 +460,11 @@ function newGame(seed, opts) {
     if (saved.occupations && typeof saved.occupations === 'object') {
       ORION.game.occupations = Object.assign({}, saved.occupations);
     }
+    /* Identità del popolo (decisione #65, schema 20). Save pre-20 → null,
+       il fallback sotto deriva il default dalla colonia natale. */
+    if (saved.empire && saved.empire.proper) {
+      ORION.game.empire = { prefix: saved.empire.prefix || 'repubblica', proper: String(saved.empire.proper) };
+    }
     /* Schema 12: ripristina nebbia di guerra (sistemi esplorati/rilevati).
        Prima del fix la scoperta veniva persa al load → i sistemi esplorati
        tornavano grigi. Validazione difensiva: deve essere un array della
@@ -481,6 +492,12 @@ function newGame(seed, opts) {
         seenLessons: Array.isArray(saved.tutorial.seenLessons) ? saved.tutorial.seenLessons.slice() : []
       };
     }
+  }
+  /* Identità del popolo (decisione #65): se non scelta dal menu né presente
+     nel payload, deriva un default dalla colonia natale (es. "Repubblica di
+     Glicine"). */
+  if (!ORION.game.empire || !ORION.game.empire.proper) {
+    ORION.game.empire = defaultEmpire(ORION.game);
   }
   /* Normalizza in ogni caso (idempotente) e mostra/nasconde la "?" in HUD. */
   if (ORION.tutorial && ORION.tutorial.initOnGame) {
@@ -6345,6 +6362,125 @@ function chronicleEvent(ev) {
 
 /* M09 (decisione #49): nome leggibile di una colonia dalla sua chiave
    "<sysId>:<bodyKey>" — rigenera system+planet dal seed (seed+delta #5). */
+/* =====================================================================
+   Identità del popolo del giocatore (decisione #65)
+   Prefisso (archetipo di governo, riusa il pool AI #34) + nome proprio.
+   ===================================================================== */
+function empireArchetypeList() {
+  const A = (ORION.ai && ORION.ai.ARCHETYPES) || {};
+  return [].concat(A.bene || [], A.neutrale || [], A.male || []);
+}
+function empireArchById(id) {
+  return empireArchetypeList().find(function (a) { return a.id === id; })
+      || { id: 'repubblica', noun: 'Repubblica' };
+}
+/* "Impero Glicine" (direct) / "Repubblica di Glicine" — stessa regola AI. */
+function formatEmpire(emp) {
+  if (!emp || !emp.proper) return '';
+  const a = empireArchById(emp.prefix);
+  return a.noun + ' ' + (a.direct ? '' : 'di ') + emp.proper;
+}
+/* Nome PLAIN della colonia da una chiave "<sysId>:<bodyKey>" (per il default). */
+function colonyPlainName(key) {
+  const g = ORION.game;
+  if (!g || !key) return '';
+  const parts = String(key).split(':');
+  const sid = Number(parts[0]); const bk = parts[1];
+  try {
+    const sys = ORION.system.generate(g.galaxy, sid);
+    const pl = ORION.planet.generate(g.galaxy, sys, bk);
+    return pl ? pl.name : ('Sistema ' + sid);
+  } catch (e) { return 'Sistema ' + sid; }
+}
+/* Default: prefisso "Repubblica" + nome della colonia natale. */
+function defaultEmpire(game) {
+  const key = game && (game.homePlanetKey ||
+    (game.homeWorld && Number.isInteger(game.homeWorld.systemId)
+      ? (game.homeWorld.systemId + ':' + game.homeWorld.bodyKey) : null));
+  const proper = (key && colonyPlainName(key)) ||
+    (game && ORION.names && ORION.names.galaxyName(game.seed)) || 'Aurora';
+  return { prefix: 'repubblica', proper: proper };
+}
+
+/* Editor in-game dell'identità (decisione #65): cambia prefisso e/o nome
+   proprio in qualsiasi momento (es. cambio di intenti di gioco). */
+function openEmpireEditor() {
+  const g = ORION.game;
+  if (!g) return;
+  const emp = (g.empire && g.empire.proper) ? g.empire : defaultEmpire(g);
+  const A = (ORION.ai && ORION.ai.ARCHETYPES) || {};
+  const sources = [];
+  [emp.proper, colonyPlainName(g.homePlanetKey), ORION.names.galaxyName(g.seed)]
+    .forEach(function (s) { if (s && sources.indexOf(s) < 0) sources.push(s); });
+  let srcIdx = 0;
+
+  function optGroup(label, arr, cur) {
+    if (!arr || !arr.length) return '';
+    return '<optgroup label="' + label + '">' + arr.map(function (a) {
+      return '<option value="' + a.id + '"' + (a.id === cur ? ' selected' : '') + '>' + escapeHtml(a.noun) + '</option>';
+    }).join('') + '</optgroup>';
+  }
+  const selectHtml = '<select class="main-menu__select" data-bind="emp-prefix">' +
+    optGroup('Luce / diplomatici', A.bene, emp.prefix) +
+    optGroup('Neutrali / economici', A.neutrale, emp.prefix) +
+    optGroup('Autoritari / diretti', A.male, emp.prefix) +
+  '</select>';
+
+  let ov = document.querySelector('[data-bind="empire-modal"]');
+  if (ov) ov.remove();
+  ov = document.createElement('div');
+  ov.className = 'save-modal empire-modal';
+  ov.setAttribute('data-bind', 'empire-modal');
+  ov.innerHTML =
+    '<div class="save-modal__panel">' +
+      '<header class="save-modal__header">' +
+        '<h2 class="save-modal__title"><span>Rinomina il tuo popolo</span></h2>' +
+        '<button class="btn btn--mini btn--icon-only" data-action="emp-close" type="button" aria-label="Chiudi"><span class="ui-icon" data-icon="close" aria-hidden="true"></span></button>' +
+      '</header>' +
+      '<div class="save-modal__body">' +
+        '<label class="main-menu__field"><span class="main-menu__field-label">Prefisso</span>' + selectHtml + '</label>' +
+        '<label class="main-menu__field"><span class="main-menu__field-label">Nome proprio</span>' +
+          '<span class="main-menu__seedrow">' +
+            '<input type="text" class="main-menu__input" data-bind="emp-proper" maxlength="24" value="' + escapeHtml(emp.proper) + '">' +
+            '<button type="button" class="btn btn--mini" data-action="emp-roll" title="Sorteggia">🎲</button>' +
+          '</span>' +
+        '</label>' +
+        '<p class="main-menu__empire-preview">Anteprima: <strong data-bind="emp-preview"></strong></p>' +
+        '<div class="main-menu__form-actions">' +
+          '<button type="button" class="btn btn--mini" data-action="emp-close">Annulla</button>' +
+          '<button type="button" class="btn btn--primary" data-action="emp-save">Salva</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(ov);
+  injectStaticSvgIcons();
+
+  const sel = ov.querySelector('[data-bind="emp-prefix"]');
+  const inp = ov.querySelector('[data-bind="emp-proper"]');
+  const prev = ov.querySelector('[data-bind="emp-preview"]');
+  function preview() {
+    prev.textContent = formatEmpire({ prefix: sel.value, proper: inp.value.trim() || sources[0] || 'Aurora' });
+  }
+  sel.addEventListener('change', preview);
+  inp.addEventListener('input', preview);
+  ov.querySelector('[data-action="emp-roll"]').addEventListener('click', function () {
+    srcIdx = (srcIdx + 1) % sources.length; inp.value = sources[srcIdx]; preview();
+  });
+  function close() { ov.remove(); document.removeEventListener('keydown', onKey); }
+  function onKey(e) { if (e.key === 'Escape') close(); }
+  document.addEventListener('keydown', onKey);
+  ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+  ov.querySelectorAll('[data-action="emp-close"]').forEach(function (b) { b.addEventListener('click', close); });
+  ov.querySelector('[data-action="emp-save"]').addEventListener('click', function () {
+    g.empire = { prefix: sel.value, proper: inp.value.trim() || sources[0] || 'Aurora' };
+    persistGame(g);
+    renderLeftPanel();
+    close();
+    showToast('Popolo: ' + formatEmpire(g.empire));
+  });
+  preview();
+}
+
 function colonyNameFromKey(key) {
   const g = ORION.game;
   if (!g || !key) return '—';
@@ -6769,7 +6905,14 @@ function renderLeftPanel() {
   }
 
   const chronCollapsed = !!ORION.chronicleCollapsed;
+  /* Identità del popolo (decisione #65): banner cliccabile in testa → editor. */
+  const emp = ORION.game && ORION.game.empire;
+  const empHtml = '<button type="button" class="lp-empire" data-action="empire-edit" title="Rinomina il tuo popolo">' +
+    '<span class="lp-empire__name">' + escapeHtml(emp ? formatEmpire(emp) : '—') + '</span>' +
+    '<span class="lp-empire__edit" aria-hidden="true">✎</span>' +
+  '</button>';
   host.innerHTML =
+    empHtml +
     sec('roster',   secTitle('roster', 'roster',     'Roster'),         rosterCount, rosterBody) +
     sec('nav',      secTitle('nav',    'galaxy',     'Navigazione'),    '',          '<nav class="lp-nav">' + navHtml + '</nav>') +
     sec('launcher', secTitle('launch', 'settings',   'Sale e moduli'),  '',          '<div class="lp-launcher">' + launcherHtml + '</div>') +
@@ -6787,6 +6930,10 @@ function renderLeftPanel() {
      a funzionare senza modifiche. */
   const ul = host.querySelector('.chronicle__log');
   if (ul) ul.setAttribute('data-bind', 'chronicle');
+
+  /* Identità popolo: click sul banner → editor (decisione #65). */
+  const empBtn = host.querySelector('[data-action="empire-edit"]');
+  if (empBtn) empBtn.addEventListener('click', openEmpireEditor);
 
   /* Bind handlers — accordion: aprire una sezione collassa le altre. */
   host.querySelectorAll('[data-action="lp-toggle"]').forEach(function (h) {
@@ -7664,6 +7811,7 @@ function saveCardHtml(meta, perms) {
       escapeHtml(meta.name) +
     '</div>' +
     '<dl class="save-card__meta">' +
+      (meta.empire ? '<div><dt>Popolo</dt><dd><strong>' + escapeHtml(meta.empire) + '</strong></dd></div>' : '') +
       (meta.galaxyName ? '<div><dt>Galassia</dt><dd><strong>' + escapeHtml(meta.galaxyName) + '</strong></dd></div>' : '') +
       '<div><dt>' + uiIcon('clock', 'soft') + ' Data Stellare</dt><dd>' + ds + '</dd></div>' +
       '<div><dt>Seed</dt><dd><code>' + escapeHtml(meta.seed) + '</code></dd></div>' +
@@ -7905,6 +8053,7 @@ function renderMainMenu() {
   if (!body) return;
   if (ORION.menuView === 'new')      return renderMainMenuNew(body);
   if (ORION.menuView === 'home-pick') return renderMainMenuHomePick(body);
+  if (ORION.menuView === 'empire-name') return renderMainMenuEmpireName(body);
   if (ORION.menuView === 'info')     return renderMainMenuInfo(body);
   return renderMainMenuHome(body);
 }
@@ -7964,7 +8113,13 @@ function autoMetaFromPayload(p) {
   const ds = currentDsOfPayload(p);
   const gname = p.seed && ORION.names && ORION.names.galaxyName
     ? ORION.names.galaxyName(p.seed) : null;
-  return (gname ? gname + ' · ' : '') + ds;
+  /* decisione #65: il nome del popolo è il reminder più forte. */
+  let emp = null;
+  if (p.empire && p.empire.proper) {
+    const a = empireArchById(p.empire.prefix);
+    emp = a.noun + ' ' + (a.direct ? '' : 'di ') + p.empire.proper;
+  }
+  return (emp ? emp + ' · ' : '') + (gname ? gname + ' · ' : '') + ds;
 }
 
 /* --- Form "Nuova partita": seed + preset + ironman --- */
@@ -8184,27 +8339,110 @@ function potBar(label, val) {
   '</div>';
 }
 
+/* Scelta colonia fatta → passa allo step "Dai un nome al tuo popolo"
+   (decisione #65). La colonia scelta è stashata nel form. */
 function confirmHomeAndStart(candidate) {
+  ORION.menuForm.home = candidate;
+  showMainMenu('empire-name');
+}
+
+/* Step identità popolo: prefisso (archetipo) + nome proprio (default dalla
+   colonia natale, editabile + 🎲 che cicla le fonti celesti). */
+function renderMainMenuEmpireName(body) {
+  const candidate = ORION.menuForm.home;
+  if (!candidate) { showMainMenu('home-pick'); return; }
+  const seed = ORION.menuForm.seed;
+  /* Fonti per il 🎲: colonia natale → regione → sistema → galassia. */
+  const sources = [];
+  [candidate.planet && candidate.planet.name, candidate.groupName,
+   candidate.system && candidate.system.name, ORION.names.galaxyName(seed)]
+    .forEach(function (s) { if (s && sources.indexOf(s) < 0) sources.push(s); });
+  ORION.menuForm.empire = ORION.menuForm.empire || { prefix: 'repubblica', proper: sources[0] || 'Aurora', srcIdx: 0 };
+  const form = ORION.menuForm.empire;
+
+  const A = (ORION.ai && ORION.ai.ARCHETYPES) || {};
+  function optGroup(label, arr) {
+    if (!arr || !arr.length) return '';
+    return '<optgroup label="' + label + '">' + arr.map(function (a) {
+      return '<option value="' + a.id + '"' + (a.id === form.prefix ? ' selected' : '') + '>' + escapeHtml(a.noun) + '</option>';
+    }).join('') + '</optgroup>';
+  }
+  const selectHtml = '<select class="main-menu__select" data-bind="emp-prefix">' +
+    optGroup('Luce / diplomatici', A.bene) +
+    optGroup('Neutrali / economici', A.neutrale) +
+    optGroup('Autoritari / diretti', A.male) +
+  '</select>';
+
+  body.innerHTML =
+    '<div class="main-menu__form">' +
+      '<h2 class="main-menu__form-title">Dai un nome al tuo popolo</h2>' +
+      '<p class="main-menu__field-hint">Come si chiamerà la tua civiltà? Il <strong>prefisso</strong> ne dà il tono ' +
+        '(potrai cambiarlo in partita se cambi intenti); il <strong>nome proprio</strong> parte dalla tua colonia ' +
+        'd\'origine ma puoi scriverlo o sortirlo come preferisci.</p>' +
+      '<label class="main-menu__field"><span class="main-menu__field-label">Prefisso</span>' + selectHtml + '</label>' +
+      '<label class="main-menu__field"><span class="main-menu__field-label">Nome proprio</span>' +
+        '<span class="main-menu__seedrow">' +
+          '<input type="text" class="main-menu__input" data-bind="emp-proper" maxlength="24" value="' + escapeHtml(form.proper) + '">' +
+          '<button type="button" class="btn btn--mini" data-action="emp-roll" title="Sorteggia un nome">🎲</button>' +
+        '</span>' +
+      '</label>' +
+      '<p class="main-menu__empire-preview">Anteprima: <strong data-bind="emp-preview"></strong></p>' +
+      '<div class="main-menu__form-actions">' +
+        '<button type="button" class="btn btn--mini" data-action="emp-back">← Indietro</button>' +
+        '<button type="button" class="btn btn--mini" data-action="emp-skip">Salta</button>' +
+        '<button type="button" class="btn btn--primary" data-action="emp-start">Inizia partita</button>' +
+      '</div>' +
+    '</div>';
+
+  const sel = body.querySelector('[data-bind="emp-prefix"]');
+  const inp = body.querySelector('[data-bind="emp-proper"]');
+  const prev = body.querySelector('[data-bind="emp-preview"]');
+  function refresh() {
+    form.prefix = sel.value;
+    form.proper = inp.value.trim() || sources[0] || 'Aurora';
+    prev.textContent = formatEmpire(form);
+  }
+  sel.addEventListener('change', refresh);
+  inp.addEventListener('input', function () { form.prefix = sel.value; form.proper = inp.value.trim(); prev.textContent = formatEmpire({ prefix: form.prefix, proper: form.proper || (sources[0] || 'Aurora') }); });
+  body.querySelector('[data-action="emp-roll"]').addEventListener('click', function () {
+    form.srcIdx = (form.srcIdx + 1) % sources.length;
+    inp.value = sources[form.srcIdx];
+    refresh();
+  });
+  body.querySelector('[data-action="emp-back"]').addEventListener('click', function () {
+    ORION.menuForm.empire = null; showMainMenu('home-pick');
+  });
+  body.querySelector('[data-action="emp-skip"]').addEventListener('click', function () {
+    startGameWithEmpire(null);
+  });
+  body.querySelector('[data-action="emp-start"]').addEventListener('click', function () {
+    refresh();
+    startGameWithEmpire({ prefix: form.prefix, proper: form.proper });
+  });
+  refresh();
+}
+
+/* Avvio reale della partita con l'identità scelta (o default se empire=null). */
+function startGameWithEmpire(empire) {
+  const candidate = ORION.menuForm.home;
+  if (!candidate) { showMainMenu('home-pick'); return; }
   const PRESETS = (ORION.victory && ORION.victory.PRESETS) || {};
   const presetId = ORION.menuForm.preset || 'classic';
   const presetMods = Object.assign({}, PRESETS[presetId] || PRESETS.classic || {});
   if (ORION.menuForm.ironman) presetMods.ironman = true;
-  const mode = {
-    startedAs: 'sandbox',
-    preset: presetId,
-    modifiers: presetMods
-  };
+  const mode = { startedAs: 'sandbox', preset: presetId, modifiers: presetMods };
   clearSavedGame();
   newGame(ORION.menuForm.seed, {
     mode: mode,
     homeWorld: { systemId: candidate.systemId, bodyKey: candidate.bodyKey },
-    tutorialEnabled: !!ORION.menuForm.tutorial
+    tutorialEnabled: !!ORION.menuForm.tutorial,
+    empire: (empire && empire.proper) ? empire : null
   });
   /* Reset preview + form per la prossima apertura */
   ORION.menuPreview = null;
   ORION.menuForm = { seed: null, preset: presetId, ironman: !!presetMods.ironman, tutorial: !!ORION.menuForm.tutorial };
   enterGame();
-  showToast('Colonia su ' + candidate.planet.name + ' · ' + ORION.names.galaxyName(ORION.game.seed));
+  showToast(formatEmpire(ORION.game.empire) + ' · ' + ORION.names.galaxyName(ORION.game.seed));
 }
 
 /* --- Info / Crediti --- */
