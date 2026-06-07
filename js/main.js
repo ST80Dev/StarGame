@@ -6098,13 +6098,13 @@ function renderMainMenuNew(body) {
     '<form class="main-menu__form" data-bind="menu-form">' +
       '<h2 class="main-menu__form-title">Nuova partita</h2>' +
       '<label class="main-menu__field">' +
-        '<span class="main-menu__field-label">Seed</span>' +
+        '<span class="main-menu__field-label">Galassia</span>' +
+        '<div class="main-menu__galname" data-bind="menu-galname">' + escapeHtml(ORION.names.galaxyName(ORION.menuForm.seed)) + '</div>' +
         '<div class="main-menu__field-row">' +
-          '<input class="main-menu__input" type="text" data-bind="menu-seed" ' +
+          '<input class="main-menu__input main-menu__input--seed" type="text" data-bind="menu-seed" ' +
             'value="' + escapeHtml(ORION.menuForm.seed) + '" maxlength="32" autocomplete="off">' +
           '<button type="button" class="btn btn--mini" data-action="menu-seed-new" title="Genera un nuovo seed">⟳ Genera</button>' +
         '</div>' +
-        '<span class="main-menu__field-hint">Galassia: <strong data-bind="menu-galname">' + escapeHtml(ORION.names.galaxyName(ORION.menuForm.seed)) + '</strong> · il seed cristallizza la galassia, sarà visibile in partita ma non rigenerabile.</span>' +
       '</label>' +
       '<label class="main-menu__field">' +
         '<span class="main-menu__field-label">Preset</span>' +

@@ -2134,6 +2134,20 @@ button { font-family: inherit; }
   box-shadow: var(--glow-focus);
 }
 select.main-menu__input { cursor: pointer; }
+.main-menu__galname {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--c-text);
+  text-shadow: 0 0 12px rgba(120, 160, 255, 0.35);
+  padding: 4px 0 6px;
+}
+.main-menu__input--seed {
+  font-size: 0.78rem;
+  opacity: 0.78;
+  padding: 6px 8px;
+}
 .main-menu__form-actions {
   display: flex;
   justify-content: flex-end;
