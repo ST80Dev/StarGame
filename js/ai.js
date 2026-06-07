@@ -195,6 +195,71 @@
     ICG_DECAY: 0.02
   };
 
+  /* ------------------------------------------------------------------
+     SCOPERTA PROGRESSIVA (decisione #52 §13.10) — 5 gradi che la vista
+     Civiltà ⬡ usa per dosare le informazioni mostrate. Vivono come campo
+     `civ.knowledge` (default 'unknown'), `civ.interactions` (contatore),
+     `civ.allianceSince` (Ι), `civ.familiarSince` (Ι, monotono → familiar
+     è sticky una volta raggiunto).
+     ------------------------------------------------------------------ */
+  const KNOWLEDGE = { unknown: 0, spotted: 1, contacted: 2, known: 3, familiar: 4 };
+  const KNOWLEDGE_INV = ['unknown', 'spotted', 'contacted', 'known', 'familiar'];
+  const KNOWN_INTERACTIONS = 3;
+  const FAMILIAR_ALLIANCE_I = 1000;
+
+  function knowledgeRank(civ) {
+    if (!civ) return 0;
+    return KNOWLEDGE[civ.knowledge || 'unknown'] || 0;
+  }
+  function bumpKnowledge(civ, level) {
+    if (!civ) return false;
+    const target = KNOWLEDGE[level];
+    if (target == null) return false;
+    if (knowledgeRank(civ) >= target) return false;
+    civ.knowledge = level;
+    if (level === 'contacted' && !civ.contacted) civ.contacted = true;
+    return true;
+  }
+  function addInteraction(civ, n) {
+    if (!civ) return;
+    civ.interactions = (civ.interactions || 0) + (n || 1);
+  }
+  /* Promozione esplicita su atto formale. Idempotente. */
+  function markContact(game, civ, events, reason) {
+    if (!civ) return;
+    addInteraction(civ);
+    if (bumpKnowledge(civ, 'contacted')) {
+      const firstSys = (civ.systems && civ.systems.length) ? civ.systems[0] : null;
+      if (events) events.push({
+        kind: 'civ-contact', civName: civ.name, civColor: civ.color,
+        alignment: civ.alignment, traitLabel: civ.traitLabel,
+        regionLabel: firstSys != null ? regionLabelOfSystem(game.galaxy, firstSys) : '—',
+        reason: reason || 'formal-contact',
+        impulso: game.timeImpulsi || 0
+      });
+    }
+  }
+  /* Avanzamento automatico contacted→known→familiar. Chiamato a ogni AI-tick
+     per ogni civ viva (vedi `tick` sopra). */
+  function maybePromoteKnowledge(game, civ, I) {
+    const rank = knowledgeRank(civ);
+    if (rank >= KNOWLEDGE.familiar) return;
+    if (rank < KNOWLEDGE.contacted) return;
+    if (rank < KNOWLEDGE.known) {
+      if ((civ.interactions || 0) >= KNOWN_INTERACTIONS) bumpKnowledge(civ, 'known');
+    }
+    if (knowledgeRank(civ) === KNOWLEDGE.known) {
+      const isFed = !!civ.federationId;
+      const allianceLong = (civ.relation === 'alliance' && civ.allianceSince != null &&
+                             (I - civ.allianceSince) >= FAMILIAR_ALLIANCE_I);
+      if (isFed || allianceLong) {
+        if (bumpKnowledge(civ, 'familiar')) {
+          civ.familiarSince = I;
+        }
+      }
+    }
+  }
+
   /* ==================================================================
      HELPERS — sistemi posseduti / mappa proprietà / cache derivata.
      ================================================================== */
@@ -692,6 +757,15 @@
     if (civ.phaseSince == null) civ.phaseSince = 0;
     if (!civ.relation) civ.relation = 'peace';
     if (civ.disposition == null) civ.disposition = baseDisposition(civ.alignment);
+    /* M10 Fase B punto 2 (decisione #52 §13.10): inizializza il grado di
+       scoperta. Save legacy che avevano `civ.contacted=true` partono come
+       'contacted' (interazione minima 1); gli altri come 'unknown'. */
+    if (!civ.knowledge) {
+      civ.knowledge = civ.contacted ? 'contacted' : 'unknown';
+    }
+    if (civ.interactions == null) {
+      civ.interactions = civ.contacted ? 1 : 0;
+    }
   }
 
   function inferVocationFromTrait(trait, alignment) {
@@ -802,17 +876,24 @@
       /* Disposizione → giocatore. */
       driftDisposition(game, civ);
 
-      /* Primo contatto. */
-      if (!civ.contacted && civSeenByPlayer(game, civ)) {
-        civ.contacted = true;
+      /* M10 Fase B punto 2 (decisione #52 §13.10): scoperta progressiva
+         a 5 gradi (unknown → spotted → contacted → known → familiar).
+         Avvistare un sistema della civiltà la promuove a 'spotted' (chip
+         "Avvistata" nella vista Civiltà ⬡). Il "contatto formale" si
+         consuma quando arriva un atto vero (diplomazia/battaglia/incursione,
+         vedi markContact altrove). */
+      if (knowledgeRank(civ) < KNOWLEDGE.spotted && civSeenByPlayer(game, civ)) {
+        bumpKnowledge(civ, 'spotted');
         const firstSys = (civ.systems && civ.systems.length) ? civ.systems[0] : null;
         events.push({
-          kind: 'civ-contact', civName: civ.name, civColor: civ.color,
-          alignment: civ.alignment, traitLabel: civ.traitLabel,
+          kind: 'civ-spotted', civName: civ.name, civColor: civ.color,
+          alignment: civ.alignment,
           regionLabel: firstSys != null ? regionLabelOfSystem(galaxy, firstSys) : '—',
           impulso: I
         });
       }
+      /* Auto-promozione di grado in base alle interazioni accumulate. */
+      maybePromoteKnowledge(game, civ, I);
     }
 
     /* --- Guerra AI-vs-AI (calma) --- */
@@ -1331,6 +1412,19 @@
   function contactedCivs(game) {
     return (game.civs || []).filter(function (c) { return c.alive && c.contacted; });
   }
+  /* M10 Fase B punto 2: tutte le civiltà visibili al giocatore (≥ avvistate).
+     Esclude le "unknown". L'UI le ordina per grado decrescente. */
+  function visibleCivs(game) {
+    return (game.civs || []).filter(function (c) { return c.alive && knowledgeRank(c) >= KNOWLEDGE.spotted; });
+  }
+  /* Etichetta italiana del grado (per UI). */
+  const KNOWLEDGE_LABEL = {
+    unknown: 'Sconosciuta', spotted: 'Avvistata', contacted: 'Contattata',
+    known: 'Conosciuta', familiar: 'Familiare'
+  };
+  function knowledgeLabel(civ) {
+    return KNOWLEDGE_LABEL[civ && civ.knowledge || 'unknown'];
+  }
 
   function materialize(game, civ, sysId) {
     if (!civ) return null;
@@ -1357,6 +1451,9 @@
       result: result, kind: kind || 'skirmish',
       sysId: (sysId == null ? -1 : sysId), impulso: game.timeImpulsi || 0
     };
+    /* M10 Fase B punto 2 (decisione #52 §13.10): uno scontro vero è un atto
+       diretto → contatto formale + interazione che conta per "Conosciuta". */
+    markContact(game, civ, null, 'battle');
   }
   function relationStatus(game, civ) {
     const now = game.timeImpulsi || 0;
@@ -1428,6 +1525,16 @@
     powerTier: powerTier,
     knownSystemsCount: knownSystemsCount,
     contactedCivs: contactedCivs,
+    /* M10 Fase B punto 2 (decisione #52 §13.10): scoperta progressiva. */
+    KNOWLEDGE: KNOWLEDGE,
+    KNOWLEDGE_LABEL: KNOWLEDGE_LABEL,
+    knowledgeRank: knowledgeRank,
+    knowledgeLabel: knowledgeLabel,
+    bumpKnowledge: bumpKnowledge,
+    addInteraction: addInteraction,
+    markContact: markContact,
+    maybePromoteKnowledge: maybePromoteKnowledge,
+    visibleCivs: visibleCivs,
     materialize: materialize,
     demobilize: demobilize,
     recordBattle: recordBattle,

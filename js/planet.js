@@ -238,20 +238,36 @@
       basePot = BASE_POTENTIAL[body.type] || BASE_POTENTIAL.terrestre;
     }
 
-    const potentials = {
+    let potentials = {
       met:   clamp(basePot.met   + rng.int(-15, 15), 0, 100),
       en:    clamp(basePot.en    + rng.int(-15, 15), 0, 100),
       food:  clamp(basePot.food  + rng.int(-15, 15), 0, 100),
       water: clamp(basePot.water + rng.int(-15, 15), 0, 100)
     };
 
+    /* M10 Fase B punto 3 (decisione #52 §6.1): marginale = ×0.80 potenziali
+       in media + bilanciamenti complementari al prime (forte in acqua+energia,
+       debole in cibo+metalli). I body.* flag arrivano dalla generazione V2. */
+    if (body.marginal) {
+      potentials.met   = Math.round(potentials.met * 0.7);
+      potentials.food  = Math.round(potentials.food * 0.7);
+      potentials.en    = Math.min(100, Math.round(potentials.en * 1.05));
+      potentials.water = Math.min(100, Math.round(potentials.water * 1.05));
+    }
+    /* Sistema metallifero anomalo: +50% potenziali metallo. */
+    if (body.metalRich) {
+      potentials.met = Math.min(100, Math.round(potentials.met * 1.5));
+    }
+
     // Slot — ±1 dalla base, mai sotto 2.
     const slotsBase = BASE_SLOTS[def.cat === 'moon' ? 'luna' : body.type] || 4;
-    const slots = Math.max(2, slotsBase + rng.int(0, 2));
+    let slots = Math.max(2, slotsBase + rng.int(0, 2));
+    if (body.marginal) slots = Math.max(2, Math.round(slots * 0.75));
 
     // Capacità popolazione (0 se non abitabile).
     let popCap = BASE_POP_CAP[def.cat === 'moon' ? 'luna' : body.type] || 0;
     if (popCap > 0) popCap = Math.max(2, popCap + rng.int(-1, 2));
+    if (body.marginal && popCap > 0) popCap = Math.max(2, Math.round(popCap * 0.75));
 
     // Candidate risorse avanzate (0-3): identità nascoste finché lo
     // stato della colonia non flagga `scanned` (decisione #15).

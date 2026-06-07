@@ -204,6 +204,7 @@
       case 'declare-war': {
         civ.relation = 'war';
         civ.truceUntil = 0;
+        civ.allianceSince = null;
         civ.disposition = Math.min(civ.disposition || 0, -20);
         const innocent = civ.alignment !== 'male';
         adjustReputation(game, innocent ? CFG.REP_ON_WAR_INNOCENT : CFG.REP_ON_WAR_EVIL);
@@ -216,6 +217,7 @@
       case 'propose-peace': {
         civ.relation = 'peace';
         civ.truceUntil = 0;
+        civ.allianceSince = null;
         civ.disposition = Math.max(civ.disposition || 0, CFG.PEACE_DISP_FLOOR);
         adjustReputation(game, CFG.REP_ON_PEACE);
         callOffAggression(game, civ);   // recovery: revoca incursioni/assedi pendenti
@@ -226,6 +228,7 @@
       case 'propose-alliance': {
         civ.relation = 'alliance';
         civ.truceUntil = 0;
+        civ.allianceSince = now;
         civ.disposition = Math.max(civ.disposition || 0, CFG.ALLY_DISP_FLOOR);
         adjustReputation(game, CFG.REP_ON_ALLIANCE);
         callOffAggression(game, civ);
@@ -235,6 +238,7 @@
       }
       case 'break-alliance': {
         civ.relation = 'peace';
+        civ.allianceSince = null;
         civ.disposition = (civ.disposition || 0) - 15;
         adjustReputation(game, CFG.REP_ON_BREAK_ALLIANCE);
         events.push({ kind: 'diplo-alliance-broken', civId: civ.id, civName: civ.name,
@@ -244,6 +248,9 @@
       default:
         return { ok: false, reason: 'Azione sconosciuta.' };
     }
+    /* M10 Fase B punto 2 (decisione #52 §13.10): ogni atto diplomatico è
+       contatto formale + interazione che conta per "Conosciuta" e oltre. */
+    if (ORION.ai && ORION.ai.markContact) ORION.ai.markContact(game, civ, events, 'diplomacy');
     return { ok: true, accepted: true, reason: verdict.reason };
   }
 

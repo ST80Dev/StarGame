@@ -162,6 +162,10 @@
     members.forEach(function (m) {
       fed.initialPlanets[m.id] = (m.planets || []).length;
       m.federationId = fed.id;
+      /* M10 Fase B punto 2: federation = +1 interazione + scatto verso
+         'familiar' al prossimo tick (la federazione vale come "alleanza ≥1000 Ι"
+         simbolica). */
+      if (ORION.ai && ORION.ai.addInteraction) ORION.ai.addInteraction(m);
     });
     st.list.push(fed);
 

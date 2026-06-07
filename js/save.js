@@ -55,7 +55,7 @@
      DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
      nuovo gioco la preserva e una recovery best-effort prova a dedurla
      da colonie/flotte/spedizioni/cronaca. */
-  const SCHEMA_VERSION = 14;
+  const SCHEMA_VERSION = 15;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -149,7 +149,13 @@
          - federations = { list:[], trust:{} } federazioni emergenti + memoria
            del trust per coppia AI alleata. `civ.federationId` marker su civs. */
       cohesion: (game.cohesion && typeof game.cohesion === 'object') ? game.cohesion : { sysIds: [] },
-      federations: (game.federations && typeof game.federations === 'object') ? game.federations : { list: [], trust: {} }
+      federations: (game.federations && typeof game.federations === 'object') ? game.federations : { list: [], trust: {} },
+      /* Schema 15 (M10 Fase B punto 3, decisione #52 §6.1): versione algoritmo
+         generazione sistemi. V1 = legacy (4-7 corpi), V2 = nuovo (5-10 corpi,
+         8 configurazioni, marginali). Save vecchi (schema ≤ 14) migrano a V1
+         per preservare i body keys delle colonie esistenti (legacy snapshot
+         per-galassia). Nuove partite usano V2. */
+      systemAlgVersion: (game.galaxy && game.galaxy.systemAlgVersion === 1) ? 1 : 2
     };
   }
 
@@ -350,6 +356,18 @@
         payload.federations.trust = {};
       }
       payload.schema = 14;
+    }
+    /* v14 → v15 (M10 Fase B punto 3, decisione #52 §6.1): introduce
+       l'algoritmo V2 di generazione sistemi (5-10 corpi, 8 configurazioni,
+       marginali). I save legacy hanno colonie generate con V1: per non
+       rompere i body keys delle colonie esistenti, marchiamo la galassia
+       come `systemAlgVersion: 1`. Le nuove partite useranno V2 (default).
+       Per-galassia, non per-sistema: scelta di pragmatismo (un per-sistema
+       snapshot dei body esistenti aggiungerebbe complessità senza benefici
+       chiari in questa fase). */
+    if ((payload.schema || 14) < 15) {
+      if (payload.systemAlgVersion == null) payload.systemAlgVersion = 1;
+      payload.schema = 15;
     }
     return payload;
   }

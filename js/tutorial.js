@@ -236,6 +236,69 @@
         'costa <strong>reputazione</strong>: i tuoi atti pesano su come tutta la galassia ti vede.</p>'
     },
     {
+      id: 'ai-vocations',
+      tag: 'Civiltà · Vocazioni',
+      title: 'Le 8 vocazioni delle civiltà',
+      body:
+        '<p>Ogni civiltà AI nasce con una <strong>vocazione persistente</strong> che ne plasma TUTTO il comportamento ' +
+        '(espansione, diplomazia, guerra, commercio). La vocazione è il <em>carattere</em> della civiltà, non un parametro.</p>' +
+        '<ul>' +
+          '<li><strong>Sedentari</strong> (~25%): si tengono 2-4 pianeti, reattivi solo se attaccati, proattivi diplomaticamente.</li>' +
+          '<li><strong>Mercantili</strong> (~15%): espansione lenta + alleanze + rotte. Propongono accordi.</li>' +
+          '<li><strong>Espansionisti</strong> (~15%): crescita territoriale attiva, guerre offensive ammesse.</li>' +
+          '<li><strong>Isolazionisti</strong> (~12%): chiudono i confini, attaccano gli intrusi.</li>' +
+          '<li><strong>Predoni</strong> (~10%): poche colonie + razzie sui vicini, vivono di taglie.</li>' +
+          '<li><strong>Mistici</strong> (~10%): convertono con dispacci, non militari.</li>' +
+          '<li><strong>Tecnocratici</strong> (~8%): focus tech, alleati di chi ha alta Reputazione.</li>' +
+          '<li><strong>Imperialisti</strong> (~5%): variante aggressiva degli espansionisti. Rari ma pericolosi.</li>' +
+        '</ul>' +
+        '<p>Si combinano con l\'<strong>allineamento</strong> (Bene/Male/Neutrale) e l\'<strong>affinità planetaria</strong> ' +
+        '(Ferrigna/Biotica/Glaciale/Mixta/Ancestrale/Orbitale): un <em>Mercantile Bene</em> è equo, un <em>Mercantile Male</em> ricattatore. ' +
+        'La vocazione si scopre solo arrivati al grado <em>Conosciuta</em> (dopo ≥3 interazioni significative).</p>'
+    },
+    {
+      id: 'four-constants',
+      tag: 'Civiltà · 4 Costanti',
+      title: 'Le Quattro Costanti',
+      body:
+        '<p>Quattro fazioni <strong>sempre presenti</strong> in ogni galassia, con funzioni narrative uniche. Visibili in una ' +
+        'sezione fissa della vista Civiltà ⬡ con <strong>nome+ruolo sempre noti</strong> (anche prima del contatto). ' +
+        'Il loro dossier completo si svela per gradi come le altre.</p>' +
+        '<ul>' +
+          '<li><strong>Sindacato Mekhari</strong> (Mercantili · Mixta) — Fixer del mercato grigio: contrabbando, taglie pirata, ' +
+            'spread valuta più basso nei loro cluster. Espandono pianissimo.</li>' +
+          '<li><strong>Conclave di Vehryn</strong> (Tecnocratici · Glaciale) — Archeologi delle stelle: vendono informazioni su ' +
+            'sistemi inesplorati e dati antichi §7.2. Avamposti presso anomalie/reliquie.</li>' +
+          '<li><strong>Guardiani di Phaerion</strong> (Isolazionisti · Ancestrale) — Custodi di tech antica intransigente. NON espandono mai. ' +
+            'Forniscono tech rare se aiutati, scaramuccia su violazione confini.</li>' +
+          '<li><strong>Pellegrini di Solhar</strong> (Mistici · Biotica) — Conversione diplomatica + figura speciale religiosa (M14). ' +
+            'Decadimento ICG bonus quando galassia allineata. Subiscono scissioni eretiche.</li>' +
+        '</ul>' +
+        '<p>Le funzioni speciali (commercio Mekhari, dati Vehryn, missioni Phaerion/Pellegrini) arriveranno coi rispettivi moduli ' +
+        '(M12 Commercio, M14 Figure, M17 Eventi). Per ora vivono come civiltà regolari con la loro vocazione e i loro confini.</p>'
+    },
+    {
+      id: 'system-variability',
+      tag: 'Galassia · Sistemi',
+      title: 'Sistemi variabili (8 configurazioni)',
+      body:
+        '<p>Non tutti i sistemi sono uguali. La generazione segue una <strong>distribuzione</strong> che dà ricchezza alla galassia ' +
+        '(ognuna deterministica dal seed):</p>' +
+        '<ul>' +
+          '<li><strong>~45% Standard single-prime</strong> — 1 pianeta abitabile + estrattivi + gassosi.</li>' +
+          '<li><strong>~25% Prime+marginale</strong> — 1 prime + 1 marginale (×0.75 slot/pop/potenziali, bilanciamenti complementari).</li>' +
+          '<li><strong>~8% Doppio prime</strong> — 2 abitabili distinti (es. terr+ocean).</li>' +
+          '<li><strong>~2% Triplo prime (raro)</strong> — Sistema "paradiso", bersaglio strategico.</li>' +
+          '<li><strong>~10% Senza prime</strong> — Solo estrattivi/gassosi, ottimo per industria.</li>' +
+          '<li><strong>~5% Metallifero anomalo</strong> — 4-6 vulcanici/desertici, +50% potenziali metallo.</li>' +
+          '<li><strong>~3% Sistema delle nebbie</strong> — 3-5 gassosi + lune, rifugio per fazioni orbitali.</li>' +
+          '<li><strong>~2% Stranezza fisica</strong> — Configurazione irregolare (es. tutti ghiacciati attorno a stella calda), gancio Eventi §17.</li>' +
+        '</ul>' +
+        '<p>Le orbite mantengono una <strong>preferenza</strong> per il tipo (interno → caldo, mediano → abitabile, esterno → freddo) ' +
+        'ma con il <strong>30% di "anomalia fisica"</strong> ammessa che produce configurazioni inaspettate. ' +
+        'La <strong>coabitazione</strong> giocatore/AI è naturale: tu sul prime, una micro-civiltà sul marginale o sul vulcanico del sistema.</p>'
+    },
+    {
       id: 'cohesion',
       tag: 'Civiltà · Coesione',
       title: 'Sistemi coesi (consorzi locali)',
