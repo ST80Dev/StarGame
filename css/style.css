@@ -9,11 +9,11 @@
    --------------------------------------------------------------------- */
 :root {
   /* --- Palette: nero profondo + blu/viola spaziale + accenti ciano/arancio --- */
-  --c-void:        #04060f;   /* nero profondo di fondo                */
-  --c-space:       #070b1c;   /* blu-nero spaziale                     */
-  --c-deep:        #0c1230;   /* viola-blu profondo                    */
-  --c-panel:       rgba(14, 20, 44, 0.86);   /* pannello: più opaco per stacco */
-  --c-panel-solid: #101630;
+  --c-void:        #0a0e1e;   /* fondo profondo (alzato dal nero verso navy scuro) */
+  --c-space:       #0e1430;   /* blu-nero spaziale                     */
+  --c-deep:        #151d42;   /* viola-blu profondo                    */
+  --c-panel:       rgba(26, 34, 64, 0.90);   /* pannello: navy scuro, opaco per stacco */
+  --c-panel-solid: #1a2342;
   --c-border:        rgba(120, 160, 255, 0.55);   /* bordo netto      */
   --c-border-soft:   rgba(120, 160, 255, 0.32);   /* bordo morbido    */
   --c-border-strong: rgba(150, 190, 255, 0.78);   /* telaio in evidenza */
@@ -27,7 +27,7 @@
 
   --c-text:        #eef2ff;   /* testo principale (contrasto AA+ su #0E…) */
   --c-text-soft:   #b3bee0;   /* testo secondario (era #9aa6cc — alzato) */
-  --c-text-faint:  #7d88b3;   /* testo tenue / placeholder (era #5d678f) */
+  --c-text-faint:  #98a3c8;   /* testo tenue / placeholder (alzato per leggibilità) */
 
   --c-good:        #4fe08a;
   --c-warn:        #ffca55;
@@ -1660,6 +1660,11 @@ button { font-family: inherit; }
    plance diventano sheet a tutto schermo richiamate dalla bottom tab bar.
    -------------------------------------------------------------------- */
 @media (max-width: 760px) {
+  /* Legibilità: ingrandisce la base rem così tutti i testi minuti dei
+     pannelli (0.58–0.78rem) salgono a una misura leggibile su telefono.
+     La geometria è in px → il layout non si deforma. */
+  html { font-size: 18px; }
+
   .app-shell {
     --mnav-h: 60px;
     grid-template-columns: 1fr;
@@ -1668,6 +1673,10 @@ button { font-family: inherit; }
     gap: 0;
     padding: 0;
   }
+
+  /* Interlinea più arieggiata nelle sheet (il colore faint è già stato
+     alzato globalmente; con html a 18px il testo rem sale di misura). */
+  .panel--left, .panel--right { line-height: 1.45; }
 
   /* HUD top compatto: indici+tempo+azioni su una riga, risorse scrollabili */
   .hud-top {
@@ -1783,8 +1792,8 @@ button { font-family: inherit; }
     font: inherit;
     cursor: pointer;
   }
-  .mobile-nav__btn .ui-icon { font-size: 1.15rem; }
-  .mobile-nav__label { font-size: 0.62rem; font-weight: 600; letter-spacing: 0.02em; }
+  .mobile-nav__btn .ui-icon { font-size: 1.2rem; }
+  .mobile-nav__label { font-size: 0.66rem; font-weight: 600; letter-spacing: 0.02em; }
   .mobile-nav__btn.is-active { color: var(--c-accent); }
   .mobile-nav__btn.is-active .ui-icon { filter: drop-shadow(0 0 4px currentColor); }
 }
