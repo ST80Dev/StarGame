@@ -1615,13 +1615,50 @@ function renderPlanetPanel(title, content) {
   }
 }
 
-/* M07: ritorna le spedizioni che originano da una colonia (per UI). */
+/* M07: ritorna le spedizioni che originano da una colonia (per UI).
+   Decisione #60: legge sia game.expeditions (legacy/transitorio) che le flotte
+   explore provenienti dalla colonia. Le flotte explore esposte come oggetti
+   "expedition-like" per back-compat UI. */
 function expeditionsForColony(colony) {
-  if (!ORION.game || !Array.isArray(ORION.game.expeditions)) return [];
+  const g = ORION.game;
+  if (!g) return [];
   const key = colony.systemId + ':' + colony.bodyKey;
-  return ORION.game.expeditions.filter(function (e) {
-    return e && e.originColonyKey === key && e.status !== 'done';
-  });
+  const out = [];
+  if (Array.isArray(g.expeditions)) {
+    for (let i = 0; i < g.expeditions.length; i++) {
+      const e = g.expeditions[i];
+      if (e && e.originColonyKey === key && e.status !== 'done') out.push(e);
+    }
+  }
+  if (Array.isArray(g.fleets)) {
+    for (let i = 0; i < g.fleets.length; i++) {
+      const f = g.fleets[i];
+      if (!f || f.ownerColonyKey !== key) continue;
+      if (!f.orders) continue;
+      const t = f.orders.type;
+      const isExploreLike = (t === 'explore') ||
+        (t === 'return' && f.ships && f.ships.length === 1 &&
+         f.ships[0] && f.ships[0].kind === 'explorer' &&
+         (f.orders._migratedFromExplore || f.orders._migratedFromExpedition));
+      if (!isExploreLike) continue;
+      const ship = f.ships && f.ships[0];
+      const crew = f.crew && f.crew[0];
+      out.push({
+        id: f.id,
+        originColonyKey: key,
+        targetSystemId: (t === 'explore') ? f.orders.toSysId : (f.route && f.route[f.route.length - 1]),
+        status: (t === 'explore') ? 'outbound' : 'returning',
+        durationOut: (t === 'explore') ? (f.etaImpulsi || 0) : 0,
+        durationBack: (t === 'return') ? (f.etaImpulsi || 0) : null,
+        shipWear: (ship && ship.wear) || 0,
+        crewId: crew && crew.id,
+        crewXp: (crew && crew.xp) || 0,
+        incidents: [],
+        _fleetRef: f
+      });
+    }
+  }
+  return out;
 }
 
 /* --- Tab Colonia / Colonizzazione --- */
@@ -2904,14 +2941,35 @@ function closeExpeditionPicker() {
 function doLaunchExpedition(colony, targetSystemId) {
   const g = ORION.game;
   const key = colony.systemId + ':' + colony.bodyKey;
-  const r = ORION.expedition.launch(g, key, targetSystemId);
-  if (!r.ok) { showToast(r.reason || 'Lancio rifiutato'); return; }
+  /* Decisione #60: lancio come flotta con ordine explore (sostituisce
+     ORION.expedition.launch). Crea una flotta dedicata, assegna 1 scafo
+     esploratore e 1 equipaggio dal pool della colonia, poi setOrder explore. */
+  if (!ORION.fleet || !ORION.fleet.createFleet) {
+    /* Fallback estremo: nessun modulo flotta caricato. */
+    showToast('Modulo flotta non disponibile'); return;
+  }
+  /* Pre-check: scafo + equipaggio disponibili in colonia. */
+  const shipsAvail = (colony.ships && colony.ships.explorer) || 0;
+  const crewsAvail = (colony.crews && Array.isArray(colony.crews.explorer))
+    ? colony.crews.explorer.length : 0;
+  if (shipsAvail < 1) { showToast('Nessuno scafo esploratore disponibile'); return; }
+  if (crewsAvail < 1) { showToast('Nessun equipaggio esploratore disponibile'); return; }
+  /* Crea flotta + assegna 1 scafo + 1 crew. */
+  const cf = ORION.fleet.createFleet(g, key, 'Esplorazione');
+  if (!cf.ok) { showToast(cf.reason || 'Creazione flotta fallita'); return; }
+  const fleet = cf.fleet;
+  const as = ORION.fleet.assignShips(g, fleet, key, 'explorer', 1);
+  if (!as.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(as.reason || 'Assegnazione nave fallita'); return; }
+  const ac = ORION.fleet.assignCrew(g, fleet, key, 1);
+  if (!ac.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(ac.reason || 'Assegnazione equipaggio fallita'); return; }
+  const so = ORION.fleet.setOrder(g, fleet, { type: 'explore', toSysId: targetSystemId });
+  if (!so.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(so.reason || 'Ordine esplorazione rifiutato'); return; }
   const sys = g.galaxy.systems[targetSystemId];
   const acr = regionAcronymFor(targetSystemId);
   const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
   pushChronicle(ORION.time.currentDS(g) + ' — Spedizione partita verso <strong>' +
     (sys ? sys.name : 'sistema ignoto') + '</strong>' + tag +
-    ' · salto iperspaziale, durata stimata ' + r.expedition.durationOut + ' ' + iU() + '.', 'explore');
+    ' · salto iperspaziale, durata stimata ' + (fleet.etaImpulsi || 0) + ' ' + iU() + '.', 'explore');
   if (ORION.tutorial) ORION.tutorial.fire('expedition-launch');
   closeExpeditionPicker();
   persistGame(g);

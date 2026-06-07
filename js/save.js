@@ -55,7 +55,7 @@
      DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
      nuovo gioco la preserva e una recovery best-effort prova a dedurla
      da colonie/flotte/spedizioni/cronaca. */
-  const SCHEMA_VERSION = 18;
+  const SCHEMA_VERSION = 19;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -110,9 +110,11 @@
       homeWorld: game.homeWorld || null,
       /* M06.6 (decisione #28): stato tutorial contestuale. */
       tutorial: game.tutorial || { enabled: false, seenLessons: [] },
-      /* M07 (decisione #37): spedizioni in corso. Le colonie già contengono
-         ships/crews/assets quindi vengono auto-serializzate via game.colonies. */
-      expeditions: Array.isArray(game.expeditions) ? game.expeditions : [],
+      /* M07 (decisione #37): spedizioni in corso. **Deprecato dal schema 19**
+         (decisione #60): le spedizioni vivono ora come flotte con order.type=
+         'explore'. Manteniamo il campo come [] vuoto per compat con loader vecchi
+         che potrebbero leggere il payload. La migrazione v18→v19 le converte. */
+      expeditions: [],
       /* M08 Fase A (decisione #42): flotte mobili. Counter scafi per
          classe vive in colony.ships e viene auto-serializzato. */
       fleets: Array.isArray(game.fleets) ? game.fleets : [],
@@ -409,6 +411,85 @@
     if ((payload.schema || 17) < 18) {
       if (!Array.isArray(payload.tradeAgreements)) payload.tradeAgreements = [];
       payload.schema = 18;
+    }
+    /* v18 → v19 (decisione #60): migrazione spedizioni M07 → ordine explore di
+       flotta M08. Ogni spedizione attiva (status != 'done') diventa una flotta
+       esploratrice con order.type='explore'. xp dell'equipaggio + wear dello
+       scafo preservati. ETA ricalcolato relativo al timeImpulsi corrente.
+       L'array expeditions viene svuotato (le spedizioni viaggiano ora come
+       flotte). Recovery-friendly (#22): nessuna perdita di stato. Determinismo
+       (#5): la migrazione è una funzione pura dei dati esistenti. */
+    if ((payload.schema || 18) < 19) {
+      if (!Array.isArray(payload.fleets)) payload.fleets = [];
+      const now = payload.timeImpulsi || 0;
+      const exps = Array.isArray(payload.expeditions) ? payload.expeditions : [];
+      for (let i = 0; i < exps.length; i++) {
+        const exp = exps[i];
+        if (!exp || exp.status === 'done') continue;
+        const fleetId = 'fleet-from-' + (exp.id || ('exp-mig-' + i));
+        const shipId = 'ship-mig-' + (exp.id || i);
+        const ship = {
+          id: shipId,
+          kind: 'explorer',
+          hp: 20,
+          wear: exp.shipWear || 0
+        };
+        const crew = {
+          id: exp.crewId || ('crew-mig-' + i),
+          xp: exp.crewXp || 0
+        };
+        /* ETA + status: outbound = in viaggio al target; returning = in viaggio
+           alla colonia origine. Per semplicità rendiamo entrambi 'in-transit'
+           con etaImpulsi pari al tempo rimanente del leg corrente.
+           Route = [home, target] o [target, home] per ricostruire startNextLeg. */
+        let etaImpulsi, route, routeIdx, status, orders;
+        const colony = payload.colonies && payload.colonies[exp.originColonyKey];
+        const homeSys = colony && (typeof colony.systemId === 'number' ? colony.systemId : null);
+        const tgt = exp.targetSystemId;
+        if (exp.status === 'outbound') {
+          etaImpulsi = Math.max(1, exp.durationOut || 1);
+          route = (homeSys != null) ? [homeSys, tgt] : [tgt];
+          routeIdx = 0;
+          status = 'in-transit';
+          orders = { type: 'explore', toSysId: tgt, _migratedFromExpedition: true };
+        } else {
+          /* returning: scafo già al target, sta tornando home */
+          etaImpulsi = Math.max(1, exp.durationBack || 1);
+          route = (homeSys != null) ? [tgt, homeSys] : [tgt];
+          routeIdx = 0;
+          status = 'in-transit';
+          orders = { type: 'return', _migratedFromExpedition: true };
+        }
+        const fleet = {
+          id: fleetId,
+          name: 'Esplorazione ' + ((tgt != null) ? '#' + tgt : ''),
+          ownerColonyKey: exp.originColonyKey,
+          location: { systemId: (exp.status === 'outbound' && homeSys != null) ? homeSys : tgt, status: status },
+          ships: [ship],
+          crew: [crew],
+          orders: orders,
+          route: route,
+          routeIdx: routeIdx,
+          etaImpulsi: etaImpulsi,
+          formation: 'balanced',
+          /* Flag per il tick: per le explore migrate dall'outbound, l'incidente
+             è già stato eventualmente estratto dal modulo expedition; non
+             ri-tirarlo nel nuovo flusso fleet (idempotente). */
+          _incidentRolled: !!(exp._incidentRolled || (exp.incidents && exp.incidents.length))
+        };
+        payload.fleets.push(fleet);
+        /* Rimuovi il crew migrato da colony.crews.explorer (era stato
+           shift()-ato al lancio, quindi non dovrebbe essere lì — ma per
+           sicurezza filtriamo se per qualche motivo è presente). */
+        if (colony && colony.crews && Array.isArray(colony.crews.explorer)) {
+          colony.crews.explorer = colony.crews.explorer.filter(function (c) {
+            return c && c.id !== crew.id;
+          });
+        }
+      }
+      /* Svuota expeditions: vivono ora come flotte. */
+      payload.expeditions = [];
+      payload.schema = 19;
     }
     return payload;
   }

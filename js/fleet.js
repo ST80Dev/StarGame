@@ -408,6 +408,8 @@
       fleet.route = path;
       fleet.routeIdx = 0;
       fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
+      /* Decisione #60: reset flag incidente all'avvio di un nuovo explore. */
+      if (type === 'explore') fleet._incidentRolled = false;
       return { ok: true };
     }
 
@@ -587,12 +589,98 @@
   }
 
   /* ------------------------------------------------------------------
+     Incidenti su ordine 'explore' (decisione #60, migrazione M07→M08).
+     Porta dentro fleet.js le 4 tipologie di incidente di expedition.js
+     (50% ritardo / 30% usura / 15% critico / 5% scoperta fortuita).
+     RNG deterministico da seed:fleet-incident:<fleet.id> — replay-safe.
+     Si tira 1 sola volta per esplorazione (gated da fleet._incidentRolled).
+     Recovery-friendly (#22): l'avaria critica perde lo scafo ma l'equipaggio
+     si salva sempre (riprodotto dal pattern expedition.js).
+     ------------------------------------------------------------------ */
+  function _dangerForExplore(galaxy, fleet) {
+    let sysId = fleet.location.systemId;
+    if (fleet.orders && fleet.orders.type === 'explore' && fleet.orders.toSysId != null) {
+      sysId = fleet.orders.toSysId;
+    }
+    const s = galaxy && galaxy.systems && galaxy.systems[sysId];
+    if (!s) return 0.5;
+    return Math.max(0, Math.min(1, (s.danger || 0) / 100));
+  }
+  function _accidentChanceForExplore(game, fleet) {
+    const d = _dangerForExplore(game.galaxy, fleet);
+    let c;
+    if (d <= 0.33) c = 0.05;
+    else if (d <= 0.66) c = 0.15;
+    else c = 0.30;
+    const xp = (fleet.crew && fleet.crew[0] && fleet.crew[0].xp) || 0;
+    c *= 1 - Math.min(0.20, xp * 0.02);
+    if (ORION.ai && ORION.ai.pirateThreat && fleet.orders && fleet.orders.toSysId != null) {
+      const threat = ORION.ai.pirateThreat(game, fleet.orders.toSysId);
+      if (threat > 0) c += threat * 0.15;
+    }
+    if (ORION.cohesion && ORION.cohesion.expeditionRiskBonus && fleet.orders && fleet.orders.toSysId != null) {
+      c += ORION.cohesion.expeditionRiskBonus(game, fleet.orders.toSysId);
+    }
+    return Math.max(0, c);
+  }
+  function _rollExploreIncident(game, fleet, events) {
+    if (fleet._incidentRolled) return;
+    fleet._incidentRolled = true;
+    if (!fleet.orders || fleet.orders.type !== 'explore') return;
+    if (!ORION.rng || !ORION.rng.makeRng) return;
+    const rng = ORION.rng.makeRng((game.seed || '') + ':fleet-incident:' + fleet.id);
+    const chance = _accidentChanceForExplore(game, fleet);
+    if (rng.float() >= chance) return;
+    const danger = _dangerForExplore(game.galaxy, fleet);
+    const r = rng.float();
+    const ship = fleet.ships && fleet.ships[0];
+    if (r < 0.50) {
+      const extra = 10 + Math.floor(rng.float() * 11);
+      fleet.etaImpulsi = (fleet.etaImpulsi || 0) + extra;
+      events.push({ kind: 'fleet-incident', fleetId: fleet.id, fleetName: fleet.name,
+        incident: { kind: 'delay', amount: extra }, impulso: game.timeImpulsi });
+      return;
+    }
+    if (r < 0.80) {
+      const w = 10 + Math.floor(rng.float() * 6);
+      if (ship) ship.wear = Math.min(100, (ship.wear || 0) + w);
+      events.push({ kind: 'fleet-incident', fleetId: fleet.id, fleetName: fleet.name,
+        incident: { kind: 'wear', amount: w }, impulso: game.timeImpulsi });
+      return;
+    }
+    if (r < 0.95) {
+      if (danger > 0.5) {
+        const back = 20 + Math.floor(rng.float() * 21);
+        if (ship) ship.wear = 100;
+        fleet._critBackOverride = back;
+        events.push({ kind: 'fleet-incident', fleetId: fleet.id, fleetName: fleet.name,
+          incident: { kind: 'critical', backDuration: back }, impulso: game.timeImpulsi });
+        return;
+      }
+      const w = 10 + Math.floor(rng.float() * 6);
+      if (ship) ship.wear = Math.min(100, (ship.wear || 0) + w);
+      events.push({ kind: 'fleet-incident', fleetId: fleet.id, fleetName: fleet.name,
+        incident: { kind: 'wear', amount: w }, impulso: game.timeImpulsi });
+      return;
+    }
+    events.push({ kind: 'fleet-discovery-bonus', fleetId: fleet.id, fleetName: fleet.name,
+      impulso: game.timeImpulsi });
+  }
+
+  /* ------------------------------------------------------------------
      tick — 1 Impulso. Decrementa etaImpulsi se in transito; alla fine
      del leg avanza al prossimo sistema e gestisce arrivo/return/patrol.
      ------------------------------------------------------------------ */
   function tick(game, fleet, events) {
     if (!fleet || !fleet.orders) return;
     if (fleet.orders.type === 'idle') return;
+
+    /* Decisione #60: incident roll una sola volta all'avvio dell'explore
+       outbound (mentre in-transit). */
+    if (fleet.orders.type === 'explore' && !fleet._incidentRolled &&
+        fleet.location && fleet.location.status === 'in-transit') {
+      _rollExploreIncident(game, fleet, events);
+    }
 
     /* Fase B: per i nuovi ordini con dwell, il countdown di sosta avviene
        qui mentre la flotta è `orbiting`. */
@@ -689,15 +777,29 @@
         systemId: arrivedAt,
         impulso: game.timeImpulsi
       });
-      /* Auto-return alla colonia origine. */
+      /* Decisione #60: usura base del viaggio (come expedition.js):
+         +8% + danger*10% sulla nave esploratrice all'arrivo. */
+      const ship = fleet.ships && fleet.ships[0];
+      if (ship && ship.kind === 'explorer') {
+        const danger = _dangerForExplore(game.galaxy, fleet);
+        const w = 8 + Math.round(danger * 10);
+        ship.wear = Math.min(100, (ship.wear || 0) + w);
+      }
+      /* Auto-return alla colonia origine. Se incidente critico, override del
+         ritorno con la durata d'emergenza. */
       const colony = game.colonies && game.colonies[fleet.ownerColonyKey];
       if (colony) {
         const back = computePath(game.galaxy, arrivedAt, colony.systemId);
         if (back) {
-          fleet.orders = { type: 'return' };
+          fleet.orders = { type: 'return', _migratedFromExplore: true };
           fleet.route = back;
           fleet.routeIdx = 0;
           fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
+          /* Critical incident: override durata ritorno con emergenza. */
+          if (fleet._critBackOverride) {
+            fleet.etaImpulsi = fleet._critBackOverride;
+            fleet._critBackOverride = null;
+          }
           return;
         }
       }
@@ -712,7 +814,8 @@
 
     if (order.type === 'return') {
       const colony = game.colonies && game.colonies[fleet.ownerColonyKey];
-      if (colony && colony.systemId === arrivedAt) {
+      const docked = !!(colony && colony.systemId === arrivedAt);
+      if (docked) {
         fleet.location.status = 'docked';
       } else {
         fleet.location.status = 'orbiting';
@@ -720,6 +823,70 @@
       fleet.etaImpulsi = 0;
       fleet.route = [arrivedAt];
       fleet.routeIdx = 0;
+      /* Decisione #60: se la flotta era un'esplorazione in rientro (1 scafo
+         explorer + 1 crew, originata da setOrder('explore') o migrata da M07),
+         e ora atterra alla colonia origine, gestisci:
+         - crew +1 xp (incluso incidente non critico)
+         - ship lost se wear>=100 → non torna al counter, evento fleet-ship-lost
+         - Promozione Comandante (#43) se xp >= 5
+         - Auto-dissolve della flotta (1 nave + 1 crew → torna tutto a colonia)
+         Recovery-friendly: l'equipaggio è sempre salvo, lo scafo no. */
+      const isExplore = order._migratedFromExplore || order._migratedFromExpedition ||
+        (fleet.ships.length === 1 && fleet.crew.length === 1 &&
+         fleet.ships[0] && fleet.ships[0].kind === 'explorer');
+      if (docked && isExplore && colony) {
+        const ship = fleet.ships[0];
+        const crew = fleet.crew[0];
+        const shipLost = !!(ship && ship.wear >= 100);
+        /* xp +1 al crew (sempre, anche con incidente non critico). */
+        if (crew) crew.xp = (crew.xp || 0) + 1;
+        /* Rinominazione id crew con counter persistente (allineato a expedition).
+           Usa ORION.time.nextCrewId se disponibile (counter persistito). */
+        const T = ORION.time;
+        const newCrewId = (T && T.nextCrewId) ? T.nextCrewId(game) : crew.id;
+        const newCrew = { id: newCrewId, xp: crew.xp };
+        /* Restituisci crew alla colonia. */
+        if (!colony.crews) colony.crews = { explorer: [] };
+        if (!Array.isArray(colony.crews.explorer)) colony.crews.explorer = [];
+        colony.crews.explorer.push(newCrew);
+        /* Restituisci scafo solo se non perso. */
+        if (!shipLost) {
+          if (!colony.ships) colony.ships = {};
+          colony.ships.explorer = (colony.ships.explorer || 0) + 1;
+        } else {
+          events.push({
+            kind: 'fleet-ship-lost',
+            fleetId: fleet.id, fleetName: fleet.name,
+            impulso: game.timeImpulsi
+          });
+        }
+        /* Promozione Comandante (#43): se xp >= 5, spawn figura nominata. */
+        const C = ORION.commander;
+        if (C && C.isPromotable && C.isPromotable(newCrew.xp)) {
+          const promotedCmd = C.promote(game, colony, newCrew, newCrew.xp, fleet.ownerColonyKey);
+          if (promotedCmd) {
+            events.push({
+              kind: 'commander-promoted',
+              commander: promotedCmd,
+              colony: colony,
+              fromCrewId: newCrew.id,
+              impulso: game.timeImpulsi
+            });
+          }
+        }
+        /* Auto-dissolve della flotta esploratrice (era un veicolo monouso). */
+        fleet.ships = [];
+        fleet.crew = [];
+        const idx = (game.fleets || []).indexOf(fleet);
+        if (idx >= 0) game.fleets.splice(idx, 1);
+        events.push({
+          kind: 'fleet-route-complete',
+          fleetId: fleet.id, fleetName: fleet.name,
+          systemId: arrivedAt,
+          impulso: game.timeImpulsi
+        });
+        return;
+      }
       events.push({
         kind: 'fleet-route-complete',
         fleetId: fleet.id, fleetName: fleet.name,

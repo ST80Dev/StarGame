@@ -658,7 +658,9 @@
         '(scafo perso, equipaggio in fuga — solo su pericolo > 50), scoperta fortuita (raro, positivo).</p>' +
         '<p><strong>Strategia:</strong> tieni gli equipaggi vivi e mandali in missione ripetutamente per costruire ' +
         '<em>veterani</em>. Uno scafo logoro al 100% va in pensione: niente fail-state, costruisci il prossimo.</p>' +
-        '<p><strong>Ganci futuri:</strong> nuove classi di navi (caccia, fregata, incrociatore) e l\'iperguida sono in arrivo.</p>'
+        '<p><strong>Ganci futuri:</strong> nuove classi di navi (caccia, fregata, incrociatore) e l\'iperguida sono in arrivo.</p>' +
+        '<p><em>Nota architettura (#60):</em> le spedizioni viaggiano ora come <strong>flotte con ordine "explore"</strong> ' +
+        '(le vedi anche nella vista Flotta). Stesso comportamento, ma il modello dati è unificato con M08.</p>'
     },
     {
       id: 'governor', tag: 'Colonia · ⚙', title: 'Governatore coloniale',
