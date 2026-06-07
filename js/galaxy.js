@@ -609,7 +609,10 @@
 
       for (let si = 0; si < sysIds.length; si++) {
         const sid = sysIds[si];
-        const system = root.ORION.system.generate(galaxy, sid);
+        /* forceHome: il candidato va generato come SARÀ in-game una volta
+           scelto (single-prime), così nomi/corpi/bodyKey coincidono col
+           gioco vero (fix WYSIWYG, decisione #64). */
+        const system = root.ORION.system.generate(galaxy, sid, { forceHome: true });
         const bodyKey = pickBestHabitableBody(system);
         if (!bodyKey) continue;
         const planet = root.ORION.planet.generate(galaxy, system, bodyKey);

@@ -302,13 +302,13 @@
      Il dispatcher legge `galaxy.systemAlgVersion`: undefined o 2 → V2,
      1 → V1 (save legacy, preserva i body keys delle colonie esistenti).
      ================================================================== */
-  function generate(galaxy, systemId) {
+  function generate(galaxy, systemId, opts) {
     const algV = (galaxy && galaxy.systemAlgVersion === 1) ? 1 : 2;
-    return (algV === 1) ? generateV1(galaxy, systemId) : generateV2(galaxy, systemId);
+    return (algV === 1) ? generateV1(galaxy, systemId, opts) : generateV2(galaxy, systemId, opts);
   }
 
   /* --- V1: algoritmo legacy invariato (per save schema ≤ 14). --- */
-  function generateV1(galaxy, systemId) {
+  function generateV1(galaxy, systemId, opts) {
     const sys = galaxy.systems[systemId];
     const seedBase = galaxy.seed + ':sys:' + systemId;
     const rng = makeRng(seedBase);
@@ -326,7 +326,7 @@
     // visivamente.
     const themePack = root.ORION.names.bodyNamesForSystem(rng);
 
-    const isHome = systemId === galaxy.homeId;
+    const isHome = (opts && opts.forceHome) || systemId === galaxy.homeId;
     let habitableSlot = -1;     // per garantire un mondo ospitale al sistema d'origine
     let bestHabT = Infinity;
 
@@ -451,15 +451,18 @@
 
   /* --- V2 (decisione #52 §6.1): 5-10 corpi con 8 configurazioni +
      marginali (×0.75 in planet.js) + 70/30 preferenze orbitali. --- */
-  function generateV2(galaxy, systemId) {
+  function generateV2(galaxy, systemId, opts) {
     const sys = galaxy.systems[systemId];
     const seedBase = galaxy.seed + ':sys:' + systemId;
     const rng = makeRng(seedBase);
     const stars = buildStars(rng, sys.star);
 
     /* Pesca la configurazione. Il sistema d'origine forza single-prime per
-       garantire un mondo ospitale §5.1/§6.2 (eredità V1). */
-    const isHome = systemId === galaxy.homeId;
+       garantire un mondo ospitale §5.1/§6.2 (eredità V1). `opts.forceHome`
+       consente all'anteprima della scelta colonia (M06.5) di generare il
+       candidato ESATTAMENTE come sarà in-game una volta diventato home —
+       così nomi/corpi/bodyKey coincidono (decisione #64 / fix WYSIWYG). */
+    const isHome = (opts && opts.forceHome) || systemId === galaxy.homeId;
     const config = isHome ? 'single-prime' : pickSystemConfig(rng);
     const configDef = SYSTEM_CONFIGS[config];
 
