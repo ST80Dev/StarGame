@@ -637,6 +637,7 @@
     generate: generate,
     findBody: findBody,
     BODY_TYPES: BODY_TYPES,
+    PRIME_TYPES: PRIME_TYPES,
     STAR_PHYS: STAR_PHYS,
     ANOMALY_KINDS: ANOMALY_KINDS,
     GAS_VARIANTS: GAS_VARIANTS,

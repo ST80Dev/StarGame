@@ -2476,6 +2476,12 @@ select.main-menu__input { cursor: pointer; }
   letter-spacing: 0.04em;
 }
 
+/* Rischio pirati (fascia regionale) nelle card candidato */
+.main-menu__risk { font-weight: 600; }
+.main-menu__risk--ok   { color: var(--c-good); }
+.main-menu__risk--warn { color: #f0d670; }
+.main-menu__risk--crit { color: var(--c-bad); }
+
 /* Barre dei potenziali §7.1 nelle card candidato */
 .main-menu__pot-bars {
   display: grid;
