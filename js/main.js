@@ -3205,15 +3205,17 @@ function renderPlanetRotteTab(host, planet, colony) {
   if (nb && !nb.disabled) nb.addEventListener('click', function () { openRoutePicker(colony); });
 }
 
-/* Sublabel del launcher "Mercato" (sx): rotte attive + valore portfolio. */
+/* Sublabel del launcher "Mercato" (sx): rotte attive + n. valute possedute.
+   Niente "crediti neutri" in UI: il giocatore non ha mai esperito un credito,
+   è solo un'unità di calcolo. Mostriamo invece quante valute distinte ha. */
 function marketLauncherSub() {
   const g = ORION.game;
   if (!g) return 'M12';
   const routes = (ORION.trade && ORION.trade.routesUsed(g)) || 0;
-  const credits = (ORION.treasury && ORION.treasury.totalCredits(g)) || 0;
+  const held = (ORION.treasury && ORION.treasury.heldCurrencies(g)) || [];
   const parts = [];
   if (routes > 0) parts.push(routes + ' rotte');
-  if (credits > 0) parts.push('≈' + credits.toFixed(0) + ' cr');
+  if (held.length > 0) parts.push(held.length + (held.length === 1 ? ' valuta' : ' valute'));
   return parts.length ? parts.join(' · ') : 'M12';
 }
 
@@ -3428,7 +3430,6 @@ function renderMarketView(stage) {
   let treasuryHtml = '';
   if (Tr) {
     const held = Tr.heldCurrencies(g);
-    const total = Tr.totalCredits(g);
     let portfolio;
     if (held.length) {
       portfolio = '<ul class="cur-list">' + held.map(function (c) {
@@ -3443,7 +3444,7 @@ function renderMarketView(stage) {
       portfolio = '<p class="panel__note">Portfolio vuoto. Vendi risorse al <em>Banco regionale</em> (tab Rotte di una colonia) per ottenere valuta locale.</p>';
     }
     treasuryHtml =
-      '<p class="sysinfo__sub">Tesoreria <span class="cantieri-section__hint">(valore ≈ ' + total.toFixed(0) + ' crediti)</span></p>' +
+      '<p class="sysinfo__sub">Tesoreria <span class="cantieri-section__hint">(' + (held.length || 'nessuna') + (held.length === 1 ? ' valuta' : ' valute') + ')</span></p>' +
       portfolio +
       '<button class="btn btn--mini btn--enter" data-action="treasury-exchange" type="button"' +
         (held.length ? '' : ' disabled') + '>⇄ Cambia valuta</button>';
@@ -3502,17 +3503,28 @@ function buildMekhariPanel(g) {
   const colKey = ORION.mekhariColonyKey;
   const sc = MK.surcharge(g);
   const credits = (ORION.treasury && ORION.treasury.totalCredits(g)) || 0;
+  /* Prezzo mostrato nella valuta della regione della colonia destinataria
+     (è il "prezzo equivalente locale"). Il backend continua a spendere via
+     spendCredits attingendo da qualunque valuta del portfolio. */
+  const Tr = ORION.treasury;
+  const colCluster = Tr ? Tr.clusterOfColony(g, colKey) : null;
+  const localCur = (Tr && colCluster != null) ? Tr.currencyFor(g, colCluster) : null;
+  const localPrice = function (cr) {
+    return (localCur && localCur.value > 0) ? (cr / localCur.value) : cr;
+  };
+  const localSym = localCur ? localCur.symbol : '';
   const colOpts = mine.map(function (k) {
     return '<option value="' + k + '"' + (k === colKey ? ' selected' : '') + '>' + colonyNameFromKey(k) + '</option>';
   }).join('');
   const rows = MK.BUY_RES.map(function (res) {
     const q = MK.quoteSmuggle(g, colKey, res, MEKHARI_LOT);
     const afford = q.ok && credits + 1e-6 >= q.costCredits;
-    const title = q.ok ? ('Compra ' + MEKHARI_LOT + ' → −' + q.costCredits.toFixed(0) + ' crediti · −' + q.repCost.toFixed(1) + ' reputazione') : (q.reason || '');
+    const priceLocal = q.ok ? localPrice(q.costCredits) : 0;
+    const title = q.ok ? ('Compra ' + MEKHARI_LOT + ' → ≈ ' + priceLocal.toFixed(0) + ' ' + localSym + ' equivalenti · −' + q.repCost.toFixed(1) + ' reputazione') : (q.reason || '');
     return '<div class="bank-row">' +
       '<span class="bank-row__res">' + resIcon(res) + ' ' + tradeResLabel(res) + '</span>' +
       '<button class="btn btn--mini" data-action="mek-buy" data-res="' + res + '" type="button"' + (afford ? '' : ' disabled') + ' title="' + escapeHtml(title) + '">' +
-        'Compra ' + MEKHARI_LOT + ' <span class="mek-cost">≈' + (q.ok ? q.costCredits.toFixed(0) : '—') + ' cr</span>' +
+        'Compra ' + MEKHARI_LOT + ' <span class="mek-cost">≈' + (q.ok ? priceLocal.toFixed(0) + ' ' + localSym : '—') + '</span>' +
       '</button>' +
     '</div>';
   }).join('');
@@ -3529,8 +3541,14 @@ function doSmuggle(resource, stage) {
   const colKey = ORION.mekhariColonyKey;
   const r = MK.buySmuggle(g, colKey, resource, MEKHARI_LOT);
   if (!r.ok) { showToast(r.reason || 'Acquisto rifiutato'); return; }
+  /* Voce cronaca: prezzo nella valuta della regione di destinazione (no "crediti" in UI). */
+  const Tr = ORION.treasury;
+  const colCluster = Tr ? Tr.clusterOfColony(g, colKey) : null;
+  const localCur = (Tr && colCluster != null) ? Tr.currencyFor(g, colCluster) : null;
+  const priceLocal = (localCur && localCur.value > 0) ? (r.costCredits / localCur.value) : r.costCredits;
+  const priceLabel = localCur ? (priceLocal.toFixed(0) + ' ' + localCur.symbol + ' equivalenti') : (priceLocal.toFixed(0));
   pushChronicle(ORION.time.currentDS(g) + ' — Mercato grigio Mekhari: ' + MEKHARI_LOT + ' ' + tradeResLabel(resource) +
-    ' a ' + colonyNameFromKey(colKey) + ' (−' + r.costCredits.toFixed(0) + ' crediti · −' + r.repCost.toFixed(1) + ' reputazione).', 'system');
+    ' a ' + colonyNameFromKey(colKey) + ' (≈ ' + priceLabel + ' · −' + r.repCost.toFixed(1) + ' reputazione).', 'system');
   if (ORION.tutorial) ORION.tutorial.fire('mekhari');
   showToast('Contrabbando: +' + MEKHARI_LOT + ' ' + tradeResLabel(resource));
   persistGame(g);

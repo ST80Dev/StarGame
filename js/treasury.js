@@ -40,8 +40,11 @@
   const REP_GOOD_MUL = 0.7, REP_BAD_MUL = 1.3;
   const MEKHARI_MUL = 0.7;          // arbitraggio Mekhari: spread più basso
 
-  /* Saldo iniziale nella valuta della regione d'origine. */
-  const START_BALANCE = 250;
+  /* Saldo iniziale nella valuta della regione d'origine.
+     Scelta utente (2026-06-07): 0 → "economia che si guadagna". I primi
+     crediti escono dal banco regionale (vendi met/en/food/water) o dalla
+     commissione 2% sugli accordi commerciali con le AI (§15.3). */
+  const START_BALANCE = 0;
 
   /* Prefissi tematici per i nomi-valuta (tono SW-flavor, decisione #34).
      Si combinano col nome della regione (es. "Stilla di Vega", "Lama Keth"). */
