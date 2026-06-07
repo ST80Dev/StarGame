@@ -4802,3 +4802,53 @@ select.main-menu__input { cursor: pointer; }
 .civ-nest__lvl { color: var(--c-text-faint); font-size: 0.76rem; }
 .civ-nest__taglia { color: #f0c070; font-size: 0.78rem; }
 .civ-nests__hint { margin: 4px 0 0; }
+
+/* =====================================================================
+   M10 Fase B (decisione #52 §13.6/§13.8) — Coesione di sistema + Federazioni
+   ===================================================================== */
+/* Chip federazione sulla card civiltà (in linea con civ-chip). */
+.civ-fedchip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 999px;
+  font-size: 0.72rem; letter-spacing: 0.06em;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--fed-color, #c8d24a);
+  border: 1px solid var(--fed-color, #c8d24a);
+}
+/* Sezione "Federazioni emergenti" (lista compatta). */
+.civ-feds {
+  margin: 10px 0 14px; padding: 10px 12px;
+  border: 1px solid rgba(157, 123, 255, 0.35); border-radius: 8px;
+  background: rgba(157, 123, 255, 0.06);
+}
+.civ-feds__title { margin: 0 0 7px; font-size: 0.92rem; color: #b39bff; font-family: var(--font-display); }
+.civ-feds__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.civ-fed {
+  display: flex; gap: 10px; align-items: center;
+  font-size: 0.82rem; flex-wrap: wrap;
+  border-left: 3px solid var(--fed-color, #9d7bff);
+  padding: 4px 0 4px 8px;
+}
+.civ-fed__swatch { width: 10px; height: 10px; border-radius: 50%; background: var(--fed-color, #9d7bff); flex-shrink: 0; }
+.civ-fed__name { flex: 1 1 auto; }
+.civ-fed__members { color: var(--c-text-faint); font-size: 0.78rem; }
+.civ-fed__age { color: var(--c-text-faint); font-size: 0.76rem; font-family: var(--font-mono, monospace); }
+
+/* Sezione "Sistemi coesi noti". */
+.civ-cohesion {
+  margin: 10px 0 14px; padding: 10px 12px;
+  border: 1px solid rgba(240, 166, 74, 0.35); border-radius: 8px;
+  background: rgba(240, 166, 74, 0.05);
+}
+.civ-cohesion__title { margin: 0 0 7px; font-size: 0.92rem; color: #f0c070; font-family: var(--font-display); }
+.civ-cohesion__list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.civ-cohesion__item { display: flex; gap: 10px; align-items: baseline; font-size: 0.82rem; flex-wrap: wrap; }
+.civ-coh-sys { flex: 1 1 auto; }
+.civ-coh-owners { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.civ-coh-owner {
+  padding: 1px 6px; border-radius: 4px; font-size: 0.74rem;
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--coh-c, #f0c070);
+  border: 1px solid var(--coh-c, #f0c070);
+}
+.civ-coh-stats { color: var(--c-text-faint); font-size: 0.76rem; }

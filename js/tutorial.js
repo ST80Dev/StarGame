@@ -236,6 +236,36 @@
         'costa <strong>reputazione</strong>: i tuoi atti pesano su come tutta la galassia ti vede.</p>'
     },
     {
+      id: 'cohesion',
+      tag: 'Civiltà · Coesione',
+      title: 'Sistemi coesi (consorzi locali)',
+      body:
+        '<p>Quando <strong>due o più fazioni</strong> (incluso te) coabitano un sistema in pace e occupano la maggior parte ' +
+        'dei suoi pianeti, il sistema diventa <strong>coeso</strong>: un <em>consorzio locale</em> emerge. Sulla mappa lo riconosci ' +
+        'dall\'alone tratteggiato ambra; nella vista Civiltà compare in <strong>Sistemi coesi noti</strong>.</p>' +
+        '<p>Toccare un consorzio costa <strong>disposizione di tutti i suoi membri</strong>:</p>' +
+        '<ul><li><strong>Passare</strong> con una flotta: −1 per proprietario (cap −3 per ordine).</li>' +
+        '<li><strong>Spedizioni</strong>: +5% rischio incidente per proprietario, cap +15%.</li>' +
+        '<li><strong>Colonizzare</strong> un corpo del sistema: −15 per proprietario.</li>' +
+        '<li><strong>Attaccare</strong> un membro: −15 anche per gli altri (solidarietà locale).</li></ul>' +
+        '<p><strong>Rompere il consorzio</strong>: metti in guerra fra loro due membri, o alleati di tutti — il sistema esce dallo stato coeso. ' +
+        'È un meccanismo emergente: nasce dalle dinamiche di gioco, non da una scelta fissa.</p>'
+    },
+    {
+      id: 'federations',
+      tag: 'Civiltà · Federazioni',
+      title: 'Federazioni emergenti',
+      body:
+        '<p>Quando due civiltà AI restano <strong>alleate del giocatore</strong> a lungo e le loro vocazioni sono compatibili, ' +
+        'accumulano <strong>fiducia reciproca</strong>. Superata la soglia, si <strong>fondono</strong> in una <strong>Federazione</strong>: ' +
+        'nome composito, colore mix, somma di pianeti/potenza, decisioni concertate.</p>' +
+        '<p><strong>Compatibilità</strong>: vocazioni di "famiglia" affine si fondono (Sedentari + Mercantili sì, Predoni + Mistici no). ' +
+        'Le 4 Costanti seguono le stesse regole.</p>' +
+        '<p><strong>Fragilità</strong>: una federazione si <strong>spezza</strong> se un membro perde più del 50% dei pianeti iniziali, ' +
+        'o se le vocazioni divergono col tempo (cambi di fase vitale). I pezzi tornano civiltà separate; il trust si resetta.</p>' +
+        '<p><strong>Iterativa</strong>: due federazioni possono a loro volta federarsi → blocchi a 3+ civiltà, scenari di galassia matura.</p>'
+    },
+    {
       id: 'pirates',
       tag: 'Galassia · Pirati',
       title: 'Predoni e covi pirata',

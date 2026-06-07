@@ -55,7 +55,7 @@
      DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
      nuovo gioco la preserva e una recovery best-effort prova a dedurla
      da colonie/flotte/spedizioni/cronaca. */
-  const SCHEMA_VERSION = 13;
+  const SCHEMA_VERSION = 14;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -142,7 +142,14 @@
          = systemId, valore = livello DISCOVERY (UNKNOWN/DETECTED/EXPLORED).
          Serializzato come array di interi (compatto in JSON). */
       discovery: (game.state && Array.isArray(game.state.discovery)) ? game.state.discovery.slice() : null,
-      selectedId: (game.state && Number.isInteger(game.state.selectedId)) ? game.state.selectedId : null
+      selectedId: (game.state && Number.isInteger(game.state.selectedId)) ? game.state.selectedId : null,
+      /* Schema 14 (M10 Fase B, decisione #52 §13.6/§13.8):
+         - cohesion = { sysIds:[] } sistemi coesi al tick scorso (per emettere
+           formed/broken una volta sola). Stato minimo, il resto è derivato.
+         - federations = { list:[], trust:{} } federazioni emergenti + memoria
+           del trust per coppia AI alleata. `civ.federationId` marker su civs. */
+      cohesion: (game.cohesion && typeof game.cohesion === 'object') ? game.cohesion : { sysIds: [] },
+      federations: (game.federations && typeof game.federations === 'object') ? game.federations : { list: [], trust: {} }
     };
   }
 
@@ -323,6 +330,26 @@
         });
       }
       payload.schema = 13;
+    }
+    /* v13 → v14 (M10 Fase B, decisione #52 §13.6/§13.8): coesione di sistema
+       (stato derivato — solo lista sysIds correntemente coesi) + federazioni
+       emergenti (lista + trust per-coppia). Lazy: vuoti qui, il prossimo
+       AI-tick rileva i sistemi coesi e popola lo stato. I save vecchi
+       caricano e cominceranno a registrare formed/broken dal momento del load,
+       coerente con seed+delta. */
+    if ((payload.schema || 13) < 14) {
+      if (!payload.cohesion || typeof payload.cohesion !== 'object') {
+        payload.cohesion = { sysIds: [] };
+      }
+      if (!Array.isArray(payload.cohesion.sysIds)) payload.cohesion.sysIds = [];
+      if (!payload.federations || typeof payload.federations !== 'object') {
+        payload.federations = { list: [], trust: {} };
+      }
+      if (!Array.isArray(payload.federations.list)) payload.federations.list = [];
+      if (!payload.federations.trust || typeof payload.federations.trust !== 'object') {
+        payload.federations.trust = {};
+      }
+      payload.schema = 14;
     }
     return payload;
   }

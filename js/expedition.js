@@ -235,6 +235,12 @@
       const threat = ORION.ai.pirateThreat(game, targetSystemId);
       if (threat > 0) c += threat * CFG.PIRATE_ACCIDENT;
     }
+    /* M10 Fase B (decisione #52 §13.6): transitare per/verso un sistema coeso
+       alza il rischio incidente (+5% per proprietario AI, cap +15%). Recovery-
+       friendly (#22): probabilità soltanto, niente esiti fatali nuovi. */
+    if (game && ORION.cohesion && ORION.cohesion.expeditionRiskBonus) {
+      c += ORION.cohesion.expeditionRiskBonus(game, targetSystemId);
+    }
     return Math.max(0, c);
   }
 
