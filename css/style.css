@@ -16,9 +16,9 @@
   /* Superfici (pannelli / card / sheet): UN SOLO knob RGB; l'alpha vive
      per-uso come `rgb(var(--c-surface-rgb) / .xx)`. Cambia questo e TUTTE
      le superfici si spostano insieme (fonte di verità della luminosità). */
-  --c-surface-rgb:        34 46 86;    /* navy scuro percepibile      */
-  --c-surface-violet-rgb: 46 34 78;    /* superfici a tinta viola     */
-  --c-bg-deep-rgb:        22 30 64;    /* fondo profondo: viewport/dashboard */
+  --c-surface-rgb:        41 55 98;    /* navy scuro percepibile (un filo più chiaro) */
+  --c-surface-violet-rgb: 52 40 86;    /* superfici a tinta viola     */
+  --c-bg-deep-rgb:        28 37 76;    /* fondo profondo: viewport/dashboard */
 
   --c-panel:       rgb(var(--c-surface-rgb) / 0.92);   /* deriva dal token superficie */
   --c-panel-solid: rgb(var(--c-surface-rgb));
@@ -1703,7 +1703,10 @@ button { font-family: inherit; }
      alcune viste (es. civ) non avevano overflow proprio. */
   .viewport__stage {
     place-items: start stretch;   /* niente centratura → i contenuti DOM partono in alto */
+    grid-template-columns: minmax(0, 1fr);  /* colonna CAPPATA alla larghezza: i contenuti
+                                               devono andare a capo, niente più clipping a dx */
     overflow-y: auto;
+    overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
   }
   .fleet-view, .civ-view, .market-view {
@@ -1711,6 +1714,9 @@ button { font-family: inherit; }
     overflow: visible;
     padding-bottom: calc(var(--mnav-h, 60px) + 20px);   /* spazio sopra la bottom nav */
   }
+  /* Card a colonna singola su telefono: le griglie minmax(≥230px) non
+     possono mai sforare lo schermo (bordo dx sempre visibile). */
+  .civ-list, .civ-feds__list { grid-template-columns: 1fr; }
   /* Le sheet scrollano come un unico contenitore (niente nested-scroll). */
   .panel--left .panel__content,
   .panel--right .panel__content {
@@ -4386,7 +4392,8 @@ select.main-menu__input { cursor: pointer; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   margin-bottom: 8px;
 }
 .fleet-view__title {
@@ -4629,8 +4636,8 @@ select.main-menu__input { cursor: pointer; }
 /* =====================================================================
    M10 Fase B (decisione #47) — Vista "Civiltà" + dossier
    ===================================================================== */
-.civ-view { padding: 4px 2px; }
-.civ-indices { display: flex; gap: 10px; align-items: center; }
+.civ-view { padding: 8px 12px; }
+.civ-indices { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .civ-index {
   font-size: 0.82rem; color: var(--c-text-faint);
   background: rgba(157, 123, 255, 0.10);
@@ -4647,13 +4654,13 @@ select.main-menu__input { cursor: pointer; }
   border-radius: 8px; padding: 11px 13px;
   background: rgb(var(--c-surface-rgb) / 0.55);
 }
-.civ-card__head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.civ-card__head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin-bottom: 8px; }
 .civ-card__swatch {
   width: 11px; height: 11px; border-radius: 3px;
   background: var(--civ-color, #9d7bff); flex: 0 0 auto;
   box-shadow: 0 0 6px var(--civ-color, #9d7bff);
 }
-.civ-card__name { font-family: var(--font-display); font-size: 0.98rem; color: var(--c-text); flex: 1 1 auto; }
+.civ-card__name { font-family: var(--font-display); font-size: 0.98rem; color: var(--c-text); flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .civ-chip {
   font-size: 0.70rem; text-transform: uppercase; letter-spacing: 0.04em;
   padding: 2px 7px; border-radius: 4px; flex: 0 0 auto;
