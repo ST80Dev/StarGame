@@ -568,11 +568,18 @@
      ottimale t=0.45). Ritorna { bodyKey, score } oppure null. */
   function pickBestHabitableBody(system) {
     const bodies = system.bodies || [];
+    /* Decisione utente: i candidati d'origine si limitano ai tipi PRIME
+       (terrestre/oceanico/forestale §6.3) — i marginali sono anch'essi
+       prime-type (flag `marginal`), quindi inclusi. Niente partenze su
+       vulcanico/desertico/ghiacciato: corpi abitabili ma con ~75% di slot
+       in meno, che il giocatore eviterebbe comunque. */
+    const PRIME = (root.ORION.system && root.ORION.system.PRIME_TYPES) || ['terrestre', 'oceanico', 'forestale'];
     let bestKey = null, bestDist = Infinity;
     for (let i = 0; i < bodies.length; i++) {
       const b = bodies[i];
       const def = root.ORION.system.BODY_TYPES[b.type];
       if (!def || !def.habitable || def.cat !== 'rocky') continue;
+      if (PRIME.indexOf(b.type) < 0) continue;
       const t = bodies.length > 1 ? i / (bodies.length - 1) : 0.5;
       const dH = Math.abs(t - 0.45);
       if (dH < bestDist) { bestDist = dH; bestKey = b.key; }
@@ -624,7 +631,9 @@
           starLabel: sys.stars.label,
           bodiesCount: sys.bodies.length,
           danger: galaxy.systems[sys.id].danger,
-          dangerTier: galaxy.systems[sys.id].dangerTier
+          dangerTier: galaxy.systems[sys.id].dangerTier,
+          tier: group.tier,
+          tierLabel: group.tierLabel
         },
         planet: {
           name: planet.name,

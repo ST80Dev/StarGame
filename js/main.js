@@ -8068,7 +8068,7 @@ function renderMainMenuHomePick(body) {
       '<h2 class="main-menu__form-title">Scegli la colonia originaria</h2>' +
       '<p class="main-menu__field-hint">' +
         candidates.length + ' candidati (uno per regione · <strong>' + escapeHtml(ORION.names.galaxyName(seed)) + '</strong> · seed <code>' + escapeHtml(seed) + '</code>). ' +
-        'La scelta cristallizza il sistema d\'origine: il pericolo della galassia si ricalibra da lì.' +
+        'La scelta cristallizza il sistema d\'origine: la galassia si ricalibra da lì. Il <strong>rischio pirati</strong> riflette la fascia (Nucleo sicuro → Orlo esposto), dove si concentrano covi e incursioni.' +
       '</p>' +
       '<div class="save-grid">' + cards + '</div>' +
       '<div class="main-menu__form-actions">' +
@@ -8101,7 +8101,7 @@ function homeCandidateCardHtml(c) {
     '<dl class="save-card__meta">' +
       '<div><dt>Regione</dt><dd>' + escapeHtml(c.groupName) + '</dd></div>' +
       '<div><dt>Sistema</dt><dd>' + escapeHtml(c.system.name) + ' · ' + escapeHtml(c.system.starLabel) + '</dd></div>' +
-      '<div><dt>Pericolo</dt><dd>' + escapeHtml(c.system.dangerTier) + ' (' + c.system.danger + ')</dd></div>' +
+      '<div><dt>Rischio pirati</dt><dd>' + pirateRiskHtml(c.system) + '</dd></div>' +
       '<div><dt>Ostilità ' + hostilityNoun(c.planet) + '</dt><dd>' + c.planet.hostility + '</dd></div>' +
       '<div><dt>Pop. max</dt><dd>' + popMaxPeople(c.planet) + '</dd></div>' +
       '<div><dt>Slot</dt><dd>' + (c.planet.slots) + '</dd></div>' +
@@ -8115,6 +8115,25 @@ function homeCandidateCardHtml(c) {
         // Trovo l'indice cercandolo nell'array dei candidati
         ORION.menuPreview.candidates.indexOf(c) + '">Inizia qui</button>' +
     '</div></div>';
+}
+
+/* Rischio pirati/esposizione del candidato d'origine, derivato dalla
+   FASCIA del gruppo (Nucleo→Spazio Sconosciuto). È il segnale onesto che
+   sopravvive alla scelta: il pericolo per-sistema si azzera quando il
+   sistema diventa la tua origine (recomputeDanger), ma la fascia è
+   immutabile e determina dove si seminano covi pirata e AI aggressive
+   (Frontiera/Orlo). Più periferico = più esposto. */
+function pirateRiskHtml(system) {
+  const MAP = {
+    nucleo:      { lvl: 'molto basso', cls: 'main-menu__risk--ok' },
+    colonie:     { lvl: 'basso',       cls: 'main-menu__risk--ok' },
+    frontiera:   { lvl: 'medio',       cls: 'main-menu__risk--warn' },
+    orlo:        { lvl: 'alto',        cls: 'main-menu__risk--crit' },
+    sconosciuto: { lvl: 'molto alto',  cls: 'main-menu__risk--crit' }
+  };
+  const r = MAP[system.tier] || { lvl: '—', cls: '' };
+  const region = system.tierLabel ? ' <span class="main-menu__sub-inline">· ' + escapeHtml(system.tierLabel) + '</span>' : '';
+  return '<span class="main-menu__risk ' + r.cls + '">' + escapeHtml(r.lvl) + '</span>' + region;
 }
 
 function potBar(label, val) {
