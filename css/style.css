@@ -5046,3 +5046,7 @@ select.main-menu__input { cursor: pointer; }
 .route-item__threat { font-size: 0.72rem; }
 .route-item__threat.is-warn { color: #f0d670; }
 .route-item__threat.is-crit { color: var(--c-bad); }
+
+/* ----- M12 Fase B slice 2 (§15.5): mercato grigio Mekhari ----- */
+.mek-cost { color: var(--c-text-dim); font-size: 0.72rem; }
+.market-view .route-picker__field { margin: 0 0 6px; }

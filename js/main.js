@@ -3261,10 +3261,13 @@ function renderMarketView(stage) {
         (held.length ? '' : ' disabled') + '>⇄ Cambia valuta</button>';
   }
 
+  /* ----- Mercato grigio Mekhari (M12 Fase B, §15.5) ----- */
+  const mekhariHtml = buildMekhariPanel(g);
+
   stage.innerHTML =
     '<div class="fleet-view market-view">' +
       '<header class="fleet-view__head">' +
-        '<h2 class="fleet-view__title">Mercato interno <span class="fleet-view__sub">M12 · Fase A2</span></h2>' +
+        '<h2 class="fleet-view__title">Mercato interno <span class="fleet-view__sub">M12 · Commercio</span></h2>' +
       '</header>' +
       '<div class="market-summary">' +
         '<div class="market-summary__cell"><span class="market-summary__val">' + routes.length + ' / ' + cap.routes + '</span><span class="market-summary__lbl">Rotte attive</span></div>' +
@@ -3274,9 +3277,9 @@ function renderMarketView(stage) {
       '<p class="sysinfo__sub">Rotte d\'impero</p>' +
       routesHtml +
       treasuryHtml +
+      mekhariHtml +
       '<p class="panel__note">La capacità di rotte e throughput è data dai <em>Mercati</em> §10 di tutte le tue colonie. ' +
-        'Le <em>valute regionali</em> (una per regione) si guadagnano vendendo risorse al banco regionale e si cambiano qui con spread modulato da reputazione + presenza Mekhari. ' +
-        'Accordi commerciali con le AI arrivano dopo.</p>' +
+        'Le <em>valute regionali</em> (una per regione) si guadagnano vendendo risorse al banco regionale e si cambiano qui con spread modulato da reputazione + presenza Mekhari.</p>' +
     '</div>';
 
   stage.querySelectorAll('[data-action="market-route-cancel"]').forEach(function (b) {
@@ -3289,6 +3292,61 @@ function renderMarketView(stage) {
   });
   const exBtn = stage.querySelector('[data-action="treasury-exchange"]');
   if (exBtn && !exBtn.disabled) exBtn.addEventListener('click', function () { openExchangeOverlay(stage); });
+  /* Mekhari: selettore colonia + acquisti contrabbando. */
+  const mekSel = stage.querySelector('[data-bind="mek-colony"]');
+  if (mekSel) mekSel.addEventListener('change', function () { ORION.mekhariColonyKey = this.value; renderMarketView(stage); });
+  stage.querySelectorAll('[data-action="mek-buy"]').forEach(function (b) {
+    b.addEventListener('click', function () { doSmuggle(b.dataset.res, stage); });
+  });
+}
+
+/* Pannello del mercato grigio Mekhari (§15.5 b). Visibile solo se i Mekhari
+   sono stati contattati. Compra risorse base per una colonia pagando dalla
+   Tesoreria (qualunque valuta) a sovrapprezzo + costo reputazione. */
+const MEKHARI_LOT = 25;
+function buildMekhariPanel(g) {
+  const MK = ORION.mekhari;
+  if (!MK || !MK.isAvailable(g)) return '';
+  const mine = myColonyKeys().filter(function (k) { const c = g.colonies[k]; return c && c.colonized; });
+  if (!mine.length) return '';
+  /* Colonia selezionata (memoria, non salvata). */
+  if (!ORION.mekhariColonyKey || mine.indexOf(ORION.mekhariColonyKey) < 0) ORION.mekhariColonyKey = mine[0];
+  const colKey = ORION.mekhariColonyKey;
+  const sc = MK.surcharge(g);
+  const credits = (ORION.treasury && ORION.treasury.totalCredits(g)) || 0;
+  const colOpts = mine.map(function (k) {
+    return '<option value="' + k + '"' + (k === colKey ? ' selected' : '') + '>' + colonyNameFromKey(k) + '</option>';
+  }).join('');
+  const rows = MK.BUY_RES.map(function (res) {
+    const q = MK.quoteSmuggle(g, colKey, res, MEKHARI_LOT);
+    const afford = q.ok && credits + 1e-6 >= q.costCredits;
+    const title = q.ok ? ('Compra ' + MEKHARI_LOT + ' → −' + q.costCredits.toFixed(0) + ' crediti · −' + q.repCost.toFixed(1) + ' reputazione') : (q.reason || '');
+    return '<div class="bank-row">' +
+      '<span class="bank-row__res">' + resIcon(res) + ' ' + tradeResLabel(res) + '</span>' +
+      '<button class="btn btn--mini" data-action="mek-buy" data-res="' + res + '" type="button"' + (afford ? '' : ' disabled') + ' title="' + escapeHtml(title) + '">' +
+        'Compra ' + MEKHARI_LOT + ' <span class="mek-cost">≈' + (q.ok ? q.costCredits.toFixed(0) : '—') + ' cr</span>' +
+      '</button>' +
+    '</div>';
+  }).join('');
+  return '<p class="sysinfo__sub">Mercato grigio Mekhari <span class="cantieri-section__hint">(sovrapprezzo ' + Math.round(sc * 100) + '% · costa reputazione)</span></p>' +
+    '<label class="route-picker__field">Colonia <select data-bind="mek-colony">' + colOpts + '</select></label>' +
+    '<div class="bank-grid">' + rows + '</div>' +
+    '<p class="panel__note">Il Sindacato Mekhari rifornisce qualunque colonia accettando <em>qualunque valuta</em> del tuo portfolio — utile dove non hai la valuta locale o sei bloccato. Paghi un sovrapprezzo da <strong>mercato grigio</strong> e un <strong>costo di reputazione</strong> §14 (pista Tiranno). Mercato secondario delle risorse avanzate e contratti mercenari arrivano con M13/M14.</p>';
+}
+
+function doSmuggle(resource, stage) {
+  const g = ORION.game;
+  const MK = ORION.mekhari;
+  if (!MK) return;
+  const colKey = ORION.mekhariColonyKey;
+  const r = MK.buySmuggle(g, colKey, resource, MEKHARI_LOT);
+  if (!r.ok) { showToast(r.reason || 'Acquisto rifiutato'); return; }
+  pushChronicle(ORION.time.currentDS(g) + ' — Mercato grigio Mekhari: ' + MEKHARI_LOT + ' ' + tradeResLabel(resource) +
+    ' a ' + colonyNameFromKey(colKey) + ' (−' + r.costCredits.toFixed(0) + ' crediti · −' + r.repCost.toFixed(1) + ' reputazione).', 'system');
+  if (ORION.tutorial) ORION.tutorial.fire('mekhari');
+  showToast('Contrabbando: +' + MEKHARI_LOT + ' ' + tradeResLabel(resource));
+  persistGame(g);
+  if (stage) renderMarketView(stage);
 }
 
 /* Overlay di cambio valuta (M12 Fase A2, §15.4). */

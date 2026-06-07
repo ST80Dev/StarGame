@@ -574,6 +574,20 @@
         '<p><strong>Recovery-friendly:</strong> se la colonia esaurisce la risorsa l\'accordo si interrompe e riparte da solo.</p>'
     },
     {
+      id: 'mekhari', tag: 'Commercio · ⬡', title: 'Mercato grigio Mekhari',
+      body:
+        '<p>Il <strong>Sindacato Mekhari</strong> (una delle 4 Costanti) è il <em>fixer</em> della galassia. Una volta ' +
+        '<strong>contattato</strong>, dalla vista Mercato puoi comprare risorse base per <em>qualunque</em> colonia ' +
+        'pagando da <strong>tutta la Tesoreria</strong> (accettano qualunque valuta).</p>' +
+        '<p><strong>Quando conviene:</strong> dove non hai la valuta locale, o quando una colonia è isolata/bloccata e ti ' +
+        'serve un rifornimento d\'emergenza.</p>' +
+        '<p><strong>Il prezzo:</strong> un <strong>sovrapprezzo</strong> da mercato grigio (più basso con buona reputazione) ' +
+        '+ un <strong>costo di reputazione</strong> §14 a ogni acquisto — è la pista <em>Tiranno</em>: scorciatoie comode ' +
+        'che ti rendono meno raccomandabile.</p>' +
+        '<p><strong>In arrivo:</strong> mercato secondario delle risorse avanzate (M13), contratti mercenari (M14), ' +
+        'taglie e mercato nero pieno (M17), intel grigia (M19).</p>'
+    },
+    {
       id: 'trade-raids', tag: 'Commercio · ☠', title: 'Razzie sulle rotte',
       body:
         '<p>Le rotte che attraversano <strong>spazio infestato dai pirati</strong> (covi M10) o <strong>sistemi coesi non alleati</strong> ' +

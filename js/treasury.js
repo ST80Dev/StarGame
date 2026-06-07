@@ -269,6 +269,29 @@
     return Math.round(tot * 100) / 100;
   }
 
+  /* Spende `credits` (valore neutro) attingendo dalle valute possedute, in
+     ordine di valore-di-possesso decrescente (le più "pesanti" prima). Usato
+     dal fixer Mekhari (§15.5), che accetta qualunque valuta. Ritorna
+     { ok, spent } o { ok:false } se il portfolio non basta. Deterministico. */
+  function spendCredits(game, credits) {
+    ensure(game);
+    credits = Math.round(Math.max(0, credits || 0) * 100) / 100;
+    if (credits <= 0) return { ok: true, spent: 0 };
+    if (totalCredits(game) + 1e-6 < credits) return { ok: false, reason: 'Tesoreria insufficiente' };
+    /* Ordina le valute per valore-di-possesso (balance × value) decrescente. */
+    const ranked = currencies(game).map(function (c) {
+      return { cid: c.clusterId, value: c.value, hold: (game.treasury.balances[c.clusterId] || 0) * c.value };
+    }).filter(function (x) { return x.hold > 0; })
+      .sort(function (a, b) { return b.hold - a.hold; });
+    let need = credits;
+    for (let i = 0; i < ranked.length && need > 1e-6; i++) {
+      const take = Math.min(need, ranked[i].hold);
+      addBalance(game, ranked[i].cid, -(take / ranked[i].value));
+      need -= take;
+    }
+    return { ok: true, spent: credits };
+  }
+
   ORION.treasury = {
     REF_PRICE: REF_PRICE,
     SPREAD_BASE: SPREAD_BASE,
@@ -291,6 +314,7 @@
     quoteBuy: quoteBuy,
     buyResource: buyResource,
     heldCurrencies: heldCurrencies,
-    totalCredits: totalCredits
+    totalCredits: totalCredits,
+    spendCredits: spendCredits
   };
 })(typeof window !== 'undefined' ? window : this);
