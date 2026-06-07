@@ -1057,22 +1057,41 @@
            (ALIGNMENT_IMPACT #23): liberare un sistema da una civiltà MALIGNA
            è "light"; aggredire una buona/neutrale è "dark". */
         if (playerWon && civ.systems.indexOf(sysId) >= 0) {
-          /* Rifondazione AI (#52): la proprietà è AL PIANETA. Rolling back il
-             "confine" sul sistema = rimuovere tutti i pianeti della civiltà in
-             quel sistema. removeAllInSystem mantiene anche civ.systems in sync. */
+          /* M11 Fase B parziale (decisione #51): OCCUPAZIONE invece di
+             rollback-a-neutrale. La civ perde i pianeti del sistema (come
+             prima), ma il sistema viene formalmente OCCUPATO dal giocatore
+             → bersaglio di reputazione/morale più pesante, contatore visibile
+             per la pista Egemone, leva di rilascio in UI (recovery-friendly:
+             il giocatore può sempre abbandonare l'occupazione). */
           if (root.ORION.ai && root.ORION.ai.removeAllInSystem) {
             root.ORION.ai.removeAllInSystem(civ, sysId);
           } else {
             civ.systems = civ.systems.filter(function (s) { return s !== sysId; });
           }
           civ.power = Math.max(0, civ.power - 8);
+          /* L'occupazione è un atto più pesante della "liberazione neutrale":
+             dark più forte se la civ è buona/neutrale, light forte se maligna. */
           const impact = (civ.alignment === 'male') ? 'light' : 'dark';
           if (root.ORION.victory && root.ORION.victory.applyAlignment) {
-            root.ORION.victory.applyAlignment(game, impact, 1);
+            root.ORION.victory.applyAlignment(game, impact, 2);
           }
-          if (impact === 'light') bumpIcg(game, -2); else bumpIcg(game, 2);
-          report.rolledBackSystem = sysId;
+          if (impact === 'light') bumpIcg(game, -2); else bumpIcg(game, 3);
           report.alignmentImpact = impact;
+          /* Registra l'occupazione (delta lazy). */
+          if (!game.occupations || typeof game.occupations !== 'object') game.occupations = {};
+          if (!game.occupations[sysId]) {
+            game.occupations[sysId] = {
+              fromCivId: civ.id, fromCivName: civ.name,
+              fromCivColor: civ.color, fromAlignment: civ.alignment,
+              sinceI: game.timeImpulsi
+            };
+            report.occupiedSystem = sysId;
+            events.push({ kind: 'system-occupied', sysId: sysId,
+              fromCivId: civ.id, fromCivName: civ.name,
+              alignment: civ.alignment, impulso: game.timeImpulsi });
+          } else {
+            report.rolledBackSystem = sysId; // già occupato → solo "ripulito"
+          }
           if ((civ.planets || civ.systems || []).length === 0) {
             civ.alive = false;
             events.push({ kind: 'civ-fallen', civName: civ.name, conqueror: 'le tue forze', impulso: game.timeImpulsi });
@@ -1841,6 +1860,29 @@
     return advance(nextEventImpulsi(game));
   }
 
+  /* M11 Fase B parziale: rilascio volontario di un sistema occupato.
+     Recovery-friendly (#22): il giocatore può sempre abbandonare. Lieve
+     bonus reputazione se l'occupazione era "dark" (atto di clemenza).
+     Il sistema torna neutrale (nessuna re-assegnazione automatica alla
+     vecchia civ — l'AI può ricolonizzarlo con i suoi cicli normali). */
+  function releaseOccupation(game, sysId) {
+    if (!game || !game.occupations) return { ok: false, reason: 'Nessuna occupazione attiva.' };
+    const occ = game.occupations[sysId];
+    if (!occ) return { ok: false, reason: 'Sistema non occupato.' };
+    delete game.occupations[sysId];
+    const wasDark = occ.fromAlignment !== 'male';
+    /* Bonus reputazione discreto per il rilascio quando era atto dark. */
+    if (wasDark && root.ORION.diplomacy && root.ORION.diplomacy.adjustReputation) {
+      root.ORION.diplomacy.adjustReputation(game, 3);
+    }
+    return { ok: true, sysId: sysId, wasDark: wasDark };
+  }
+
+  function occupationCount(game) {
+    if (!game || !game.occupations) return 0;
+    return Object.keys(game.occupations).length;
+  }
+
   ORION.time = {
     CFG: CFG,
     CLASS_BIAS: CLASS_BIAS,
@@ -1865,6 +1907,8 @@
     wasteStatus: wasteStatus,
     /* M09 Fase B — leve di recovery / esiti esposti per la UI */
     evacuateColony: evacuateColony,
+    releaseOccupation: releaseOccupation,
+    occupationCount: occupationCount,
     ensureWarState: ensureWarState
   };
 })(typeof window !== 'undefined' ? window : this);

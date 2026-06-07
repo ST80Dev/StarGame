@@ -337,7 +337,10 @@ function newGame(seed, opts) {
     treasury: { balances: {} },
     /* M12 Fase A2 (decisione #56 §15.3): accordi commerciali bilaterali
        con le civiltà AI. */
-    tradeAgreements: []
+    tradeAgreements: [],
+    /* M11 Fase B parziale: sistemi occupati dopo vittoria su civiltà AI.
+       Lazy, additivo; nessun bump di schema. */
+    occupations: {}
   };
   // startDS = Data Stellare INIZIALE (epoca .00), fissa per la partita.
   ORION.game.startDS = ORION.time.format(startOrbita * 100);
@@ -413,6 +416,10 @@ function newGame(seed, opts) {
     }
     /* M12 Fase A2 (decisione #56 §15.3): accordi commerciali AI. */
     if (Array.isArray(saved.tradeAgreements)) ORION.game.tradeAgreements = saved.tradeAgreements.slice();
+    /* M11 Fase B parziale: sistemi occupati (additivo, no migrazione). */
+    if (saved.occupations && typeof saved.occupations === 'object') {
+      ORION.game.occupations = Object.assign({}, saved.occupations);
+    }
     /* Schema 12: ripristina nebbia di guerra (sistemi esplorati/rilevati).
        Prima del fix la scoperta veniva persa al load → i sistemi esplorati
        tornavano grigi. Validazione difensiva: deve essere un array della
@@ -4044,7 +4051,22 @@ function renderCivView(stage) {
         }
       }
       const alignChip = '<span class="civ-chip civ-chip--' + c.alignment + '">' + (ALIGN_LABEL[c.alignment] || c.alignment) + '</span>';
+      /* M11 Fase B parziale: dispaccio AI pendente — banner con accetta/rifiuta. */
+      let offerHtml = '';
+      if (c.pendingOffer && DIP) {
+        const off = c.pendingOffer;
+        const lab = DIP.offerLabel(off.actionId);
+        const ttl = Math.max(0, (off.expiresAt || 0) - (g.timeImpulsi || 0));
+        offerHtml = '<div class="dip-offer">' +
+          '<span class="dip-offer__icon" aria-hidden="true">✉</span>' +
+          '<span class="dip-offer__text"><strong>Dispaccio:</strong> offrono <strong>' + escapeHtml(lab) +
+            '</strong> · scade tra ' + ttl + ' Ι</span>' +
+          '<button type="button" class="dip-btn dip-btn--primary" data-dip-offer="' + escapeHtml(c.id) + '" data-dip-resp="accept">Accetta</button>' +
+          '<button type="button" class="dip-btn dip-btn--danger" data-dip-offer="' + escapeHtml(c.id) + '" data-dip-resp="reject">Rifiuta</button>' +
+        '</div>';
+      }
       body = '<div class="civ-card__chips">' + alignChip + relChip + fedChip + '</div>' +
+        offerHtml +
         '<div class="civ-card__row"><span class="civ-card__k">Sede</span><span>' +
           escapeHtml(seat.tierLabel || '—') + (seat.name ? ' · ' + escapeHtml(seat.name) : '') + '</span></div>' +
         '<div class="civ-disp">' +
@@ -4200,6 +4222,32 @@ function renderCivView(stage) {
       '</div>';
   }
 
+  /* M11 Fase B parziale: sistemi OCCUPATI dal giocatore (post-skirmish vinto
+     su civiltà AI). Lista con bottone "Abbandona" come leva di recupero. */
+  let occHtml = '';
+  const occMap = g.occupations || {};
+  const occIds = Object.keys(occMap);
+  if (occIds.length) {
+    occHtml = '<div class="civ-occupations">' +
+      '<h3 class="civ-occupations__title">▣ Sistemi occupati <span class="civ-occ__count">' + occIds.length + '</span></h3>' +
+      '<ul class="civ-occupations__list">' + occIds.map(function (sid) {
+        const occ = occMap[sid];
+        const sys = g.galaxy.systems[sid] || {};
+        const tag = systemTagHtml(Number(sid));
+        const since = Math.max(0, (g.timeImpulsi || 0) - (occ.sinceI || 0));
+        const alignCls = occ.fromAlignment || 'neutrale';
+        return '<li class="civ-occupation" style="--occ-color:' + escapeHtml(occ.fromCivColor || '#888') + '">' +
+          '<span class="civ-occ__sys"><strong>' + escapeHtml(sys.name || ('Sistema ' + sid)) + '</strong>' + tag + '</span>' +
+          '<span class="civ-occ__from">strappato a <span class="civ-chip civ-chip--' + alignCls + '">' + escapeHtml(occ.fromCivName || '—') + '</span></span>' +
+          '<span class="civ-occ__since">da ' + since + ' Ι</span>' +
+          '<button type="button" class="btn btn--mini btn--danger" data-action="occ-release" data-sys="' + escapeHtml(sid) + '">Abbandona</button>' +
+        '</li>';
+      }).join('') + '</ul>' +
+      '<p class="panel__note">L\'occupazione di un sistema AI conta per la pista <strong>Egemone</strong>. ' +
+        'Abbandonare un\'occupazione su una civiltà non maligna restituisce un po\' di <strong>reputazione</strong>.</p>' +
+    '</div>';
+  }
+
   stage.innerHTML =
     '<div class="civ-view">' +
       '<header class="fleet-view__head">' +
@@ -4220,6 +4268,7 @@ function renderCivView(stage) {
       constHtml +
       fedsHtml +
       cohHtml +
+      occHtml +
       nestsHtml +
       cards +
     '</div>';
@@ -4234,7 +4283,29 @@ function renderCivView(stage) {
         runDiplomacyAction(civ, btn.dataset.dipAct);
       });
     });
+    /* M11 Fase B parziale: risposta a un'offerta AI (accetta/rifiuta). */
+    stage.querySelectorAll('[data-dip-offer]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const civ = (g.civs || []).filter(function (c) { return c.id === btn.dataset.dipOffer; })[0];
+        if (!civ) return;
+        respondToAiOffer(civ, btn.dataset.dipResp === 'accept');
+      });
+    });
   }
+  /* M11 Fase B parziale: rilascio occupazione sistema. */
+  stage.querySelectorAll('[data-action="occ-release"]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const sid = Number(btn.dataset.sys);
+      if (!Number.isFinite(sid)) return;
+      if (!window.confirm('Abbandonare l\'occupazione di questo sistema?')) return;
+      const r = ORION.time.releaseOccupation(g, sid);
+      if (!r.ok) { showToast(r.reason || 'Rilascio rifiutato'); return; }
+      chronicleEvent({ kind: 'system-released', sysId: sid, impulso: g.timeImpulsi });
+      persistGame(g);
+      updateGlobalIndicesHud();
+      renderCivView(stage);
+    });
+  });
   /* M12 Fase A2 (#56 §15.3): handler accordi commerciali. */
   stage.querySelectorAll('[data-action="agr-propose"]').forEach(function (btn) {
     btn.addEventListener('click', function () {
@@ -4426,6 +4497,23 @@ function runDiplomacyAction(civ, actionId) {
   if (stage && ORION._currentView === 'civ') renderCivView(stage);
   if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
   if (res.accepted === false) showToast(civ.name + ' ha respinto la proposta');
+}
+
+/* M11 Fase B parziale: accetta/rifiuta un'offerta diplomatica AI. */
+function respondToAiOffer(civ, accept) {
+  const g = ORION.game;
+  const DIP = ORION.diplomacy;
+  if (!g || !DIP || !civ || !civ.pendingOffer) return;
+  const events = [];
+  const res = DIP.respondToOffer(g, civ, accept, events);
+  if (!res.ok) { showToast(res.reason || 'Risposta rifiutata'); return; }
+  events.forEach(function (ev) { chronicleEvent(ev); });
+  persistGame(g);
+  updateGlobalIndicesHud();
+  const stage = document.querySelector('[data-view-stage]');
+  if (stage && ORION._currentView === 'civ') renderCivView(stage);
+  if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+  showToast(accept ? ('Offerta accettata · ' + civ.name) : ('Offerta rifiutata · ' + civ.name));
 }
 
 function findFleet(id) {
@@ -5194,6 +5282,15 @@ const DEFAULT_AUTOPAUSE = {
   'diplo-war': false, 'diplo-peace': false, 'diplo-alliance': false,
   'diplo-alliance-broken': false, 'diplo-rejected': false,
   'diplo-truce-expired': true,
+  /* M11 Fase B parziale: dispacci AI proattivi e occupazioni di sistemi.
+     Le offerte AI sono SORPRESE rilevanti (finestra di tempo per rispondere)
+     → auto-pausa ON. Scadenza/rifiuto sono atmosferici → OFF. L'occupazione
+     di un sistema AI è un atto geopolitico forte → ON. */
+  'diplo-offer': true,
+  'diplo-offer-expired': false,
+  'diplo-offer-rejected': false,
+  'system-occupied': true,
+  'system-released': false,
   /* M10 Fase B (decisione #52 §13.6/§13.8): la coesione di sistema è
      atmosferica (consorzio locale che si forma o si scioglie ai confini) →
      OFF di default. Le federazioni emergenti, invece, sono eventi geopolitici
@@ -5509,6 +5606,11 @@ function showEventOverlay(events) {
     'diplo-alliance-broken': 'Alleanza rotta',
     'diplo-rejected': 'Proposta respinta',
     'diplo-truce-expired': 'Tregua scaduta',
+    'diplo-offer': 'Dispaccio AI',
+    'diplo-offer-expired': 'Offerta AI scaduta',
+    'diplo-offer-rejected': 'Offerta AI rifiutata',
+    'system-occupied': 'Sistema occupato',
+    'system-released': 'Occupazione abbandonata',
     'system-cohesion-formed': 'Sistema coeso (consorzio formato)',
     'system-cohesion-broken': 'Sistema coeso: dissolto',
     'federation-formed': 'Federazione emergente',
@@ -5846,6 +5948,31 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.civName) + '</strong> ha respinto la tua proposta diplomatica.', 'civ');
   } else if (ev.kind === 'diplo-truce-expired') {
     pushChronicle(ds + ' — La tregua con <strong>' + escapeHtml(ev.civName) + '</strong> è scaduta · stato di guerra ripristinato.', 'civ');
+  } else if (ev.kind === 'diplo-offer') {
+    /* M11 Fase B parziale: la AI ti invia un dispaccio (pace/alleanza). */
+    const DIP = ORION.diplomacy;
+    const lab = (DIP && DIP.offerLabel) ? DIP.offerLabel(ev.action) : ev.action;
+    pushChronicle(ds + ' — <strong>Dispaccio</strong> da <strong>' + escapeHtml(ev.civName) +
+      '</strong>: offrono <strong>' + escapeHtml(lab) + '</strong>. Apri la vista <strong>Civiltà</strong> per accettare o rifiutare.', 'civ');
+    if (ORION.tutorial) ORION.tutorial.fire('diplomacy');
+  } else if (ev.kind === 'diplo-offer-expired') {
+    pushChronicle(ds + ' — L\'offerta di <strong>' + escapeHtml(ev.civName) + '</strong> è scaduta senza risposta.', 'civ');
+  } else if (ev.kind === 'diplo-offer-rejected') {
+    pushChronicle(ds + ' — Hai respinto l\'offerta di <strong>' + escapeHtml(ev.civName) + '</strong>.', 'civ');
+  } else if (ev.kind === 'system-occupied') {
+    /* M11 Fase B parziale: occupazione di un sistema AI dopo vittoria. */
+    const sys = ORION.game.galaxy.systems[ev.sysId];
+    const stag = ev.sysId != null && ev.sysId >= 0 ? systemTagHtml(ev.sysId) : '';
+    pushChronicle(ds + ' — <strong>' + escapeHtml(sys ? sys.name : '—') + '</strong>' + stag +
+      ' <strong>occupato</strong>: strappato a <strong>' + escapeHtml(ev.fromCivName || 'una civiltà') +
+      '</strong>. Resta sotto il tuo controllo finché non lo abbandoni.', 'civ');
+    if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+  } else if (ev.kind === 'system-released') {
+    const sys = ORION.game.galaxy.systems[ev.sysId];
+    const stag = ev.sysId != null && ev.sysId >= 0 ? systemTagHtml(ev.sysId) : '';
+    pushChronicle(ds + ' — Occupazione di <strong>' + escapeHtml(sys ? sys.name : '—') + '</strong>' + stag +
+      ' <strong>abbandonata</strong>.', 'civ');
+    if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
   } else if (ev.kind === 'system-cohesion-formed') {
     /* M10 Fase B (decisione #52 §13.6): consorzio locale che emerge. */
     const stag = ev.sysId != null && ev.sysId >= 0 ? systemTagHtml(ev.sysId) : '';

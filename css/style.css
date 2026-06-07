@@ -4215,6 +4215,50 @@ select.main-menu__input { cursor: pointer; }
   font-family: var(--font-data); font-size: 0.66rem; font-weight: 400;
   opacity: 0.78; text-transform: lowercase;
 }
+.dip-btn--primary {
+  background: rgba(47, 230, 224, 0.14); border-color: rgba(47, 230, 224, 0.42); color: var(--c-accent);
+}
+.dip-btn--primary:hover:not([disabled]) { background: rgba(47, 230, 224, 0.22); }
+
+/* M11 Fase B parziale — dispacci AI proattivi */
+.dip-offer {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin: 8px 0; padding: 8px 10px;
+  background: rgba(255, 124, 168, 0.10);
+  border: 1px solid rgba(255, 124, 168, 0.42);
+  border-left: 3px solid #ff7ca8;
+  border-radius: var(--radius-sm, 5px);
+}
+.dip-offer__icon { font-size: 1.1rem; color: #ff7ca8; }
+.dip-offer__text { flex: 1 1 auto; font-size: 0.82rem; }
+
+/* M11 Fase B parziale — Sistemi occupati */
+.civ-occupations {
+  margin: 14px 0; padding: 12px;
+  background: rgba(255, 124, 168, 0.05);
+  border: 1px solid rgba(255, 124, 168, 0.28);
+  border-radius: var(--radius-md, 6px);
+}
+.civ-occupations__title {
+  margin: 0 0 7px; font-size: 0.92rem; color: #ffb3cd;
+  font-family: var(--font-display);
+}
+.civ-occ__count {
+  display: inline-block; padding: 1px 7px; margin-left: 4px;
+  background: rgba(255,124,168,0.18); border-radius: 999px;
+  font-size: 0.72rem; color: #ffb3cd;
+}
+.civ-occupations__list {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 5px;
+}
+.civ-occupation {
+  display: grid; grid-template-columns: 1.4fr 1fr auto auto; gap: 10px;
+  align-items: center; padding: 6px 9px;
+  background: rgba(0,0,0,0.25); border-left: 3px solid var(--occ-color, #ff7ca8);
+  border-radius: 4px; font-size: 0.82rem;
+}
+.civ-occ__since { font-family: var(--font-data); font-size: 0.74rem; opacity: 0.7; }
 
 /* =====================================================================
    M09 Fase A (decisione #49) — Guerra / assedi / veteranità
