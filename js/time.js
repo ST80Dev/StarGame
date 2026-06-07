@@ -1598,6 +1598,12 @@
     if (root.ORION.trade && root.ORION.trade.processRoutes) {
       root.ORION.trade.processRoutes(game, events);
     }
+    /* M12 Fase A2 (decisione #56 §15.3): accordi commerciali con le AI —
+       flusso passivo risorsa↔risorsa, gate diplomatico (pace/alleanza),
+       sospensione in guerra/tregua, durata. Dopo le rotte interne. */
+    if (root.ORION.agreements && root.ORION.agreements.process) {
+      root.ORION.agreements.process(game, events);
+    }
     /* M09 Fase A (decisione #49): combattimento. Scaramucce lampo (flotte
        co-locate con presenza ostile), incursioni pirata inbound, assedi in
        corso (1 round ogni ROUND_EVERY_I), poi decadimento dello stato di
@@ -1780,6 +1786,11 @@
     /* M12 Fase A1: mercantili in costruzione (coda Hangar). */
     if (root.ORION.trade && root.ORION.trade.minQueueDuration) {
       const d = root.ORION.trade.minQueueDuration(game);
+      if (d > 0 && d < best) best = d;
+    }
+    /* M12 Fase A2: accordi commerciali AI in scadenza. */
+    if (root.ORION.agreements && root.ORION.agreements.minDuration) {
+      const d = root.ORION.agreements.minDuration(game);
       if (d > 0 && d < best) best = d;
     }
     /* M07: spedizioni in viaggio (outbound o returning) */

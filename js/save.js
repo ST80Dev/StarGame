@@ -55,7 +55,7 @@
      DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
      nuovo gioco la preserva e una recovery best-effort prova a dedurla
      da colonie/flotte/spedizioni/cronaca. */
-  const SCHEMA_VERSION = 16;
+  const SCHEMA_VERSION = 18;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -160,7 +160,15 @@
          interne. I mercantili (entità con xp) e la loro coda di costruzione
          vivono in colony.mercantili / colony.assets.mercantileQueue e sono
          auto-serializzati dentro game.colonies. */
-      tradeRoutes: Array.isArray(game.tradeRoutes) ? game.tradeRoutes : []
+      tradeRoutes: Array.isArray(game.tradeRoutes) ? game.tradeRoutes : [],
+      /* Schema 17 (M12 Fase A2, decisione #56 §15.4): Tesoreria. Solo le
+         balances sono persistite — le valute (nome/simbolo/valore) si
+         rigenerano dal seed (cache non salvata, come la galassia). */
+      treasury: (game.treasury && typeof game.treasury === 'object')
+        ? { balances: game.treasury.balances || {} } : { balances: {} },
+      /* Schema 18 (M12 Fase A2, decisione #56 §15.3): accordi commerciali
+         bilaterali con le AI. La relazione/disposizione vive in game.civs. */
+      tradeAgreements: Array.isArray(game.tradeAgreements) ? game.tradeAgreements : []
     };
   }
 
@@ -381,6 +389,21 @@
     if ((payload.schema || 15) < 16) {
       if (!Array.isArray(payload.tradeRoutes)) payload.tradeRoutes = [];
       payload.schema = 16;
+    }
+    /* v16 → v17 (M12 Fase A2, decisione #56 §15.4): Tesoreria. Aggiunge il
+       contenitore delle balances valuta. Le valute si rigenerano dal seed.
+       Save vecchi caricano con portfolio vuoto (nessun saldo iniziale
+       retroattivo: il faucet è il banco regionale). */
+    if ((payload.schema || 16) < 17) {
+      if (!payload.treasury || typeof payload.treasury !== 'object') payload.treasury = { balances: {} };
+      if (!payload.treasury.balances || typeof payload.treasury.balances !== 'object') payload.treasury.balances = {};
+      payload.schema = 17;
+    }
+    /* v17 → v18 (M12 Fase A2, decisione #56 §15.3): accordi commerciali AI.
+       Save vecchi caricano con 0 accordi. */
+    if ((payload.schema || 17) < 18) {
+      if (!Array.isArray(payload.tradeAgreements)) payload.tradeAgreements = [];
+      payload.schema = 18;
     }
     return payload;
   }
