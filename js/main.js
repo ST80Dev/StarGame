@@ -6104,7 +6104,7 @@ function renderMainMenuNew(body) {
             'value="' + escapeHtml(ORION.menuForm.seed) + '" maxlength="32" autocomplete="off">' +
           '<button type="button" class="btn btn--mini" data-action="menu-seed-new" title="Genera un nuovo seed">⟳ Genera</button>' +
         '</div>' +
-        '<span class="main-menu__field-hint">Il seed cristallizza la galassia. Sarà visibile in partita ma non rigenerabile.</span>' +
+        '<span class="main-menu__field-hint">Galassia: <strong data-bind="menu-galname">' + escapeHtml(ORION.names.galaxyName(ORION.menuForm.seed)) + '</strong> · il seed cristallizza la galassia, sarà visibile in partita ma non rigenerabile.</span>' +
       '</label>' +
       '<label class="main-menu__field">' +
         '<span class="main-menu__field-label">Preset</span>' +
@@ -6134,12 +6134,18 @@ function renderMainMenuNew(body) {
   const seedBtn = form.querySelector('[data-action="menu-seed-new"]');
   const cancel = form.querySelector('[data-action="menu-cancel"]');
 
+  const galnameEl = form.querySelector('[data-bind="menu-galname"]');
+  const refreshGalname = function () {
+    if (galnameEl) galnameEl.textContent = ORION.names.galaxyName(ORION.menuForm.seed);
+  };
   seedInput.addEventListener('input', function () {
     ORION.menuForm.seed = seedInput.value.trim() || ORION.rng.newSeed();
+    refreshGalname();
   });
   seedBtn.addEventListener('click', function () {
     ORION.menuForm.seed = ORION.rng.newSeed();
     seedInput.value = ORION.menuForm.seed;
+    refreshGalname();
     seedInput.focus();
   });
   presetSel.addEventListener('change', function () {
