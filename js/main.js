@@ -53,9 +53,26 @@ ORION.dxIsPinned = false;
    id ('colonia' | 'risorse' | ...) per coerenza con renderPlanetPanel. */
 ORION.dxTab = 'colonia';
 /* Cronaca: stato collassato (sx). Persistito in localStorage. */
-ORION.chronicleCollapsed = false;
-/* Stato delle sezioni roster nel launcher sx (id → bool collassato). */
-ORION.lpSectionCollapsed = { roster: false, nav: false, launcher: false };
+ORION.chronicleCollapsed = true;
+/* Stato delle sezioni della Plancia d'Impero (id → bool collassato).
+   Accordion: una sola sezione aperta per volta (default: Roster). */
+ORION.lpSectionCollapsed = { roster: false, nav: true, launcher: true };
+
+/* Accordion Plancia d'Impero: apre SOLO `openId`, collassa le altre
+   (chronicle inclusa). `openId === null` → tutte chiuse. */
+function lpAccordionOpen(openId) {
+  ['roster', 'nav', 'launcher'].forEach(function (k) {
+    ORION.lpSectionCollapsed[k] = (k !== openId);
+  });
+  ORION.chronicleCollapsed = (openId !== 'chronicle');
+}
+/* Normalizza a una sola sezione aperta (per save vecchi con più aperte). */
+function normalizeLpAccordion() {
+  const order = ['roster', 'nav', 'launcher'];
+  let openId = order.find(function (k) { return !ORION.lpSectionCollapsed[k]; }) || null;
+  if (openId == null && !ORION.chronicleCollapsed) openId = 'chronicle';
+  lpAccordionOpen(openId || 'roster');
+}
 
 /* =====================================================================
    Decisione #62 — Dashboard Impero (M07.3)
@@ -85,6 +102,8 @@ function loadUiPrefs() {
     /* La pin si recupera per partita (chiave seed-aware), perché un
        seed diverso → colonie diverse → il pin vecchio non è valido. */
   } catch (_) { /* niente */ }
+  /* Accordion: forza una sola sezione aperta (anche per prefs vecchie). */
+  normalizeLpAccordion();
 }
 function saveUiPrefs() {
   try {
@@ -6769,18 +6788,20 @@ function renderLeftPanel() {
   const ul = host.querySelector('.chronicle__log');
   if (ul) ul.setAttribute('data-bind', 'chronicle');
 
-  /* Bind handlers */
+  /* Bind handlers — accordion: aprire una sezione collassa le altre. */
   host.querySelectorAll('[data-action="lp-toggle"]').forEach(function (h) {
     h.addEventListener('click', function () {
       const id = h.dataset.id;
-      ORION.lpSectionCollapsed[id] = !ORION.lpSectionCollapsed[id];
+      if (ORION.lpSectionCollapsed[id]) lpAccordionOpen(id);  // era chiusa → aprila sola
+      else ORION.lpSectionCollapsed[id] = true;               // era aperta → chiudila
       saveUiPrefs();
       renderLeftPanel();
     });
   });
   const chronHead = host.querySelector('[data-action="lp-toggle-chron"]');
   if (chronHead) chronHead.addEventListener('click', function () {
-    ORION.chronicleCollapsed = !ORION.chronicleCollapsed;
+    if (ORION.chronicleCollapsed) lpAccordionOpen('chronicle');
+    else ORION.chronicleCollapsed = true;
     saveUiPrefs();
     renderLeftPanel();
   });
