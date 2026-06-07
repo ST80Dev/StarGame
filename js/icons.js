@@ -316,6 +316,14 @@
       '<polyline points="20 6 9 17 4 12"/>'
     ),
 
+    /* Grid — quattro celle (Dashboard Impero, vista d'insieme colonie). */
+    grid: svg(
+      '<rect x="3" y="3" width="7" height="7" rx="1"/>' +
+      '<rect x="14" y="3" width="7" height="7" rx="1"/>' +
+      '<rect x="3" y="14" width="7" height="7" rx="1"/>' +
+      '<rect x="14" y="14" width="7" height="7" rx="1"/>'
+    ),
+
     /* Book — libro (tutorial, indice schede). */
     book: svg(
       '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>' +
