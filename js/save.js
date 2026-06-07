@@ -55,7 +55,7 @@
      DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
      nuovo gioco la preserva e una recovery best-effort prova a dedurla
      da colonie/flotte/spedizioni/cronaca. */
-  const SCHEMA_VERSION = 15;
+  const SCHEMA_VERSION = 16;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -155,7 +155,12 @@
          8 configurazioni, marginali). Save vecchi (schema ≤ 14) migrano a V1
          per preservare i body keys delle colonie esistenti (legacy snapshot
          per-galassia). Nuove partite usano V2. */
-      systemAlgVersion: (game.galaxy && game.galaxy.systemAlgVersion === 1) ? 1 : 2
+      systemAlgVersion: (game.galaxy && game.galaxy.systemAlgVersion === 1) ? 1 : 2,
+      /* Schema 16 (M12 Fase A1, decisione #53 §15.2): rotte commerciali
+         interne. I mercantili (entità con xp) e la loro coda di costruzione
+         vivono in colony.mercantili / colony.assets.mercantileQueue e sono
+         auto-serializzati dentro game.colonies. */
+      tradeRoutes: Array.isArray(game.tradeRoutes) ? game.tradeRoutes : []
     };
   }
 
@@ -368,6 +373,14 @@
     if ((payload.schema || 14) < 15) {
       if (payload.systemAlgVersion == null) payload.systemAlgVersion = 1;
       payload.schema = 15;
+    }
+    /* v15 → v16 (M12 Fase A1, decisione #53 §15.2): commercio interno.
+       Aggiunge il contenitore delle rotte commerciali. I mercantili
+       (entità con xp) sono lazy-init da trade.js dentro le colonie → niente
+       da migrare lì. Save vecchi caricano con 0 rotte, retro-compat 100%. */
+    if ((payload.schema || 15) < 16) {
+      if (!Array.isArray(payload.tradeRoutes)) payload.tradeRoutes = [];
+      payload.schema = 16;
     }
     return payload;
   }

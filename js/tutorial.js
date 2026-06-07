@@ -529,11 +529,34 @@
     {
       id: 'struct:mercato', tag: 'Strutture · ⇄', title: 'Mercato',
       body:
-        '<p>Hub per le rotte commerciali interne all\'impero e per le <em>valute regionali</em> ' +
-        '(ogni regione avrà una sua moneta a tema).</p>' +
-        '<p>Oggi non produce nulla visibile. Costruirlo è un investimento per quando saranno attivi gli scambi tra colonie ' +
-        '(produzione specializzata + trasferimento risorse).</p>' +
-        '<p><strong>Pista vittoria:</strong> contribuirà all\'<em>Egemone economico</em>.</p>'
+        '<p>Hub delle <strong>rotte commerciali interne</strong>. Ogni livello aggiunge <strong>rotte simultanee</strong> ' +
+        'e <strong>throughput/Ι</strong> (lvl 1 = 2 rotte/8 unità · lvl 3 = 4/18 · lvl 5 = 7/36), <em>sommati su tutte le tue colonie</em>.</p>' +
+        '<p><strong>A cosa serve:</strong> sblocca la tab <em>Rotte</em>, dove costruisci i mercantili e apri rotte per spostare ' +
+        'risorse tra colonie — early: cibo/acqua dai mondi-giardino ai mondi-fabbrica/lune, così questi raggiungono il tetto di popolazione.</p>' +
+        '<p><strong>Pista vittoria:</strong> contribuirà all\'<em>Egemone economico</em>. Valute regionali e accordi con le AI arrivano dopo.</p>'
+    },
+    {
+      id: 'trade-routes', tag: 'Commercio · ⇄', title: 'Rotte commerciali',
+      body:
+        '<p>Le <strong>rotte</strong> spostano <em>una risorsa base per Impulso</em> da una colonia all\'altra, ' +
+        'in modo <strong>passivo</strong> (niente microgestione): le configuri una volta e restano attive.</p>' +
+        '<p><strong>Cosa le limita:</strong> il <em>Mercato</em> §10 dà il numero massimo di rotte e il throughput totale ' +
+        '(sommati su tutte le tue colonie); il <em>mercantile</em> assegnato determina quanto lontano arriva (in salti) e ' +
+        'quanto trasporta (cargo). La rotta si interrompe da sola se la sorgente esaurisce la risorsa o se il transito ' +
+        'diventa ostile, e riparte appena le condizioni tornano.</p>' +
+        '<p><strong>Uso chiave (early):</strong> porta cibo/acqua dai mondi-giardino ai mondi-fabbrica → sblocca la ' +
+        '<em>saturazione del tetto di popolazione</em> (i grandi mondi raggiungono il cap pieno solo con import).</p>' +
+        '<p><strong>In arrivo (Fase A2):</strong> Tesoreria + valute regionali, accordi commerciali con le AI.</p>'
+    },
+    {
+      id: 'mercantili', tag: 'Commercio · ◈', title: 'Mercantili',
+      body:
+        '<p>Il <strong>mercantile</strong> è una nave dedicata al carico (niente armi): la costruisci all\'<em>Hangar di costruzione</em> ' +
+        'dalla tab Rotte. Ha <strong>3 livelli</strong> — Cargo leggero (1 salto), Cargo pesante (3 salti), Convoglio iperspaziale ' +
+        '(tutta la galassia, richiede l\'iperguida M13).</p>' +
+        '<p><strong>Esperienza:</strong> ogni viaggio servito accumula xp → ranghi <em>novizia → esperta → veterana → leggendaria</em>. ' +
+        'Bonus: +10% cargo a esperta, +1 salto di raggio a veterana, +2 a leggendaria. Tenere viva la stessa nave conta.</p>' +
+        '<p><strong>Una nave = una rotta:</strong> un mercantile a riposo può essere assegnato a una nuova rotta; chiudendo la rotta torna disponibile.</p>'
     },
     {
       id: 'struct:impianto-riciclo', tag: 'Strutture · ♻', title: 'Impianto di riciclo',

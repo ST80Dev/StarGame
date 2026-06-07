@@ -218,13 +218,18 @@
     },
     {
       id: 'mercato', name: 'Mercato', cat: 'civile', glyph: '⇄',
-      desc: 'Hub commerciale per le rotte interne. Funzione piena nel modulo commercio (M12).',
+      desc: 'Hub commerciale per le rotte interne. Ogni livello aggiunge rotte simultanee e throughput/Ι (M12 §15.2).',
       cost: { met: 50, en: 15 }, time: 12,
       upkeep: { en: 1 },
       rates: {},
-      slots: 1, maxLevel: 2,
+      slots: 1, maxLevel: 5,
       bodyTypes: HABITABLE,
-      hooks: ['trade']            // gancio M12
+      hooks: ['trade'],           // gancio M12
+      /* M12 Fase A1 (decisione #53, §15.2): capacità commerciale per
+         livello. Sommata sui Mercati di tutte le colonie del giocatore.
+         tradeRoutes = rotte simultanee, tradeThroughput = unità/Ι totali. */
+      tradeRoutes: [2, 3, 4, 5, 7],
+      tradeThroughput: [8, 12, 18, 26, 36]
     },
     /* Decisione #48 (Fase 0 — gestione rifiuti): popolazione e industria
        generano rifiuti continui; l'impianto di riciclo li tratta recuperando

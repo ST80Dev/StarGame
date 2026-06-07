@@ -327,7 +327,10 @@ function newGame(seed, opts) {
        formed/broken una sola volta) + federazioni emergenti (lista + trust
        per coppia AI alleata). Il marker `civ.federationId` vive su game.civs. */
     cohesion: { sysIds: [] },
-    federations: { list: [], trust: {} }
+    federations: { list: [], trust: {} },
+    /* M12 Fase A1 (decisione #53 §15.2): rotte commerciali interne. I
+       mercantili (entità con xp) vivono in colony.mercantili. */
+    tradeRoutes: []
   };
   // startDS = Data Stellare INIZIALE (epoca .00), fissa per la partita.
   ORION.game.startDS = ORION.time.format(startOrbita * 100);
@@ -387,6 +390,9 @@ function newGame(seed, opts) {
     if (saved.federations && typeof saved.federations === 'object') {
       ORION.game.federations = saved.federations;
     }
+    /* M12 Fase A1 (decisione #53 §15.2): rotte commerciali interne. I
+       mercantili vivono in saved.colonies (auto-ripristinati). */
+    if (Array.isArray(saved.tradeRoutes)) ORION.game.tradeRoutes = saved.tradeRoutes.slice();
     /* Schema 12: ripristina nebbia di guerra (sistemi esplorati/rilevati).
        Prima del fix la scoperta veniva persa al load → i sistemi esplorati
        tornavano grigi. Validazione difensiva: deve essere un array della
@@ -627,6 +633,18 @@ function renderView(stage, view) {
     if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
     if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
     renderCivView(stage);
+    return;
+  }
+
+  // M12 Fase A1 (decisione #53): vista "Mercato" — riepilogo d'impero del
+  // commercio interno (capacità, rotte, mercantili). La gestione operativa
+  // (crea/cancella, costruisci mercantili) vive nella tab Rotte per-colonia.
+  if (view === 'market') {
+    if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; }
+    if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
+    if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
+    if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
+    renderMarketView(stage);
     return;
   }
 
@@ -1482,13 +1500,23 @@ function renderPlanetPanel(title, content) {
     !!colony.structures['cantiere-navale'] ||
     !!colony.structures['accademia-militare']
   );
+  /* M12 Fase A1 (decisione #53): tab Rotte visibile non appena la colonia
+     ha un Mercato §10 (l'hub delle rotte interne) o partecipa già a una
+     rotta. La casa del commercio interno per-colonia. */
+  const hasTrade = colony.colonized && (
+    !!(colony.structures && colony.structures['mercato']) ||
+    (Array.isArray(colony.mercantili) && colony.mercantili.length > 0) ||
+    (ORION.trade && ORION.trade.routesForColony(ORION.game, ORION.openPlanetKey).length > 0)
+  );
   const tabs = ['colonia', 'risorse', 'strutture', 'popolazione'];
   if (hasRecruitment) tabs.push('forze');
   if (hasExplorationAssets) tabs.push('esplorazione');
+  if (hasTrade) tabs.push('rotte');
   if (!colony.colonized) ORION.planetTab = 'colonia';
   /* Fallback se la tab attiva non è più visibile. */
   if (ORION.planetTab === 'esplorazione' && !hasExplorationAssets) ORION.planetTab = 'colonia';
   if (ORION.planetTab === 'forze' && !hasRecruitment) ORION.planetTab = 'colonia';
+  if (ORION.planetTab === 'rotte' && !hasTrade) ORION.planetTab = 'colonia';
   const activeTab = ORION.planetTab;
   const alerts = planetTabAlerts(colony);
 
@@ -1506,7 +1534,8 @@ function renderPlanetPanel(title, content) {
           strutture:    { iconName: 'build',     tone: 'cyan',   label: 'Strutt.',  full: 'Strutture' },
           popolazione:  { iconName: 'civ',       tone: 'pink',   label: 'Pop.',     full: 'Popolazione' },
           forze:        { iconName: 'forces',    tone: 'red',    label: 'Forze',    full: 'Forze e reclutamento' },
-          esplorazione: { iconName: 'fleet',     tone: 'cyan',   label: 'Esplor.',  full: 'Esplorazione' }
+          esplorazione: { iconName: 'fleet',     tone: 'cyan',   label: 'Esplor.',  full: 'Esplorazione' },
+          rotte:        { iconName: 'market',    tone: 'gold',   label: 'Rotte',    full: 'Rotte commerciali' }
         }[t];
         const iconSvg = (ORION.icon && ORION.icon(meta.iconName)) || '';
         const disabled = (!colony.colonized && t !== 'colonia');
@@ -1541,6 +1570,7 @@ function renderPlanetPanel(title, content) {
   else if (activeTab === 'popolazione') renderPlanetPopolazioneTab(host, planet, colony);
   else if (activeTab === 'forze') renderPlanetForzeTab(host, planet, colony);
   else if (activeTab === 'esplorazione') renderPlanetEsplorazioneTab(host, planet, colony);
+  else if (activeTab === 'rotte') renderPlanetRotteTab(host, planet, colony);
 
   /* M06.6: tutorial — schede per tab pianeta. Risorse copre l'idea delle
      avanzate mascherate (§7.2); Strutture copre slot/coda/durata. */
@@ -1550,6 +1580,7 @@ function renderPlanetPanel(title, content) {
       ORION.tutorial.fire('advanced');
     }
     else if (activeTab === 'esplorazione') ORION.tutorial.fire('exploration');
+    else if (activeTab === 'rotte') ORION.tutorial.fire('trade-routes');
   }
 }
 
@@ -2766,6 +2797,364 @@ function doLaunchExpedition(colony, targetSystemId) {
   closeExpeditionPicker();
   persistGame(g);
   updatePlanetUI();
+}
+
+/* =====================================================================
+   M12 Fase A1 — Tab ROTTE (commercio interno, decisione #53 §15.2/§15.6)
+   Per-colonia: capacità di mercato, mercantili (costruzione + roster),
+   rotte attive (crea/cancella). La gestione d'impero vive nella vista
+   "Mercato" (launcher sx).
+   ===================================================================== */
+function tradeResLabel(k) {
+  return { met: 'metalli', en: 'energia', food: 'cibo', water: 'acqua' }[k] || k;
+}
+function tradeRouteStatusMeta(status) {
+  if (status === 'interrupted-source') return { label: 'sorgente esaurita', cls: 'warn' };
+  if (status === 'interrupted-route')  return { label: 'transito ostile', cls: 'crit' };
+  return { label: 'attiva', cls: 'ok' };
+}
+
+function renderPlanetRotteTab(host, planet, colony) {
+  const g = ORION.game;
+  const T = ORION.trade;
+  if (!T) { host.innerHTML = '<p class="panel__note">Modulo commercio non disponibile.</p>'; return; }
+  const colKey = ORION.openPlanetKey;
+  T.ensureColonyTrade(colony);
+
+  const cap = T.marketCapacity(g);
+  const used = T.routesUsed(g);
+  const marketLvl = T.marketLevelOf(colony);
+  const mercs = colony.mercantili || [];
+  const queue = (colony.assets && colony.assets.mercantileQueue) || [];
+  const routes = T.routesForColony(g, colKey);
+
+  /* ----- Capacità ----- */
+  let html = '<div class="trade-tab">';
+  html += '<p class="sysinfo__sub">Capacità commerciale</p>' +
+    '<dl class="sysinfo__list">' +
+      row('Mercato locale', marketLvl > 0 ? ('lvl ' + marketLvl) : '<em>non costruito</em>') +
+      row('Rotte d\'impero', used + ' / ' + cap.routes) +
+      row('Throughput d\'impero', cap.throughput + ' ' + iU() + ' tot') +
+    '</dl>';
+  if (marketLvl <= 0) {
+    html += '<p class="panel__note">Costruisci un <em>Mercato</em> (scheda Strutture) per aprire rotte: ogni livello aggiunge rotte simultanee e throughput, sommati su tutte le tue colonie.</p>';
+  }
+
+  /* ----- Mercantili ----- */
+  const buildable = T.buildableTier(colony, g);
+  html += '<p class="sysinfo__sub">Mercantili <span class="cantieri-section__hint">(consorzio)</span></p>';
+  if (mercs.length) {
+    html += '<ul class="merc-roster">' + mercs.map(function (m) {
+      const t = T.getTier(m.tier) || {};
+      const rank = T.rankLabel(m.xp);
+      const onRoute = m.status === 'on-route';
+      return '<li class="merc-roster__item">' +
+        '<span class="merc-roster__glyph" aria-hidden="true">' + (t.glyph || '◈') + '</span>' +
+        '<span class="merc-roster__name">' + escapeHtml(t.name || ('Tier ' + m.tier)) + '</span>' +
+        '<span class="xp-chip" title="Esperienza viaggi">xp ' + (m.xp | 0) + ' · ' + rank + '</span>' +
+        '<span class="merc-roster__cargo" title="Cargo · raggio">cargo ' + T.mercantileCargo(m) + ' · ' + T.mercantileMaxHops(m) + ' salti</span>' +
+        '<span class="merc-roster__status merc-roster__status--' + (onRoute ? 'busy' : 'idle') + '">' + (onRoute ? 'in rotta' : 'a riposo') + '</span>' +
+      '</li>';
+    }).join('') + '</ul>';
+  } else {
+    html += '<p class="panel__note">Nessun mercantile. Costruiscine uno all\'<em>Hangar di costruzione</em> per servire le rotte.</p>';
+  }
+  /* Build mercantili (richiede Hangar). */
+  if (T.hangarLevelOf(colony) > 0) {
+    html += '<div class="merc-build">';
+    T.MERCANTILE_TIERS.forEach(function (t) {
+      const can = T.canBuildMercantile(g, colony, colKey, t.tier);
+      const locked = t.tier > buildable;
+      const costStr = Object.keys(t.cost).map(function (k) { return resIcon(k) + t.cost[k]; }).join(' · ');
+      const reason = locked
+        ? (T.hangarLevelOf(colony) < t.hangarLvl ? 'Hangar lvl ' + t.hangarLvl : 'richiede iperguida (M13)')
+        : (can.ok ? '' : can.reason);
+      html += '<button class="btn btn--mini merc-build__btn" data-action="merc-build" data-tier="' + t.tier + '" type="button"' +
+        (can.ok ? '' : ' disabled') +
+        ' title="' + escapeHtml(can.ok ? ('Costo: ' + t.name) : reason) + '">' +
+        '<span aria-hidden="true">' + t.glyph + '</span> ' + escapeHtml(t.name) +
+        ' <span class="merc-build__cost">' + costStr + ' · ' + t.time + ' ' + iU() + '</span>' +
+        (locked ? ' <span class="merc-build__lock">🔒</span>' : '') +
+      '</button>';
+    });
+    html += '</div>';
+    if (queue.length) {
+      html += '<ul class="merc-queue">' + queue.map(function (q, i) {
+        const t = T.getTier(q.tier) || {};
+        const pct = q.totalTime ? Math.round((1 - (q.duration / q.totalTime)) * 100) : 0;
+        return '<li class="merc-queue__item">' +
+          '<span class="merc-queue__name">' + escapeHtml(t.name || ('Tier ' + q.tier)) + '</span>' +
+          '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
+          '<span class="merc-queue__eta">' + (q.duration | 0) + ' ' + iU() + '</span>' +
+          '<button class="btn btn--mini btn--danger" data-action="merc-cancel" data-idx="' + i + '" type="button" title="Annulla (rimborso 50%)">×</button>' +
+        '</li>';
+      }).join('') + '</ul>';
+    }
+  } else {
+    html += '<p class="panel__note">Serve un <em>Hangar di costruzione</em> per varare mercantili.</p>';
+  }
+
+  /* ----- Rotte ----- */
+  html += '<p class="sysinfo__sub">Rotte attive</p>';
+  if (routes.length) {
+    html += '<ul class="route-list">' + routes.map(function (r) {
+      const meta = tradeRouteStatusMeta(r.status);
+      const outbound = (r.src === colKey);
+      const otherKey = outbound ? r.dst : r.src;
+      const dir = outbound ? '→' : '←';
+      return '<li class="route-item">' +
+        '<div class="route-item__head">' +
+          '<span class="route-item__dir">' + dir + '</span>' +
+          '<span class="route-item__peer">' + colonyNameFromKey(otherKey) + '</span>' +
+          '<span class="route-item__res">' + resIcon(r.resource) + ' ' + r.rate + '/' + iU() + '</span>' +
+          '<span class="route-item__status is-' + meta.cls + '">' + meta.label + '</span>' +
+        '</div>' +
+        '<div class="route-item__foot">' +
+          '<span class="route-item__hops">' + (r.hops | 0) + ' salti · consegnato ' + Math.round(r.delivered || 0) + '</span>' +
+          (outbound ? '<button class="btn btn--mini btn--danger" data-action="route-cancel" data-rid="' + r.id + '" type="button">Chiudi rotta</button>' : '') +
+        '</div>' +
+      '</li>';
+    }).join('') + '</ul>';
+  } else {
+    html += '<p class="panel__note">Nessuna rotta da questa colonia.</p>';
+  }
+  const idle = T.idleMercantili(colony);
+  const canOpen = marketLvl >= 0 && cap.routes > 0 && used < cap.routes && idle.length > 0;
+  html += '<button class="btn btn--mini btn--enter" data-action="route-new" type="button"' +
+    (canOpen ? '' : ' disabled') +
+    ' title="' + (cap.routes <= 0 ? 'Serve un Mercato' : (used >= cap.routes ? 'Limite rotte raggiunto' : (idle.length <= 0 ? 'Serve un mercantile a riposo' : 'Apri una nuova rotta da questa colonia'))) + '">' +
+    '+ Nuova rotta' +
+  '</button>';
+  html += '<p class="panel__note">Le rotte spostano una risorsa per Impulso da questa colonia a un\'altra (early: cibo/acqua dai mondi-giardino ai mondi-fabbrica → sblocca il tetto popolazione). Il flusso è passivo, limitato dal Mercato (rotte+throughput) e dal raggio del mercantile.</p>';
+  html += '</div>';
+
+  host.innerHTML = html;
+
+  host.querySelectorAll('[data-action="merc-build"]').forEach(function (b) {
+    b.addEventListener('click', function () { doBuildMercantile(colony, Number(b.dataset.tier)); });
+  });
+  host.querySelectorAll('[data-action="merc-cancel"]').forEach(function (b) {
+    b.addEventListener('click', function () { doCancelMercantile(colony, Number(b.dataset.idx)); });
+  });
+  host.querySelectorAll('[data-action="route-cancel"]').forEach(function (b) {
+    b.addEventListener('click', function () { doCancelRoute(b.dataset.rid); });
+  });
+  const nb = host.querySelector('[data-action="route-new"]');
+  if (nb && !nb.disabled) nb.addEventListener('click', function () { openRoutePicker(colony); });
+}
+
+function doBuildMercantile(colony, tier) {
+  const g = ORION.game;
+  /* Deriva la chiave dalla colonia (robusto sia per il centro che per la
+     dx, dove ORION.openPlanetKey al click è già ripristinato al centro). */
+  const colKey = colony.systemId + ':' + colony.bodyKey;
+  const r = ORION.trade.startMercantileBuild(colony, null, g, colKey, tier);
+  if (!r.ok) { showToast(r.reason || 'Costruzione rifiutata'); return; }
+  const t = ORION.trade.getTier(tier);
+  if (ORION.tutorial) ORION.tutorial.fire('mercantili');
+  showToast((t ? t.name : 'Mercantile') + ' in costruzione');
+  persistGame(g);
+  updatePlanetUI();
+}
+function doCancelMercantile(colony, idx) {
+  const g = ORION.game;
+  const r = ORION.trade.cancelMercantileBuild(colony, idx);
+  if (!r.ok) { showToast(r.reason || 'Annullamento rifiutato'); return; }
+  persistGame(g);
+  updatePlanetUI();
+}
+function doCancelRoute(routeId) {
+  const g = ORION.game;
+  const r = ORION.trade.cancelRoute(g, routeId);
+  if (!r.ok) { showToast(r.reason || 'Chiusura rifiutata'); return; }
+  showToast('Rotta chiusa');
+  persistGame(g);
+  updatePlanetUI();
+  if (ORION._currentView === 'market') renderView(document.querySelector('[data-view-stage]'), 'market');
+}
+
+/* Overlay creazione rotta: destinazione (colonia raggiungibile) + risorsa
+   + mercantile + rate. */
+function openRoutePicker(colony) {
+  const g = ORION.game;
+  const T = ORION.trade;
+  /* Chiave derivata dalla colonia (robusta nel contesto dx, dove al click
+     ORION.openPlanetKey è già ripristinato alla colonia del centro). */
+  const srcKey = colony.systemId + ':' + colony.bodyKey;
+  const idle = T.idleMercantili(colony);
+  if (!idle.length) { showToast('Nessun mercantile a riposo'); return; }
+
+  /* Stato di selezione locale all'overlay. */
+  let mercId = idle[0].id;
+  let resource = 'food';
+
+  let host = document.querySelector('[data-bind="route-picker"]');
+  if (!host) {
+    host = document.createElement('div');
+    host.className = 'expedition-pick-overlay';
+    host.setAttribute('data-bind', 'route-picker');
+    host.setAttribute('role', 'dialog');
+    host.setAttribute('aria-modal', 'true');
+    host.setAttribute('aria-label', 'Nuova rotta commerciale');
+    document.body.appendChild(host);
+  }
+
+  function destinations() {
+    /* Colonie del giocatore diverse dalla sorgente, raggiungibili entro il
+       raggio del mercantile selezionato. */
+    const merc = T.findMercantile(colony, mercId);
+    const maxHops = merc ? T.mercantileMaxHops(merc) : 1;
+    return myColonyKeys().filter(function (k) {
+      if (k === srcKey) return false;
+      const c = g.colonies[k];
+      if (!c || !c.colonized) return false;
+      const hops = T.routeHopCount(g, srcKey, k);
+      return hops > 0 && hops <= maxHops;
+    });
+  }
+
+  function render() {
+    const merc = T.findMercantile(colony, mercId);
+    const maxRate = merc ? T.mercantileCargo(merc) : 1;
+    const dests = destinations();
+    const mercOpts = idle.map(function (m) {
+      const t = T.getTier(m.tier) || {};
+      return '<option value="' + m.id + '"' + (m.id === mercId ? ' selected' : '') + '>' +
+        escapeHtml(t.name || ('Tier ' + m.tier)) + ' · ' + T.rankLabel(m.xp) + ' · cargo ' + T.mercantileCargo(m) + ' · ' + T.mercantileMaxHops(m) + ' salti</option>';
+    }).join('');
+    const resOpts = T.TRADE_RESOURCES.map(function (k) {
+      return '<option value="' + k + '"' + (k === resource ? ' selected' : '') + '>' + tradeResLabel(k) + '</option>';
+    }).join('');
+    const destCards = dests.length ? dests.map(function (k) {
+      const hops = T.routeHopCount(g, srcKey, k);
+      const c = g.colonies[k];
+      const stock = c.stock ? Math.round(c.stock[resource] || 0) : 0;
+      return '<div class="route-dest-card">' +
+        '<div class="route-dest-card__head">' +
+          '<span class="route-dest-card__name">' + colonyNameFromKey(k) + '</span>' +
+          '<span class="route-dest-card__hops">' + hops + ' salti</span>' +
+        '</div>' +
+        '<p class="route-dest-card__meta">' + tradeResLabel(resource) + ' in loco: ' + stock + '</p>' +
+        '<button class="btn btn--mini btn--primary" data-action="route-do" data-dst="' + k + '" type="button">Apri rotta</button>' +
+      '</div>';
+    }).join('') : '<p class="panel__note">Nessuna colonia raggiungibile entro il raggio del mercantile. Usa un mercantile di livello superiore o avvicina le colonie.</p>';
+
+    host.innerHTML =
+      '<div class="expedition-pick-overlay__panel" role="document">' +
+        '<header class="expedition-pick-overlay__head">' +
+          '<h2 class="expedition-pick-overlay__title">Nuova rotta da ' + colonyNameFromKey(srcKey) + '</h2>' +
+          '<button class="btn btn--mini btn--icon-only" data-action="route-pick-close" type="button" aria-label="Chiudi">' +
+            '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+          '</button>' +
+        '</header>' +
+        '<div class="route-picker__controls">' +
+          '<label class="route-picker__field">Mercantile <select data-bind="route-merc">' + mercOpts + '</select></label>' +
+          '<label class="route-picker__field">Risorsa <select data-bind="route-res">' + resOpts + '</select></label>' +
+          '<span class="route-picker__rate">Flusso max: <strong>' + maxRate + '</strong> ' + iU() + '</span>' +
+        '</div>' +
+        '<div class="expedition-pick-overlay__grid">' + destCards + '</div>' +
+        '<p class="panel__note">Il flusso parte al massimo del cargo del mercantile (regolabile poi cancellando e ricreando la rotta). Si interrompe da solo se la sorgente esaurisce la risorsa.</p>' +
+      '</div>';
+
+    host.querySelector('[data-bind="route-merc"]').addEventListener('change', function () {
+      mercId = this.value; render();
+    });
+    host.querySelector('[data-bind="route-res"]').addEventListener('change', function () {
+      resource = this.value; render();
+    });
+    host.querySelectorAll('[data-action="route-do"]').forEach(function (b) {
+      b.addEventListener('click', function () { doCreateRoute(srcKey, b.dataset.dst, resource, mercId); });
+    });
+    host.querySelector('[data-action="route-pick-close"]').addEventListener('click', closeRoutePicker);
+  }
+
+  host.addEventListener('click', function (e) { if (e.target === host) closeRoutePicker(); });
+  render();
+  host.hidden = false;
+}
+function closeRoutePicker() {
+  const host = document.querySelector('[data-bind="route-picker"]');
+  if (host) { host.hidden = true; host.innerHTML = ''; }
+}
+function doCreateRoute(srcKey, dstKey, resource, mercId) {
+  const g = ORION.game;
+  const r = ORION.trade.createRoute(g, srcKey, dstKey, resource, null, mercId);
+  if (!r.ok) { showToast(r.reason || 'Rotta rifiutata'); return; }
+  pushChronicle(ORION.time.currentDS(g) + ' — Nuova rotta commerciale: ' +
+    colonyNameFromKey(srcKey) + ' → ' + colonyNameFromKey(dstKey) +
+    ' · <strong>' + tradeResLabel(resource) + '</strong> ' + r.route.rate + '/' + iU() + '.', 'planet');
+  if (ORION.tutorial) ORION.tutorial.fire('trade-routes');
+  closeRoutePicker();
+  persistGame(g);
+  updatePlanetUI();
+}
+
+/* =====================================================================
+   M12 Fase A1 — Vista MERCATO (riepilogo d'impero, decisione #53 §15.2)
+   ===================================================================== */
+function renderMarketView(stage) {
+  if (!stage) return;
+  const g = ORION.game;
+  const T = ORION.trade;
+  if (!g || !T) return;
+  if (ORION.tutorial) ORION.tutorial.fire('trade-routes');
+
+  const cap = T.marketCapacity(g);
+  const routes = T.activeRoutes(g);
+  /* Conta mercantili su tutte le colonie. */
+  let totalMercs = 0, idleMercs = 0;
+  myColonyKeys().forEach(function (k) {
+    const c = g.colonies[k];
+    const ms = (c && c.mercantili) || [];
+    totalMercs += ms.length;
+    ms.forEach(function (m) { if (m.status !== 'on-route') idleMercs++; });
+  });
+
+  let routesHtml;
+  if (routes.length) {
+    routesHtml = '<ul class="route-list">' + routes.map(function (r) {
+      const meta = tradeRouteStatusMeta(r.status);
+      return '<li class="route-item">' +
+        '<div class="route-item__head">' +
+          '<span class="route-item__peer">' + colonyNameFromKey(r.src) + ' → ' + colonyNameFromKey(r.dst) + '</span>' +
+          '<span class="route-item__res">' + resIcon(r.resource) + ' ' + r.rate + '/' + iU() + '</span>' +
+          '<span class="route-item__status is-' + meta.cls + '">' + meta.label + '</span>' +
+        '</div>' +
+        '<div class="route-item__foot">' +
+          '<span class="route-item__hops">' + (r.hops | 0) + ' salti · consegnato ' + Math.round(r.delivered || 0) + '</span>' +
+          '<button class="btn btn--mini btn--danger" data-action="market-route-cancel" data-rid="' + r.id + '" type="button">Chiudi rotta</button>' +
+        '</div>' +
+      '</li>';
+    }).join('') + '</ul>';
+  } else {
+    routesHtml = '<p class="panel__note">Nessuna rotta attiva. Apri rotte dalla tab <em>Rotte</em> di una colonia con un Mercato e un mercantile.</p>';
+  }
+
+  stage.innerHTML =
+    '<div class="fleet-view market-view">' +
+      '<header class="fleet-view__head">' +
+        '<h2 class="fleet-view__title">Mercato interno <span class="fleet-view__sub">M12 · Fase A1</span></h2>' +
+      '</header>' +
+      '<div class="market-summary">' +
+        '<div class="market-summary__cell"><span class="market-summary__val">' + routes.length + ' / ' + cap.routes + '</span><span class="market-summary__lbl">Rotte attive</span></div>' +
+        '<div class="market-summary__cell"><span class="market-summary__val">' + cap.throughput + '</span><span class="market-summary__lbl">Throughput ' + iU() + '</span></div>' +
+        '<div class="market-summary__cell"><span class="market-summary__val">' + idleMercs + ' / ' + totalMercs + '</span><span class="market-summary__lbl">Mercantili a riposo</span></div>' +
+      '</div>' +
+      '<p class="sysinfo__sub">Rotte d\'impero</p>' +
+      routesHtml +
+      '<p class="panel__note">La capacità di rotte e throughput è data dai <em>Mercati</em> §10 di tutte le tue colonie. ' +
+        'Costruisci e assegna i mercantili (entità con xp, raggio crescente) dalla tab <em>Rotte</em> di ogni colonia. ' +
+        'Valute regionali e accordi commerciali con le AI arrivano nella Fase A2.</p>' +
+    '</div>';
+
+  stage.querySelectorAll('[data-action="market-route-cancel"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const r = ORION.trade.cancelRoute(g, b.dataset.rid);
+      if (!r.ok) { showToast(r.reason || 'Chiusura rifiutata'); return; }
+      persistGame(g);
+      renderMarketView(stage);
+    });
+  });
 }
 
 /* =====================================================================
@@ -4382,7 +4771,13 @@ const DEFAULT_AUTOPAUSE = {
   'system-cohesion-formed': false,
   'system-cohesion-broken': false,
   'federation-formed': true,
-  'federation-broken': true
+  'federation-broken': true,
+  /* M12 Fase A1 (decisione #53): eventi commercio. Tutti OFF di default —
+     frequenti/atmosferici e recovery-friendly (le interruzioni rotta
+     ripartono da sole). L'utente può accenderli dall'overlay. */
+  'mercantile-built': false, 'mercantile-promoted': false,
+  'trade-route-interrupted': false, 'trade-route-resumed': false,
+  'trade-route-closed': false
 };
 
 ORION.timer = {
@@ -4633,7 +5028,12 @@ function showEventOverlay(events) {
     'system-cohesion-formed': 'Sistema coeso (consorzio formato)',
     'system-cohesion-broken': 'Sistema coeso: dissolto',
     'federation-formed': 'Federazione emergente',
-    'federation-broken': 'Federazione dissolta'
+    'federation-broken': 'Federazione dissolta',
+    'mercantile-built': 'Mercantile varato',
+    'mercantile-promoted': 'Mercantile promosso',
+    'trade-route-interrupted': 'Rotta commerciale interrotta',
+    'trade-route-resumed': 'Rotta commerciale ripresa',
+    'trade-route-closed': 'Rotta commerciale chiusa'
   };
   /* Raggruppa per kind: una checkbox per categoria, una sola voce di sintesi. */
   const byKind = {};
@@ -4781,6 +5181,20 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — Nuova <strong>' + scls.name + '</strong> pronta al varo su ' + pname + ptag + '.', 'planet');
   } else if (ev.kind === 'crew-formed') {
     pushChronicle(ds + ' — Nuovo <strong>equipaggio esploratore</strong> brevettato dall\'Accademia di ' + pname + ptag + '.', 'planet');
+  } else if (ev.kind === 'mercantile-built') {
+    /* M12 Fase A1: mercantile varato dall'Hangar. */
+    const t = (ORION.trade && ORION.trade.getTier(ev.tier)) || { name: 'mercantile' };
+    pushChronicle(ds + ' — Nuovo <strong>' + escapeHtml(t.name) + '</strong> pronto al varo su ' + pname + ptag + '.', 'planet');
+    if (ORION.tutorial) ORION.tutorial.fire('mercantili');
+  } else if (ev.kind === 'mercantile-promoted') {
+    pushChronicle(ds + ' — Un mercantile del consorzio sale al rango <strong>' + escapeHtml(ev.rank) + '</strong> dopo le rotte percorse.', 'planet');
+  } else if (ev.kind === 'trade-route-interrupted') {
+    const why = ev.reason === 'interrupted-route' ? 'transito ostile' : 'sorgente esaurita';
+    pushChronicle(ds + ' — Rotta ' + colonyNameFromKey(ev.src) + ' → ' + colonyNameFromKey(ev.dst) + ' <strong>interrotta</strong> (' + why + ').', 'system');
+  } else if (ev.kind === 'trade-route-resumed') {
+    pushChronicle(ds + ' — Rotta ' + colonyNameFromKey(ev.src) + ' → ' + colonyNameFromKey(ev.dst) + ' di nuovo <strong>operativa</strong>.', 'system');
+  } else if (ev.kind === 'trade-route-closed') {
+    pushChronicle(ds + ' — Rotta commerciale chiusa.', 'system');
   } else if (ev.kind === 'commander-promoted') {
     /* Decisione #43: la promozione di una figura Comandante è il
        "punto di nascita" dei soggetti militari nominati (gancio M14). */
