@@ -4997,3 +4997,52 @@ select.main-menu__input { cursor: pointer; }
 }
 .market-summary__val { font-family: var(--font-display); font-size: 1.25rem; color: #f0d670; }
 .market-summary__lbl { font-size: 0.72rem; color: var(--c-text-dim); }
+
+/* ----- M12 Fase A2: Tesoreria & valute regionali (decisione #56 §15.4) ----- */
+.cur-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.cur-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 9px; border-radius: 6px;
+  background: rgba(240, 214, 112, 0.05); border: 1px solid rgba(240, 214, 112, 0.18);
+}
+.cur-item__sym {
+  font-family: var(--font-display); font-size: 0.74rem; color: #f0d670;
+  min-width: 30px; text-align: center;
+  background: rgba(240, 214, 112, 0.12); border-radius: 4px; padding: 1px 4px;
+}
+.cur-item__name { font-size: 0.82rem; }
+.cur-item__bal { margin-left: auto; font-family: var(--font-display); color: #f0d670; }
+.cur-item__mek { color: #d96bd0; font-size: 0.82rem; }
+
+/* Banco regionale: griglia vendi/compra per risorsa. */
+.bank-grid { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px; }
+.bank-row { display: flex; align-items: center; gap: 6px; }
+.bank-row__res { flex: 1; font-size: 0.8rem; }
+.bank-row__stock { color: var(--c-text-dim); font-size: 0.72rem; }
+
+/* ----- M12 Fase A2: accordi commerciali AI (decisione #56 §15.3) ----- */
+.civ-trade {
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px dashed rgba(255,255,255,0.1);
+  display: flex; flex-direction: column; gap: 5px;
+}
+.agr-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.agr-item {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 4px 8px; border-radius: 6px;
+  background: rgba(240, 214, 112, 0.05); border: 1px solid rgba(240, 214, 112, 0.16);
+}
+.agr-item__deal { font-size: 0.8rem; }
+.agr-item__dur { font-size: 0.72rem; color: var(--c-text-dim); }
+.agr-item .route-item__status { margin-left: auto; }
+.agr-note { margin: 0; }
+
+/* ----- M12 Fase B (§15.7): eventi perturbativi — usura mercantile + rischio rotta ----- */
+.merc-roster__wear {
+  font-size: 0.72rem; padding: 1px 6px; border-radius: 4px;
+  background: rgba(240, 214, 112, 0.14); color: #f0d670;
+}
+.merc-roster__wear.is-high { background: rgba(255, 92, 108, 0.16); color: var(--c-bad); }
+.route-item__threat { font-size: 0.72rem; }
+.route-item__threat.is-warn { color: #f0d670; }
+.route-item__threat.is-crit { color: var(--c-bad); }

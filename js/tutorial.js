@@ -549,6 +549,42 @@
         '<p><strong>In arrivo (Fase A2):</strong> Tesoreria + valute regionali, accordi commerciali con le AI.</p>'
     },
     {
+      id: 'treasury', tag: 'Commercio · ⇄', title: 'Tesoreria e valute regionali',
+      body:
+        '<p>Ogni <strong>regione</strong> (gruppo stellare) ha la sua <strong>valuta</strong>, col nome dal seed ' +
+        '(es. <em>Stilla di Vega</em>, <em>Lama Keth</em>). La <strong>Tesoreria</strong> (vista Mercato) è il portfolio ' +
+        'di tutte le valute che possiedi.</p>' +
+        '<p><strong>Come la ottieni:</strong> vendendo risorse al <em>Banco regionale</em> (tab Rotte di una colonia) ottieni ' +
+        'la valuta della sua regione; col <strong>cambio</strong> (sempre disponibile, digitale) la converti in un\'altra valuta.</p>' +
+        '<p><strong>Spread:</strong> ogni conversione ha una frizione che <strong>cala con reputazione alta</strong> (§14) e dove ' +
+        'è presente il <strong>Sindacato Mekhari</strong> (arbitraggio). Reputazione bassa → paghi di più.</p>' +
+        '<p><strong>A cosa serve:</strong> oggi soprattutto come cuscinetto (vendi l\'eccedenza, compra dove sei carente). ' +
+        'Beni e servizi esclusivi regionali (tech, figure, accessi) arriveranno con M13/M14.</p>'
+    },
+    {
+      id: 'trade-ai', tag: 'Commercio · ⬡', title: 'Accordi commerciali con le AI',
+      body:
+        '<p>Oltre alle rotte interne, puoi stipulare <strong>accordi bilaterali</strong> con le civiltà AI ' +
+        '(vista Civiltà ⬡): "do tot di X per Impulso, ricevo tot di Y" da una tua colonia.</p>' +
+        '<p><strong>Gate diplomatico:</strong> solo in <em>pace o alleanza</em>. In <em>tregua</em> non ne stipuli di nuovi ' +
+        '(i vecchi proseguono); in <em>guerra</em> si <strong>sospendono</strong> e riprendono appena torna la pace.</p>' +
+        '<p><strong>Termini:</strong> il rapporto di scambio è <strong>bloccato alla stipula</strong> e dipende dalla tua ' +
+        '<em>reputazione</em> §14 a soglie (≥70 ricevi di più · &lt;30 di meno) e dall\'allineamento del partner ' +
+        '(Bene equo, Male più caro). Completare scambi versa anche una piccola <em>commissione</em> nella valuta della loro regione.</p>' +
+        '<p><strong>Recovery-friendly:</strong> se la colonia esaurisce la risorsa l\'accordo si interrompe e riparte da solo.</p>'
+    },
+    {
+      id: 'trade-raids', tag: 'Commercio · ☠', title: 'Razzie sulle rotte',
+      body:
+        '<p>Le rotte che attraversano <strong>spazio infestato dai pirati</strong> (covi M10) o <strong>sistemi coesi non alleati</strong> ' +
+        'rischiano <strong>razzie</strong>: il convoglio viene assalito, il <em>cargo di quel passaggio è perso</em> e il mercantile ' +
+        'accumula <strong>usura</strong>.</p>' +
+        '<p><strong>Usura:</strong> riduce gradualmente il cargo e a <strong>100% ritira</strong> il mercantile dal servizio (la rotta si ' +
+        'chiude: ne costruisci un altro). I <em>veterani</em> sono meno esposti (l\'esperienza riduce la probabilità di razzia).</p>' +
+        '<p><strong>Cosa fare:</strong> la tab Rotte mostra il <em>rischio ☠</em> di ogni rotta e l\'usura di ogni mercantile. ' +
+        'Preferisci percorsi sicuri, manda i veterani sulle tratte pericolose, o ripulisci i covi con una flotta (M09).</p>'
+    },
+    {
       id: 'mercantili', tag: 'Commercio · ◈', title: 'Mercantili',
       body:
         '<p>Il <strong>mercantile</strong> è una nave dedicata al carico (niente armi): la costruisci all\'<em>Hangar di costruzione</em> ' +

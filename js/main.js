@@ -330,7 +330,14 @@ function newGame(seed, opts) {
     federations: { list: [], trust: {} },
     /* M12 Fase A1 (decisione #53 §15.2): rotte commerciali interne. I
        mercantili (entità con xp) vivono in colony.mercantili. */
-    tradeRoutes: []
+    tradeRoutes: [],
+    /* M12 Fase A2 (decisione #56 §15.4): Tesoreria — portfolio valute
+       regionali. Solo le balances sono persistite; le valute si rigenerano
+       dal seed. */
+    treasury: { balances: {} },
+    /* M12 Fase A2 (decisione #56 §15.3): accordi commerciali bilaterali
+       con le civiltà AI. */
+    tradeAgreements: []
   };
   // startDS = Data Stellare INIZIALE (epoca .00), fissa per la partita.
   ORION.game.startDS = ORION.time.format(startOrbita * 100);
@@ -342,6 +349,12 @@ function newGame(seed, opts) {
      (idempotente: non sovrascrive una capitale già designata). */
   if (ORION.capital && ORION.capital.initFromHome) {
     ORION.capital.initFromHome(ORION.game);
+  }
+  /* M12 Fase A2 (decisione #56 §15.4): saldo iniziale nella valuta della
+     regione d'origine (solo per partite nuove — se c'è un payload, il
+     restore sotto sovrascrive le balances). */
+  if (!opts.payload && ORION.treasury && ORION.treasury.seedStartingBalance) {
+    ORION.treasury.seedStartingBalance(ORION.game);
   }
 
   // M06: se c'è un payload (autosave/slot/import), ripristina i delta
@@ -393,6 +406,13 @@ function newGame(seed, opts) {
     /* M12 Fase A1 (decisione #53 §15.2): rotte commerciali interne. I
        mercantili vivono in saved.colonies (auto-ripristinati). */
     if (Array.isArray(saved.tradeRoutes)) ORION.game.tradeRoutes = saved.tradeRoutes.slice();
+    /* M12 Fase A2 (decisione #56 §15.4): Tesoreria — ripristina le balances
+       (le valute si rigenerano dal seed). */
+    if (saved.treasury && typeof saved.treasury === 'object' && saved.treasury.balances) {
+      ORION.game.treasury = { balances: Object.assign({}, saved.treasury.balances) };
+    }
+    /* M12 Fase A2 (decisione #56 §15.3): accordi commerciali AI. */
+    if (Array.isArray(saved.tradeAgreements)) ORION.game.tradeAgreements = saved.tradeAgreements.slice();
     /* Schema 12: ripristina nebbia di guerra (sistemi esplorati/rilevati).
        Prima del fix la scoperta veniva persa al load → i sistemi esplorati
        tornavano grigi. Validazione difensiva: deve essere un array della
@@ -2853,11 +2873,16 @@ function renderPlanetRotteTab(host, planet, colony) {
       const t = T.getTier(m.tier) || {};
       const rank = T.rankLabel(m.xp);
       const onRoute = m.status === 'on-route';
+      const wear = T.mercantileWear ? T.mercantileWear(m) : (m.wear || 0);
+      const wearHtml = wear > 0
+        ? '<span class="merc-roster__wear' + (wear >= 70 ? ' is-high' : '') + '" title="Usura da razzie: a 100% il mercantile è ritirato">usura ' + Math.round(wear) + '%</span>'
+        : '';
       return '<li class="merc-roster__item">' +
         '<span class="merc-roster__glyph" aria-hidden="true">' + (t.glyph || '◈') + '</span>' +
         '<span class="merc-roster__name">' + escapeHtml(t.name || ('Tier ' + m.tier)) + '</span>' +
         '<span class="xp-chip" title="Esperienza viaggi">xp ' + (m.xp | 0) + ' · ' + rank + '</span>' +
         '<span class="merc-roster__cargo" title="Cargo · raggio">cargo ' + T.mercantileCargo(m) + ' · ' + T.mercantileMaxHops(m) + ' salti</span>' +
+        wearHtml +
         '<span class="merc-roster__status merc-roster__status--' + (onRoute ? 'busy' : 'idle') + '">' + (onRoute ? 'in rotta' : 'a riposo') + '</span>' +
       '</li>';
     }).join('') + '</ul>';
@@ -2907,6 +2932,16 @@ function renderPlanetRotteTab(host, planet, colony) {
       const outbound = (r.src === colKey);
       const otherKey = outbound ? r.dst : r.src;
       const dir = outbound ? '→' : '←';
+      /* §15.7: indicatore minaccia razzia sul percorso. */
+      let threatHtml = '';
+      if (T.routePath && T.routeThreat) {
+        const path = T.routePath(g, r);
+        const th = path ? T.routeThreat(g, path) : 0;
+        if (th > 0) {
+          const lvl = th >= 0.4 ? 'crit' : 'warn';
+          threatHtml = ' · <span class="route-item__threat is-' + lvl + '" title="Rischio razzia pirata sul percorso">☠ ' + Math.round(th * 100) + '%</span>';
+        }
+      }
       return '<li class="route-item">' +
         '<div class="route-item__head">' +
           '<span class="route-item__dir">' + dir + '</span>' +
@@ -2915,7 +2950,7 @@ function renderPlanetRotteTab(host, planet, colony) {
           '<span class="route-item__status is-' + meta.cls + '">' + meta.label + '</span>' +
         '</div>' +
         '<div class="route-item__foot">' +
-          '<span class="route-item__hops">' + (r.hops | 0) + ' salti · consegnato ' + Math.round(r.delivered || 0) + '</span>' +
+          '<span class="route-item__hops">' + (r.hops | 0) + ' salti · consegnato ' + Math.round(r.delivered || 0) + threatHtml + '</span>' +
           (outbound ? '<button class="btn btn--mini btn--danger" data-action="route-cancel" data-rid="' + r.id + '" type="button">Chiudi rotta</button>' : '') +
         '</div>' +
       '</li>';
@@ -2931,6 +2966,34 @@ function renderPlanetRotteTab(host, planet, colony) {
     '+ Nuova rotta' +
   '</button>';
   html += '<p class="panel__note">Le rotte spostano una risorsa per Impulso da questa colonia a un\'altra (early: cibo/acqua dai mondi-giardino ai mondi-fabbrica → sblocca il tetto popolazione). Il flusso è passivo, limitato dal Mercato (rotte+throughput) e dal raggio del mercantile.</p>';
+
+  /* ----- Banco regionale (M12 Fase A2, §15.4) ----- */
+  const Tr = ORION.treasury;
+  if (Tr) {
+    const cluster = Tr.clusterOfColony(g, colKey);
+    const cur = Tr.currencyFor(g, cluster);
+    if (cur) {
+      const bal = Tr.balance(g, cluster);
+      const sp = Tr.spread(g, cluster);
+      const mek = Tr.mekhariInCluster(g, cluster);
+      html += '<p class="sysinfo__sub">Banco regionale <span class="cantieri-section__hint">(' + escapeHtml(cur.name) + ')</span></p>';
+      html += '<dl class="sysinfo__list">' +
+        row('Valuta locale', '<strong>' + bal.toFixed(2) + '</strong> ' + escapeHtml(cur.symbol)) +
+        row('Spread', Math.round(sp * 100) + '%' + (mek ? ' <span class="cur-item__mek" title="Mekhari presente">⬡</span>' : '')) +
+      '</dl>';
+      html += '<div class="bank-grid">' + TRADE_BANK_RES.map(function (k) {
+        const qs = Tr.quoteSell(g, colKey, k, 10);
+        const qb = Tr.quoteBuy(g, colKey, k, 10);
+        const stock = Math.round((colony.stock[k] || 0));
+        return '<div class="bank-row">' +
+          '<span class="bank-row__res">' + resIcon(k) + ' ' + tradeResLabel(k) + ' <span class="bank-row__stock">(' + stock + ')</span></span>' +
+          '<button class="btn btn--mini" data-action="bank-sell" data-res="' + k + '" type="button" title="Vendi 10 → +' + (qs.ok ? qs.get.toFixed(1) : '0') + ' ' + escapeHtml(cur.symbol) + '">Vendi 10</button>' +
+          '<button class="btn btn--mini" data-action="bank-buy" data-res="' + k + '" type="button" title="Compra 10 → −' + (qb.ok ? qb.cost.toFixed(1) : '0') + ' ' + escapeHtml(cur.symbol) + '">Compra 10</button>' +
+        '</div>';
+      }).join('') + '</div>';
+      html += '<p class="panel__note">Vendi le risorse in eccedenza per <em>valuta locale</em>, o comprala dove sei carente. Lo spread cala con reputazione alta e dove operano i Mekhari. Cambia tra valute dalla vista <em>Mercato</em>.</p>';
+    }
+  }
   html += '</div>';
 
   host.innerHTML = html;
@@ -2944,8 +3007,45 @@ function renderPlanetRotteTab(host, planet, colony) {
   host.querySelectorAll('[data-action="route-cancel"]').forEach(function (b) {
     b.addEventListener('click', function () { doCancelRoute(b.dataset.rid); });
   });
+  host.querySelectorAll('[data-action="bank-sell"]').forEach(function (b) {
+    b.addEventListener('click', function () { doBankTrade(colony, 'sell', b.dataset.res); });
+  });
+  host.querySelectorAll('[data-action="bank-buy"]').forEach(function (b) {
+    b.addEventListener('click', function () { doBankTrade(colony, 'buy', b.dataset.res); });
+  });
   const nb = host.querySelector('[data-action="route-new"]');
   if (nb && !nb.disabled) nb.addEventListener('click', function () { openRoutePicker(colony); });
+}
+
+/* Sublabel del launcher "Mercato" (sx): rotte attive + valore portfolio. */
+function marketLauncherSub() {
+  const g = ORION.game;
+  if (!g) return 'M12';
+  const routes = (ORION.trade && ORION.trade.routesUsed(g)) || 0;
+  const credits = (ORION.treasury && ORION.treasury.totalCredits(g)) || 0;
+  const parts = [];
+  if (routes > 0) parts.push(routes + ' rotte');
+  if (credits > 0) parts.push('≈' + credits.toFixed(0) + ' cr');
+  return parts.length ? parts.join(' · ') : 'M12';
+}
+
+const TRADE_BANK_RES = ['met', 'en', 'food', 'water'];
+const TRADE_BANK_QTY = 10;
+function doBankTrade(colony, dir, resource) {
+  const g = ORION.game;
+  const Tr = ORION.treasury;
+  if (!Tr) return;
+  const colKey = colony.systemId + ':' + colony.bodyKey;
+  const r = (dir === 'sell')
+    ? Tr.sellResource(g, colKey, resource, TRADE_BANK_QTY)
+    : Tr.buyResource(g, colKey, resource, TRADE_BANK_QTY);
+  if (!r.ok) { showToast(r.reason || 'Operazione rifiutata'); return; }
+  if (ORION.tutorial) ORION.tutorial.fire('treasury');
+  showToast(dir === 'sell'
+    ? 'Venduti ' + TRADE_BANK_QTY + ' ' + tradeResLabel(resource) + ' → +' + r.got.toFixed(1) + ' ' + r.currency.symbol
+    : 'Comprati ' + TRADE_BANK_QTY + ' ' + tradeResLabel(resource) + ' → −' + r.cost.toFixed(1) + ' ' + r.currency.symbol);
+  persistGame(g);
+  updatePlanetUI();
 }
 
 function doBuildMercantile(colony, tier) {
@@ -3135,10 +3235,36 @@ function renderMarketView(stage) {
     routesHtml = '<p class="panel__note">Nessuna rotta attiva. Apri rotte dalla tab <em>Rotte</em> di una colonia con un Mercato e un mercantile.</p>';
   }
 
+  /* ----- Tesoreria (M12 Fase A2, §15.4) ----- */
+  const Tr = ORION.treasury;
+  let treasuryHtml = '';
+  if (Tr) {
+    const held = Tr.heldCurrencies(g);
+    const total = Tr.totalCredits(g);
+    let portfolio;
+    if (held.length) {
+      portfolio = '<ul class="cur-list">' + held.map(function (c) {
+        const mek = Tr.mekhariInCluster(g, c.clusterId);
+        return '<li class="cur-item">' +
+          '<span class="cur-item__sym" title="' + escapeHtml(c.region) + '">' + escapeHtml(c.symbol) + '</span>' +
+          '<span class="cur-item__name">' + escapeHtml(c.name) + (mek ? ' <span class="cur-item__mek" title="Sindacato Mekhari presente: spread ridotto">⬡</span>' : '') + '</span>' +
+          '<span class="cur-item__bal">' + Tr.balance(g, c.clusterId).toFixed(2) + '</span>' +
+        '</li>';
+      }).join('') + '</ul>';
+    } else {
+      portfolio = '<p class="panel__note">Portfolio vuoto. Vendi risorse al <em>Banco regionale</em> (tab Rotte di una colonia) per ottenere valuta locale.</p>';
+    }
+    treasuryHtml =
+      '<p class="sysinfo__sub">Tesoreria <span class="cantieri-section__hint">(valore ≈ ' + total.toFixed(0) + ' crediti)</span></p>' +
+      portfolio +
+      '<button class="btn btn--mini btn--enter" data-action="treasury-exchange" type="button"' +
+        (held.length ? '' : ' disabled') + '>⇄ Cambia valuta</button>';
+  }
+
   stage.innerHTML =
     '<div class="fleet-view market-view">' +
       '<header class="fleet-view__head">' +
-        '<h2 class="fleet-view__title">Mercato interno <span class="fleet-view__sub">M12 · Fase A1</span></h2>' +
+        '<h2 class="fleet-view__title">Mercato interno <span class="fleet-view__sub">M12 · Fase A2</span></h2>' +
       '</header>' +
       '<div class="market-summary">' +
         '<div class="market-summary__cell"><span class="market-summary__val">' + routes.length + ' / ' + cap.routes + '</span><span class="market-summary__lbl">Rotte attive</span></div>' +
@@ -3147,9 +3273,10 @@ function renderMarketView(stage) {
       '</div>' +
       '<p class="sysinfo__sub">Rotte d\'impero</p>' +
       routesHtml +
+      treasuryHtml +
       '<p class="panel__note">La capacità di rotte e throughput è data dai <em>Mercati</em> §10 di tutte le tue colonie. ' +
-        'Costruisci e assegna i mercantili (entità con xp, raggio crescente) dalla tab <em>Rotte</em> di ogni colonia. ' +
-        'Valute regionali e accordi commerciali con le AI arrivano nella Fase A2.</p>' +
+        'Le <em>valute regionali</em> (una per regione) si guadagnano vendendo risorse al banco regionale e si cambiano qui con spread modulato da reputazione + presenza Mekhari. ' +
+        'Accordi commerciali con le AI arrivano dopo.</p>' +
     '</div>';
 
   stage.querySelectorAll('[data-action="market-route-cancel"]').forEach(function (b) {
@@ -3160,6 +3287,100 @@ function renderMarketView(stage) {
       renderMarketView(stage);
     });
   });
+  const exBtn = stage.querySelector('[data-action="treasury-exchange"]');
+  if (exBtn && !exBtn.disabled) exBtn.addEventListener('click', function () { openExchangeOverlay(stage); });
+}
+
+/* Overlay di cambio valuta (M12 Fase A2, §15.4). */
+function openExchangeOverlay(marketStage) {
+  const g = ORION.game;
+  const Tr = ORION.treasury;
+  if (!Tr) return;
+  const all = Tr.currencies(g);
+  const held = Tr.heldCurrencies(g);
+  if (!held.length) { showToast('Nessuna valuta da cambiare'); return; }
+  let fromC = held[0].clusterId;
+  let toC = (all.find(function (c) { return c.clusterId !== fromC; }) || held[0]).clusterId;
+  let amount = '';
+
+  let host = document.querySelector('[data-bind="exchange-overlay"]');
+  if (!host) {
+    host = document.createElement('div');
+    host.className = 'expedition-pick-overlay';
+    host.setAttribute('data-bind', 'exchange-overlay');
+    host.setAttribute('role', 'dialog');
+    host.setAttribute('aria-modal', 'true');
+    host.setAttribute('aria-label', 'Cambia valuta');
+    document.body.appendChild(host);
+  }
+
+  function curName(cid) { const c = Tr.currencyFor(g, cid); return c ? c.name : '—'; }
+
+  function render() {
+    const fromOpts = held.map(function (c) {
+      return '<option value="' + c.clusterId + '"' + (c.clusterId === fromC ? ' selected' : '') + '>' +
+        escapeHtml(c.name) + ' · ' + Tr.balance(g, c.clusterId).toFixed(2) + '</option>';
+    }).join('');
+    const toOpts = all.filter(function (c) { return c.clusterId !== fromC; }).map(function (c) {
+      return '<option value="' + c.clusterId + '"' + (c.clusterId === toC ? ' selected' : '') + '>' + escapeHtml(c.name) + '</option>';
+    }).join('');
+    host.innerHTML =
+      '<div class="expedition-pick-overlay__panel" role="document">' +
+        '<header class="expedition-pick-overlay__head">' +
+          '<h2 class="expedition-pick-overlay__title">Cambia valuta</h2>' +
+          '<button class="btn btn--mini btn--icon-only" data-action="ex-close" type="button" aria-label="Chiudi">' +
+            '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+          '</button>' +
+        '</header>' +
+        '<div class="route-picker__controls">' +
+          '<label class="route-picker__field">Da <select data-bind="ex-from">' + fromOpts + '</select></label>' +
+          '<label class="route-picker__field">A <select data-bind="ex-to">' + toOpts + '</select></label>' +
+          '<label class="route-picker__field">Importo <input type="number" min="0" step="1" data-bind="ex-amt" value="' + escapeHtml(amount) + '"></label>' +
+        '</div>' +
+        '<p class="panel__note" data-bind="ex-quote"></p>' +
+        '<div class="expedition-card__actions">' +
+          '<button class="btn btn--mini btn--primary" data-action="ex-do" type="button">Esegui cambio</button>' +
+        '</div>' +
+        '<p class="panel__note">Lo spread dipende dalla tua reputazione §14 e dalla presenza del Sindacato Mekhari nella regione di destinazione (arbitraggio → spread più basso).</p>' +
+      '</div>';
+
+    /* Aggiorna solo riga quote + stato bottone (no full re-render sul tasto). */
+    function refreshQuote() {
+      const amt = parseFloat(amount) || 0;
+      const q = (amt > 0) ? Tr.quoteExchange(g, fromC, toC, amt) : null;
+      const line = host.querySelector('[data-bind="ex-quote"]');
+      const doBtn = host.querySelector('[data-action="ex-do"]');
+      if (q && q.ok && Tr.balance(g, fromC) >= amt) {
+        line.innerHTML = 'Ricevi <strong>' + q.get.toFixed(2) + '</strong> ' + escapeHtml(curName(toC)) +
+          ' · tasso ' + q.rate.toFixed(3) + ' · spread ' + Math.round(q.spread * 100) + '%';
+        doBtn.disabled = false;
+      } else {
+        line.innerHTML = (amt > 0 && Tr.balance(g, fromC) < amt) ? 'Saldo insufficiente.' : 'Inserisci un importo da cambiare.';
+        doBtn.disabled = true;
+      }
+    }
+    refreshQuote();
+
+    host.querySelector('[data-bind="ex-from"]').addEventListener('change', function () { fromC = Number(this.value); if (toC === fromC) { const alt = all.find(function (c) { return c.clusterId !== fromC; }); toC = alt ? alt.clusterId : toC; } render(); });
+    host.querySelector('[data-bind="ex-to"]').addEventListener('change', function () { toC = Number(this.value); render(); });
+    host.querySelector('[data-bind="ex-amt"]').addEventListener('input', function () { amount = this.value; refreshQuote(); });
+    host.querySelector('[data-action="ex-close"]').addEventListener('click', closeExchangeOverlay);
+    host.querySelector('[data-action="ex-do"]').addEventListener('click', function () {
+      const r = Tr.exchange(g, fromC, toC, parseFloat(amount) || 0);
+      if (!r.ok) { showToast(r.reason || 'Cambio rifiutato'); return; }
+      showToast('Cambiati ' + r.spent.toFixed(2) + ' → ' + r.got.toFixed(2) + ' ' + curName(toC));
+      persistGame(g);
+      closeExchangeOverlay();
+      if (marketStage) renderMarketView(marketStage);
+    });
+  }
+  host.addEventListener('click', function (e) { if (e.target === host) closeExchangeOverlay(); });
+  render();
+  host.hidden = false;
+}
+function closeExchangeOverlay() {
+  const host = document.querySelector('[data-bind="exchange-overlay"]');
+  if (host) { host.hidden = true; host.innerHTML = ''; }
 }
 
 /* =====================================================================
@@ -3774,7 +3995,8 @@ function renderCivView(stage) {
           '<div class="civ-disp__bar"><span class="civ-disp__mid" aria-hidden="true"></span>' +
             '<span class="civ-disp__fill civ-disp__fill--' + dispCls + '" style="width:' + pct.toFixed(0) + '%"></span></div>' +
         '</div>' +
-        dipActions;
+        dipActions +
+        civTradeHtml(g, c);
     }
     /* KNOWN+ — vocazione + tratto + intel forza. */
     if (rank >= KNOWLEDGE.known) {
@@ -3955,6 +4177,150 @@ function renderCivView(stage) {
       });
     });
   }
+  /* M12 Fase A2 (#56 §15.3): handler accordi commerciali. */
+  stage.querySelectorAll('[data-action="agr-propose"]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const civ = (g.civs || []).filter(function (c) { return c.id === btn.dataset.civ; })[0];
+      if (civ) openAgreementPicker(civ, stage);
+    });
+  });
+  stage.querySelectorAll('[data-action="agr-cancel"]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const r = ORION.agreements.cancel(g, btn.dataset.agr);
+      if (!r.ok) { showToast(r.reason || 'Annullamento rifiutato'); return; }
+      showToast('Accordo chiuso');
+      persistGame(g);
+      renderCivView(stage);
+    });
+  });
+}
+
+/* M12 Fase A2 (#56 §15.3): blocco "Commercio" nella card civiltà. */
+function civTradeHtml(g, civ) {
+  const AG = ORION.agreements;
+  if (!AG) return '';
+  const rel = ORION.diplomacy ? ORION.diplomacy.effectiveRelation(g, civ) : (civ.relation || 'peace');
+  const list = AG.agreementsFor(g, civ.id);
+  let inner = '';
+  if (list.length) {
+    inner += '<ul class="agr-list">' + list.map(function (a) {
+      const stCls = a.status === 'active' ? 'ok' : (a.status === 'suspended' ? 'crit' : 'warn');
+      const stLbl = a.status === 'active' ? 'attivo' : (a.status === 'suspended' ? 'sospeso' : 'interrotto');
+      return '<li class="agr-item">' +
+        '<span class="agr-item__deal">' + resIcon(a.giveRes) + ' ' + a.flow + ' → ' + resIcon(a.getRes) + ' ' + (Math.round(a.flow * a.ratio * 10) / 10) + ' /' + iU() + '</span>' +
+        '<span class="agr-item__dur">' + (a.duration | 0) + ' ' + iU() + '</span>' +
+        '<span class="route-item__status is-' + stCls + '">' + stLbl + '</span>' +
+        '<button class="btn btn--mini btn--danger" data-action="agr-cancel" data-agr="' + a.id + '" type="button" title="Chiudi accordo">×</button>' +
+      '</li>';
+    }).join('') + '</ul>';
+  }
+  const canTrade = (rel === 'peace' || rel === 'alliance');
+  const full = list.length >= AG.MAX_PER_CIV;
+  if (canTrade && !full) {
+    inner += '<button class="btn btn--mini" data-action="agr-propose" data-civ="' + escapeHtml(civ.id) + '" type="button">+ Proponi accordo</button>';
+  } else if (!canTrade) {
+    inner += '<p class="panel__note agr-note">Il commercio richiede <strong>pace o alleanza</strong>.</p>';
+  }
+  return '<div class="civ-trade"><span class="civ-card__k">Commercio</span>' + inner + '</div>';
+}
+
+/* Overlay proposta accordo commerciale (M12 Fase A2, §15.3). */
+function openAgreementPicker(civ, civStage) {
+  const g = ORION.game;
+  const AG = ORION.agreements;
+  if (!AG) return;
+  const mine = myColonyKeys().filter(function (k) { const c = g.colonies[k]; return c && c.colonized; });
+  if (!mine.length) { showToast('Nessuna colonia operativa'); return; }
+  let colonyKey = mine[0];
+  let giveRes = 'met', getRes = 'food';
+  let flow = 10;
+
+  let host = document.querySelector('[data-bind="agr-picker"]');
+  if (!host) {
+    host = document.createElement('div');
+    host.className = 'expedition-pick-overlay';
+    host.setAttribute('data-bind', 'agr-picker');
+    host.setAttribute('role', 'dialog');
+    host.setAttribute('aria-modal', 'true');
+    host.setAttribute('aria-label', 'Proponi accordo commerciale');
+    document.body.appendChild(host);
+  }
+
+  function render() {
+    const colOpts = mine.map(function (k) {
+      return '<option value="' + k + '"' + (k === colonyKey ? ' selected' : '') + '>' + colonyNameFromKey(k) + '</option>';
+    }).join('');
+    function resOpts(sel) {
+      return AG.TRADE_RES.map(function (r) {
+        return '<option value="' + r + '"' + (r === sel ? ' selected' : '') + '>' + tradeResLabel(r) + '</option>';
+      }).join('');
+    }
+    host.innerHTML =
+      '<div class="expedition-pick-overlay__panel" role="document">' +
+        '<header class="expedition-pick-overlay__head">' +
+          '<h2 class="expedition-pick-overlay__title">Accordo commerciale · ' + escapeHtml(civ.name) + '</h2>' +
+          '<button class="btn btn--mini btn--icon-only" data-action="agr-close" type="button" aria-label="Chiudi">' +
+            '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+          '</button>' +
+        '</header>' +
+        '<div class="route-picker__controls">' +
+          '<label class="route-picker__field">Colonia <select data-bind="agr-col">' + colOpts + '</select></label>' +
+          '<label class="route-picker__field">Dai <select data-bind="agr-give">' + resOpts(giveRes) + '</select></label>' +
+          '<label class="route-picker__field">Ricevi <select data-bind="agr-get">' + resOpts(getRes) + '</select></label>' +
+          '<label class="route-picker__field">Flusso/' + iU() + ' <input type="number" min="' + AG.FLOW_MIN + '" max="' + AG.FLOW_MAX + '" step="1" data-bind="agr-flow" value="' + flow + '"></label>' +
+        '</div>' +
+        '<p class="panel__note" data-bind="agr-preview"></p>' +
+        '<div class="expedition-card__actions">' +
+          '<button class="btn btn--mini btn--primary" data-action="agr-do" type="button">Proponi</button>' +
+        '</div>' +
+        '<p class="panel__note">I termini sono <strong>bloccati</strong> alla stipula e dipendono dalla tua reputazione §14 (soglie discrete) e dall\'allineamento del partner. Durata ' + AG.DURATION_DEFAULT + ' ' + iU() + '. In guerra l\'accordo si sospende; riprende a pace.</p>' +
+      '</div>';
+
+    /* Aggiorna solo preview + bottone (no full re-render sul tasto del flusso). */
+    function refreshPreview() {
+      const line = host.querySelector('[data-bind="agr-preview"]');
+      const doBtn2 = host.querySelector('[data-action="agr-do"]');
+      const chk = AG.canPropose(g, civ.id, colonyKey, giveRes, getRes, flow);
+      if (giveRes === getRes) {
+        line.innerHTML = 'Scegli due risorse diverse.';
+        doBtn2.disabled = true;
+        return;
+      }
+      const ratio = AG.termsRatio(g, civ, giveRes, getRes);
+      const getQty = Math.round(flow * ratio * 10) / 10;
+      const verdict = chk.ok ? ('esito <strong>' + chk.likelihood + '</strong>') : ('<strong>' + escapeHtml(chk.reason) + '</strong>');
+      line.innerHTML = 'Dai <strong>' + flow + '</strong> ' + tradeResLabel(giveRes) + '/' + iU() +
+        ' → ricevi <strong>' + getQty + '</strong> ' + tradeResLabel(getRes) + '/' + iU() + ' · ' + verdict;
+      doBtn2.disabled = !chk.ok;
+    }
+    refreshPreview();
+
+    host.querySelector('[data-bind="agr-col"]').addEventListener('change', function () { colonyKey = this.value; refreshPreview(); });
+    host.querySelector('[data-bind="agr-give"]').addEventListener('change', function () { giveRes = this.value; refreshPreview(); });
+    host.querySelector('[data-bind="agr-get"]').addEventListener('change', function () { getRes = this.value; refreshPreview(); });
+    host.querySelector('[data-bind="agr-flow"]').addEventListener('input', function () { flow = Math.max(AG.FLOW_MIN, Math.min(AG.FLOW_MAX, parseInt(this.value, 10) || AG.FLOW_MIN)); refreshPreview(); });
+    host.querySelector('[data-action="agr-close"]').addEventListener('click', closeAgreementPicker);
+    const doBtn = host.querySelector('[data-action="agr-do"]');
+    doBtn.addEventListener('click', function () {
+      if (doBtn.disabled) return;
+      const r = AG.propose(g, civ.id, colonyKey, giveRes, getRes, flow);
+      if (!r.ok) { showToast(r.reason || 'Proposta rifiutata'); return; }
+      pushChronicle(ORION.time.currentDS(g) + ' — Accordo commerciale con <strong>' + escapeHtml(civ.name) + '</strong>: ' +
+        flow + ' ' + tradeResLabel(giveRes) + '/' + iU() + ' ↔ ' + (Math.round(flow * r.agreement.ratio * 10) / 10) + ' ' + tradeResLabel(getRes) + '/' + iU() + '.', 'explore');
+      if (ORION.tutorial) ORION.tutorial.fire('trade-ai');
+      showToast('Accordo stipulato');
+      persistGame(g);
+      closeAgreementPicker();
+      if (civStage) renderCivView(civStage);
+    });
+  }
+  host.addEventListener('click', function (e) { if (e.target === host) closeAgreementPicker(); });
+  render();
+  host.hidden = false;
+}
+function closeAgreementPicker() {
+  const host = document.querySelector('[data-bind="agr-picker"]');
+  if (host) { host.hidden = true; host.innerHTML = ''; }
 }
 
 /* M11 (#51): esegue un'azione diplomatica, registra in cronaca, persiste e
@@ -4783,7 +5149,13 @@ const DEFAULT_AUTOPAUSE = {
      ripartono da sole). L'utente può accenderli dall'overlay. */
   'mercantile-built': false, 'mercantile-promoted': false,
   'trade-route-interrupted': false, 'trade-route-resumed': false,
-  'trade-route-closed': false
+  'trade-route-closed': false,
+  /* §15.7 (Fase B): razzia sulla rotta = frequente/atmosferica → OFF; la
+     perdita del mercantile è notevole → ON. */
+  'trade-raid': false, 'trade-mercantile-lost': true,
+  /* M12 Fase A2 (§15.3): accordi commerciali AI. Tutti OFF (atmosferici,
+     recovery-friendly: le sospensioni riprendono da sole). */
+  'agreement-suspended': false, 'agreement-resumed': false, 'agreement-ended': false
 };
 
 ORION.timer = {
@@ -5087,7 +5459,12 @@ function showEventOverlay(events) {
     'mercantile-promoted': 'Mercantile promosso',
     'trade-route-interrupted': 'Rotta commerciale interrotta',
     'trade-route-resumed': 'Rotta commerciale ripresa',
-    'trade-route-closed': 'Rotta commerciale chiusa'
+    'trade-route-closed': 'Rotta commerciale chiusa',
+    'trade-raid': 'Razzia pirata su rotta',
+    'trade-mercantile-lost': 'Mercantile perso',
+    'agreement-suspended': 'Accordo commerciale sospeso',
+    'agreement-resumed': 'Accordo commerciale ripreso',
+    'agreement-ended': 'Accordo commerciale concluso'
   };
   /* Raggruppa per kind: una checkbox per categoria, una sola voce di sintesi. */
   const byKind = {};
@@ -5249,6 +5626,19 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — Rotta ' + colonyNameFromKey(ev.src) + ' → ' + colonyNameFromKey(ev.dst) + ' di nuovo <strong>operativa</strong>.', 'system');
   } else if (ev.kind === 'trade-route-closed') {
     pushChronicle(ds + ' — Rotta commerciale chiusa.', 'system');
+  } else if (ev.kind === 'trade-raid') {
+    const sys = ORION.game.galaxy.systems[ev.sysId];
+    const where = sys ? (' presso <strong>' + escapeHtml(sys.name) + '</strong>') : '';
+    pushChronicle(ds + ' — <strong>Razzia pirata</strong> sulla rotta ' + colonyNameFromKey(ev.src) + ' → ' + colonyNameFromKey(ev.dst) +
+      where + ': persi ' + resIcon(ev.resource) + Math.round(ev.lost) + ' · usura mercantile +' + (ev.wear | 0) + '%.', 'system');
+    if (ORION.tutorial) ORION.tutorial.fire('trade-raids');
+  } else if (ev.kind === 'trade-mercantile-lost') {
+    pushChronicle(ds + ' — Mercantile <strong>ritirato</strong> (usura 100%) sulla rotta da ' + colonyNameFromKey(ev.src) + ': rotta chiusa.', 'system');
+  } else if (ev.kind === 'agreement-suspended' || ev.kind === 'agreement-resumed' || ev.kind === 'agreement-ended') {
+    const civ = (ORION.game.civs || []).filter(function (c) { return c.id === ev.civId; })[0];
+    const cname = civ ? civ.name : 'una civiltà';
+    const verb = ev.kind === 'agreement-suspended' ? 'sospeso' : (ev.kind === 'agreement-resumed' ? 'ripreso' : 'concluso');
+    pushChronicle(ds + ' — Accordo commerciale con <strong>' + escapeHtml(cname) + '</strong> ' + verb + '.', 'explore');
   } else if (ev.kind === 'commander-promoted') {
     /* Decisione #43: la promozione di una figura Comandante è il
        "punto di nascita" dei soggetti militari nominati (gancio M14). */
@@ -5694,7 +6084,7 @@ function renderLeftPanel() {
     '<button class="lp-launcher__btn" data-view="market" type="button">' +
       '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('market') + '</span>' +
       '<span>Mercato</span>' +
-      '<span class="lp-launcher__sub">M12</span>' +
+      '<span class="lp-launcher__sub">' + marketLauncherSub() + '</span>' +
     '</button>';
 
   /* ----- Cronaca (collassabile) -----
