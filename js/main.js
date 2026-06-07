@@ -832,6 +832,7 @@ function renderGalaxyPanel(title, content) {
   content.innerHTML =
     '<div class="sysinfo">' +
       '<dl class="sysinfo__list">' +
+        row('Galassia', '<strong>' + escapeHtml(ORION.names.galaxyName(g.seed)) + '</strong>') +
         row('Seed', '<code>' + g.seed + '</code>') +
         row('Sistemi', String(g.galaxy.count)) +
         row('Gruppi stellari', String(g.galaxy.groups.length)) +
@@ -5776,6 +5777,7 @@ function saveCardHtml(meta, perms) {
       escapeHtml(meta.name) +
     '</div>' +
     '<dl class="save-card__meta">' +
+      (meta.galaxyName ? '<div><dt>Galassia</dt><dd><strong>' + escapeHtml(meta.galaxyName) + '</strong></dd></div>' : '') +
       '<div><dt>' + uiIcon('clock', 'soft') + ' Data Stellare</dt><dd>' + ds + '</dd></div>' +
       '<div><dt>Seed</dt><dd><code>' + escapeHtml(meta.seed) + '</code></dd></div>' +
       '<div><dt>Colonie</dt><dd>' + meta.colonies + '</dd></div>' +
@@ -6062,11 +6064,13 @@ function renderMainMenuHome(body) {
   if (focusBtn) setTimeout(function () { focusBtn.focus(); }, 0);
 }
 
-/* Etichetta breve per il sub del bottone Continua: "DS xxx · seed". */
+/* Etichetta breve per il sub del bottone Continua: "Nome galassia · DS xxx". */
 function autoMetaFromPayload(p) {
   if (!p) return null;
   const ds = currentDsOfPayload(p);
-  return ds + ' · seed ' + p.seed;
+  const gname = p.seed && ORION.names && ORION.names.galaxyName
+    ? ORION.names.galaxyName(p.seed) : null;
+  return (gname ? gname + ' · ' : '') + ds;
 }
 
 /* --- Form "Nuova partita": seed + preset + ironman --- */
@@ -6202,7 +6206,7 @@ function renderMainMenuHomePick(body) {
     '<div class="main-menu__pick">' +
       '<h2 class="main-menu__form-title">Scegli la colonia originaria</h2>' +
       '<p class="main-menu__field-hint">' +
-        candidates.length + ' candidati (uno per regione · seed <code>' + escapeHtml(seed) + '</code>). ' +
+        candidates.length + ' candidati (uno per regione · <strong>' + escapeHtml(ORION.names.galaxyName(seed)) + '</strong> · seed <code>' + escapeHtml(seed) + '</code>). ' +
         'La scelta cristallizza il sistema d\'origine: il pericolo della galassia si ricalibra da lì.' +
       '</p>' +
       '<div class="save-grid">' + cards + '</div>' +
@@ -6281,7 +6285,7 @@ function confirmHomeAndStart(candidate) {
   ORION.menuPreview = null;
   ORION.menuForm = { seed: null, preset: presetId, ironman: !!presetMods.ironman, tutorial: !!ORION.menuForm.tutorial };
   enterGame();
-  showToast('Colonia su ' + candidate.planet.name + ' · seed ' + ORION.game.seed);
+  showToast('Colonia su ' + candidate.planet.name + ' · ' + ORION.names.galaxyName(ORION.game.seed));
 }
 
 /* --- Info / Crediti --- */

@@ -371,6 +371,34 @@
     return out.slice(0, 3).join('');
   }
 
+  /* --- Nome galassia (decisione "Galaxy name in UI", 2026-06-07) ---
+     Pattern `<NomeProprio> <Epiteto>`, distinto dal locativo "X di Y"
+     delle regioni (decisione #26) per evitare collisioni d'occhio.
+     40 × 12 = 480 combinazioni uniche. Determinismo dal seed. */
+  const GALAXY_NAMES = [
+    /* Mitologia greco-romana / cosmologia primordiale (~24) */
+    'Aetheryon', 'Caelus', 'Empyreum', 'Pleroma', 'Aurora', 'Aeon',
+    'Demiurgo', 'Vortex', 'Cosmos', 'Genesi', 'Olympus', 'Aether',
+    'Khaos', 'Erebos', 'Hyperion', 'Ananke', 'Astraeus', 'Nyx',
+    'Eos', 'Helios', 'Ouranos', 'Theia', 'Selene', 'Phosphoros',
+    /* Galassie reali riconoscibili (~11) */
+    'Andromeda', 'Triangolo', 'Sombrero', 'Centauro', 'Magellano',
+    'Sigaro', 'Scultore', 'Fornace', 'Cigno', 'Cartwheel', 'Bode',
+    /* Inventati SW-flavor (5, decisione #34) */
+    'Vehryn', 'Mekhari', 'Solhar', 'Phaerion', 'Drevan'
+  ];
+  const GALAXY_EPITHETS = [
+    'Maggiore', 'Minore', 'Prime', 'Antica', 'Nascente', 'Boreale',
+    'Australe', 'Esterna', 'Interna', 'Errante', 'Velata', 'Remota'
+  ];
+  /* Deterministico dal seed (decisione #5). Sub-namespace ':galname'. */
+  function galaxyName(seed) {
+    const rng = root.ORION.rng.makeRng(String(seed) + ':galname');
+    const proper = rng.pick(GALAXY_NAMES);
+    const epithet = rng.pick(GALAXY_EPITHETS);
+    return proper + ' ' + epithet;
+  }
+
   root.ORION = root.ORION || {};
   root.ORION.names = {
     generate: generate,
@@ -378,8 +406,11 @@
     inventEvocative: inventEvocative,
     bodyNamesForSystem: bodyNamesForSystem,
     regionAcronym: regionAcronym,
+    galaxyName: galaxyName,
     REAL: REAL,
     REGION_KINDS: REGION_KINDS,
-    THEMES: THEMES
+    THEMES: THEMES,
+    GALAXY_NAMES: GALAXY_NAMES,
+    GALAXY_EPITHETS: GALAXY_EPITHETS
   };
 })(typeof window !== 'undefined' ? window : this);
