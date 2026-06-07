@@ -168,7 +168,12 @@
         ? { balances: game.treasury.balances || {} } : { balances: {} },
       /* Schema 18 (M12 Fase A2, decisione #56 §15.3): accordi commerciali
          bilaterali con le AI. La relazione/disposizione vive in game.civs. */
-      tradeAgreements: Array.isArray(game.tradeAgreements) ? game.tradeAgreements : []
+      tradeAgreements: Array.isArray(game.tradeAgreements) ? game.tradeAgreements : [],
+      /* M11 Fase B parziale: sistemi occupati dal giocatore dopo vittoria su
+         civiltà AI (sostituisce il rollback-a-neutrale). Mappa sysId →
+         { fromCivId, fromCivName, fromCivColor, fromAlignment, sinceI }.
+         Additivo: i save vecchi caricano con {} (nessuna migrazione). */
+      occupations: (game.occupations && typeof game.occupations === 'object') ? game.occupations : {}
     };
   }
 

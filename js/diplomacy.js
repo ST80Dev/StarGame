@@ -58,7 +58,25 @@
     PEACE_DISP_FLOOR: 5,
     ALLY_DISP_FLOOR: 45,
     /* Cooldown anti-spam per coppia (giocatore↔civ), in Ι. */
-    PROPOSAL_COOLDOWN: 40
+    PROPOSAL_COOLDOWN: 40,
+    /* M11 Fase B parziale — dispacci AI proattivi. Cadenza tick: ogni 80 Ι la
+       AI valuta se inviare un'offerta al giocatore. Una sola offerta attiva
+       per civ; expiresAt = ora + OFFER_TTL. Soglie su disposizione (alleanza)
+       e pressione/perdita potenza (pace). Tutto deterministico. */
+    PROACTIVE_EVERY_I: 80,
+    PROACTIVE_WARMUP_I: 200,    // niente offerte AI nei primi 200 Ι (onboarding pulito)
+    OFFER_TTL: 120,             // Ι entro cui rispondere
+    OFFER_REJECT_DISP: -5,      // disposizione persa al rifiuto esplicito
+    OFFER_EXPIRE_DISP: -2,      // disposizione persa allo scadere (silenzio)
+    /* Soglie per ALLEANZA proposta dalla AI (più alte delle proposte player:
+       l'AI offre solo quando è davvero convinta). */
+    AI_ALLY_DISP_MIN: 55,
+    /* Soglie per PACE proposta dalla AI (stati war/truce): la AI sceglie la
+       diplomazia quando è in difficoltà (potere in calo) o se il giocatore ha
+       reputazione alta e pressione bassa. */
+    AI_PEACE_REP_MIN: 55,
+    /* Massimo 1 offerta nuova per tick proattivo, in modo da non spammare. */
+    PROACTIVE_MAX_PER_TICK: 1
   };
 
   /* ---------- Reputazione globale (§14) ---------- */
@@ -288,6 +306,25 @@
       }
     });
 
+    /* Offerte AI scadute → rifiuto silenzioso, lieve costo disposizione
+       (recovery-friendly: il giocatore può sempre proporre da sé). */
+    (game.civs || []).forEach(function (c) {
+      if (!c || !c.alive || !c.pendingOffer) return;
+      if ((c.pendingOffer.expiresAt || 0) <= now) {
+        const off = c.pendingOffer;
+        c.pendingOffer = null;
+        c.disposition = (c.disposition || 0) + CFG.OFFER_EXPIRE_DISP;
+        if (events) events.push({ kind: 'diplo-offer-expired', civId: c.id,
+          civName: c.name, civColor: c.color, action: off.actionId, impulso: now });
+      }
+    });
+
+    /* Dispacci AI proattivi (Fase B parziale): la AI propone pace/alleanza
+       quando ha senso. Cadenza ogni PROACTIVE_EVERY_I dopo warmup. */
+    if (now >= CFG.PROACTIVE_WARMUP_I && now % CFG.PROACTIVE_EVERY_I === 0) {
+      tickProactive(game, events, now);
+    }
+
     /* Reputazione: deriva lenta verso il target dato dalle piste morali
        (light/dark), così i verbi M09 continuano a contare. Cadenzata. */
     if (now % CFG.DRIFT_EVERY_I === 0) {
@@ -298,6 +335,115 @@
       game.reputation += (target - game.reputation) * CFG.REP_DRIFT;
       game.reputation = Math.max(CFG.REP_MIN, Math.min(CFG.REP_MAX, game.reputation));
     }
+  }
+
+  /* ---------- Dispacci AI proattivi (Fase B parziale) ----------
+     Solo civiltà CONTATTATE (knowledge ≥ contacted), vive, fuori cooldown,
+     senza offerta pendente. Una sola offerta per civ alla volta. Ordine
+     deterministico (per civ.id) → niente race / niente RNG. */
+  function tickProactive(game, events, now) {
+    if (!Array.isArray(game.civs)) return;
+    const KNOWLEDGE = (ORION.ai && ORION.ai.KNOWLEDGE) || { contacted: 2 };
+    const contactedThreshold = KNOWLEDGE.contacted;
+    const pressure = (game.warState && game.warState.pressure) || 0;
+    const rep = ensureReputation(game);
+    let emitted = 0;
+    /* Ordine stabile per id (deterministico). */
+    const civs = (game.civs || []).slice().sort(function (a, b) {
+      return String(a.id || '').localeCompare(String(b.id || ''));
+    });
+    for (let i = 0; i < civs.length && emitted < CFG.PROACTIVE_MAX_PER_TICK; i++) {
+      const c = civs[i];
+      if (!c || !c.alive) continue;
+      if (c.pendingOffer) continue;
+      const krank = (ORION.ai && ORION.ai.knowledgeRank) ? ORION.ai.knowledgeRank(c) : (c.contacted ? 2 : 0);
+      if (krank < contactedThreshold) continue;
+      /* Cooldown: niente nuove offerte se la AI ha appena ricevuto/inviato qcs. */
+      if (c.lastProposalAt != null && (now - c.lastProposalAt) < CFG.PROPOSAL_COOLDOWN) continue;
+
+      const rel = effectiveRelation(game, c);
+      const disp = c.disposition || 0;
+      let offer = null;
+
+      if (rel === 'war' || rel === 'truce') {
+        /* PACE: la AI vuole tregua se è sotto pressione interna (perdita
+           potenza recente) o se il giocatore ha buona reputazione + bassa
+           pressione globale. Pacifici (mistici/sedentari) più inclini. */
+        const inDecline = c.phase === 'decline' || c.phase === 'collapse';
+        const playerStrong = rep >= CFG.AI_PEACE_REP_MIN && pressure < 0.4;
+        const wantsPeace = inDecline || playerStrong || (disp >= 0 && rel === 'truce');
+        if (wantsPeace) offer = 'propose-peace';
+      } else if (rel === 'peace') {
+        /* ALLEANZA: serve disposizione alta + coerenza con allineamento
+           (i buoni richiedono buona reputazione; i maligni diffidano dei
+           santi). Soglie più severe di quelle del giocatore (l'AI non si
+           espone facilmente). */
+        if (disp >= CFG.AI_ALLY_DISP_MIN) {
+          let ok = true;
+          if (c.alignment === 'bene' && rep < CFG.ALLY_REP_MIN) ok = false;
+          if (c.alignment === 'male' && rep > (100 - CFG.ALLY_REP_MIN)) ok = false;
+          if (ok) offer = 'propose-alliance';
+        }
+      }
+      /* alliance / war di default → nessuna offerta extra (rottura/dichiarazione
+         AI-driven è materia di Fase B piena: tradimenti, ultimatum). */
+
+      if (!offer) continue;
+      c.pendingOffer = { actionId: offer, expiresAt: now + CFG.OFFER_TTL, since: now };
+      c.lastProposalAt = now;
+      events.push({ kind: 'diplo-offer', civId: c.id, civName: c.name,
+        civColor: c.color, action: offer, expiresAt: c.pendingOffer.expiresAt,
+        impulso: now });
+      emitted++;
+    }
+  }
+
+  /* ---------- Risposta del giocatore a un'offerta AI ----------
+     Accetta = applica la transizione coerente (peace/alliance) senza
+     riesaminare (è già stata "accettata" dalla AI col solo invio).
+     Rifiuta = lieve costo disposizione, niente reputazione. */
+  function respondToOffer(game, civ, accept, events) {
+    events = events || [];
+    if (!civ || !civ.pendingOffer) return { ok: false, reason: 'Nessuna offerta in corso.' };
+    const off = civ.pendingOffer;
+    const now = (game && game.timeImpulsi) || 0;
+    civ.pendingOffer = null;
+    if (!accept) {
+      civ.disposition = Math.max(-100, (civ.disposition || 0) + CFG.OFFER_REJECT_DISP);
+      events.push({ kind: 'diplo-offer-rejected', civId: civ.id, civName: civ.name,
+        civColor: civ.color, action: off.actionId, impulso: now });
+      return { ok: true, accepted: false };
+    }
+    /* Applica direttamente la transizione corrispondente. */
+    if (off.actionId === 'propose-peace') {
+      civ.relation = 'peace';
+      civ.truceUntil = 0;
+      civ.allianceSince = null;
+      civ.disposition = Math.max(civ.disposition || 0, CFG.PEACE_DISP_FLOOR);
+      adjustReputation(game, CFG.REP_ON_PEACE);
+      callOffAggression(game, civ);
+      events.push({ kind: 'diplo-peace', civId: civ.id, civName: civ.name,
+        civColor: civ.color, fromOffer: true, impulso: now });
+    } else if (off.actionId === 'propose-alliance') {
+      civ.relation = 'alliance';
+      civ.truceUntil = 0;
+      civ.allianceSince = now;
+      civ.disposition = Math.max(civ.disposition || 0, CFG.ALLY_DISP_FLOOR);
+      adjustReputation(game, CFG.REP_ON_ALLIANCE);
+      callOffAggression(game, civ);
+      events.push({ kind: 'diplo-alliance', civId: civ.id, civName: civ.name,
+        civColor: civ.color, fromOffer: true, impulso: now });
+    } else {
+      return { ok: false, reason: 'Offerta non riconoscibile.' };
+    }
+    if (ORION.ai && ORION.ai.markContact) ORION.ai.markContact(game, civ, events, 'diplomacy');
+    return { ok: true, accepted: true };
+  }
+
+  function offerLabel(actionId) {
+    if (actionId === 'propose-peace') return 'Pace';
+    if (actionId === 'propose-alliance') return 'Alleanza';
+    return actionId || '—';
   }
 
   /* Conteggi per HUD/UI. */
@@ -328,6 +474,9 @@
     onCooldown: onCooldown,
     apply: apply,
     tick: tick,
+    tickProactive: tickProactive,   // esposto per test/diagnostic
+    respondToOffer: respondToOffer,
+    offerLabel: offerLabel,
     alliesOf: alliesOf,
     atWarWith: atWarWith
   };
