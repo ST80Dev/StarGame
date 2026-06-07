@@ -303,6 +303,38 @@
   function launch(game, originColonyKey, targetSystemId) {
     const check = canLaunch(game, originColonyKey, targetSystemId);
     if (!check.ok) return { ok: false, reason: check.reason };
+    /* Decisione #60: shim back-compat. Le spedizioni vivono ora come flotte
+       con order.type='explore' (gestite da fleet.js). Questo wrapper riusa i
+       check + crea direttamente la flotta tramite ORION.fleet. */
+    if (root.ORION && root.ORION.fleet && root.ORION.fleet.createFleet) {
+      const F = root.ORION.fleet;
+      const cf = F.createFleet(game, originColonyKey, 'Esplorazione');
+      if (!cf.ok) return { ok: false, reason: cf.reason };
+      const fleet = cf.fleet;
+      const as = F.assignShips(game, fleet, originColonyKey, 'explorer', 1);
+      if (!as.ok) { F.dissolveFleet(game, fleet); return { ok: false, reason: as.reason }; }
+      const ac = F.assignCrew(game, fleet, originColonyKey, 1);
+      if (!ac.ok) { F.dissolveFleet(game, fleet); return { ok: false, reason: ac.reason }; }
+      const so = F.setOrder(game, fleet, { type: 'explore', toSysId: targetSystemId });
+      if (!so.ok) { F.dissolveFleet(game, fleet); return { ok: false, reason: so.reason }; }
+      const crew = fleet.crew[0];
+      return {
+        ok: true,
+        expedition: {
+          id: fleet.id,
+          originColonyKey: originColonyKey,
+          targetSystemId: targetSystemId,
+          status: 'outbound',
+          durationOut: fleet.etaImpulsi || 0,
+          shipWear: 0,
+          crewId: crew && crew.id,
+          crewXp: (crew && crew.xp) || 0,
+          incidents: [],
+          _fleetRef: fleet
+        }
+      };
+    }
+    /* Legacy fallback (non dovrebbe più scattare). */
     const colony = game.colonies[originColonyKey];
     /* Pesca il PRIMO equipaggio dall'array (deterministico) — quello con
        l'id più vecchio. Se in futuro vorremo "scegli equipaggio" come UX,
