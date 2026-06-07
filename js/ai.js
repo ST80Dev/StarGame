@@ -1,38 +1,41 @@
 /* =====================================================================
    ORION EMPIRES — ai.js
-   Modulo M10 · Fase A: CIVILTÀ AI (GDD §13, roadmap riga 598).
+   Modulo M10 · CIVILTÀ AI (GDD §13 rifondato — decisione #52).
 
-   Apre M10 con lo strato che rende la galassia VIVA e OSSERVABILE
-   (decisione #47). Le civiltà AI:
-     - esistono con territorio, allineamento, archetipo, tratto (§13.1/§13.2);
-     - vivono in BACKGROUND in forma AGGREGATA (potenza + sistemi posseduti,
-       niente colonie reali da simulare): è il principio LOD della
-       decisione #47 — il dettaglio (flotte/colonie reali) si materializzerà
-       SOLO al contatto col giocatore in Fase B (wiring M08/M09);
-     - espandono nello spazio neutrale, si fanno guerra TRA loro (§13.3),
-       possono SCOMPARIRE (ridotte a 0 sistemi) e NASCERNE di nuove sulla
-       Frontiera (roster vivo, decisione #47);
-     - alimentano l'ICG (§5.4) e una disposizione EMERGENTE verso il
-       giocatore (anteprima della Reputazione §14, decisione #47).
+   === RIFONDAZIONE FASE A (decisione #52) ===
+   - **Frammentazione iniziale**: 2-4 imperi consolidati + 10-15 micro-
+     civiltà + 4 Costanti (`factions.js`) = ~16-23 fazioni a inizio
+     partita (vs 4-5 modello M10-Fase-A precedente).
+   - **Vocazione persistente** (8 tipi) come DRIVER del comportamento, non
+     solo "expand_chance". Sedentari, Mercantili, Espansionisti,
+     Isolazionisti, Predoni, Mistici, Tecnocratici, Imperialisti.
+   - **Affinità planetaria** come tratto secondario (6 famiglie):
+     Ferrigna/Biotica/Glaciale/Mixta/Ancestrale/Orbitale. Modula la
+     scelta di colonizzazione.
+   - **Fasi vitali** (growth/rise/stable/decline/collapse) come
+     MODULAZIONE: una Sedentaria in decline resta Sedentaria, cede
+     pianeti ai bordi.
+   - **Proprietà al pianeta** (decisione #52 §9): `civ.planets[]` come
+     array di `'sysId:bodyKey'` (canonical, persistito); `civ.systems[]`
+     resta come **cache derivata** (unique sysIds, ricalcolata ad ogni
+     mutazione) → tutti i consumer esistenti continuano a funzionare.
+   - **Calibrazione "calma"** (§13.5): warm-up 500 Ι, ramp ×0.3 nei 2000 Ι
+     successivi, EXPAND_CHANCE_BASE 0.005 (vs 0.18 vecchio = 36× più
+     lento), WAR_CHANCE 0.015, BIRTH_CHANCE 0.005. Target: ~25% galassia
+     occupata a Ι 10000 — il giocatore ha sempre margine.
 
-   Geografia mista (decisione #47): imperi consolidati nel Nucleo,
-   arrampicatori piccoli su Frontiera/Orlo. Usa il campo `tier` dei gruppi
-   (decisione #34, aggiunto in galaxy.js).
+   === DETERMINISMO (#5/#22) ===
+   Zero `Math.random`. Generazione `seed:civs`; tick di sfondo
+   `seed:ai:<I>` (globale) + `seed:civ:<id>:<I>` (per civiltà).
+   Recovery-friendly: nessuna AI può causare game-over (la pressione
+   diretta vive in M09/Fase B).
 
-   Visibilità (decisione #47): il giocatore vede i confini AI solo nei
-   sistemi che ha DETECTED/EXPLORED; gli effetti lontani arrivano come
-   VOCI di cronaca senza svelare la mappa.
-
-   Determinismo (decisione #5/#22): ZERO Math.random. La generazione usa
-   `seed:civs`; il tick di sfondo usa `seed:ai:<I>` (globale) e
-   `seed:civ:<id>:<I>` (per civiltà). Replay identico. Recovery-friendly:
-   nessuna AI può causare un game-over in Fase A (la pressione diretta è
-   Fase B); le civiltà cadute spariscono, mai bloccano il giocatore.
-
-   Confini di Fase A: NIENTE primo-contatto come scheda/dossier (solo il
-   flag `contacted` + una voce di cronaca), NIENTE materializzazione in
-   combattimento, NIENTE diplomazia interattiva (M11). Tutto questo è
-   Fase B / moduli dedicati.
+   === CONFINE FASE A vs FASE B (refactor #52) ===
+   Fase A (questa PR): modello dati + 8 vocazioni + 6 affinità + 5 fasi
+   + calibrazione calma + 4 Costanti + migrazione schema v12→v13.
+   Fase B (PR successiva): coesione di sistema, federazioni emergenti,
+   vista Civiltà progressiva (sconosciuta→familiare), tutorial dedicato,
+   marker planetari su galaxy-map.
    ===================================================================== */
 'use strict';
 
@@ -40,9 +43,7 @@
   const ORION = root.ORION = root.ORION || {};
 
   /* ------------------------------------------------------------------
-     Archetipi di governo (decisione #34 — lessico SW-flavor, MAI un
-     unico Impero/Repubblica galattico: sono categorie distribuite per
-     regione). `direct` = il nome non usa il connettore "di".
+     ARCHETIPI di governo (decisione #34 — lessico SW-flavor).
      ------------------------------------------------------------------ */
   const ARCHETYPES = {
     bene: [
@@ -64,82 +65,141 @@
     ]
   };
 
-  /* Caratteristica riconoscibile al primo contatto (§13.1). */
+  /* Caratteristica narrativa "al primo contatto" — eredità Fase A. La
+     **vocazione** (sotto) è il driver vero del comportamento. */
   const TRAITS = {
-    bene: [
-      { id: 'diplomatici', label: 'Diplomatici, cercano alleanze' },
-      { id: 'avanzati',    label: 'Tecnologicamente avanzati, isolazionisti' },
-      { id: 'mercantili',  label: 'Commercianti pacifici e difensivi' }
-    ],
-    male: [
-      { id: 'espansionisti', label: 'Espansionisti aggressivi' },
-      { id: 'predoni',       label: 'Saccheggiatori di sistemi' },
-      { id: 'spie',          label: 'Ricatti e spionaggio' }
-    ],
-    neutrale: [
-      { id: 'opportunisti', label: 'Opportunisti: seguono chi vince' },
-      { id: 'mercenari',    label: 'Mercanti prima di tutto, imprevedibili' }
-    ]
-  };
-
-  /* Tinte civiltà (assegnate alla generazione, usate dai marker mappa). */
-  const PALETTE = [
-    '#e0556e', '#5fa8ff', '#9d7bff', '#3fcaa0',
-    '#f0a64a', '#d96bd0', '#7fd0e6', '#c8d24a'
-  ];
-
-  /* Pool di nomi propri di fazione (procedurali, decisione #34 — niente
-     marchi 1:1). Mix aspro/poetico, unici per civiltà. */
-  const NAME_POOL = [
-    'Keth-Var', 'Aethon', 'Serenthal', 'Mekhari', 'Vorthan', 'Cygnus',
-    'Draxis', 'Auvethal', 'Zorvahl', 'Caelum', 'Nexaris', 'Thyssen',
-    'Karveth', 'Lirnos', 'Omneth', 'Valdris', 'Skethara', 'Mirvael',
-    'Drennan', 'Calvion', 'Ghulvann', 'Serath', 'Vaelith', 'Tharkos'
-  ];
-
-  const CFG = {
-    /* Cadenza del simulatore di sfondo: ogni N Impulsi (non a ogni tick:
-       leggero e deterministico, come il victory-check). */
-    AI_EVERY_I: 8,
-    /* Warm-up: la galassia "preesiste" ma evitiamo sussulti immediati nei
-       primissimi Impulsi mentre il giocatore fa l'Insediamento. */
-    AI_WARMUP_I: 16,
-
-    /* Generazione */
-    CIV_MIN: 4, CIV_MAX: 5,             // §13.1: 4-5 civiltà
-    CORE_SYSTEMS: [4, 7],               // imperi consolidati (Nucleo/Colonie)
-    FRONTIER_SYSTEMS: [1, 3],           // arrampicatori (Frontiera/Orlo)
-    POWER_PER_SYSTEM: 10,
-
-    /* Sfondo. Le frequenze sono tarate per una galassia VIVA ma una
-       cronaca LEGGIBILE (il log è capato a 40 voci): la simulazione gira
-       di sfondo, ma solo una quota degli eventi diventa "voce". */
-    POWER_GROWTH: 0.6,                  // crescita potenza/AI-tick per sistema
-    EXPAND_CHANCE_BASE: 0.18,           // prob. base di annettere un sistema
-    WAR_CHANCE: 0.14,                   // prob. di una schermaglia AI-vs-AI/AI-tick
-    AIWAR_POWER_PER_LOSS: 6,            // M10 Fase D: potenza persa per nave distrutta in una guerra AI-vs-AI materializzata
-    BIRTH_CHANCE: 0.015,                // prob. nascita nuovo arrampicatore/AI-tick
-    PIRATE_RAID_CHANCE: 0.06,           // prob. razzia pirata/AI-tick (solo voce)
-    PIRATE_RAIDER_CHANCE: 0.05,         // M10 Fase E: prob. che un covo lanci un raider contro una tua flotta esposta
-    PIRATE_RAIDER_GRACE: 120,           // M10 Fase E: nessun raider prima di questo Impulso (grazia, recovery-friendly)
-    RUMOR_EXPAND_CHANCE: 0.30,          // quota di espansioni che diventano "voce"
-    RUMOR_WAR_CHANCE: 0.45,             // quota di guerre che diventano "voce"
-
-    /* Disposizione verso il giocatore (anteprima §14) */
-    DISPOSITION_DRIFT: 0.06,            // velocità di avvicinamento al target
-
-    /* ICG §5.4 — contributi (M18 sistematizzerà) */
-    ICG_PER_EVIL_EXPAND: 0.8,
-    ICG_PER_GOOD_STABILIZE: 0.5,
-    ICG_DECAY: 0.02                     // lieve ritorno verso il basale/AI-tick
+    bene:     [{ id: 'diplomatici', label: 'Diplomatici, cercano alleanze' },
+               { id: 'avanzati',    label: 'Tecnologicamente avanzati' },
+               { id: 'mercantili',  label: 'Commercianti pacifici' }],
+    male:     [{ id: 'espansionisti', label: 'Espansionisti aggressivi' },
+               { id: 'predoni',       label: 'Saccheggiatori' },
+               { id: 'spie',          label: 'Ricatti e spionaggio' }],
+    neutrale: [{ id: 'opportunisti', label: 'Opportunisti' },
+               { id: 'mercenari',    label: 'Mercanti imprevedibili' }]
   };
 
   /* ------------------------------------------------------------------
-     Helpers di stato
+     VOCAZIONI (decisione #52 §13.2) — 8 tipi, driver primario del
+     comportamento. I `*Mul` modulano CFG base; più alto = più attivo.
+     `id` stabile per il save (persistito su civ.vocation).
      ------------------------------------------------------------------ */
+  const VOCATIONS = {
+    sedentari:     { weight: 0.25, expandMul: 0.20, warMul: 0.40, diplomatMul: 1.4, label: 'Sedentari',     desc: 'Si tengono 2-4 pianeti. Reattivi solo se attaccati.' },
+    mercantili:    { weight: 0.15, expandMul: 0.60, warMul: 0.50, diplomatMul: 1.6, label: 'Mercantili',    desc: 'Espansione lenta + alleanze + rotte.' },
+    espansionisti: { weight: 0.15, expandMul: 1.50, warMul: 1.30, diplomatMul: 0.8, label: 'Espansionisti', desc: 'Crescita territoriale attiva. Guerre offensive.' },
+    isolazionisti: { weight: 0.12, expandMul: 0.10, warMul: 0.90, diplomatMul: 0.4, label: 'Isolazionisti', desc: 'Chiudono confini, attaccano gli intrusi.' },
+    predoni:       { weight: 0.10, expandMul: 0.30, warMul: 1.40, diplomatMul: 0.3, label: 'Predoni',       desc: 'Razzie sui vicini, taglie e bottino.' },
+    mistici:       { weight: 0.10, expandMul: 0.40, warMul: 0.20, diplomatMul: 1.8, label: 'Mistici',       desc: 'Convertono i vicini con dispacci. Non militari.' },
+    tecnocratici:  { weight: 0.08, expandMul: 0.50, warMul: 0.30, diplomatMul: 1.2, label: 'Tecnocratici',  desc: 'Focus tech, alleati di chi ha alta Reputazione.' },
+    imperialisti:  { weight: 0.05, expandMul: 1.80, warMul: 1.60, diplomatMul: 0.6, label: 'Imperialisti',  desc: 'Variante aggressiva. Rari ma pericolosi.' }
+  };
+  const VOCATION_IDS = Object.keys(VOCATIONS);
 
-  /* Sistemi posseduti dal giocatore (home + colonie attive): non
-     annettibili dalle AI. */
+  /* ------------------------------------------------------------------
+     AFFINITÀ PLANETARIA (decisione #52 §13.2 trait secondario).
+     6 famiglie. `typeWeights` = pesi per i tipi-corpo §6.3. Peso 1.0
+     = neutro; più alto = più preferito; più basso = evitato.
+     ------------------------------------------------------------------ */
+  const AFFINITIES = {
+    ferrigna:    { weight: 0.20, label: 'Ferrigna',    typeWeights: { vulcanico: 2.0, desertico: 1.7, terrestre: 0.8, forestale: 0.6, oceanico: 0.7, ghiacciato: 0.8, gassoso: 0.5, luna: 1.0 } },
+    biotica:     { weight: 0.20, label: 'Biotica',     typeWeights: { forestale: 2.0, oceanico: 1.7, terrestre: 1.4, desertico: 0.7, vulcanico: 0.5, ghiacciato: 0.6, gassoso: 0.4, luna: 0.6 } },
+    glaciale:    { weight: 0.15, label: 'Glaciale',    typeWeights: { ghiacciato: 2.0, oceanico: 1.3, gassoso: 1.0, terrestre: 0.9, forestale: 0.7, desertico: 0.5, vulcanico: 0.5, luna: 1.2 } },
+    mixta:       { weight: 0.20, label: 'Mixta',       typeWeights: { terrestre: 1.3, desertico: 1.1, oceanico: 1.1, ghiacciato: 1.0, vulcanico: 1.0, forestale: 1.0, gassoso: 0.9, luna: 0.9 } },
+    ancestrale:  { weight: 0.10, label: 'Ancestrale',  typeWeights: { terrestre: 1.5, forestale: 1.3, oceanico: 1.2, desertico: 1.0, vulcanico: 0.8, ghiacciato: 0.8, gassoso: 0.6, luna: 0.8 } },
+    orbitale:    { weight: 0.15, label: 'Orbitale',    typeWeights: { gassoso: 2.0, luna: 1.6, ghiacciato: 1.0, vulcanico: 0.8, terrestre: 0.7, desertico: 0.7, forestale: 0.5, oceanico: 0.7 } }
+  };
+  const AFFINITY_IDS = Object.keys(AFFINITIES);
+
+  /* ------------------------------------------------------------------
+     FASI VITALI (decisione #52 §13.4) — modulatore della vocazione.
+     Mai sostituiscono il carattere; danno ritmo (espansione/declino).
+     ------------------------------------------------------------------ */
+  const PHASES = {
+    growth:   { expandMul: 1.0, warMul: 1.0, declineLoss: 0,    minDuration: 800 },
+    rise:     { expandMul: 1.5, warMul: 1.3, declineLoss: 0,    minDuration: 600 },
+    stable:   { expandMul: 0.5, warMul: 0.6, declineLoss: 0,    minDuration: 1200 },
+    decline:  { expandMul: 0,   warMul: 0.4, declineLoss: 250,  minDuration: 800 },
+    collapse: { expandMul: 0,   warMul: 0,   declineLoss: 80,   minDuration: 400 }
+  };
+  /* Transizione: probabilità di passare a un'altra fase dopo minDuration. */
+  const PHASE_TRANSITIONS = {
+    growth:   [{ to: 'rise', p: 0.20 }, { to: 'stable', p: 0.50 }, { to: 'decline', p: 0.10 }],
+    rise:     [{ to: 'stable', p: 0.55 }, { to: 'growth', p: 0.30 }, { to: 'decline', p: 0.10 }],
+    stable:   [{ to: 'growth', p: 0.25 }, { to: 'rise', p: 0.10 }, { to: 'decline', p: 0.15 }],
+    decline:  [{ to: 'collapse', p: 0.35 }, { to: 'stable', p: 0.30 }, { to: 'growth', p: 0.05 }],
+    collapse: [{ to: 'decline', p: 0.10 }]
+  };
+
+  /* Palette (assegnata alla generazione). */
+  const PALETTE = [
+    '#e0556e', '#5fa8ff', '#9d7bff', '#3fcaa0',
+    '#f0a64a', '#d96bd0', '#7fd0e6', '#c8d24a',
+    '#ff8a65', '#6bd0a0', '#bf6bd9', '#5ac9c9',
+    '#e8a4ff', '#a0c5ff'
+  ];
+
+  const NAME_POOL = [
+    'Keth-Var', 'Aethon', 'Serenthal', 'Vorthan', 'Cygnus',
+    'Draxis', 'Auvethal', 'Zorvahl', 'Caelum', 'Nexaris', 'Thyssen',
+    'Karveth', 'Lirnos', 'Omneth', 'Valdris', 'Skethara', 'Mirvael',
+    'Drennan', 'Calvion', 'Ghulvann', 'Serath', 'Vaelith', 'Tharkos',
+    'Brevyn', 'Oraxis', 'Quel-Mor', 'Hethrin', 'Yldor', 'Pravon'
+  ];
+
+  /* ------------------------------------------------------------------
+     CONFIG — calibrazione "calma" (decisione #52 §13.5).
+     Numeri tarati perché il giocatore abbia orizzonte ~10000 Ι di
+     espansione prima di pressione reale; ~75% libero a Ι 10000.
+     ------------------------------------------------------------------ */
+  const CFG = {
+    /* Cadenza del simulatore (8 Ι, come Fase A originale). */
+    AI_EVERY_I: 8,
+    /* Warm-up MOLTO esteso (500 Ι): 0 movimenti AI. Insediamento +
+       prime strutture tranquilli. */
+    AI_WARMUP_I: 500,
+    /* Ramp dopo il warm-up: i primi 2000 Ι hanno chance ×0.3 (decollo
+       dolce). Dopo: 1.0 piena. */
+    AI_RAMP_DURATION: 2000,
+    AI_RAMP_MULTIPLIER: 0.3,
+
+    /* Frammentazione iniziale (§13.1). */
+    EMPIRES_RANGE: [2, 4],          // imperi consolidati
+    MICROS_RANGE: [10, 15],         // micro-civiltà
+    EMPIRE_PLANETS: [5, 12],        // §13.1
+    MICRO_PLANETS:  [1, 3],
+    POWER_PER_PLANET: 8,
+
+    /* Sfondo (CALMO). */
+    POWER_GROWTH: 0.4,
+    EXPAND_CHANCE_BASE: 0.005,      // vs vecchio 0.18 → 36× più lento
+    WAR_CHANCE: 0.015,
+    AIWAR_POWER_PER_LOSS: 6,
+    BIRTH_CHANCE: 0.005,
+    BIRTH_GRACE_I: 5000,            // nessun nuovo arrampicatore prima
+    PIRATE_RAID_CHANCE: 0.06,
+    PIRATE_RAIDER_CHANCE: 0.05,
+    PIRATE_RAIDER_GRACE: 120,
+    RUMOR_EXPAND_CHANCE: 0.30,
+    RUMOR_WAR_CHANCE: 0.45,
+
+    /* Disposizione → giocatore */
+    DISPOSITION_DRIFT: 0.06,
+
+    /* Phase tick: chance di transizione di fase per civ per AI-tick */
+    PHASE_TRANSITION_CHANCE: 0.04,
+    PHASE_RUMOR_CHANCE: 0.45,
+
+    /* ICG §5.4 */
+    ICG_PER_EVIL_EXPAND: 0.8,
+    ICG_PER_GOOD_STABILIZE: 0.5,
+    ICG_DECAY: 0.02
+  };
+
+  /* ==================================================================
+     HELPERS — sistemi posseduti / mappa proprietà / cache derivata.
+     ================================================================== */
+
+  /* Sistemi posseduti dal giocatore (home + colonie attive). */
   function playerSystems(game) {
     const set = new Set();
     if (game.galaxy) set.add(game.galaxy.homeId);
@@ -154,24 +214,78 @@
     return set;
   }
 
-  /* Mappa sysId → civId per i sistemi posseduti dalle AI vive. */
+  /* Parsing canonical planetKey "sysId:bodyKey" → { sysId, bodyKey }. */
+  function parsePlanetKey(pk) {
+    if (typeof pk !== 'string') return null;
+    const colon = pk.indexOf(':');
+    if (colon <= 0) return null;
+    const sid = Number(pk.slice(0, colon));
+    if (isNaN(sid)) return null;
+    return { sysId: sid, bodyKey: pk.slice(colon + 1) };
+  }
+
+  /* Lista (ordinata, deduplicata) di sysId da civ.planets[]. */
+  function derivedSystems(civ) {
+    if (!civ || !Array.isArray(civ.planets)) return [];
+    const seen = {};
+    const out = [];
+    for (let i = 0; i < civ.planets.length; i++) {
+      const p = parsePlanetKey(civ.planets[i]);
+      if (!p) continue;
+      if (!seen[p.sysId]) { seen[p.sysId] = 1; out.push(p.sysId); }
+    }
+    return out;
+  }
+
+  /* Ricostruisce la cache civ.systems da civ.planets. */
+  function rebuildSystemsCache(civ) {
+    civ.systems = derivedSystems(civ);
+  }
+
+  /* API canonica di mutazione (mantiene cache in sync). */
+  function addPlanet(civ, sysId, bodyKey) {
+    const key = sysId + ':' + (bodyKey || 'b0');
+    if (!Array.isArray(civ.planets)) civ.planets = [];
+    if (civ.planets.indexOf(key) >= 0) return key;
+    civ.planets.push(key);
+    rebuildSystemsCache(civ);
+    return key;
+  }
+  function removePlanet(civ, planetKey) {
+    if (!Array.isArray(civ.planets)) { civ.planets = []; civ.systems = []; return; }
+    const i = civ.planets.indexOf(planetKey);
+    if (i < 0) return;
+    civ.planets.splice(i, 1);
+    rebuildSystemsCache(civ);
+  }
+  function removeAllInSystem(civ, sysId) {
+    if (!Array.isArray(civ.planets)) { civ.planets = []; civ.systems = []; return 0; }
+    const prefix = sysId + ':';
+    const before = civ.planets.length;
+    civ.planets = civ.planets.filter(function (p) { return p.indexOf(prefix) !== 0; });
+    rebuildSystemsCache(civ);
+    return before - civ.planets.length;
+  }
+
+  /* Mappa sysId → civId (dalle civs vive). */
   function ownerMap(game) {
     const map = {};
     const civs = game.civs || [];
     for (let i = 0; i < civs.length; i++) {
       const c = civs[i];
       if (!c || !c.alive) continue;
-      for (let j = 0; j < c.systems.length; j++) map[c.systems[j]] = c.id;
+      const sys = c.systems || derivedSystems(c);
+      for (let j = 0; j < sys.length; j++) map[sys[j]] = c.id;
     }
     return map;
   }
-
-  /* Civiltà che possiede `sysId` (o null). */
   function civForSystem(game, sysId) {
     const civs = game.civs || [];
     for (let i = 0; i < civs.length; i++) {
       const c = civs[i];
-      if (c && c.alive && c.systems.indexOf(sysId) >= 0) return c;
+      if (!c || !c.alive) continue;
+      const sys = c.systems || derivedSystems(c);
+      if (sys.indexOf(sysId) >= 0) return c;
     }
     return null;
   }
@@ -188,14 +302,15 @@
     return gp ? gp.name : '—';
   }
 
-  /* Frontiera espandibile di una civiltà: sistemi NON posseduti (né da AI
-     né dal giocatore) adiacenti a un sistema della civiltà. */
   function expandableFrontier(game, civ, claimed, players) {
     const galaxy = game.galaxy;
     const out = [];
     const seen = new Set();
-    for (let i = 0; i < civ.systems.length; i++) {
-      const links = galaxy.systems[civ.systems[i]].links || [];
+    const sys = civ.systems || derivedSystems(civ);
+    for (let i = 0; i < sys.length; i++) {
+      const s = galaxy.systems[sys[i]];
+      if (!s) continue;
+      const links = s.links || [];
       for (let j = 0; j < links.length; j++) {
         const nid = links[j];
         if (seen.has(nid)) continue;
@@ -207,14 +322,16 @@
     return out;
   }
 
-  /* Sistemi di confine di `civ` adiacenti a `other` (per le guerre). */
-  function borderSystemsBetween(galaxy, civ, other) {
-    const otherSet = new Set(other.systems);
+  function borderSystemsBetween(galaxy, civA, civB) {
+    const otherSet = new Set(civB.systems || derivedSystems(civB));
     const out = [];
-    for (let i = 0; i < civ.systems.length; i++) {
-      const links = galaxy.systems[civ.systems[i]].links || [];
+    const sysA = civA.systems || derivedSystems(civA);
+    for (let i = 0; i < sysA.length; i++) {
+      const s = galaxy.systems[sysA[i]];
+      if (!s) continue;
+      const links = s.links || [];
       for (let j = 0; j < links.length; j++) {
-        if (otherSet.has(links[j])) { out.push(civ.systems[i]); break; }
+        if (otherSet.has(links[j])) { out.push(sysA[i]); break; }
       }
     }
     return out;
@@ -231,127 +348,152 @@
   }
 
   /* ==================================================================
-     GENERAZIONE — eseguita una sola volta a inizio partita
-     (idempotente via ensure()). Determinismo: seed:civs.
+     GENERAZIONE — `seed:civs`, deterministica, idempotente via ensure().
      ================================================================== */
+
+  function pickWeighted(rng, table, ids) {
+    let total = 0;
+    for (let i = 0; i < ids.length; i++) total += table[ids[i]].weight || 0;
+    let r = rng.float() * total;
+    for (let i = 0; i < ids.length; i++) {
+      r -= table[ids[i]].weight || 0;
+      if (r <= 0) return ids[i];
+    }
+    return ids[ids.length - 1];
+  }
+
+  /* Sceglie body key deterministico per un'espansione (lazy: usa 'b0'
+     come default + variazione hash-based per varietà). Quando avremo
+     bisogno del tipo reale (Fase B), useremo ORION.system.generate.
+     Per ora basta una chiave coerente che non collida con il giocatore. */
+  function pickBodyKey(rng, sysId, occupied) {
+    /* occupied = set di planet keys già presi nel sistema (dal pool delle
+       AI + del giocatore). Per ora ci limitiamo a 'b0'..'b6' rotazione. */
+    const bodyIdx = rng.int(0, 6);
+    for (let i = 0; i < 7; i++) {
+      const idx = (bodyIdx + i) % 7;
+      const key = sysId + ':b' + idx;
+      if (!occupied || !occupied.has(key)) return 'b' + idx;
+    }
+    return 'b0';
+  }
+
+  function makeCivName(rng, alignment, used) {
+    const archPool = ARCHETYPES[alignment];
+    const arch = archPool[rng.int(0, archPool.length - 1)];
+    const pool = rng.shuffle(NAME_POOL.slice());
+    for (let i = 0; i < pool.length; i++) {
+      const nm = arch.noun + (arch.direct ? ' ' : ' di ') + pool[i];
+      if (!used[nm]) { return { name: nm, archetype: arch, proper: pool[i] }; }
+    }
+    /* fallback: append index */
+    const idx = Object.keys(used).length;
+    return { name: arch.noun + ' ' + (arch.direct ? '' : 'di ') + 'X-' + idx, archetype: arch, proper: 'X-' + idx };
+  }
+
+  function baseDisposition(alignment) {
+    if (alignment === 'bene') return 25;
+    if (alignment === 'male') return -25;
+    return 0;
+  }
+
   function generate(game) {
     const galaxy = game.galaxy;
     if (!galaxy || !galaxy.groups) return [];
     const rng = ORION.rng.makeRng(galaxy.seed + ':civs');
-    const groups = galaxy.groups;
 
-    /* Numero di civiltà: 4-5, ridotto se la galassia ha pochi gruppi
-       (un gruppo è la sede del giocatore). Il modificatore galaxySize
-       del preset (#23) può ampliare la galassia → più gruppi → più AI. */
+    /* Conteggi: imperi + micro-civiltà (le 4 Costanti vivono SOPRA in
+       factions.js → ensureFactions). */
+    const nEmpires = rng.int(CFG.EMPIRES_RANGE[0], CFG.EMPIRES_RANGE[1]);
+    const nMicros  = rng.int(CFG.MICROS_RANGE[0],  CFG.MICROS_RANGE[1]);
+
+    const groups = galaxy.groups;
     const homeGroupId = galaxy.homeGroupId;
     const seatGroups = groups.filter(function (g) { return g.id !== homeGroupId; });
-    let n = rng.int(CFG.CIV_MIN, CFG.CIV_MAX);
-    n = Math.max(1, Math.min(n, seatGroups.length));
-
-    /* Allineamenti: garantisci almeno una Bene / Male / Neutrale, poi
-       riempi il resto pesato verso Male/Bene (la Neutrale resta rara). */
-    const alignments = ['bene', 'male', 'neutrale'];
-    while (alignments.length < n) {
-      const r = rng.float();
-      alignments.push(r < 0.45 ? 'male' : r < 0.85 ? 'bene' : 'neutrale');
-    }
-    rng.shuffle(alignments);
-
-    /* Ordina i gruppi-sede per fascia: i più centrali (Nucleo/Colonie)
-       ospitano gli imperi consolidati, l'Orlo gli arrampicatori. */
     const TIER_RANK = { nucleo: 0, colonie: 1, frontiera: 2, orlo: 3, sconosciuto: 4 };
     seatGroups.sort(function (a, b) {
       return (TIER_RANK[a.tier] || 2) - (TIER_RANK[b.tier] || 2);
     });
 
-    const names = rng.shuffle(NAME_POOL.slice());
     const players = playerSystems(game);
-    const claimed = new Set();           // sistemi già assegnati a una civiltà
+    const claimed = new Set();
     const civs = [];
+    const usedNames = {};
+    let civCounter = 0;
 
-    for (let i = 0; i < n; i++) {
-      const alignment = alignments[i];
-      /* Sede: alterna preferenza per fascia in base all'allineamento.
-         Bene → tende al Nucleo, Male/Neutrale → tende all'Orlo (decisione
-         #34/#47). Scegliamo deterministicamente dal pool ordinato. */
-      let seatIdx;
-      if (alignment === 'bene') seatIdx = i % Math.max(1, Math.ceil(seatGroups.length / 2));
-      else seatIdx = seatGroups.length - 1 - (i % Math.max(1, Math.ceil(seatGroups.length / 2)));
-      seatIdx = Math.max(0, Math.min(seatGroups.length - 1, seatIdx));
-      const seat = seatGroups[seatIdx];
-
-      const archPool = ARCHETYPES[alignment];
-      const arch = archPool[rng.int(0, archPool.length - 1)];
+    /* --- Imperi consolidati: vocazione pesata, sedi nel Nucleo/Colonie. --- */
+    for (let e = 0; e < nEmpires; e++) {
+      /* Allineamento garantito: alterna mix. */
+      const alignment = pickAlignment(e, nEmpires, rng);
+      const vocation = pickWeighted(rng, VOCATIONS, VOCATION_IDS);
+      const affinity = pickWeighted(rng, AFFINITIES, AFFINITY_IDS);
+      const nameSpec = makeCivName(rng, alignment, usedNames);
+      usedNames[nameSpec.name] = 1;
       const traitPool = TRAITS[alignment];
       const trait = traitPool[rng.int(0, traitPool.length - 1)];
-      const properName = names[i % names.length];
-      const civName = arch.noun + (arch.direct ? ' ' : ' di ') + properName;
 
-      /* Consolidato vs arrampicatore in base alla fascia della sede. */
-      const established = (seat.tier === 'nucleo' || seat.tier === 'colonie');
-      const range = established ? CFG.CORE_SYSTEMS : CFG.FRONTIER_SYSTEMS;
-      const want = rng.int(range[0], range[1]);
-
-      /* Semina: parte da un sistema della sede non posseduto, poi cresce
-         per adiacenza BFS restando preferibilmente nel proprio gruppo. */
-      const seatSystems = (seat.members || []).slice().sort(function (a, b) { return a - b; });
-      const owned = [];
-      let seed = -1;
-      for (let s = 0; s < seatSystems.length; s++) {
-        const sid = seatSystems[s];
-        if (!claimed.has(sid) && !players.has(sid)) { seed = sid; break; }
-      }
-      if (seed < 0) continue;            // sede satura: salta questa civiltà
-      owned.push(seed); claimed.add(seed);
-
-      let guard = 0;
-      while (owned.length < want && guard < 400) {
-        guard++;
-        // candidati = adiacenti non posseduti (preferenza stesso gruppo)
-        const cands = [];
-        for (let o = 0; o < owned.length; o++) {
-          const links = galaxy.systems[owned[o]].links || [];
-          for (let l = 0; l < links.length; l++) {
-            const nid = links[l];
-            if (claimed.has(nid) || players.has(nid)) continue;
-            cands.push(nid);
-          }
+      /* sede nel Nucleo/Colonie disponibili. */
+      let seat = null;
+      for (let s = 0; s < seatGroups.length; s++) {
+        const g = seatGroups[s];
+        if (g.tier === 'nucleo' || g.tier === 'colonie') {
+          // gruppo non saturo
+          const free = (g.members || []).filter(function (m) { return !claimed.has(m) && !players.has(m); });
+          if (free.length >= 2) { seat = g; break; }
         }
-        if (!cands.length) break;
-        // preferisci stesso cluster, poi il più vicino al seme
-        cands.sort(function (a, b) {
-          const sa = galaxy.systems[a].cluster === seat.id ? 0 : 1;
-          const sb = galaxy.systems[b].cluster === seat.id ? 0 : 1;
-          return sa - sb || a - b;
-        });
-        const pick = cands[0];
-        owned.push(pick); claimed.add(pick);
       }
+      if (!seat) {
+        // fallback: qualsiasi gruppo con spazio
+        for (let s = 0; s < seatGroups.length; s++) {
+          const free = (seatGroups[s].members || []).filter(function (m) { return !claimed.has(m) && !players.has(m); });
+          if (free.length >= 1) { seat = seatGroups[s]; break; }
+        }
+      }
+      if (!seat) continue;
 
-      civs.push({
-        id: 'civ-' + i,
-        name: civName,
-        archetype: arch.id,
-        archetypeLabel: arch.noun,
-        alignment: alignment,
-        trait: trait.id,
-        traitLabel: trait.label,
-        color: PALETTE[i % PALETTE.length],
-        homeGroupId: seat.id,
-        homeTier: seat.tier,
-        established: established,
-        systems: owned,
-        power: owned.length * CFG.POWER_PER_SYSTEM,
-        disposition: baseDisposition(alignment),
-        relation: 'peace',          // M11 (#51): stato diplomatico esplicito
-        contacted: false,
-        alive: true,
-        bornAt: 0
-      });
+      const wantPlanets = rng.int(CFG.EMPIRE_PLANETS[0], CFG.EMPIRE_PLANETS[1]);
+      const planets = seedTerritory(galaxy, seat, wantPlanets, claimed, players, rng, true);
+      if (!planets.length) continue;
+
+      civs.push(makeCiv({
+        id: 'civ-emp-' + civCounter++,
+        nameSpec: nameSpec, alignment: alignment, trait: trait,
+        vocation: vocation, affinity: affinity,
+        seat: seat, established: true, planets: planets, rng: rng
+      }));
     }
 
-    /* ICG iniziale (§5.4): la galassia preesiste, parte da un basale
-       proporzionale alla forza "maligna" già presente. */
+    /* --- Micro-civiltà: vocazione pesata, sedi su Frontiera/Orlo. --- */
+    for (let m = 0; m < nMicros; m++) {
+      const rim = seatGroups.filter(function (g) {
+        return g.tier === 'frontiera' || g.tier === 'orlo' || g.tier === 'sconosciuto' || g.tier === 'colonie';
+      });
+      if (!rim.length) break;
+      const seat = rim[m % rim.length];
+      const free = (seat.members || []).filter(function (id) { return !claimed.has(id) && !players.has(id); });
+      if (!free.length) continue;
+
+      const alignment = pickAlignment(m, nMicros, rng);
+      const vocation = pickWeighted(rng, VOCATIONS, VOCATION_IDS);
+      const affinity = pickWeighted(rng, AFFINITIES, AFFINITY_IDS);
+      const nameSpec = makeCivName(rng, alignment, usedNames);
+      usedNames[nameSpec.name] = 1;
+      const traitPool = TRAITS[alignment];
+      const trait = traitPool[rng.int(0, traitPool.length - 1)];
+
+      const wantPlanets = rng.int(CFG.MICRO_PLANETS[0], CFG.MICRO_PLANETS[1]);
+      const planets = seedTerritory(galaxy, seat, wantPlanets, claimed, players, rng, false);
+      if (!planets.length) continue;
+
+      civs.push(makeCiv({
+        id: 'civ-mic-' + civCounter++,
+        nameSpec: nameSpec, alignment: alignment, trait: trait,
+        vocation: vocation, affinity: affinity,
+        seat: seat, established: false, planets: planets, rng: rng
+      }));
+    }
+
+    /* ICG iniziale (§5.4): basale proporzionale alla forza maligna vs buona. */
     let evil = 0, good = 0;
     civs.forEach(function (c) {
       if (c.alignment === 'male') evil += c.power;
@@ -360,17 +502,115 @@
     const total = Math.max(1, evil + good);
     game.icg = Math.round(Math.max(8, Math.min(55, 25 + (evil - good) / total * 30)));
 
-    /* Pirati (§17.5, gancio leggero decisione #47): qualche covo nei
-       sistemi ad alto pericolo dell'Orlo, non posseduti. */
+    /* Pirati: covi nei sistemi ad alto pericolo non posseduti. */
     game.piracy = { nests: seedPirateNests(game, rng, claimed, players) };
 
     return civs;
   }
 
-  function baseDisposition(alignment) {
-    if (alignment === 'bene') return 25;
-    if (alignment === 'male') return -25;
-    return 0;
+  function pickAlignment(idx, total, rng) {
+    /* Garantisci mix: prime 3 sono bene/male/neutrale (ciclo), poi peso. */
+    if (idx === 0) return 'bene';
+    if (idx === 1) return 'male';
+    if (idx === 2) return 'neutrale';
+    const r = rng.float();
+    if (r < 0.35) return 'bene';
+    if (r < 0.65) return 'male';
+    return 'neutrale';
+  }
+
+  /* Semina territorio per una civ: parte da un sistema della sede non
+     posseduto, cresce per adiacenza BFS. Restituisce array di planet keys
+     ("sysId:bodyKey"). Aggiorna `claimed` (set di sysId). */
+  function seedTerritory(galaxy, seat, wantPlanets, claimed, players, rng, preferSameGroup) {
+    const seatSystems = (seat.members || []).slice().sort(function (a, b) { return a - b; });
+    const owned = [];
+    let seedSys = -1;
+    for (let s = 0; s < seatSystems.length; s++) {
+      const sid = seatSystems[s];
+      if (!claimed.has(sid) && !players.has(sid)) { seedSys = sid; break; }
+    }
+    if (seedSys < 0) return [];
+    owned.push(seedSys); claimed.add(seedSys);
+
+    let guard = 0;
+    /* Convertiamo wantPlanets in target sistemi: ~1.4 planet/system,
+       quindi targetSystems = ceil(wantPlanets/1.4). */
+    const wantSys = Math.max(1, Math.ceil(wantPlanets / 1.4));
+    while (owned.length < wantSys && guard < 200) {
+      guard++;
+      const cands = [];
+      for (let o = 0; o < owned.length; o++) {
+        const s = galaxy.systems[owned[o]];
+        if (!s) continue;
+        const links = s.links || [];
+        for (let l = 0; l < links.length; l++) {
+          const nid = links[l];
+          if (claimed.has(nid) || players.has(nid)) continue;
+          cands.push(nid);
+        }
+      }
+      if (!cands.length) break;
+      cands.sort(function (a, b) {
+        if (preferSameGroup) {
+          const sa = galaxy.systems[a].cluster === seat.id ? 0 : 1;
+          const sb = galaxy.systems[b].cluster === seat.id ? 0 : 1;
+          return sa - sb || a - b;
+        }
+        return a - b;
+      });
+      const pick = cands[0];
+      owned.push(pick); claimed.add(pick);
+    }
+
+    /* Genera planet keys: 1 pianeta per sistema + qualche sistema con 2 */
+    const planets = [];
+    for (let i = 0; i < owned.length; i++) {
+      const sid = owned[i];
+      planets.push(sid + ':b0');
+      // 25% chance di un secondo pianeta nello stesso sistema (doppio prime/marginale)
+      if (rng.chance(0.25) && planets.length < wantPlanets) {
+        planets.push(sid + ':b1');
+      }
+      if (planets.length >= wantPlanets) break;
+    }
+    return planets;
+  }
+
+  function makeCiv(opts) {
+    const civ = {
+      id: opts.id,
+      name: opts.nameSpec.name,
+      archetype: opts.nameSpec.archetype.id,
+      archetypeLabel: opts.nameSpec.archetype.noun,
+      alignment: opts.alignment,
+      trait: opts.trait.id,
+      traitLabel: opts.trait.label,
+      vocation: opts.vocation,
+      affinity: opts.affinity,
+      phase: 'growth',
+      phaseSince: 0,
+      color: PALETTE[Math.abs(hashCode(opts.id)) % PALETTE.length],
+      homeGroupId: opts.seat.id,
+      homeTier: opts.seat.tier,
+      established: opts.established,
+      planets: opts.planets,
+      systems: [],
+      power: opts.planets.length * CFG.POWER_PER_PLANET,
+      disposition: baseDisposition(opts.alignment),
+      relation: 'peace',
+      contacted: false,
+      alive: true,
+      bornAt: 0
+    };
+    rebuildSystemsCache(civ);
+    return civ;
+  }
+
+  function hashCode(str) {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) { h = ((h << 5) - h + str.charCodeAt(i)) | 0; }
+    return h;
   }
 
   function seedPirateNests(game, rng, claimed, players) {
@@ -388,23 +628,89 @@
     return nests;
   }
 
-  /* Crea/normalizza lo stato AI sul game (idempotente). Non rigenera se
-     i civs esistono già (load da save). */
+  /* ==================================================================
+     ENSURE — chiamato a boot / load. Idempotente.
+     - Crea civs se mancanti (newGame)
+     - Migra civs legacy (civ.systems senza civ.planets)
+     - Assicura vocation/affinity/phase su tutte
+     - Spawn 4 Costanti via factions.js (idempotente)
+     ================================================================== */
   function ensure(game) {
     if (!game || !game.galaxy) return;
+
     if (!Array.isArray(game.civs) || !game.civs.length) {
       game.civs = generate(game);
     }
+
+    /* Migra civs legacy + normalizza. */
+    const galaxy = game.galaxy;
+    const migrateRng = ORION.rng.makeRng(galaxy.seed + ':civ-migrate');
+    for (let i = 0; i < game.civs.length; i++) {
+      const c = game.civs[i];
+      if (!c) continue;
+      migrateLegacyCiv(c, galaxy, migrateRng);
+    }
+
+    /* Spawn 4 Costanti (idempotente). */
+    if (ORION.factions && ORION.factions.ensureFactions) {
+      ORION.factions.ensureFactions(game);
+    }
+
     if (game.icg == null) game.icg = 20;
     if (!game.piracy || !Array.isArray(game.piracy.nests)) {
       game.piracy = { nests: [] };
     }
   }
 
+  /* Converte una civ legacy (civ.systems senza civ.planets) al nuovo
+     modello; assicura vocation/affinity/phase. Idempotente. */
+  function migrateLegacyCiv(civ, galaxy, rng) {
+    if (!Array.isArray(civ.planets) || !civ.planets.length) {
+      if (Array.isArray(civ.systems) && civ.systems.length) {
+        // Conversione deterministica: ogni sysId → 1 planet key 'sysId:b0'
+        // (lazy: niente lookup body reale; sufficiente per la semantica).
+        civ.planets = civ.systems.map(function (s) { return s + ':b0'; });
+      } else {
+        civ.planets = [];
+      }
+    }
+    rebuildSystemsCache(civ);
+
+    /* Assegna vocation/affinity deterministiche se mancanti. RNG seed
+       ancorato a civ.id → stabilità tra session/load. */
+    if (!civ.vocation || !VOCATIONS[civ.vocation]) {
+      const lrng = ORION.rng.makeRng(galaxy.seed + ':legacy-voc:' + civ.id);
+      /* Inferisci dalla trait esistente quando possibile. */
+      const tInf = inferVocationFromTrait(civ.trait, civ.alignment);
+      civ.vocation = tInf || pickWeighted(lrng, VOCATIONS, VOCATION_IDS);
+    }
+    if (!civ.affinity || !AFFINITIES[civ.affinity]) {
+      const lrng = ORION.rng.makeRng(galaxy.seed + ':legacy-aff:' + civ.id);
+      civ.affinity = pickWeighted(lrng, AFFINITIES, AFFINITY_IDS);
+    }
+    if (!civ.phase || !PHASES[civ.phase]) civ.phase = 'growth';
+    if (civ.phaseSince == null) civ.phaseSince = 0;
+    if (!civ.relation) civ.relation = 'peace';
+    if (civ.disposition == null) civ.disposition = baseDisposition(civ.alignment);
+  }
+
+  function inferVocationFromTrait(trait, alignment) {
+    const map = {
+      espansionisti: 'espansionisti',
+      predoni:       'predoni',
+      mercantili:    'mercantili',
+      avanzati:      'tecnocratici',
+      diplomatici:   'sedentari',
+      spie:          'imperialisti',
+      opportunisti:  'mercantili',
+      mercenari:     'predoni'
+    };
+    return map[trait] || null;
+  }
+
   /* ==================================================================
-     SIMULAZIONE DI SFONDO — chiamata dal tick di time.js.
-     Cadenza interna AI_EVERY_I, warm-up AI_WARMUP_I. Eventi notevoli +
-     voci di cronaca rate-limitate emessi in `events`.
+     SIMULAZIONE DI SFONDO — tick(game, events). Cadenza AI_EVERY_I,
+     warm-up AI_WARMUP_I, ramp AI_RAMP_DURATION.
      ================================================================== */
   function tick(game, events) {
     if (!game || !Array.isArray(game.civs)) return;
@@ -416,41 +722,49 @@
     const players = playerSystems(game);
     const grng = ORION.rng.makeRng(galaxy.seed + ':ai:' + I);
 
-    /* Set dei sistemi posseduti (aggiornato durante il passo). */
+    /* Ramp multiplier: nei primi 2000 Ι dopo warm-up, le chance sono ×0.3. */
+    const sinceWarmup = I - CFG.AI_WARMUP_I;
+    const rampMul = sinceWarmup < CFG.AI_RAMP_DURATION
+      ? CFG.AI_RAMP_MULTIPLIER + (1 - CFG.AI_RAMP_MULTIPLIER) * (sinceWarmup / CFG.AI_RAMP_DURATION)
+      : 1.0;
+
+    /* Set sistemi posseduti (aggiornato durante il passo). */
     const claimed = new Set();
     game.civs.forEach(function (c) {
-      if (c.alive) c.systems.forEach(function (s) { claimed.add(s); });
+      if (c.alive) (c.systems || derivedSystems(c)).forEach(function (s) { claimed.add(s); });
     });
 
     let icgDelta = 0;
 
-    /* --- Per civiltà: crescita potenza + espansione + disposizione --- */
+    /* --- Per civiltà --- */
     for (let i = 0; i < game.civs.length; i++) {
       const civ = game.civs[i];
       if (!civ.alive) continue;
       const crng = ORION.rng.makeRng(galaxy.seed + ':civ:' + civ.id + ':' + I);
+      const voc = VOCATIONS[civ.vocation] || VOCATIONS.sedentari;
+      const phase = PHASES[civ.phase] || PHASES.growth;
 
-      // crescita potenza (lenta, ∝ sistemi)
-      civ.power += CFG.POWER_GROWTH * civ.systems.length;
+      /* Crescita potenza modulata da fase. */
+      civ.power += CFG.POWER_GROWTH * (civ.planets || []).length * phase.expandMul;
 
-      // espansione (pesata da archetipo + fascia di sede)
-      let expandChance = CFG.EXPAND_CHANCE_BASE;
-      if (civ.trait === 'espansionisti') expandChance *= 1.8;
-      else if (civ.alignment === 'male') expandChance *= 1.3;
-      else if (civ.alignment === 'bene') expandChance *= 0.7;
-      if (!civ.established) expandChance *= 1.4;     // gli arrampicatori spingono
+      /* Espansione: chance modulata da vocazione + fase + ramp + faction. */
+      const factionDef = civ.faction && ORION.factions ? ORION.factions.byId(civ.faction) : null;
+      const factionExpMul = factionDef ? factionDef.expandMul : 1.0;
+      let expandChance = CFG.EXPAND_CHANCE_BASE * voc.expandMul * phase.expandMul * factionExpMul * rampMul;
+      if (!civ.established) expandChance *= 1.3;
       if (crng.chance(expandChance)) {
         const frontier = expandableFrontier(game, civ, claimed, players);
         if (frontier.length) {
           frontier.sort(function (a, b) { return a - b; });
+          // affinità: peso opzionale (richiede inspectBodyType lazy, Fase B)
           const target = frontier[crng.int(0, frontier.length - 1)];
-          civ.systems.push(target);
+          const bodyKey = pickBodyKey(crng, target, null);
+          addPlanet(civ, target, bodyKey);
           claimed.add(target);
-          civ.power += CFG.POWER_PER_SYSTEM * 0.5;
+          civ.power += CFG.POWER_PER_PLANET * 0.7;
           if (civ.alignment === 'male') icgDelta += CFG.ICG_PER_EVIL_EXPAND;
           else if (civ.alignment === 'bene') icgDelta -= CFG.ICG_PER_GOOD_STABILIZE;
-          // voce di cronaca rate-limitata (effetto lontano = solo "voce")
-          if (crng.chance(CFG.RUMOR_EXPAND_CHANCE)) {
+          if (crng.chance(CFG.RUMOR_EXPAND_CHANCE) && discovered(game, target)) {
             events.push({
               kind: 'civ-expand', civName: civ.name, civColor: civ.color,
               alignment: civ.alignment,
@@ -461,72 +775,107 @@
         }
       }
 
-      // disposizione emergente verso il giocatore (anteprima §14)
+      /* Declino: perdita pianeti ai bordi nelle fasi decline/collapse. */
+      if (phase.declineLoss > 0 && civ.planets.length > 1) {
+        // (impulse-based: la perdita scatta ogni `declineLoss` Ι; controllo
+        //  semplificato a probabilità per AI-tick)
+        const lossChance = CFG.AI_EVERY_I / phase.declineLoss;
+        if (crng.chance(lossChance)) {
+          // perde il pianeta di confine "più esposto" (idx maggiore per
+          // semplicità — è una scelta deterministica recovery-friendly)
+          const lostKey = civ.planets[civ.planets.length - 1];
+          const lostInfo = parsePlanetKey(lostKey);
+          removePlanet(civ, lostKey);
+          if (lostInfo) claimed.delete(lostInfo.sysId);  // ricontrolla i sysId
+          civ.systems.forEach(function (s) { claimed.add(s); });
+          civ.power = Math.max(0, civ.power - CFG.POWER_PER_PLANET * 0.5);
+          if (civ.planets.length === 0) {
+            civ.alive = false;
+            events.push({ kind: 'civ-fallen', civName: civ.name, conqueror: 'il declino interno', impulso: I });
+          }
+        }
+      }
+
+      /* Fasi vitali: transizione probabilistica. */
+      if (!civ.vocationLocked) maybePhaseTransition(civ, I, crng, events);
+
+      /* Disposizione → giocatore. */
       driftDisposition(game, civ);
 
-      // primo contatto: il giocatore ha esplorato un sistema della civiltà?
+      /* Primo contatto. */
       if (!civ.contacted && civSeenByPlayer(game, civ)) {
         civ.contacted = true;
+        const firstSys = (civ.systems && civ.systems.length) ? civ.systems[0] : null;
         events.push({
           kind: 'civ-contact', civName: civ.name, civColor: civ.color,
           alignment: civ.alignment, traitLabel: civ.traitLabel,
-          regionLabel: regionLabelOfSystem(galaxy, civ.systems[0]),
+          regionLabel: firstSys != null ? regionLabelOfSystem(galaxy, firstSys) : '—',
           impulso: I
         });
       }
     }
 
-    /* --- Guerra AI-vs-AI: una schermaglia per AI-tick, tra una coppia
-       adiacente con frizione di allineamento. --- */
-    maybeWar(game, grng, events, function (d) { icgDelta += d; });
+    /* --- Guerra AI-vs-AI (calma) --- */
+    if (grng.chance(rampMul)) maybeWar(game, grng, events, function (d) { icgDelta += d; });
 
-    /* --- Nascita di un nuovo arrampicatore sulla Frontiera/Orlo --- */
-    maybeBirth(game, grng, claimed, players, events);
+    /* --- Nascita arrampicatore (rara, post-grazia) --- */
+    if (I >= CFG.BIRTH_GRACE_I) maybeBirth(game, grng, claimed, players, events);
 
-    /* --- Pirati: razzia atmosferica (voce di cronaca). --- */
+    /* --- Pirati: razzia atmosferica + raider --- */
     maybePirateRaid(game, grng, events);
-
-    /* --- M10 Fase E: i predoni cacciano le tue flotte ESPOSTE (in orbita
-       lontano dalle colonie). Gated da grazia iniziale; lo scontro è risolto
-       all'arrivo in time.js (lampo). --- */
     maybePirateRaider(game, grng, events);
 
-    /* --- M09 Fase A (decisione #49): incursione pirata "con denti" verso
-       una colonia del giocatore. Gated dalla pressione (catena di sconfitte
-       → più attacchi) + grazia iniziale: niente assedi a freddo. --- */
+    /* --- M09: incursioni pirata + AI di conquista (invariate) --- */
     maybePirateIncursion(game, grng, events);
-
-    /* --- M09 Fase B (decisione #49): incursione AI STRATEGICA. Una civiltà
-       ostile che confina col giocatore può lanciare una forza di conquista.
-       Gated da disposizione molto bassa + pressione + grazia iniziale più
-       lunga (niente guerra a freddo), e rispetta le tregue (truceUntil). --- */
     maybeAiIncursion(game, grng, events);
 
-    /* --- ICG §5.4: applica i contributi dell'AI-tick + un decadimento
-       dolce verso il basale "stabile" (20), così l'indice respira invece
-       di salire monotòno. M18 sistematizzerà l'indice. --- */
+    /* --- ICG: applica + decadimento dolce. --- */
     if (game.icg == null) game.icg = 20;
     game.icg += icgDelta;
     game.icg += (20 - game.icg) * CFG.ICG_DECAY;
     game.icg = Math.max(0, Math.min(100, game.icg));
   }
 
-  /* Disposizione → target dipendente da allineamento, vicinanza al
-     giocatore e dalle piste reputation light/dark (#23). */
+  function maybePhaseTransition(civ, I, rng, events) {
+    const phase = PHASES[civ.phase] || PHASES.growth;
+    const sinceTransition = I - (civ.phaseSince || 0);
+    if (sinceTransition < phase.minDuration) return;
+    if (!rng.chance(CFG.PHASE_TRANSITION_CHANCE)) return;
+    const trans = PHASE_TRANSITIONS[civ.phase] || [];
+    if (!trans.length) return;
+    let total = 0;
+    for (let i = 0; i < trans.length; i++) total += trans[i].p;
+    let r = rng.float() * total;
+    let next = trans[0].to;
+    for (let i = 0; i < trans.length; i++) {
+      r -= trans[i].p;
+      if (r <= 0) { next = trans[i].to; break; }
+    }
+    if (next === civ.phase) return;
+    civ.phase = next;
+    civ.phaseSince = I;
+    if (rng.chance(CFG.PHASE_RUMOR_CHANCE)) {
+      events.push({
+        kind: 'civ-phase', civName: civ.name, civColor: civ.color,
+        phase: next, alignment: civ.alignment, impulso: I
+      });
+    }
+  }
+
+  /* ==================================================================
+     DISPOSIZIONE / PRIMO CONTATTO — invariati nella sostanza.
+     ================================================================== */
   function driftDisposition(game, civ) {
     const tracks = game.victoryTracks || {};
-    const light = tracks.reputationLight || 0;   // 0..1
-    const dark = tracks.reputationDark || 0;     // 0..1
+    const light = tracks.reputationLight || 0;
+    const dark = tracks.reputationDark || 0;
     let target = baseDisposition(civ.alignment);
     if (civ.alignment === 'bene') target += light * 40 - dark * 40;
     else if (civ.alignment === 'male') target += dark * 35 - light * 25;
     else target += (light - dark) * 15;
-    // vicinanza: una civiltà che confina col giocatore reagisce di più
     if (civBordersPlayer(game, civ)) {
       target += (civ.alignment === 'male') ? -10 : (civ.alignment === 'bene' ? 6 : 0);
     }
-    /* M11 (#51): lo stato diplomatico formale tira il target — alleati si
-       fidano (alleanza non erode da sola), nemici restano ostili. */
     if (ORION.diplomacy && ORION.diplomacy.relationDispositionBias) {
       target += ORION.diplomacy.relationDispositionBias(civ);
     }
@@ -534,33 +883,50 @@
     civ.disposition += (target - civ.disposition) * CFG.DISPOSITION_DRIFT;
     civ.disposition = Math.max(-100, Math.min(100, civ.disposition));
   }
-
   function civBordersPlayer(game, civ) {
     const galaxy = game.galaxy;
     const players = playerSystems(game);
-    for (let i = 0; i < civ.systems.length; i++) {
-      const links = galaxy.systems[civ.systems[i]].links || [];
+    const sys = civ.systems || derivedSystems(civ);
+    for (let i = 0; i < sys.length; i++) {
+      const s = galaxy.systems[sys[i]];
+      if (!s) continue;
+      const links = s.links || [];
       for (let j = 0; j < links.length; j++) if (players.has(links[j])) return true;
     }
     return false;
   }
   function civSeenByPlayer(game, civ) {
-    for (let i = 0; i < civ.systems.length; i++) {
-      if (discovered(game, civ.systems[i])) return true;
-    }
+    const sys = civ.systems || derivedSystems(civ);
+    for (let i = 0; i < sys.length; i++) if (discovered(game, sys[i])) return true;
     return false;
   }
 
+  /* ==================================================================
+     GUERRA AI-vs-AI (calma + vocazione)
+     ================================================================== */
   function maybeWar(game, rng, events, addIcg) {
-    if (!rng.chance(CFG.WAR_CHANCE)) return;
-    const galaxy = game.galaxy;
-    const live = game.civs.filter(function (c) { return c.alive && c.systems.length; });
+    /* Chance globale modulata dalla MEDIA delle warMul delle civs vive
+       — galassie di Mistici/Sedentari fanno meno guerre, di Predoni più. */
+    const live = game.civs.filter(function (c) { return c.alive && (c.planets || []).length; });
     if (live.length < 2) return;
-    // raccogli coppie adiacenti con frizione (almeno una Male, o Bene-vs-Male)
+    let warMulSum = 0;
+    for (let i = 0; i < live.length; i++) {
+      const v = VOCATIONS[live[i].vocation] || VOCATIONS.sedentari;
+      const p = PHASES[live[i].phase] || PHASES.growth;
+      warMulSum += v.warMul * p.warMul;
+    }
+    const warMulAvg = warMulSum / live.length;
+    if (!rng.chance(CFG.WAR_CHANCE * warMulAvg)) return;
+
+    const galaxy = game.galaxy;
+    /* coppie adiacenti con frizione (vocazione, allineamento). */
     const pairs = [];
     for (let a = 0; a < live.length; a++) {
       for (let b = a + 1; b < live.length; b++) {
         const A = live[a], B = live[b];
+        // pacifici (mistici/sedentari) raramente attaccano
+        const aV = VOCATIONS[A.vocation], bV = VOCATIONS[B.vocation];
+        if ((aV && aV.warMul < 0.3) && (bV && bV.warMul < 0.3)) continue;
         const friction = (A.alignment === 'male' || B.alignment === 'male')
           || (A.alignment !== B.alignment);
         if (!friction) continue;
@@ -570,14 +936,9 @@
     if (!pairs.length) return;
     const pair = pairs[rng.int(0, pairs.length - 1)];
 
-    /* Attaccante = più forte, difensore = più debole: il forte preme sul
-       confine del debole. L'esito può comunque sorprendere (§13.1). */
     let attacker = pair[0], defender = pair[1];
     if (defender.power > attacker.power) { const t = attacker; attacker = defender; defender = t; }
 
-    /* Sistema conteso = un sistema di confine del DIFENSORE adiacente
-       all'attaccante. Se il giocatore ne vede almeno uno (DETECTED+),
-       la guerra è "assistibile" → la risolviamo col motore M09 (Fase D). */
     const dborder = borderSystemsBetween(galaxy, defender, attacker);
     if (!dborder.length) return;
     dborder.sort(function (x, y) { return x - y; });
@@ -587,10 +948,6 @@
       ? seenBorder[rng.int(0, seenBorder.length - 1)]
       : dborder[rng.int(0, dborder.length - 1)];
 
-    /* Esito. Witnessed → battaglia REALE materializzata (decisione #47 Fase D):
-       le due civiltà diventano forze concrete e si scontrano col motore
-       deterministico di M09; chi vince la battaglia decide il sistema. Le
-       guerre LONTANE (non viste) restano astratte (zero costo/spam). */
     let attackerWon, report = null;
     if (witnessed) {
       const C = root.ORION.combat;
@@ -599,45 +956,38 @@
       const battleId = 'aiwar:' + attacker.id + ':' + defender.id + ':' + contested + ':' + (game.timeImpulsi || 0);
       report = C.resolve(game, battleId, A, B);
       attackerWon = (report.winner === 'A');
-      // costo della battaglia: le perdite si traducono in potenza persa
       attacker.power = Math.max(0, attacker.power - report.sideA.lost * CFG.AIWAR_POWER_PER_LOSS);
       defender.power = Math.max(0, defender.power - report.sideB.lost * CFG.AIWAR_POWER_PER_LOSS);
     } else {
       const pWin = attacker.power / Math.max(1, attacker.power + defender.power);
-      attackerWon = !(rng.float() > pWin * 1.1);   // upset come prima (§13.1)
+      attackerWon = !(rng.float() > pWin * 1.1);
     }
 
     let winner, loser;
     if (attackerWon) {
-      // l'attaccante conquista il sistema conteso
-      defender.systems = defender.systems.filter(function (s) { return s !== contested; });
-      attacker.systems.push(contested);
-      attacker.power += CFG.POWER_PER_SYSTEM * 0.5;
-      defender.power = Math.max(0, defender.power - CFG.POWER_PER_SYSTEM);
+      // L'attaccante conquista TUTTI i pianeti del difensore nel sistema conteso
+      removeAllInSystem(defender, contested);
+      addPlanet(attacker, contested, 'b0');
+      attacker.power += CFG.POWER_PER_PLANET * 0.7;
+      defender.power = Math.max(0, defender.power - CFG.POWER_PER_PLANET);
       if (attacker.alignment === 'male') addIcg(CFG.ICG_PER_EVIL_EXPAND);
       winner = attacker; loser = defender;
     } else {
-      // il difensore resiste. Nelle guerre VISTE è una difesa riuscita
-      // (nessun trasferimento); in quelle ASTRATTE conserviamo la regola
-      // "il territorio cambia sempre" → il difensore-vincitore strappa un
-      // sistema all'attaccante (equivalente all'upset originale).
       winner = defender; loser = attacker;
       if (!witnessed) {
         const aborder = borderSystemsBetween(galaxy, attacker, defender);
         if (aborder.length) {
           aborder.sort(function (x, y) { return x - y; });
           const taken = aborder[rng.int(0, aborder.length - 1)];
-          attacker.systems = attacker.systems.filter(function (s) { return s !== taken; });
-          defender.systems.push(taken);
-          defender.power += CFG.POWER_PER_SYSTEM * 0.5;
-          attacker.power = Math.max(0, attacker.power - CFG.POWER_PER_SYSTEM);
+          removeAllInSystem(attacker, taken);
+          addPlanet(defender, taken, 'b0');
+          defender.power += CFG.POWER_PER_PLANET * 0.7;
+          attacker.power = Math.max(0, attacker.power - CFG.POWER_PER_PLANET);
           if (defender.alignment === 'male') addIcg(CFG.ICG_PER_EVIL_EXPAND);
         }
       }
     }
 
-    // Cronaca: le guerre VISTE producono un report reale ("hai assistito a…");
-    // le lontane restano una "voce" rate-limitata.
     if (witnessed) {
       events.push({
         kind: 'civ-battle',
@@ -657,10 +1007,8 @@
       });
     }
 
-    // Caduta (roster vivo): controlla ENTRAMBE (nell'upset astratto anche
-    // l'attaccante può perdere il suo ultimo sistema).
     [attacker, defender].forEach(function (civ) {
-      if (civ.alive && civ.systems.length === 0) {
+      if (civ.alive && (civ.planets || []).length === 0) {
         civ.alive = false;
         const conq = (civ === attacker) ? defender : attacker;
         events.push({
@@ -674,7 +1022,6 @@
   function maybeBirth(game, rng, claimed, players, events) {
     if (!rng.chance(CFG.BIRTH_CHANCE)) return;
     const galaxy = game.galaxy;
-    // un gruppo di Frontiera/Orlo con sistemi liberi
     const rim = (galaxy.groups || []).filter(function (g) {
       return g.tier === 'frontiera' || g.tier === 'orlo' || g.tier === 'sconosciuto';
     });
@@ -685,46 +1032,36 @@
     });
     if (!free.length) return;
     free.sort(function (a, b) { return a - b; });
-    const seed = free[0];
+    const seedSys = free[0];
 
-    // arrampicatore: archetipo Male/Neutrale, tratto coerente
     const alignment = rng.chance(0.6) ? 'male' : 'neutrale';
-    const archPool = ARCHETYPES[alignment];
-    const arch = archPool[rng.int(0, archPool.length - 1)];
+    const used = {}; game.civs.forEach(function (c) { used[c.name] = 1; });
+    const nameSpec = makeCivName(rng, alignment, used);
     const traitPool = TRAITS[alignment];
     const trait = traitPool[rng.int(0, traitPool.length - 1)];
-    // nome non ancora in uso
-    const used = {}; game.civs.forEach(function (c) { used[c.name] = 1; });
-    let proper = null;
-    const pool = rng.shuffle(NAME_POOL.slice());
-    for (let i = 0; i < pool.length; i++) {
-      const nm = arch.noun + (arch.direct ? ' ' : ' di ') + pool[i];
-      if (!used[nm]) { proper = pool[i]; break; }
-    }
-    if (!proper) return;
-    const civName = arch.noun + (arch.direct ? ' ' : ' di ') + proper;
-    const idx = game.civs.length;
+    const vocation = pickWeighted(rng, VOCATIONS, VOCATION_IDS);
+    const affinity = pickWeighted(rng, AFFINITIES, AFFINITY_IDS);
 
-    game.civs.push({
-      id: 'civ-' + idx + '-' + game.timeImpulsi,   // id unico anche dopo cadute
-      name: civName, archetype: arch.id, archetypeLabel: arch.noun,
-      alignment: alignment, trait: trait.id, traitLabel: trait.label,
-      color: PALETTE[idx % PALETTE.length],
-      homeGroupId: grp.id, homeTier: grp.tier, established: false,
-      systems: [seed], power: CFG.POWER_PER_SYSTEM,
-      disposition: baseDisposition(alignment), relation: 'peace', contacted: false,
-      alive: true, bornAt: game.timeImpulsi
+    const civ = makeCiv({
+      id: 'civ-' + game.civs.length + '-' + (game.timeImpulsi || 0),
+      nameSpec: nameSpec, alignment: alignment, trait: trait,
+      vocation: vocation, affinity: affinity,
+      seat: grp, established: false,
+      planets: [seedSys + ':b0'], rng: rng
     });
+    civ.bornAt = game.timeImpulsi || 0;
+    game.civs.push(civ);
     events.push({
-      kind: 'civ-emerged', civName: civName, alignment: alignment,
+      kind: 'civ-emerged', civName: civ.name, alignment: alignment,
       regionLabel: grp.name, impulso: game.timeImpulsi
     });
   }
 
-  /* M09 Fase A (decisione #49): un covo pirata lancia un'INCURSIONE inbound
-     verso la colonia raggiungibile più vicina. La probabilità sale con la
-     pressione (game.warState.pressure). Grazia iniziale (no assedi a freddo,
-     recovery-friendly #22) + una sola incursione/assedio per colonia. */
+  /* ==================================================================
+     PIRATI / INCURSIONI — invariati semanticamente (riusano civ.systems
+     come prima, ora derivata da civ.planets via cache).
+     ================================================================== */
+
   function incursionTargeting(game, sysId) {
     const inc = game.incursions || [];
     for (let i = 0; i < inc.length; i++) if (inc[i].targetSysId === sysId) return true;
@@ -738,7 +1075,7 @@
     return false;
   }
   function maybePirateIncursion(game, rng, events) {
-    if ((game.timeImpulsi || 0) < 120) return;     // grazia iniziale
+    if ((game.timeImpulsi || 0) < 120) return;
     const nests = game.piracy && game.piracy.nests;
     if (!nests || !nests.length) return;
     const T = ORION.time, cfg = (T && T.CFG) || {};
@@ -782,12 +1119,11 @@
     }
   }
 
-  /* M09 Fase B: una civiltà AI ostile lancia un'incursione di conquista
-     verso una colonia del giocatore. Più tardiva e più rara dei pirati
-     (la guerra vera non scoppia a freddo). Rispetta le tregue. */
   function maybeAiIncursion(game, rng, events) {
-    if ((game.timeImpulsi || 0) < 160) return;     // grazia iniziale più lunga
-    const civs = (game.civs || []).filter(function (c) { return c.alive && c.systems.length; });
+    if ((game.timeImpulsi || 0) < 160) return;
+    const civs = (game.civs || []).filter(function (c) {
+      return c.alive && (c.planets || []).length;
+    });
     if (!civs.length) return;
     const T = ORION.time, cfg = (T && T.CFG) || {};
     const pressure = (game.warState && game.warState.pressure) || 0;
@@ -798,46 +1134,37 @@
     });
     if (!cols.length) return;
     if (!Array.isArray(game.incursions)) game.incursions = [];
-    const players = playerSystems(game);
-    /* Soglia di ostilità RILASSATA dalla pressione (decisione #49): a impero
-       in difficoltà (catena di sconfitte → pressione alta) anche civiltà
-       moderatamente ostili "fiutano il sangue" e attaccano. Realizza la
-       spirale: la debolezza invita all'aggressione. */
-    const threshold = -50 + pressure * 20;     // pressione 1.0 → fino a -30
+    const threshold = -50 + pressure * 20;
     for (let i = 0; i < civs.length; i++) {
       const civ = civs[i];
-      /* M11 (#51): pace/tregua/alleanza = non-aggressione formale → niente
-         incursioni. L'alleanza è una garanzia, la pace una scelta del
-         giocatore che sospende la guerra finché la disposizione regge. */
+      if (civ.faction === 'phaerion' || civ.faction === 'pellegrini') continue;  // Costanti non-belligeranti
       const rel = (ORION.diplomacy && ORION.diplomacy.effectiveRelation)
         ? ORION.diplomacy.effectiveRelation(game, civ) : null;
       if (rel === 'alliance' || rel === 'peace' || rel === 'truce') continue;
       if (civ.disposition > threshold) continue;
-      if ((civ.truceUntil || 0) > (game.timeImpulsi || 0)) continue;  // tregua in corso
-      if (!civBordersPlayer(game, civ)) continue;                // deve confinare
-      // probabilità: bassa, cresce con ostilità + pressione
-      const hostility = Math.min(1, Math.max(0, (-civ.disposition - 30) / 50));   // 0..1
+      if ((civ.truceUntil || 0) > (game.timeImpulsi || 0)) continue;
+      if (!civBordersPlayer(game, civ)) continue;
+      const voc = VOCATIONS[civ.vocation] || VOCATIONS.sedentari;
+      const hostility = Math.min(1, Math.max(0, (-civ.disposition - 30) / 50));
       const base = (cfg.AI_INCURSION_BASE != null ? cfg.AI_INCURSION_BASE : 0.05);
-      const chance = base * (0.5 + hostility) + pressure * 0.18;
+      const chance = (base * (0.5 + hostility) + pressure * 0.18) * voc.warMul;
       if (!rng.chance(chance)) continue;
-      // bersaglio: colonia del giocatore confinante più vicina a un sistema della civ
+      const sysArr = civ.systems || derivedSystems(civ);
       let best = null, bestHops = Infinity;
-      for (let s = 0; s < civ.systems.length; s++) {
-        const links = galaxyOf(game).systems[civ.systems[s]].links || [];
+      for (let s = 0; s < sysArr.length; s++) {
+        const links = galaxyOf(game).systems[sysArr[s]].links || [];
         for (let c = 0; c < cols.length; c++) {
           if (incursionTargeting(game, cols[c].sysId) || siegeActiveAt(game, cols[c].sysId)) continue;
           if (links.indexOf(cols[c].sysId) >= 0) {
-            const hops = 1;
-            if (hops < bestHops) { bestHops = hops; best = cols[c]; }
+            if (1 < bestHops) { bestHops = 1; best = cols[c]; }
           }
         }
       }
-      // se non confina direttamente, prova la più vicina raggiungibile
       if (!best) {
         for (let c = 0; c < cols.length; c++) {
           if (incursionTargeting(game, cols[c].sysId) || siegeActiveAt(game, cols[c].sysId)) continue;
           const path = (ORION.fleet && ORION.fleet.computePath)
-            ? ORION.fleet.computePath(galaxyOf(game), civ.systems[0], cols[c].sysId) : null;
+            ? ORION.fleet.computePath(galaxyOf(game), sysArr[0], cols[c].sysId) : null;
           if (!path) continue;
           const hops = path.length - 1;
           if (hops < bestHops) { bestHops = hops; best = cols[c]; }
@@ -847,10 +1174,10 @@
       const eta = Math.max(25, Math.min(90, 25 + bestHops * 12));
       const id = 'inc-ai-' + (game.timeImpulsi || 0) + '-' + i;
       const level = Math.max(1, Math.round(civ.power / 30));
-      civ.relation = 'war';   // M11 (#51): l'aggressione formalizza la guerra
+      civ.relation = 'war';
       game.incursions.push({
         id: id, kind: 'ai', civId: civ.id, civName: civ.name, civColor: civ.color,
-        fromSysId: civ.systems[0], targetSysId: best.sysId, targetColonyKey: best.key,
+        fromSysId: sysArr[0], targetSysId: best.sysId, targetColonyKey: best.key,
         level: level, eta: eta, launchedAt: game.timeImpulsi || 0
       });
       events.push({
@@ -874,11 +1201,6 @@
     });
   }
 
-  /* M10 Fase E: un covo lancia un RAIDER contro una flotta del giocatore
-     ESPOSTA (in orbita lontano dalle colonie). Crea un'incursione di tipo
-     'pirate-raider' che time.js risolve all'arrivo come scaramuccia lampo
-     contro quella flotta. Grazia iniziale + una preda alla volta per covo.
-     Recovery-friendly (#22): se la preda non c'è più, il raider svanisce. */
   function maybePirateRaider(game, rng, events) {
     if ((game.timeImpulsi || 0) < CFG.PIRATE_RAIDER_GRACE) return;
     const nests = game.piracy && game.piracy.nests;
@@ -886,28 +1208,19 @@
     const fleets = game.fleets || [];
     if (!fleets.length) return;
     if (!ORION.fleet || !ORION.fleet.computePath) return;
-
-    // flotte esposte: armate, in orbita, NON in un sistema-colonia del giocatore
     const players = playerSystems(game);
     const exposed = [];
     for (let i = 0; i < fleets.length; i++) {
       const f = fleets[i];
       if (!f || !f.location || f.location.status !== 'orbiting') continue;
-      if (players.has(f.location.systemId)) continue;   // in casa = al sicuro
-      const guns = (f.ships || []).some(function (s) {
-        const cls = ORION.fleet.getClass && ORION.fleet.getClass(s.kind);
-        return cls && cls.fp > 0;
-      });
-      // anche le flotte disarmate possono essere predate (anzi, sono prede facili)
-      exposed.push({ fleet: f, armed: guns });
+      if (players.has(f.location.systemId)) continue;
+      exposed.push({ fleet: f });
     }
     if (!exposed.length) return;
-
     if (!Array.isArray(game.incursions)) game.incursions = [];
     for (let i = 0; i < nests.length; i++) {
       const nest = nests[i];
       if (!rng.chance(CFG.PIRATE_RAIDER_CHANCE)) continue;
-      // scegli la preda raggiungibile più vicina non già bersagliata
       let best = null, bestHops = Infinity;
       for (let e = 0; e < exposed.length; e++) {
         const sysId = exposed[e].fleet.location.systemId;
@@ -940,8 +1253,6 @@
     return false;
   }
 
-  /* M10 Fase E: covi pirata NOTI al giocatore (sistema DETECTED+). Per i
-     marker sulla mappa e la lista "Minacce pirata" nel dossier. */
   function knownNests(game) {
     const nests = (game.piracy && game.piracy.nests) || [];
     const out = [];
@@ -957,13 +1268,10 @@
     return out;
   }
 
-  /* ------------------------------------------------------------------
-     API per Fase B / UI (innocue in Fase A)
-     ------------------------------------------------------------------ */
+  /* ==================================================================
+     API DOSSIER / INTEL (Fase B+C eredità) — invariate.
+     ================================================================== */
 
-  /* Minaccia pirata 0..1 su un sistema (gancio M07/M09: incidenti +
-     combattimento). In Fase A è esposta ma non ancora consumata dagli
-     incidenti delle spedizioni — wiring rimandato a Fase B/M09. */
   function pirateThreat(game, sysId) {
     const nests = game.piracy && game.piracy.nests;
     if (!nests) return 0;
@@ -979,24 +1287,21 @@
     return Math.min(1, threat);
   }
 
-  /* Dati per il dossier-civiltà (Fase B). In Fase A è disponibile per la
-     cronaca/marker, la scheda vera arriva dopo. */
   function dossier(civ) {
     if (!civ) return null;
+    const sys = civ.systems || derivedSystems(civ);
     return {
       name: civ.name, alignment: civ.alignment, archetypeLabel: civ.archetypeLabel,
-      traitLabel: civ.traitLabel, color: civ.color, systems: civ.systems.length,
+      traitLabel: civ.traitLabel, color: civ.color, systems: sys.length,
+      planets: (civ.planets || []).length,
+      vocation: civ.vocation, vocationLabel: VOCATIONS[civ.vocation] ? VOCATIONS[civ.vocation].label : '—',
+      affinity: civ.affinity, affinityLabel: AFFINITIES[civ.affinity] ? AFFINITIES[civ.affinity].label : '—',
+      phase: civ.phase, faction: civ.faction || null,
       disposition: Math.round(civ.disposition), contacted: !!civ.contacted,
       tier: civ.homeTier
     };
   }
 
-  /* ------------------------------------------------------------------
-     M10 Fase B (decisione #47): helper per il dossier-civiltà e la vista
-     "Civiltà". Valori COARSE dove serve mantenere la nebbia (#5/§5.1):
-     il giocatore conosce l'identità e la disposizione, ma la potenza
-     resta una stima a fasce, non un numero esatto.
-     ------------------------------------------------------------------ */
   function dispositionLabel(v) {
     if (v <= -40) return 'Ostile';
     if (v <= -15) return 'Diffidente';
@@ -1010,67 +1315,34 @@
     if (power < 160) return 'forte';
     return 'dominante';
   }
-  /* Quanti sistemi della civiltà il giocatore ha già visto (DETECTED+).
-     È ciò che il giocatore "sa", non il totale reale (nebbia di guerra). */
   function knownSystemsCount(game, civ) {
+    const sys = civ.systems || derivedSystems(civ);
     let n = 0;
-    for (let i = 0; i < civ.systems.length; i++) {
-      if (discovered(game, civ.systems[i])) n++;
-    }
+    for (let i = 0; i < sys.length; i++) if (discovered(game, sys[i])) n++;
     return n;
   }
-  /* Lista delle civiltà già contattate (vive). */
   function contactedCivs(game) {
     return (game.civs || []).filter(function (c) { return c.alive && c.contacted; });
   }
 
-  /* ------------------------------------------------------------------
-     SCAFFOLD materializzazione LOD (decisione #47) — gancio M09.
-     Quando una civiltà AGGREGATA deve entrare in uno scontro col
-     giocatore, M09 la "materializzerà" in una forza concreta. Qui forniamo
-     solo il DESCRITTORE (puro, nessuna mutazione di stato, nessun
-     combattimento): M09 lo consumerà per costruire le entità reali, poi
-     chiamerà demobilize() per riportare la civiltà ad aggregata.
-     In Fase A/B la materializzazione NON avviene (lo scontro è M09).
-     ------------------------------------------------------------------ */
   function materialize(game, civ, sysId) {
     if (!civ) return null;
-    // forza concreta proporzionale alla potenza aggregata locale (coarse)
-    const units = Math.max(1, Math.round(civ.power / 25));
+    const units = Math.max(1, Math.round((civ.power || 0) / 25));
     return {
       civId: civ.id, civName: civ.name, alignment: civ.alignment,
       color: civ.color, atSystem: sysId,
-      units: units, power: civ.power,
-      // M09 riempirà ships:[] con classi reali (riuso catalogo ORION.fleet)
-      ships: []
+      units: units, power: civ.power || 0, ships: []
     };
   }
   function demobilize(game, civ, outcome) {
-    /* M09 Fase A (decisione #49): applica l'esito di una scaramuccia sulla
-       potenza AGGREGATA della civiltà (niente perdita di sistemi in Fase A:
-       la conquista è Fase B). Se vince il giocatore la civiltà perde potenza;
-       se vince la civiltà, perde comunque un po' (ha speso forze). Bounded. */
     if (!civ || !outcome) return true;
     const loss = (outcome.winner === 'player') ? 12 : 5;
     civ.power = Math.max(0, civ.power - loss);
-    /* M10 Fase C (decisione #47): registra l'esito come INTEL nel dossier
-       (campo lazy, niente bump di schema — civ è serializzata in game.civs). */
     recordBattle(game, civ.id, outcome.winner === 'player' ? 'win' : 'loss', 'skirmish',
       outcome.report && outcome.report.systemId);
     return true;
   }
 
-  /* ==================================================================
-     M10 Fase C (decisione #47) — INTEL dossier combat-aware.
-     Ora che M09 produce dati di combattimento, il dossier li riflette:
-     stato di guerra/tregua col giocatore, stima della forza, ultimo
-     scontro col suo esito, e il "perché" della disposizione. Tutto
-     DERIVATO dallo stato esistente; l'unico campo nuovo è `civ.lastBattle`
-     (lazy → niente bump di schema). Determinismo: nessun RNG.
-     ================================================================== */
-
-  /* Registra l'ultimo scontro col giocatore sul dossier della civiltà.
-     result: 'win'|'loss' DAL PUNTO DI VISTA DEL GIOCATORE. */
   function recordBattle(game, civId, result, kind, sysId) {
     const civ = (game.civs || []).filter(function (c) { return c.id === civId; })[0];
     if (!civ) return;
@@ -1079,9 +1351,6 @@
       sysId: (sysId == null ? -1 : sysId), impulso: game.timeImpulsi || 0
     };
   }
-
-  /* Stato della relazione col giocatore (derivato): tregua → guerra attiva
-     → ostile → disposizione. Per il chip del dossier. */
   function relationStatus(game, civ) {
     const now = game.timeImpulsi || 0;
     if ((civ.truceUntil || 0) > now) return { id: 'truce', label: 'Tregua' };
@@ -1094,16 +1363,9 @@
     if (d >= 15) return { id: 'cordial', label: 'Cordiale' };
     return { id: 'neutral', label: 'Neutrale' };
   }
-
-  /* Stima coarse della forza materializzabile (numero di unità), coerente
-     con la formula di materialize(). Mantiene la nebbia (è una stima). */
   function forceEstimate(game, civ) {
     return Math.max(1, Math.round((civ.power || 0) / 25));
   }
-
-  /* "Perché" della disposizione: euristica leggibile dai fattori che la
-     guidano (allineamento, azioni morali del giocatore #23, vicinanza,
-     ultimo scontro). Stringa breve per il dossier. */
   function dispositionReason(game, civ) {
     const deeds = game.alignmentDeeds || { light: 0, dark: 0 };
     const near = civBordersPlayer(game, civ);
@@ -1122,10 +1384,6 @@
     }
     return out.length ? out.join(' · ') : 'nessun fattore rilevante';
   }
-
-  /* Reputazione globale del giocatore come anteprima (§14, decisione #47):
-     media delle disposizioni delle civiltà CONTATTATE, mappata 0..100.
-     Se nessun contatto, neutro (50). */
   function reputationPreview(game) {
     const civs = (game.civs || []).filter(function (c) { return c.alive && c.contacted; });
     if (!civs.length) return 50;
@@ -1138,27 +1396,39 @@
     CFG: CFG,
     ARCHETYPES: ARCHETYPES,
     TRAITS: TRAITS,
+    VOCATIONS: VOCATIONS,
+    AFFINITIES: AFFINITIES,
+    PHASES: PHASES,
     generate: generate,
     ensure: ensure,
     tick: tick,
+    /* Data-model API (decisione #52) */
+    addPlanet: addPlanet,
+    removePlanet: removePlanet,
+    removeAllInSystem: removeAllInSystem,
+    derivedSystems: derivedSystems,
+    rebuildSystemsCache: rebuildSystemsCache,
+    parsePlanetKey: parsePlanetKey,
+    migrateLegacyCiv: migrateLegacyCiv,
+    /* Lookups */
     ownerMap: ownerMap,
     civForSystem: civForSystem,
     pirateThreat: pirateThreat,
+    /* Dossier / intel */
     dossier: dossier,
     reputationPreview: reputationPreview,
-    /* Fase B */
     dispositionLabel: dispositionLabel,
     powerTier: powerTier,
     knownSystemsCount: knownSystemsCount,
     contactedCivs: contactedCivs,
     materialize: materialize,
     demobilize: demobilize,
-    /* Fase C — intel dossier combat-aware */
     recordBattle: recordBattle,
     relationStatus: relationStatus,
     forceEstimate: forceEstimate,
     dispositionReason: dispositionReason,
-    /* Fase E — pirati raidabili + raider */
-    knownNests: knownNests
+    knownNests: knownNests,
+    /* esposto per factions.js */
+    _playerSystems: playerSystems
   };
 })(typeof window !== 'undefined' ? window : this);

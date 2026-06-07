@@ -55,7 +55,7 @@
      DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
      nuovo gioco la preserva e una recovery best-effort prova a dedurla
      da colonie/flotte/spedizioni/cronaca. */
-  const SCHEMA_VERSION = 12;
+  const SCHEMA_VERSION = 13;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -302,6 +302,27 @@
       if (payload.discovery === undefined) payload.discovery = null;
       if (payload.selectedId === undefined) payload.selectedId = null;
       payload.schema = 12;
+    }
+    /* v12 → v13 (rifondazione AI, decisione #52): introduce il modello
+       `civ.planets[]` (canonical 'sysId:bodyKey') + campi `vocation` /
+       `affinity` / `phase` / `phaseSince` su ogni civiltà. La conversione
+       VERA da `civ.systems[]` a `civ.planets[]` è lazy: viene eseguita
+       da `ORION.ai.ensure(game)` al primo load (richiede la galassia per
+       la deduzione dei body keys). Qui ci limitiamo a marcare i campi
+       come presenti (vuoti) per coerenza dello schema. Le 4 Costanti
+       (factions.js) vengono spawnate in `ensure(game)` se assenti. */
+    if ((payload.schema || 12) < 13) {
+      if (Array.isArray(payload.civs)) {
+        payload.civs.forEach(function (c) {
+          if (!c) return;
+          if (!Array.isArray(c.planets)) c.planets = [];
+          if (!c.vocation) c.vocation = null;     // ensure() lo assegna lazy
+          if (!c.affinity) c.affinity = null;
+          if (!c.phase) c.phase = 'growth';
+          if (c.phaseSince == null) c.phaseSince = 0;
+        });
+      }
+      payload.schema = 13;
     }
     return payload;
   }

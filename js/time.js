@@ -1057,7 +1057,14 @@
            (ALIGNMENT_IMPACT #23): liberare un sistema da una civiltà MALIGNA
            è "light"; aggredire una buona/neutrale è "dark". */
         if (playerWon && civ.systems.indexOf(sysId) >= 0) {
-          civ.systems = civ.systems.filter(function (s) { return s !== sysId; });
+          /* Rifondazione AI (#52): la proprietà è AL PIANETA. Rolling back il
+             "confine" sul sistema = rimuovere tutti i pianeti della civiltà in
+             quel sistema. removeAllInSystem mantiene anche civ.systems in sync. */
+          if (root.ORION.ai && root.ORION.ai.removeAllInSystem) {
+            root.ORION.ai.removeAllInSystem(civ, sysId);
+          } else {
+            civ.systems = civ.systems.filter(function (s) { return s !== sysId; });
+          }
           civ.power = Math.max(0, civ.power - 8);
           const impact = (civ.alignment === 'male') ? 'light' : 'dark';
           if (root.ORION.victory && root.ORION.victory.applyAlignment) {
@@ -1066,7 +1073,7 @@
           if (impact === 'light') bumpIcg(game, -2); else bumpIcg(game, 2);
           report.rolledBackSystem = sysId;
           report.alignmentImpact = impact;
-          if (civ.systems.length === 0) {
+          if ((civ.planets || civ.systems || []).length === 0) {
             civ.alive = false;
             events.push({ kind: 'civ-fallen', civName: civ.name, conqueror: 'le tue forze', impulso: game.timeImpulsi });
           }
@@ -1401,8 +1408,18 @@
           civName: civ ? civ.name : battle.attacker.name, wasCapital: wasCapital, impulso: game.timeImpulsi });
         return 'razed';
       }
-      // conquista: il sistema passa alla civiltà
-      if (civ && civ.alive) { civ.systems.push(sysId); civ.power += 15; }
+      // conquista: il pianeta conquistato passa alla civiltà (#52: civ.planets canonical)
+      if (civ && civ.alive) {
+        const bodyKey = (colonyKey && colonyKey.indexOf(':') > 0)
+          ? colonyKey.slice(colonyKey.indexOf(':') + 1) : 'b0';
+        if (root.ORION.ai && root.ORION.ai.addPlanet) {
+          root.ORION.ai.addPlanet(civ, sysId, bodyKey);
+        } else {
+          civ.systems = civ.systems || [];
+          if (civ.systems.indexOf(sysId) < 0) civ.systems.push(sysId);
+        }
+        civ.power += 15;
+      }
       removeColony(game, colonyKey);
       bumpIcg(game, 4);
       events.push({ kind: 'colony-conquered', colonyKey: colonyKey, systemId: sysId,
