@@ -315,7 +315,13 @@ function newGame(seed, opts) {
     alignmentDeeds: { light: 0, dark: 0 },
     /* M11 Fase A (decisione #51): reputazione globale §14 (neutra all'avvio).
        Lo stato diplomatico per-civiltà vive in game.civs (relation). */
-    reputation: 50
+    reputation: 50,
+    /* M10 Fase B (decisione #52 §13.6/§13.8): stato derivato della coesione
+       di sistema (solo lista sysIds correntemente coesi, per emettere
+       formed/broken una sola volta) + federazioni emergenti (lista + trust
+       per coppia AI alleata). Il marker `civ.federationId` vive su game.civs. */
+    cohesion: { sysIds: [] },
+    federations: { list: [], trust: {} }
   };
   // startDS = Data Stellare INIZIALE (epoca .00), fissa per la partita.
   ORION.game.startDS = ORION.time.format(startOrbita * 100);
@@ -365,6 +371,16 @@ function newGame(seed, opts) {
     /* M11 Fase A (decisione #51): reputazione globale (relation per-civ è
        dentro saved.civs). */
     if (typeof saved.reputation === 'number') ORION.game.reputation = saved.reputation;
+    /* M10 Fase B (decisione #52 §13.6/§13.8): coesione di sistema + federazioni
+       emergenti. Stato minimo (lista sysIds coesi al tick scorso, lista
+       federations + trust). Schema 14+; per save pre-14 ensureState() al
+       prossimo tick farà il setup lazy. */
+    if (saved.cohesion && typeof saved.cohesion === 'object') {
+      ORION.game.cohesion = saved.cohesion;
+    }
+    if (saved.federations && typeof saved.federations === 'object') {
+      ORION.game.federations = saved.federations;
+    }
     /* Schema 12: ripristina nebbia di guerra (sistemi esplorati/rilevati).
        Prima del fix la scoperta veniva persa al load → i sistemi esplorati
        tornavano grigi. Validazione difensiva: deve essere un array della
@@ -1884,6 +1900,15 @@ function tryColonize(planet) {
   };
   pushChronicle(ORION.time.currentDS(g) + ' — Spedizione coloniale in viaggio verso <strong>' + planet.name + '</strong>' + bodyTagHtml(planet.systemId) + ' (' + cost.impulsi + ' ' + iU() + ').', 'planet');
   if (ORION.tutorial) ORION.tutorial.fire('specialization');
+  /* M10 Fase B (decisione #52 §13.6): colonizzare in un sistema coeso
+     costa −15 disposizione a ciascun proprietario AI. Recovery-friendly
+     (#22): scelta consapevole, mai blocco. */
+  if (ORION.cohesion && ORION.cohesion.applyColonizePenalty) {
+    const nHit = ORION.cohesion.applyColonizePenalty(g, planet.systemId);
+    if (nHit > 0) {
+      pushChronicle(ORION.time.currentDS(g) + ' — Il consorzio locale di <strong>' + (g.galaxy.systems[planet.systemId] || {}).name + '</strong> reagisce: disposizione di ' + nHit + ' proprietari in calo.', 'civ');
+    }
+  }
   persistGame(g);
   updateGlobalResourceHud();
   updatePlanetUI();
@@ -3321,12 +3346,22 @@ function renderCivView(stage) {
           '<span class="civ-card__k">Ultimo scontro</span><span>' + verdict + where +
           (when ? ' · <span class="civ-card__when">' + escapeHtml(when) + '</span>' : '') + '</span></div>';
       }
+      /* M10 Fase B (decisione #52 §13.8): se la civiltà è in federazione,
+         mostra una chip composita col nome federazione. */
+      let fedChip = '';
+      if (ORION.federations && ORION.federations.federationOf) {
+        const fed = ORION.federations.federationOf(g, c.id);
+        if (fed) {
+          fedChip = '<span class="civ-fedchip" title="Membro di una federazione emergente" style="--fed-color:' +
+            escapeHtml(fed.color) + '">⬢ ' + escapeHtml(fed.name) + '</span>';
+        }
+      }
       return '<li class="civ-card" style="--civ-color:' + escapeHtml(c.color) + '">' +
         '<div class="civ-card__head">' +
           '<span class="civ-card__swatch" aria-hidden="true"></span>' +
           '<span class="civ-card__name">' + escapeHtml(c.name) + '</span>' +
           '<span class="civ-chip civ-chip--' + c.alignment + '">' + (ALIGN_LABEL[c.alignment] || c.alignment) + '</span>' +
-          relChip +
+          relChip + fedChip +
         '</div>' +
         '<div class="civ-card__row"><span class="civ-card__k">Tratto</span><span>' + escapeHtml(c.traitLabel) + '</span></div>' +
         '<div class="civ-card__row"><span class="civ-card__k">Sede</span><span>' +
@@ -3352,6 +3387,55 @@ function renderCivView(stage) {
   const moralePct = Math.round((ws.morale != null ? ws.morale : 1) * 100);
   const pressure = Math.round(ws.pressure || 0);
   const deeds = g.alignmentDeeds || { light: 0, dark: 0 };
+
+  /* M10 Fase B (decisione #52 §13.8): federazioni emergenti attive. Lista
+     compatta con membri e Ι di vita. */
+  let fedsHtml = '';
+  const feds = (g.federations && Array.isArray(g.federations.list)) ? g.federations.list : [];
+  if (feds.length) {
+    fedsHtml = '<div class="civ-feds">' +
+      '<h3 class="civ-feds__title">⬢ Federazioni emergenti</h3>' +
+      '<ul class="civ-feds__list">' + feds.map(function (f) {
+        const names = (f.memberIds || []).map(function (id) {
+          const c = (g.civs || []).filter(function (cc) { return cc.id === id; })[0];
+          return c ? c.name : id;
+        }).join(' + ');
+        const age = Math.max(0, (g.timeImpulsi || 0) - (f.formedAt || 0));
+        return '<li class="civ-fed" style="--fed-color:' + escapeHtml(f.color) + '">' +
+          '<span class="civ-fed__swatch" aria-hidden="true"></span>' +
+          '<span class="civ-fed__name"><strong>' + escapeHtml(f.name) + '</strong></span>' +
+          '<span class="civ-fed__members">' + escapeHtml(names) + '</span>' +
+          '<span class="civ-fed__age">attiva da ' + age + ' Ι</span></li>';
+      }).join('') + '</ul></div>';
+  }
+
+  /* M10 Fase B (decisione #52 §13.6): sistemi coesi noti (DETECTED+).
+     Contesto per la diplomazia: muovere/colonizzare/attaccare qui costa. */
+  let cohHtml = '';
+  const cohList = (g.cohesion && Array.isArray(g.cohesion.sysIds)) ? g.cohesion.sysIds : [];
+  if (cohList.length && ORION.cohesion) {
+    const DET = (ORION.galaxy && ORION.galaxy.DISCOVERY) ? ORION.galaxy.DISCOVERY.DETECTED : 1;
+    const visible = cohList.filter(function (sid) { return (g.state.discovery[sid] || 0) >= DET; });
+    if (visible.length) {
+      cohHtml = '<div class="civ-cohesion">' +
+        '<h3 class="civ-cohesion__title">⌬ Sistemi coesi noti</h3>' +
+        '<ul class="civ-cohesion__list">' + visible.map(function (sid) {
+          const info = ORION.cohesion.cohesionInfo(g, sid);
+          const sys = g.galaxy.systems[sid] || {};
+          const tag = systemTagHtml(sid);
+          const owners = info.owners.map(function (o) {
+            return '<span class="civ-coh-owner" style="--coh-c:' + escapeHtml(o.color) + '">' +
+              escapeHtml(o.name) + '</span>';
+          }).join(' + ');
+          return '<li class="civ-cohesion__item"><span class="civ-coh-sys"><strong>' + escapeHtml(sys.name || '—') + '</strong>' + tag + '</span>' +
+            '<span class="civ-coh-owners">' + owners + '</span>' +
+            '<span class="civ-coh-stats">' + info.totalColonies + ' colonie · ' + info.bodies + ' corpi</span></li>';
+        }).join('') + '</ul>' +
+        '<p class="panel__note">Passare, attaccare o colonizzare in un sistema coeso costa <strong>disposizione</strong> ' +
+          'a tutti i proprietari (consorzio §13.6). Rompi il consorzio mettendo in guerra due membri o alleandoti con tutti.</p>' +
+      '</div>';
+    }
+  }
 
   /* M10 Fase E: covi pirata NOTI — bersagli raidabili (manda una flotta
      armata sul sistema per sgominarli e incassare la taglia). */
@@ -3389,6 +3473,8 @@ function renderCivView(stage) {
         '<strong>reputazione</strong> e allineamento. Le tue azioni morali finora — <span class="civ-deeds civ-deeds--light">' + (deeds.light || 0) + ' luce</span> · ' +
         '<span class="civ-deeds civ-deeds--dark">' + (deeds.dark || 0) + ' ombra</span>. ' +
         'Gli scontri si risolvono col <strong>Combattimento</strong> (M09).</p>' +
+      fedsHtml +
+      cohHtml +
       nestsHtml +
       cards +
     '</div>';
@@ -3409,6 +3495,25 @@ function renderCivView(stage) {
 /* M11 (#51): esegue un'azione diplomatica, registra in cronaca, persiste e
    ri-renderizza la vista Civiltà. Le azioni unilaterali (guerra/rottura)
    chiedono conferma per via degli effetti su reputazione. */
+/* M10 Fase B helper: estrae i sistemi rilevanti per la penalità di transito da
+   un ordine di flotta. Per `move`/`explore`/`attack` = singolo target;
+   `move-route` = waypoints; `patrol-loop` = nodi loop; `patrol` = sysA+sysB. */
+function collectOrderSystems(g, fleet, order) {
+  if (!order) return [];
+  if (order.type === 'move' || order.type === 'explore' || order.type === 'attack') {
+    return order.toSysId != null ? [order.toSysId] : [];
+  }
+  if (order.type === 'move-route') return Array.isArray(order.waypoints) ? order.waypoints.slice() : [];
+  if (order.type === 'patrol-loop') return Array.isArray(order.loop) ? order.loop.slice() : [];
+  if (order.type === 'patrol') {
+    const o = [];
+    if (order.sysA != null) o.push(order.sysA);
+    if (order.sysB != null) o.push(order.sysB);
+    return o;
+  }
+  return [];
+}
+
 function runDiplomacyAction(civ, actionId) {
   const g = ORION.game;
   const DIP = ORION.diplomacy;
@@ -3719,6 +3824,16 @@ function openFleetOrdersOverlay(fleetId) {
   function dispatch(order) {
     const r = ORION.fleet.setOrder(g, fleet, order);
     if (!r.ok) { showToast(r.reason); return; }
+    /* M10 Fase B (decisione #52 §13.6): se la rotta tocca sistemi coesi,
+       paga −1 disposizione/proprietario (cap −3 globale per atto di
+       pianificazione). Warning narrativo in cronaca. */
+    if (ORION.cohesion && ORION.cohesion.applyTravelPenalty && order.type !== 'idle' && order.type !== 'return') {
+      const sysIds = collectOrderSystems(g, fleet, order);
+      const pen = ORION.cohesion.applyTravelPenalty(g, sysIds);
+      if (pen.applied < 0) {
+        showToast('Rotta attraverso ' + pen.affectedSys.length + ' sistema coeso — disposizione ' + pen.applied + '/proprietari');
+      }
+    }
     if (order.type !== 'idle') {
       let label;
       if (order.type === 'move-route') {
@@ -4183,7 +4298,15 @@ const DEFAULT_AUTOPAUSE = {
      scadenza di una tregua → guerra è invece una sorpresa rilevante. */
   'diplo-war': false, 'diplo-peace': false, 'diplo-alliance': false,
   'diplo-alliance-broken': false, 'diplo-rejected': false,
-  'diplo-truce-expired': true
+  'diplo-truce-expired': true,
+  /* M10 Fase B (decisione #52 §13.6/§13.8): la coesione di sistema è
+     atmosferica (consorzio locale che si forma o si scioglie ai confini) →
+     OFF di default. Le federazioni emergenti, invece, sono eventi geopolitici
+     forti (nuova entità composita o sua rottura) → ON. */
+  'system-cohesion-formed': false,
+  'system-cohesion-broken': false,
+  'federation-formed': true,
+  'federation-broken': true
 };
 
 ORION.timer = {
@@ -4429,7 +4552,11 @@ function showEventOverlay(events) {
     'diplo-alliance': 'Alleanza stretta',
     'diplo-alliance-broken': 'Alleanza rotta',
     'diplo-rejected': 'Proposta respinta',
-    'diplo-truce-expired': 'Tregua scaduta'
+    'diplo-truce-expired': 'Tregua scaduta',
+    'system-cohesion-formed': 'Sistema coeso (consorzio formato)',
+    'system-cohesion-broken': 'Sistema coeso: dissolto',
+    'federation-formed': 'Federazione emergente',
+    'federation-broken': 'Federazione dissolta'
   };
   /* Raggruppa per kind: una checkbox per categoria, una sola voce di sintesi. */
   const byKind = {};
@@ -4721,6 +4848,31 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.civName) + '</strong> ha respinto la tua proposta diplomatica.', 'civ');
   } else if (ev.kind === 'diplo-truce-expired') {
     pushChronicle(ds + ' — La tregua con <strong>' + escapeHtml(ev.civName) + '</strong> è scaduta · stato di guerra ripristinato.', 'civ');
+  } else if (ev.kind === 'system-cohesion-formed') {
+    /* M10 Fase B (decisione #52 §13.6): consorzio locale che emerge. */
+    const stag = ev.sysId != null && ev.sysId >= 0 ? systemTagHtml(ev.sysId) : '';
+    const names = (ev.owners || []).map(function (o) { return '<strong>' + escapeHtml(o.name) + '</strong>'; }).join(' + ');
+    pushChronicle(ds + ' — <strong>Sistema coeso</strong> a <strong>' + escapeHtml(ev.systemName || '—') + '</strong>' + stag +
+      ' · ' + names + ' coabitano in pace. Passare, attaccare o colonizzare costa disposizione di tutti i membri.', 'civ');
+    if (ORION.tutorial) ORION.tutorial.fire('cohesion');
+    if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+  } else if (ev.kind === 'system-cohesion-broken') {
+    const stag = ev.sysId != null && ev.sysId >= 0 ? systemTagHtml(ev.sysId) : '';
+    pushChronicle(ds + ' — Il consorzio locale a <strong>' + escapeHtml(ev.systemName || '—') + '</strong>' + stag + ' si è <strong>dissolto</strong>.', 'civ');
+    if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+  } else if (ev.kind === 'federation-formed') {
+    /* M10 Fase B (decisione #52 §13.8): federazione emergente, entità composita. */
+    const members = (ev.memberNames || []).map(function (n) { return '<strong>' + escapeHtml(n) + '</strong>'; }).join(' + ');
+    pushChronicle(ds + ' — Nasce la <strong>' + escapeHtml(ev.fedName) + '</strong>: ' + members +
+      ' suggellano un patto federativo. Decisioni concertate, somma di pianeti e potenza.', 'civ');
+    if (ORION.tutorial) ORION.tutorial.fire('federations');
+  } else if (ev.kind === 'federation-broken') {
+    const REASON = {
+      'members-fallen': 'troppi membri caduti', 'territory-loss': 'perdita di territorio',
+      'vocation-drift': 'divergenza di vocazioni', 'unknown': 'cause interne'
+    };
+    pushChronicle(ds + ' — La <strong>' + escapeHtml(ev.fedName) + '</strong> si è dissolta · ' +
+      (REASON[ev.reason] || ev.reason || 'cause interne') + '.', 'civ');
   } else if (ev.kind === 'pirate-cleared') {
     /* M10 Fase E: covo sgominato → taglia. */
     const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';

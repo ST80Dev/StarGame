@@ -807,6 +807,9 @@
         /* M10 Fase A (decisione #47): confini delle civiltà AI. Visibili solo
            sui sistemi che il giocatore ha DETECTED/EXPLORED (scoperta-guidata). */
         this._drawCivOwnership(ctx, reveal);
+        /* M10 Fase B (decisione #52 §13.6): alone ambra tratteggiato sui
+           sistemi coesi noti — consorzio locale visibile a colpo d'occhio. */
+        this._drawCohesion(ctx, reveal);
         /* M10 Fase E: covi pirata noti (DETECTED+) — bersagli raidabili. */
         this._drawPirateNests(ctx, reveal);
         /* M08 Fase B (decisione #46): markers flotte + rotte in transito.
@@ -1161,6 +1164,35 @@
           this._ring(ctx, p, r + 7.5, hexA(civ.color, 0.35), 1);
         }
       }
+      ctx.restore();
+    }
+
+    /* M10 Fase B (decisione #52 §13.6): alone ambra tratteggiato sui sistemi
+       coesi. Solo i sistemi DETECTED+ sono mostrati (scoperta-guidata). */
+    _drawCohesion(ctx, reveal) {
+      const game = root.ORION && root.ORION.game;
+      if (!game || !game.cohesion || !Array.isArray(game.cohesion.sysIds)) return;
+      const g = this.galaxy;
+      const disc = this.state.discovery;
+      const DET = DISCOVERY.DETECTED;
+      const list = game.cohesion.sysIds;
+      if (!list.length) return;
+      ctx.save();
+      ctx.globalAlpha = reveal;
+      ctx.setLineDash([3, 3]);
+      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = '#f0a64a';   // ambra (UI_GUIDE §7 warn)
+      for (let i = 0; i < list.length; i++) {
+        const sid = list[i];
+        if (disc[sid] < DET) continue;
+        const sys = g.systems[sid];
+        if (!sys) continue;
+        const p = this.project(sys.x, sys.y, sys.z || 0);
+        if (p.x < -30 || p.x > this.cssW + 30 || p.y < -30 || p.y > this.cssH + 30) continue;
+        const r = this.nodeRadius(p.parallax);
+        ctx.beginPath(); ctx.arc(p.x, p.y, r + 11, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.setLineDash([]);
       ctx.restore();
     }
 

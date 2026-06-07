@@ -834,6 +834,13 @@
     game.icg += icgDelta;
     game.icg += (20 - game.icg) * CFG.ICG_DECAY;
     game.icg = Math.max(0, Math.min(100, game.icg));
+
+    /* --- Fase B (decisione #52 §13.6 §13.8): coesione di sistema +
+       federazioni emergenti. Entrambi i moduli sono PURI consumer dello
+       stato `game.civs`/`game.colonies` — vivono sul tick AI per cadenza
+       coerente (8 Ι). --- */
+    if (ORION.cohesion && ORION.cohesion.tick) ORION.cohesion.tick(game, events);
+    if (ORION.federations && ORION.federations.tick) ORION.federations.tick(game, events);
   }
 
   function maybePhaseTransition(civ, I, rng, events) {
