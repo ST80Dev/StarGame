@@ -4852,3 +4852,41 @@ select.main-menu__input { cursor: pointer; }
   border: 1px solid var(--coh-c, #f0c070);
 }
 .civ-coh-stats { color: var(--c-text-faint); font-size: 0.76rem; }
+
+/* =====================================================================
+   M10 Fase B punto 2 (decisione #52 §13.10) — Scoperta progressiva 5 gradi
+   ===================================================================== */
+/* Chip "grado di scoperta" sulla card civiltà (header). */
+.civ-grade {
+  display: inline-block; padding: 1px 7px; border-radius: 999px;
+  font-size: 0.7rem; letter-spacing: 0.06em; font-family: var(--font-display, monospace);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid currentColor;
+}
+.civ-grade--unknown   { color: #6a7088; }
+.civ-grade--spotted   { color: #f0a64a; }     /* ambra: hai visto ma non parlato */
+.civ-grade--contacted { color: #5fa8ff; }     /* ciano: contatto formale */
+.civ-grade--known     { color: #6fe0b8; }     /* verde: dossier completo */
+.civ-grade--familiar  { color: #f0c870; background: rgba(240, 200, 112, 0.15); }  /* oro: familiare */
+
+/* Card collassata per gradi bassi (spotted/unknown). */
+.civ-card--unknown,
+.civ-card--spotted {
+  opacity: 0.85;
+}
+.civ-card__hint { margin: 4px 0 0; font-size: 0.78rem; }
+.civ-card__chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 3px 0 5px; }
+
+/* Sezione fissa "Le Quattro Costanti" — sempre presente. */
+.civ-constants {
+  margin: 0 0 14px; padding: 10px 12px;
+  border: 1px solid rgba(157, 123, 255, 0.35); border-radius: 8px;
+  background: rgba(157, 123, 255, 0.04);
+}
+.civ-constants__title { margin: 0 0 6px; font-size: 0.92rem; color: #b39bff; font-family: var(--font-display); }
+.civ-constants .panel__note { margin: 0 0 8px; }
+.civ-faction-role {
+  display: inline-block; padding: 1px 7px; border-radius: 4px;
+  font-size: 0.72rem; font-style: italic;
+  background: rgba(157, 123, 255, 0.12); color: #b39bff;
+}

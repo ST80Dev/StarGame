@@ -810,6 +810,10 @@
         /* M10 Fase B (decisione #52 §13.6): alone ambra tratteggiato sui
            sistemi coesi noti — consorzio locale visibile a colpo d'occhio. */
         this._drawCohesion(ctx, reveal);
+        /* M10 Fase B punto 4 (decisione #52 §13.6): marker planetari sotto
+           i nodi — proprietà al pianeta (non al sistema), riflesso del modello
+           `civ.planets[]`. */
+        this._drawPlanetMarkers(ctx, reveal);
         /* M10 Fase E: covi pirata noti (DETECTED+) — bersagli raidabili. */
         this._drawPirateNests(ctx, reveal);
         /* M08 Fase B (decisione #46): markers flotte + rotte in transito.
@@ -1164,6 +1168,78 @@
           this._ring(ctx, p, r + 7.5, hexA(civ.color, 0.35), 1);
         }
       }
+      ctx.restore();
+    }
+
+    /* M10 Fase B punto 4 (decisione #52 §13.6): marker planetari sotto i
+       nodi. La proprietà è al PIANETA (non al sistema) → un sistema con due
+       proprietari diversi mostra due dots distinti. Sistemi DETECTED+ only. */
+    _drawPlanetMarkers(ctx, reveal) {
+      const game = root.ORION && root.ORION.game;
+      if (!game) return;
+      const g = this.galaxy;
+      const disc = this.state.discovery;
+      const DET = DISCOVERY.DETECTED;
+
+      /* Raccogli proprietà per sysId: list di { color, kind } per ogni pianeta
+         (uno per ogni pianeta posseduto). */
+      const ownership = {};
+      function addOwner(sid, color) {
+        if (!ownership[sid]) ownership[sid] = [];
+        if (ownership[sid].length >= 10) return;   // cap visivo a 10 dots
+        ownership[sid].push(color);
+      }
+      /* Player colonies. */
+      const cols = game.colonies || {};
+      Object.keys(cols).forEach(function (k) {
+        const c = cols[k];
+        if (!c || !c.colonized) return;
+        const colon = k.indexOf(':');
+        if (colon < 0) return;
+        const sid = Number(k.slice(0, colon));
+        if (!isNaN(sid)) addOwner(sid, '#5fa8ff');   // ciano player (UI_GUIDE)
+      });
+      /* Civ planets (canonical 'sysId:bodyKey'). */
+      const civs = game.civs || [];
+      for (let i = 0; i < civs.length; i++) {
+        const civ = civs[i];
+        if (!civ || !civ.alive || !Array.isArray(civ.planets)) continue;
+        for (let j = 0; j < civ.planets.length; j++) {
+          const pk = civ.planets[j];
+          const colon = pk.indexOf(':');
+          if (colon < 0) continue;
+          const sid = Number(pk.slice(0, colon));
+          if (!isNaN(sid)) addOwner(sid, civ.color);
+        }
+      }
+
+      ctx.save();
+      ctx.globalAlpha = reveal;
+      Object.keys(ownership).forEach(function (key) {
+        const sid = Number(key);
+        if (disc[sid] < DET) return;
+        const sys = g.systems[sid];
+        if (!sys) return;
+        const p = this.project(sys.x, sys.y, sys.z || 0);
+        if (p.x < -30 || p.x > this.cssW + 30 || p.y < -30 || p.y > this.cssH + 30) return;
+        const r = this.nodeRadius(p.parallax);
+        const colors = ownership[sid];
+        const dotR = Math.max(1.6, r * 0.20);
+        const gap = dotR * 2 + 1.2;
+        const totalW = (colors.length - 1) * gap;
+        const cy = p.y + r + dotR + 5;
+        const startX = p.x - totalW / 2;
+        for (let i = 0; i < colors.length; i++) {
+          const cx = startX + i * gap;
+          ctx.beginPath();
+          ctx.arc(cx, cy, dotR, 0, Math.PI * 2);
+          ctx.fillStyle = colors[i];
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+        }
+      }, this);
       ctx.restore();
     }
 
