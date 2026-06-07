@@ -9,9 +9,9 @@
    --------------------------------------------------------------------- */
 :root {
   /* --- Palette: nero profondo + blu/viola spaziale + accenti ciano/arancio --- */
-  --c-void:        #0a0e1e;   /* fondo profondo (alzato dal nero verso navy scuro) */
-  --c-space:       #0e1430;   /* blu-nero spaziale                     */
-  --c-deep:        #151d42;   /* viola-blu profondo                    */
+  --c-void:        #0c1228;   /* fondo profondo (navy scuro, alzato dal nero) */
+  --c-space:       #121a3c;   /* blu-nero spaziale                     */
+  --c-deep:        #19224c;   /* viola-blu profondo                    */
   --c-panel:       rgba(26, 34, 64, 0.90);   /* pannello: navy scuro, opaco per stacco */
   --c-panel-solid: #1a2342;
   --c-border:        rgba(120, 160, 255, 0.55);   /* bordo netto      */
@@ -362,7 +362,7 @@ button { font-family: inherit; }
   border: 2px solid var(--c-border-strong);
   border-radius: var(--radius);
   background:
-    radial-gradient(ellipse at center, rgba(20, 28, 64, 0.55) 0%, rgba(6, 9, 22, 0.85) 75%);
+    radial-gradient(ellipse at center, rgba(30, 40, 84, 0.55) 0%, rgba(14, 20, 48, 0.92) 78%);
   box-shadow: var(--shadow-panel), inset 0 0 60px rgba(0, 0, 0, 0.6), inset 0 1px 0 var(--c-panel-hilite);
   overflow: hidden;
   min-height: 0;
@@ -1678,6 +1678,39 @@ button { font-family: inherit; }
      alzato globalmente; con html a 18px il testo rem sale di misura). */
   .panel--left, .panel--right { line-height: 1.45; }
 
+  /* Anti-overflow orizzontale (testi che sforavano leggermente a destra):
+     il testo va a capo e i flex-child possono restringersi sotto il loro
+     contenuto (min-width:auto è la causa classica dello spill nei flex). */
+  .panel--left, .panel--right, .viewport__stage { overflow-x: hidden; }
+  .panel__content, .fleet-view, .civ-view, .market-view {
+    overflow-wrap: break-word;
+    max-width: 100%;
+  }
+  .panel__content :where(div, p, li, ul, table, h2, h3, h4),
+  .fleet-view :where(div, p, li, ul, table),
+  .civ-view :where(div, p, li, ul, table) { min-width: 0; max-width: 100%; }
+
+  /* Scroll verticale (fix: su mobile quasi tutte le sezioni non
+     raggiungevano il fondo). Lo stage centrava i contenuti e non scrollava;
+     alcune viste (es. civ) non avevano overflow proprio. */
+  .viewport__stage {
+    place-items: start stretch;   /* niente centratura → i contenuti DOM partono in alto */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .fleet-view, .civ-view, .market-view {
+    height: auto;                 /* lascia crescere il contenuto: scrolla lo stage */
+    overflow: visible;
+    padding-bottom: calc(var(--mnav-h, 60px) + 20px);   /* spazio sopra la bottom nav */
+  }
+  /* Le sheet scrollano come un unico contenitore (niente nested-scroll). */
+  .panel--left .panel__content,
+  .panel--right .panel__content {
+    overflow: visible;
+    flex: 0 1 auto;
+    padding-bottom: calc(var(--mnav-h, 60px) + 20px);
+  }
+
   /* HUD top compatto: indici+tempo+azioni su una riga, risorse scrollabili */
   .hud-top {
     flex-wrap: wrap;
@@ -1694,10 +1727,17 @@ button { font-family: inherit; }
   .index--date .index__value { font-size: 0.78rem; }
   .btn--save, .btn--tutorial { padding: 6px 8px; }
   .btn--save .btn__label { display: none; }
-  .time-control--inline { padding: 3px 5px; gap: 5px; }
-  .time-control--inline .btn--next-event { padding: 7px 9px; }
+  .time-control--inline { padding: 3px 4px; gap: 4px; flex-wrap: wrap; }
+  .time-control--inline .btn--play { padding: 4px 7px; gap: 4px; }
+  .time-control--inline .btn--play .btn__label { font-size: 0.72rem; letter-spacing: 0; }
+  .time-control--inline .btn--mini,
+  .time-control--inline .btn--play-step,
+  .time-control--inline .btn--step { padding: 5px 7px; min-width: 30px; }
+  .time-control--inline .btn--next-event { padding: 5px 7px; gap: 3px; }
   .time-control--inline .btn--next-event .btn__label { display: none; }
-  .time-control--inline .btn--step { padding: 6px 8px; min-width: 34px; }
+  .time-control--inline .btn--next-event .time-control__delta {
+    margin-left: 3px; padding: 1px 4px; font-size: 0.68rem;
+  }
 
   /* Risorse: riga unica scrollabile in orizzontale (niente wrap verticale) */
   .resource-bar {
@@ -4037,7 +4077,7 @@ select.main-menu__input { cursor: pointer; }
   padding: 52px 12px 16px;       /* top per non incappare nella breadcrumb */
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, rgba(6, 9, 22, 0.9), rgba(6, 9, 22, 0.82));
+  background: linear-gradient(180deg, rgba(14, 20, 48, 0.9), rgba(14, 20, 48, 0.82));
   backdrop-filter: blur(3px);
 }
 .empire-deck[hidden] { display: none; }
