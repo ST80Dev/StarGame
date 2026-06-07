@@ -676,10 +676,31 @@
         '</ul>' +
         '<p>Le 2 segnalazioni più urgenti (carenze in arrivo, coda ferma) fanno <strong>auto-pausa</strong>; ' +
         'le altre restano in cronaca senza interrompere il gioco. Puoi spegnere ogni tipo dall\'overlay di pausa.</p>' +
-        '<p><strong>Tier futuri:</strong> il Tier 2 <em>Operativo</em> gestirà in autonomia la coda secondo una ' +
-        '<em>vocazione</em> scelta da te (estrattiva, agricola, militare, ricerca); il Tier 3 <em>Autonomo</em> ' +
-        'estenderà la delega ad asset, difese e rotte commerciali. Richiederanno tech dedicati e una <em>figura ' +
+        '<p><strong>Tier 2 (decisione #59, ora disponibile):</strong> due livelli operativi selezionabili dal dropdown.</p>' +
+        '<ul>' +
+          '<li><strong>Operativo (cauto)</strong> — accoda <em>una nuova</em> struttura della vocazione scelta quando la coda è vuota, ' +
+            'le scorte sono ok e ci sono risorse. Mai espande, mai cancella.</li>' +
+          '<li><strong>Operativo (attivo)</strong> — come cauto, ma se non c\'è nulla di nuovo da costruire <em>espande un modulo esistente</em> ' +
+            'coerente con la vocazione, purché ci sia surplus sulle 4 risorse base.</li>' +
+        '</ul>' +
+        '<p>Entrambi si <strong>auto-pausano in scarsità</strong> (low/crit su qualunque risorsa) — l\'utente decide nei momenti delicati. ' +
+          'Le ultime 5 decisioni sono nel log dedicato. Bottone <em>Sospendi</em> sempre visibile per tornare al Tier 1 Vigile.</p>' +
+        '<p><strong>Vocazioni (5):</strong> estrattiva · agricola · militare · ricerca · equilibrata (rotazione fra le 4).</p>' +
+        '<p><strong>Tier 3 <em>Autonomo</em></strong> (futuro M13/M14) estenderà la delega ad asset, difese e rotte. Richiederà tech dedicati e una <em>figura ' +
         'Governatore</em> da assegnare alla colonia.</p>'
+    },
+    {
+      id: 'governor-vocation', tag: 'Colonia · ⚙', title: 'Vocazione del Governatore',
+      body:
+        '<p>La <strong>vocazione</strong> della colonia decide <em>cosa</em> il Governatore Tier 2 costruisce/espande:</p>' +
+        '<ul>' +
+          '<li><strong>Estrattiva</strong> — miniera, centrale, idrico, fattoria, fonderia, raffineria</li>' +
+          '<li><strong>Agricola</strong> — fattoria, idrico, ospedale, abitativo, riciclo</li>' +
+          '<li><strong>Militare</strong> — cantiere, accademia, batteria di difesa, centrale, miniera</li>' +
+          '<li><strong>Ricerca</strong> — laboratorio, osservatorio, abitativo, idrico/fattoria</li>' +
+          '<li><strong>Equilibrata</strong> — rotazione deterministica fra le 4 vocazioni</li>' +
+        '</ul>' +
+        '<p>La scelta è per-colonia: una colonia mineraria, una agricola, una militare, ecc. Puoi cambiarla in qualunque momento.</p>'
     },
     {
       id: 'commander-promoted', tag: 'Forze · ★', title: 'Un Comandante emerge dall\'equipaggio',

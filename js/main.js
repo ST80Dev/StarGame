@@ -1894,7 +1894,10 @@ function renderGovernorSection(colony, planet) {
   if (!ORION.governor.isAvailable(g)) return '';
   const gov = ORION.governor.ensureState(colony);
   const enabled = !!gov.enabled;
+  const level = gov.level || (enabled ? 'vigile' : 'off');
+  const vocation = gov.vocation || 'equilibrata';
   const recent = Array.isArray(gov.recent) ? gov.recent : [];
+  const decisions = Array.isArray(gov.decisions) ? gov.decisions : [];
   const ALERT_LABEL = {
     'gov-queue-empty':    'Coda di costruzione ferma',
     'gov-slots-idle':     'Slot inutilizzati',
@@ -1902,6 +1905,20 @@ function renderGovernorSection(colony, planet) {
     'gov-supply-falling': 'Stock in calo',
     'gov-veterans-idle':  'Veterani disponibili'
   };
+  const LEVELS = ORION.governor.LEVELS || ['off','vigile','operativo-cauto','operativo-attivo'];
+  const VOCATIONS = ORION.governor.VOCATIONS || ['estrattiva','agricola','militare','ricerca','equilibrata'];
+  const LEVEL_LABEL = ORION.governor.LEVEL_LABEL || {};
+  const VOCATION_LABEL = ORION.governor.VOCATION_LABEL || {};
+
+  const levelOpts = LEVELS.map(function (lv) {
+    return '<option value="' + lv + '"' + (lv === level ? ' selected' : '') + '>' +
+           escapeHtml(LEVEL_LABEL[lv] || lv) + '</option>';
+  }).join('');
+  const vocOpts = VOCATIONS.map(function (v) {
+    return '<option value="' + v + '"' + (v === vocation ? ' selected' : '') + '>' +
+           escapeHtml(VOCATION_LABEL[v] || v) + '</option>';
+  }).join('');
+
   const recentHtml = recent.length
     ? '<ul class="gov-log">' + recent.slice(0, 5).map(function (a) {
         const ds = ORION.time.format((g.startEpochOrbita || 0) * 100 + a.impulso, 'compact');
@@ -1911,37 +1928,107 @@ function renderGovernorSection(colony, planet) {
                '<span class="gov-log__msg">' + (ALERT_LABEL[a.kind] || a.kind) + sub + '</span></li>';
       }).join('') + '</ul>'
     : '<p class="panel__note gov-log__empty">Nessuna segnalazione recente.</p>';
+
+  const isOperative = (level === 'operativo-cauto' || level === 'operativo-attivo');
+  const decisionsHtml = isOperative ? (decisions.length
+    ? '<ul class="gov-decisions__log">' + decisions.slice(0, 5).map(function (d) {
+        const ds = ORION.time.format((g.startEpochOrbita || 0) * 100 + d.impulso, 'compact');
+        const SDEF = ORION.structures && ORION.structures.get(d.structId);
+        const sname = SDEF ? SDEF.name : (d.structId || '—');
+        const verb = d.kind === 'expand' ? 'Espande' : 'Costruisce';
+        const lvl = d.level && d.level > 1 ? ' lvl ' + d.level : '';
+        return '<li class="gov-log__item"><span class="gov-log__ds">' + ds + '</span>' +
+               '<span class="gov-log__msg">' + verb + ' <strong>' + escapeHtml(sname) + '</strong>' + lvl + '</span></li>';
+      }).join('') + '</ul>'
+    : '<p class="panel__note gov-log__empty">Nessuna decisione recente.</p>') : '';
+
+  const tierLabel = level === 'off' ? 'Off'
+    : level === 'vigile' ? 'Tier 1 · Vigile'
+    : level === 'operativo-cauto' ? 'Tier 2 · Operativo (cauto)'
+    : level === 'operativo-attivo' ? 'Tier 2 · Operativo (attivo)'
+    : level;
+
+  const hint = level === 'off'
+    ? 'Scegli un livello per delegare la gestione di questa colonia.'
+    : level === 'vigile'
+      ? 'Sorveglia coda, slot, popolazione, scorte e veterani — segnala in cronaca, non agisce.'
+      : level === 'operativo-cauto'
+        ? 'Accoda nuove strutture secondo la vocazione (mai espande, mai cancella). Auto-pausa in scarsità.'
+        : 'Accoda nuove strutture ed espande moduli esistenti in surplus. Mai cancella. Auto-pausa in scarsità.';
+
   return '<div class="gov-section" data-bind="gov-section">' +
     '<div class="gov-section__head">' +
       '<p class="sysinfo__sub gov-section__title">' +
         '<span class="gov-section__glyph ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('settings')) || '') + '</span> ' +
-        'Governatore <em>(Tier 1 · Vigile)</em>' +
+        'Governatore <em>(' + escapeHtml(tierLabel) + ')</em>' +
       '</p>' +
-      '<label class="gov-toggle">' +
-        '<input type="checkbox" data-action="gov-toggle"' + (enabled ? ' checked' : '') + '>' +
-        '<span>' + (enabled ? 'Attivo' : 'Inattivo') + '</span>' +
-      '</label>' +
     '</div>' +
-    '<p class="panel__note gov-section__hint">' +
-      (enabled
-        ? 'Sorveglia coda, slot, popolazione, scorte e veterani — segnala in cronaca, non agisce.'
-        : 'Attiva per ricevere segnalazioni contestuali su questa colonia.') +
-    '</p>' +
-    (enabled ? recentHtml : '') +
+    '<div class="gov-section__controls">' +
+      '<label class="gov-select"><span>Livello</span>' +
+        '<select data-action="gov-level">' + levelOpts + '</select>' +
+      '</label>' +
+      '<label class="gov-select"><span>Vocazione</span>' +
+        '<select data-action="gov-vocation"' + (level === 'off' ? ' disabled' : '') + '>' + vocOpts + '</select>' +
+      '</label>' +
+      (isOperative ? '<button type="button" class="btn btn--ghost gov-suspend" data-action="gov-suspend">Sospendi</button>' : '') +
+    '</div>' +
+    '<p class="panel__note gov-section__hint">' + escapeHtml(hint) + '</p>' +
+    (enabled ? '<div class="gov-section__panels">' +
+       '<div class="gov-section__panel"><p class="panel__note gov-log__title">Segnalazioni</p>' + recentHtml + '</div>' +
+       (isOperative ? '<div class="gov-section__panel"><p class="panel__note gov-log__title">Decisioni recenti</p>' + decisionsHtml + '</div>' : '') +
+     '</div>' : '') +
   '</div>';
 }
 function bindGovernorHandlers(host, planet, colony) {
   if (!host) return;
-  const toggle = host.querySelector('[data-action="gov-toggle"]');
-  if (!toggle) return;
-  toggle.addEventListener('change', function (e) {
-    if (!ORION.governor) return;
-    ORION.governor.setEnabled(colony, e.target.checked);
-    if (e.target.checked && ORION.tutorial) ORION.tutorial.fire('governor');
+  const persist = function () {
     if (ORION.save && ORION.save.autosave && ORION.game) ORION.save.autosave(ORION.game);
-    /* Ri-render del tab corrente (mostra/nasconde il log recenti). */
-    renderPlanetColoniaTab(host, planet, colony);
-  });
+  };
+  /* Backward compat: il vecchio checkbox toggle non c'è più, ma rebind
+     code lato dx-panel può ancora cercarlo: no-op se assente. */
+  const oldToggle = host.querySelector('[data-action="gov-toggle"]');
+  if (oldToggle) {
+    oldToggle.addEventListener('change', function (e) {
+      if (!ORION.governor) return;
+      ORION.governor.setEnabled(colony, e.target.checked);
+      if (e.target.checked && ORION.tutorial) ORION.tutorial.fire('governor');
+      persist();
+      renderPlanetColoniaTab(host, planet, colony);
+    });
+  }
+  /* Level dropdown (decisione #59). */
+  const levelSel = host.querySelector('[data-action="gov-level"]');
+  if (levelSel) {
+    levelSel.addEventListener('change', function (e) {
+      if (!ORION.governor) return;
+      ORION.governor.setLevel(colony, e.target.value);
+      if (e.target.value !== 'off' && ORION.tutorial) ORION.tutorial.fire('governor');
+      persist();
+      renderPlanetColoniaTab(host, planet, colony);
+    });
+  }
+  /* Vocation dropdown (decisione #59). */
+  const vocSel = host.querySelector('[data-action="gov-vocation"]');
+  if (vocSel) {
+    vocSel.addEventListener('change', function (e) {
+      if (!ORION.governor) return;
+      ORION.governor.setVocation(colony, e.target.value);
+      if (ORION.tutorial) ORION.tutorial.fire('governor-vocation');
+      persist();
+      renderPlanetColoniaTab(host, planet, colony);
+    });
+  }
+  /* Suspend button: torna a 'vigile' come stato "occhi extra ma niente
+     azioni" — leva di recovery sempre disponibile (decisione #59/#22). */
+  const susp = host.querySelector('[data-action="gov-suspend"]');
+  if (susp) {
+    susp.addEventListener('click', function () {
+      if (!ORION.governor) return;
+      ORION.governor.setLevel(colony, 'vigile');
+      persist();
+      renderPlanetColoniaTab(host, planet, colony);
+    });
+  }
 }
 
 function tryColonize(planet) {
@@ -5223,6 +5310,9 @@ const DEFAULT_AUTOPAUSE = {
      spegnere ognuna dall'overlay di pausa. */
   'gov-supply-falling': true, 'gov-queue-empty': true,
   'gov-slots-idle': false, 'gov-pop-near-cap': false, 'gov-veterans-idle': false,
+  /* M07.1 Tier 2 (decisione #59): azioni del Governatore (build/espande).
+     Default OFF: frequenti/atmosferiche, visibili in cronaca + log dedicato. */
+  'gov-build-started': false, 'gov-expand-started': false,
   /* M08 Fase A (decisione #42): arrivo flotta + rotta completata + scoperta
      fortuita auto-pausano (esiti notevoli). Il launch è azione utente,
      non sorpresa. Hop intermedi mai. */
@@ -5567,6 +5657,8 @@ function showEventOverlay(events) {
     'gov-pop-near-cap': 'Governatore: popolazione vicina al tetto',
     'gov-supply-falling': 'Governatore: stock in calo',
     'gov-veterans-idle': 'Governatore: veterani disponibili',
+    'gov-build-started': 'Governatore: nuova costruzione accodata',
+    'gov-expand-started': 'Governatore: espansione accodata',
     'fleet-arrived': 'Flotta arrivata',
     'fleet-route-complete': 'Flotta: rotta completata',
     'fleet-discovery': 'Flotta: sistema esplorato',
@@ -5890,6 +5982,16 @@ function chronicleEvent(ev) {
     if (ORION.tutorial) ORION.tutorial.fire('governor');
   } else if (ev.kind === 'gov-veterans-idle') {
     pushChronicle(ds + ' — <strong>Governatore di ' + pname + ptag + '</strong>: ' + (ev.count || 1) + ' equipaggio/i veterano/i disponibile/i, nessuna spedizione in corso.', 'explore');
+    if (ORION.tutorial) ORION.tutorial.fire('governor');
+  } else if (ev.kind === 'gov-build-started') {
+    const SDEF = ORION.structures && ORION.structures.get(ev.structId);
+    const sname = SDEF ? SDEF.name : (ev.structId || '—');
+    pushChronicle(ds + ' — <strong>Governatore di ' + pname + ptag + '</strong>: avviata costruzione di <strong>' + sname + '</strong> (vocazione ' + (ev.vocation || '—') + ').', 'planet');
+    if (ORION.tutorial) ORION.tutorial.fire('governor');
+  } else if (ev.kind === 'gov-expand-started') {
+    const SDEF = ORION.structures && ORION.structures.get(ev.structId);
+    const sname = SDEF ? SDEF.name : (ev.structId || '—');
+    pushChronicle(ds + ' — <strong>Governatore di ' + pname + ptag + '</strong>: espansione di <strong>' + sname + '</strong> al livello ' + (ev.level || '?') + '.', 'planet');
     if (ORION.tutorial) ORION.tutorial.fire('governor');
   } else if (ev.kind === 'capital-declared') {
     pushChronicle(ds + ' — <strong>' + pname + ptag + '</strong> dichiarata capitale di gruppo (transizione in corso).', 'planet');
@@ -6579,7 +6681,7 @@ function renderDxPanel() {
     /* Triggera click del nuovo bottone (è già stato sostituito sopra,
        quindi questo è no-op se il flusso è completato — fallback). */
   });
-  /* Governor toggle: rebind diretto. */
+  /* Governor toggle/dropdowns (decisione #59 Tier 2): rebind diretto. */
   content.querySelectorAll('[data-action="gov-toggle"]').forEach(function (chk) {
     const nb = chk.cloneNode(true);
     chk.parentNode.replaceChild(nb, chk);
@@ -6587,6 +6689,38 @@ function renderDxPanel() {
       if (!ORION.governor) return;
       ORION.governor.setEnabled(colony, nb.checked);
       if (nb.checked && ORION.tutorial) ORION.tutorial.fire('governor');
+      if (ORION.save && ORION.save.autosave && ORION.game) ORION.save.autosave(ORION.game);
+      renderDxPanel();
+    }));
+  });
+  content.querySelectorAll('[data-action="gov-level"]').forEach(function (sel) {
+    const nb = sel.cloneNode(true);
+    sel.parentNode.replaceChild(nb, sel);
+    nb.addEventListener('change', withDxScope(function () {
+      if (!ORION.governor) return;
+      ORION.governor.setLevel(colony, nb.value);
+      if (nb.value !== 'off' && ORION.tutorial) ORION.tutorial.fire('governor');
+      if (ORION.save && ORION.save.autosave && ORION.game) ORION.save.autosave(ORION.game);
+      renderDxPanel();
+    }));
+  });
+  content.querySelectorAll('[data-action="gov-vocation"]').forEach(function (sel) {
+    const nb = sel.cloneNode(true);
+    sel.parentNode.replaceChild(nb, sel);
+    nb.addEventListener('change', withDxScope(function () {
+      if (!ORION.governor) return;
+      ORION.governor.setVocation(colony, nb.value);
+      if (ORION.tutorial) ORION.tutorial.fire('governor-vocation');
+      if (ORION.save && ORION.save.autosave && ORION.game) ORION.save.autosave(ORION.game);
+      renderDxPanel();
+    }));
+  });
+  content.querySelectorAll('[data-action="gov-suspend"]').forEach(function (btn) {
+    const nb = btn.cloneNode(true);
+    btn.parentNode.replaceChild(nb, btn);
+    nb.addEventListener('click', withDxScope(function () {
+      if (!ORION.governor) return;
+      ORION.governor.setLevel(colony, 'vigile');
       if (ORION.save && ORION.save.autosave && ORION.game) ORION.save.autosave(ORION.game);
       renderDxPanel();
     }));
