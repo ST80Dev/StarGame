@@ -1632,79 +1632,163 @@ button { font-family: inherit; }
    - Cronaca → striscia compatta a piè di pagina.
    - Padding interni ridotti ovunque.
    --------------------------------------------------------------------- */
-@media (max-width: 900px) {
+/* =====================================================================
+   Layout responsivo — tablet + telefono (PR mobile, emenda decisione #6).
+   NB: le vecchie media query ≤900/≤560 referenziavano l'area grid "chron"
+   e il pannello .chronicle, RIMOSSI dal refactor #50 (la cronaca vive ora
+   nella Plancia d'Impero sx) → erano obsolete. Riscritte da zero sulla
+   shell attuale (top / left / view / right) + navigazione mobile a sheet.
+   Stato UI volatile, mai nel save (UI_GUIDE §9).
+   ===================================================================== */
+
+/* Componenti mobile: base nascosta su desktop (mostrati sotto il breakpoint
+   telefono solo a partita avviata, via body.has-game). */
+.mobile-nav,
+.mobile-scrim { display: none; }
+
+/* --- Tablet landscape / finestre medie: pannelli più stretti --- */
+@media (max-width: 1000px) {
+  :root { --panel-left-w: 232px; --panel-right-w: 322px; }
+  .brand-title { font-size: 1.05rem; }
+  .resource__label { display: none; }
+  .index { min-width: 48px; }
+  .btn--save .btn__label { display: none; }
+}
+
+/* --- Telefono / portrait stretto (≤760px) ---------------------------
+   Colonna unica: il centro (mappa/flotte/civiltà) occupa tutto; le due
+   plance diventano sheet a tutto schermo richiamate dalla bottom tab bar.
+   -------------------------------------------------------------------- */
+@media (max-width: 760px) {
   .app-shell {
-    grid-template-columns: 56px 1fr;
-    grid-template-rows: auto minmax(0, 1.5fr) minmax(0, 1fr) auto;
-    grid-template-areas:
-      "top   top"
-      "left  view"
-      "left  right"
-      "chron chron";
-    gap: 8px;
-    padding: 8px;
+    --mnav-h: 60px;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    grid-template-areas: "top" "view";
+    gap: 0;
+    padding: 0;
   }
 
-  /* --- Header compatto, icon-first --- */
+  /* HUD top compatto: indici+tempo+azioni su una riga, risorse scrollabili */
   .hud-top {
     flex-wrap: wrap;
     height: auto;
-    min-height: 50px;
-    padding: 6px 10px;
-    gap: 8px;
-    row-gap: 6px;
+    min-height: 46px;
+    padding: 5px 8px;
+    gap: 6px;
+    border-radius: 0;
   }
-  .brand-title { display: none; }                /* resta solo il segno ◈ */
-  .resource__label { display: none; }
-  .resource { padding: 5px 8px; gap: 5px; }
-  .resource__value { font-size: 0.92rem; }
-  .index { min-width: 50px; padding: 4px 8px; }
-  .index__value { font-size: 1rem; }
-  .index--date .index__value { font-size: 0.82rem; }
-  /* SAVE → solo icona ◇ */
-  .btn--save { padding: 6px 9px; margin-left: 6px; }
+  .brand-title { display: none; }                 /* resta solo il segno ◈ */
+  .hud-top__indices { gap: 4px; }
+  .index { min-width: 44px; padding: 3px 7px; }
+  .index__value { font-size: 0.92rem; }
+  .index--date .index__value { font-size: 0.78rem; }
+  .btn--save, .btn--tutorial { padding: 6px 8px; }
   .btn--save .btn__label { display: none; }
-  /* "Prossimo evento" → solo glifo ⏭ */
-  .time-control--inline { padding: 4px 6px; gap: 6px; }
+  .time-control--inline { padding: 3px 5px; gap: 5px; }
   .time-control--inline .btn--next-event { padding: 7px 9px; }
   .time-control--inline .btn--next-event .btn__label { display: none; }
   .time-control--inline .btn--step { padding: 6px 8px; min-width: 34px; }
 
-  /* --- Sidebar sinistra → rail a sole icone --- */
-  .panel--left .panel__header { display: none; }
-  .panel--left .panel__content { padding: 6px 4px; }
-  .nav-item { gap: 0; justify-content: center; padding: 11px 0; }
-  .nav-item__label { display: none; }
-  .nav-item__glyph { font-size: 1.2rem; }
+  /* Risorse: riga unica scrollabile in orizzontale (niente wrap verticale) */
+  .resource-bar {
+    flex: 1 0 100%;
+    order: 5;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 6px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .resource-bar::-webkit-scrollbar { display: none; }
+  .resource { flex: 0 0 auto; padding: 4px 8px; gap: 4px; }
+  .resource__label { display: none; }
+  .resource__value { font-size: 0.9rem; }
 
-  /* --- Pannello destro: ricomparso sotto la mappa --- */
-  .panel--right { display: flex; }
+  /* Viewport a tutta larghezza; action bar sopra la bottom nav */
+  .viewport { grid-area: view; border-radius: 0; }
+  .viewport__actionbar { bottom: calc(var(--mnav-h, 60px) + 8px); }
+  /* il deck colonia in-mappa (overlay sopra la sfera) non finisce sotto la nav */
+  .colony-deck { padding-bottom: calc(var(--mnav-h, 60px) + 16px); }
 
-  /* --- Padding interni ridotti --- */
-  .panel__header { padding: 8px 10px; }
-  .panel__content { padding: 9px 11px; }
+  /* Le due plance → sheet a tutto schermo (overlay), nascoste di default */
+  .panel--left,
+  .panel--right {
+    position: fixed;
+    left: 0; right: 0; top: 0;
+    bottom: var(--mnav-h, 60px);
+    z-index: 140;
+    border: none;
+    border-radius: 0;
+    background: var(--c-panel-solid, #101630);
+    transform: translateY(100%);
+    transition: transform 240ms ease;
+    visibility: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .panel--left.is-sheet-open,
+  .panel--right.is-sheet-open {
+    transform: translateY(0);
+    visibility: visible;
+  }
+  .panel--left .panel__header,
+  .panel--right .panel__header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--c-panel-solid, #101630);
+  }
+  .panel__content { padding: 10px 12px; }
 
-  /* --- Cronaca → striscia compatta --- */
-  .chronicle { padding: 6px 10px; }
-  .chronicle .panel__header--inline { padding: 0 0 2px; }
-  .chronicle__log { font-size: 0.76rem; gap: 4px; max-height: 78px; }
+  /* Scrim: hit-area di chiusura sotto la sheet */
+  body.has-game .mobile-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    bottom: var(--mnav-h, 60px);
+    z-index: 135;
+    background: rgba(2, 5, 16, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 200ms ease;
+  }
+  body.has-game .mobile-scrim.is-on { opacity: 1; pointer-events: auto; }
+
+  /* Bottom tab bar */
+  body.has-game .mobile-nav {
+    display: flex;
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    height: var(--mnav-h, 60px);
+    z-index: 150;
+    background: var(--c-panel-solid, #101630);
+    border-top: 1px solid var(--c-border-soft);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .mobile-nav__btn {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 44px;
+    padding: 6px 2px;
+    background: none;
+    border: none;
+    color: var(--c-text-soft, #9fb0d8);
+    font: inherit;
+    cursor: pointer;
+  }
+  .mobile-nav__btn .ui-icon { font-size: 1.15rem; }
+  .mobile-nav__label { font-size: 0.62rem; font-weight: 600; letter-spacing: 0.02em; }
+  .mobile-nav__btn.is-active { color: var(--c-accent); }
+  .mobile-nav__btn.is-active .ui-icon { filter: drop-shadow(0 0 4px currentColor); }
 }
 
-/* ---------------------------------------------------------------------
-   Telefono / finestre molto strette (≤560px) — non supportato (decisione
-   #6) ma reso in modo aggraziato: colonna singola, rail nascosto.
-   --------------------------------------------------------------------- */
-@media (max-width: 560px) {
-  .app-shell {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1.4fr) minmax(0, 1fr) auto;
-    grid-template-areas:
-      "top"
-      "view"
-      "right"
-      "chron";
-  }
-  .panel--left { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .panel--left, .panel--right, .mobile-scrim { transition: none; }
 }
 
 /* ============================================================

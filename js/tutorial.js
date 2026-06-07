@@ -48,6 +48,19 @@
         '<p class="tut-hint">Riapri questo tutorial dal pulsante <kbd>?</kbd> in alto, quando vuoi.</p>'
     },
     {
+      id: 'mobile-nav',
+      tag: 'Mobile',
+      title: 'Giocare da telefono',
+      body:
+        '<p>Su schermo stretto l\'interfaccia passa a <strong>colonna unica</strong>: la mappa occupa tutto e in basso ' +
+        'compare una <strong>barra di navigazione</strong> con cinque voci.</p>' +
+        '<p><strong>Mappa</strong> torna alla galassia · <strong>Colonia</strong> apre la plancia operativa della colonia ' +
+        'in focus · <strong>Flotte</strong> e <strong>Civiltà</strong> aprono le rispettive viste · ' +
+        '<strong>Altro</strong> (⋯) apre roster, cronaca, Mercato, Ricerca.</p>' +
+        '<p>I gesti sulla mappa restano touch: un dito per spostare, due dita per zoom e ruotare.</p>' +
+        '<p class="tut-hint">Tocca di nuovo una voce o lo sfondo per chiudere un pannello.</p>'
+    },
+    {
       id: 'galaxy',
       tag: 'Galassia',
       title: 'Mappa galattica',

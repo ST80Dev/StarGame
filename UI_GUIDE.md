@@ -239,6 +239,7 @@ Quando crei una sezione nuova, **prima cerca** se uno di questi pattern fa al ca
 | **Helper titolo sezione** | `secTitle(glyphCls, glyph, text)` in `main.js` | sempre questo helper per nuove sezioni sx |
 | **Toast feedback** | `.save-toast` | 1.8s bottom-center per feedback discreto |
 | **Tag inline** | `.name-tag` (decisione #28) | sigla regione + nome sistema |
+| **Navigazione mobile** | `.mobile-nav` · `.mobile-scrim` (decisione #62) | bottom tab bar (≤760px) + plance come sheet a tutto schermo |
 
 ---
 
@@ -309,3 +310,4 @@ Modifiche a UI_GUIDE.md vanno discusse con l'utente PRIMA di applicarle (come pe
 
 - **2026-06-06** — Prima stesura. Codifica gli standard emersi durante il refactor sidebar (PR #74 / decisione #50). Inputs dell'utente: icone colorate sempre, sigle solo dove l'utente esperto basta + tooltip, parola piena nei titoli sezione, glyph fallback inconsistente → migrazione canonica a inline SVG.
 - **2026-06-06** — Glow morbido: specifica canonica abbassata da `0 0 5px` alpha `0.7` a `0 0 3px` alpha `0.35-0.45` (feedback utente: l'alone fluo marcato stancava l'occhio nelle sessioni lunghe). `.res-icon` esistente a `4px / 0.45` resta valido. La preview `icons-preview.svg` è stata aggiornata di conseguenza.
+- **2026-06-07** — Layout mobile (PR mobile, decisione #62, emenda #6). Aggiunto il breakpoint telefono ≤760px: shell a **colonna unica** (mappa a tutto schermo) + **bottom tab bar** (`.mobile-nav`: Mappa·Colonia·Flotte·Civiltà·Altro, icone SVG tematiche §3, voci attive in `--c-accent`) + le due plance (sx/dx) come **sheet a tutto schermo** (`transform: translateY` con scrim `.mobile-scrim`). Riscritte da zero le media query ≤900/≤560 **obsolete** (referenziavano l'area grid `chron`/`.chronicle` rimossa dal refactor #50). Nuovo tier tablet ≤1000px (pannelli più stretti). Target-touch ≥44px (§10). Stato UI volatile su `ORION._mobileSheet`, mai nel save (§9). Nuova lezione tutorial `mobile-nav` (§0.9).

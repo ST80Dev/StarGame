@@ -166,6 +166,35 @@
         </div>
       </aside>
     </main>
+
+    <!-- ---- Navigazione mobile (PR mobile, decisione #6 emendata) ----
+         Barra fissa in basso, visibile solo su schermo stretto (≤760px)
+         via CSS. Mappa/Flotte/Civiltà cambiano la vista centrale; Colonia
+         apre la Plancia Operativa (dx) come sheet a tutto schermo; "⋯" apre
+         la Plancia d'Impero (sx). Stato volatile, mai nel save (UI_GUIDE §9). -->
+    <div class="mobile-scrim" data-bind="mobile-scrim" hidden></div>
+    <nav class="mobile-nav" data-bind="mobile-nav" aria-label="Navigazione" hidden>
+      <button class="mobile-nav__btn" data-mnav="map" type="button" aria-label="Mappa">
+        <span class="ui-icon" data-icon="galaxy" aria-hidden="true"></span>
+        <span class="mobile-nav__label">Mappa</span>
+      </button>
+      <button class="mobile-nav__btn" data-mnav="colony" type="button" aria-label="Colonia">
+        <span class="ui-icon" data-icon="home" aria-hidden="true"></span>
+        <span class="mobile-nav__label">Colonia</span>
+      </button>
+      <button class="mobile-nav__btn" data-mnav="fleet" type="button" aria-label="Flotte">
+        <span class="ui-icon" data-icon="fleet" aria-hidden="true"></span>
+        <span class="mobile-nav__label">Flotte</span>
+      </button>
+      <button class="mobile-nav__btn" data-mnav="civ" type="button" aria-label="Civiltà">
+        <span class="ui-icon" data-icon="civ" aria-hidden="true"></span>
+        <span class="mobile-nav__label">Civiltà</span>
+      </button>
+      <button class="mobile-nav__btn" data-mnav="more" type="button" aria-label="Altro">
+        <span class="ui-icon" data-icon="menu" aria-hidden="true"></span>
+        <span class="mobile-nav__label">Altro</span>
+      </button>
+    </nav>
   </div>
 
   <!-- Moduli di gioco (vanilla JS, ordine di dipendenza) -->

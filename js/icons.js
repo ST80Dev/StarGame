@@ -146,6 +146,13 @@
       '<line x1="12" y1="8" x2="12.01" y2="8"/>'
     ),
 
+    /* Menu — tre puntini (overflow "altro", barra mobile). */
+    menu: svg(
+      '<circle cx="5" cy="12" r="1.6"/>' +
+      '<circle cx="12" cy="12" r="1.6"/>' +
+      '<circle cx="19" cy="12" r="1.6"/>'
+    ),
+
     /* Settings — ingranaggio. */
     settings: svg(
       '<circle cx="12" cy="12" r="3"/>' +
