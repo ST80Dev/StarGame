@@ -4909,3 +4909,91 @@ select.main-menu__input { cursor: pointer; }
   font-size: 0.72rem; font-style: italic;
   background: rgba(157, 123, 255, 0.12); color: #b39bff;
 }
+
+/* =====================================================================
+   M12 Fase A1 (decisione #53 §15.2/§15.6) — Commercio interno
+   Tab Rotte per-colonia (mercantili + rotte) + vista Mercato d'impero.
+   Tinta concetto commercio = oro (UI_GUIDE §1).
+   ===================================================================== */
+.trade-tab { display: flex; flex-direction: column; }
+
+/* Roster mercantili. */
+.merc-roster { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.merc-roster__item {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 5px 8px; border-radius: 6px;
+  background: rgba(240, 214, 112, 0.05);
+  border: 1px solid rgba(240, 214, 112, 0.18);
+}
+.merc-roster__glyph { color: #f0d670; font-size: 0.95rem; }
+.merc-roster__name { font-weight: 600; font-size: 0.84rem; }
+.merc-roster__cargo { font-size: 0.72rem; color: var(--c-text-dim); }
+.merc-roster__status { margin-left: auto; font-size: 0.72rem; padding: 1px 7px; border-radius: 4px; }
+.merc-roster__status--idle { background: rgba(79, 224, 138, 0.14); color: var(--c-good); }
+.merc-roster__status--busy { background: rgba(47, 230, 224, 0.14); color: var(--c-accent); }
+
+/* Pulsanti di costruzione mercantili. */
+.merc-build { display: flex; flex-direction: column; gap: 5px; margin: 0 0 8px; }
+.merc-build__btn { justify-content: flex-start; text-align: left; gap: 6px; }
+.merc-build__cost { color: var(--c-text-dim); font-size: 0.72rem; margin-left: auto; }
+.merc-build__lock { opacity: 0.7; }
+
+/* Coda costruzione mercantili. */
+.merc-queue { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.merc-queue__item { display: flex; align-items: center; gap: 8px; }
+.merc-queue__name { font-size: 0.78rem; min-width: 120px; }
+.merc-queue__item .progress-bar { flex: 1; }
+.merc-queue__eta { font-size: 0.72rem; color: var(--c-text-dim); }
+
+/* Lista rotte. */
+.route-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.route-item {
+  padding: 6px 9px; border-radius: 7px;
+  background: rgba(240, 214, 112, 0.04);
+  border: 1px solid rgba(240, 214, 112, 0.18);
+}
+.route-item__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.route-item__dir { color: #f0d670; font-weight: 700; }
+.route-item__peer { font-weight: 600; font-size: 0.84rem; }
+.route-item__res { font-size: 0.78rem; color: var(--c-text-dim); }
+.route-item__status { margin-left: auto; font-size: 0.72rem; padding: 1px 7px; border-radius: 4px; }
+.route-item__status.is-ok   { background: rgba(79, 224, 138, 0.14); color: var(--c-good); }
+.route-item__status.is-warn { background: rgba(240, 214, 112, 0.16); color: #f0d670; }
+.route-item__status.is-crit { background: rgba(255, 92, 108, 0.16); color: var(--c-bad); }
+.route-item__foot { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.route-item__hops { font-size: 0.72rem; color: var(--c-text-dim); }
+.route-item__foot .btn { margin-left: auto; }
+
+/* Overlay creazione rotta — riusa l'impalcatura .expedition-pick-overlay. */
+.route-picker__controls {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin: 0 0 10px; padding: 8px 10px;
+  border-radius: 7px; background: rgba(255,255,255,0.03);
+}
+.route-picker__field { display: flex; flex-direction: column; gap: 3px; font-size: 0.74rem; color: var(--c-text-dim); }
+.route-picker__field select {
+  background: rgba(0,0,0,0.35); color: var(--c-text);
+  border: 1px solid rgba(255,255,255,0.14); border-radius: 5px; padding: 4px 6px; font: inherit;
+}
+.route-picker__rate { font-size: 0.78rem; color: var(--c-text-dim); margin-left: auto; }
+.route-dest-card {
+  padding: 9px 11px; border-radius: 8px;
+  background: rgba(240, 214, 112, 0.05); border: 1px solid rgba(240, 214, 112, 0.2);
+  display: flex; flex-direction: column; gap: 5px;
+}
+.route-dest-card__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.route-dest-card__name { font-weight: 600; font-size: 0.86rem; }
+.route-dest-card__hops { font-size: 0.72rem; color: var(--c-text-dim); }
+.route-dest-card__meta { margin: 0; font-size: 0.74rem; color: var(--c-text-dim); }
+
+/* Vista Mercato d'impero — riepilogo. */
+.market-summary {
+  display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 14px;
+}
+.market-summary__cell {
+  flex: 1; min-width: 120px; padding: 10px 12px; border-radius: 8px;
+  background: rgba(240, 214, 112, 0.05); border: 1px solid rgba(240, 214, 112, 0.2);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.market-summary__val { font-family: var(--font-display); font-size: 1.25rem; color: #f0d670; }
+.market-summary__lbl { font-size: 0.72rem; color: var(--c-text-dim); }

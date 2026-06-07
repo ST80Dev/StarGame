@@ -1577,6 +1577,11 @@
       processWaste(game, colony, planet, events);
       processObservatory(game, colony, planet, events);
       processAssets(game, colony, planet, events);
+      /* M12 Fase A1 (decisione #53, §15.6): matura la coda di costruzione
+         dei mercantili dell'Hangar (parallela a scafi/equipaggi). */
+      if (root.ORION.trade && root.ORION.trade.processColonyAssets) {
+        root.ORION.trade.processColonyAssets(game, colony, planet, events);
+      }
       processSettling(game, colony, planet, events);
       /* M09 (decisione #49, §10.2): riparazione passiva delle strutture
          danneggiate in battaglia, sospesa mentre la colonia è sotto assedio. */
@@ -1586,6 +1591,13 @@
     processExpeditions(game, events);
     /* M08 Fase A: flotte mobili (movimento + ordini). */
     processFleets(game, events);
+    /* M12 Fase A1 (decisione #53, §15.2): rotte commerciali interne —
+       flusso passivo di risorse colonia→colonia entro il budget di
+       throughput dei Mercati, maturazione xp dei mercantili, interruzioni
+       recovery-friendly. Dopo la produzione (lo stock è già aggiornato). */
+    if (root.ORION.trade && root.ORION.trade.processRoutes) {
+      root.ORION.trade.processRoutes(game, events);
+    }
     /* M09 Fase A (decisione #49): combattimento. Scaramucce lampo (flotte
        co-locate con presenza ostile), incursioni pirata inbound, assedi in
        corso (1 round ogni ROUND_EVERY_I), poi decadimento dello stato di
@@ -1765,6 +1777,11 @@
         }
       }
     });
+    /* M12 Fase A1: mercantili in costruzione (coda Hangar). */
+    if (root.ORION.trade && root.ORION.trade.minQueueDuration) {
+      const d = root.ORION.trade.minQueueDuration(game);
+      if (d > 0 && d < best) best = d;
+    }
     /* M07: spedizioni in viaggio (outbound o returning) */
     if (Array.isArray(game.expeditions)) {
       for (let i = 0; i < game.expeditions.length; i++) {
