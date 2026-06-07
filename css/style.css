@@ -1714,6 +1714,16 @@ button { font-family: inherit; }
     overflow: visible;
     padding-bottom: calc(var(--mnav-h, 60px) + 20px);   /* spazio sopra la bottom nav */
   }
+  /* Card Impero: su telefono le 3 metriche stanno strette → impila
+     etichetta sopra il valore (niente più sovrapposizione dei valori
+     nowrap che sforavano nelle colonne adiacenti). */
+  .ecard__metrics { gap: 8px; }
+  .ecard__metric { overflow: hidden; }
+  .ecard__metric-head { flex-direction: column; align-items: flex-start; gap: 0; }
+  .ecard__metric-label,
+  .ecard__metric-val { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ecard__metric-val { font-size: 0.84rem; }
+
   /* Card a colonna singola su telefono: le griglie minmax(≥230px) non
      possono mai sforare lo schermo (bordo dx sempre visibile). */
   .civ-list, .civ-feds__list { grid-template-columns: 1fr; }
