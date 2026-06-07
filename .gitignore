@@ -9,3 +9,6 @@ Thumbs.db
 # Logs / temp
 *.log
 node_modules/
+
+# Claude Code worktrees (agent isolation, ephemeral)
+.claude/
