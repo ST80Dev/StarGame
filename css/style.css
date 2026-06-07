@@ -1690,6 +1690,27 @@ button { font-family: inherit; }
   .fleet-view :where(div, p, li, ul, table),
   .civ-view :where(div, p, li, ul, table) { min-width: 0; max-width: 100%; }
 
+  /* Scroll verticale (fix: su mobile quasi tutte le sezioni non
+     raggiungevano il fondo). Lo stage centrava i contenuti e non scrollava;
+     alcune viste (es. civ) non avevano overflow proprio. */
+  .viewport__stage {
+    place-items: start stretch;   /* niente centratura → i contenuti DOM partono in alto */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .fleet-view, .civ-view, .market-view {
+    height: auto;                 /* lascia crescere il contenuto: scrolla lo stage */
+    overflow: visible;
+    padding-bottom: calc(var(--mnav-h, 60px) + 20px);   /* spazio sopra la bottom nav */
+  }
+  /* Le sheet scrollano come un unico contenitore (niente nested-scroll). */
+  .panel--left .panel__content,
+  .panel--right .panel__content {
+    overflow: visible;
+    flex: 0 1 auto;
+    padding-bottom: calc(var(--mnav-h, 60px) + 20px);
+  }
+
   /* HUD top compatto: indici+tempo+azioni su una riga, risorse scrollabili */
   .hud-top {
     flex-wrap: wrap;
