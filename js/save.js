@@ -424,11 +424,14 @@
       });
     }
     const ds = currentDsLabel(p);
+    const gname = p.seed && ORION.names && ORION.names.galaxyName
+      ? ORION.names.galaxyName(p.seed) : null;
     return {
       idx: idx,
       name: slot.name || ('Slot ' + (idx + 1)),
       ts: slot.ts || 0,
       seed: p.seed || '—',
+      galaxyName: gname,
       ds: ds,
       colonies: colonies,
       mode: (p.mode && p.mode.startedAs) || 'sandbox',
@@ -495,6 +498,15 @@
   }
   function exportFilename(payload) {
     const seed = (payload.seed || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
+    /* Nome galassia leggibile come prefisso (decisione "Galaxy name in UI",
+       2026-06-07): orion_<NomeGalassia>_<seed>_DS<…>.json. Il seed resta
+       (disambigua collisioni dovute a 480 combo finite). */
+    let gslug = '';
+    if (payload.seed && ORION.names && ORION.names.galaxyName) {
+      gslug = ORION.names.galaxyName(payload.seed)
+        .replace(/\s+/g, '-')
+        .replace(/[^a-zA-Z0-9_-]/g, '');
+    }
     const orb = payload.startEpochOrbita || 0;
     const i = payload.timeImpulsi || 0;
     const dsOrb = orb + Math.floor(i / 100);
@@ -503,7 +515,8 @@
     const pad = function (n) { return n < 10 ? '0' + n : '' + n; };
     const ts = d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) +
                pad(d.getHours()) + pad(d.getMinutes());
-    return 'orion_' + seed + '_DS' + dsOrb + '-' + pad(dsI) + '_' + ts + '.json';
+    const prefix = gslug ? 'orion_' + gslug + '_' + seed : 'orion_' + seed;
+    return prefix + '_DS' + dsOrb + '-' + pad(dsI) + '_' + ts + '.json';
   }
 
   /* Parsa + valida un blob .json. Ritorna { ok, payload, reason }. */
