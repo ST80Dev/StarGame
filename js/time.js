@@ -89,14 +89,24 @@
        sempre recuperabile (decisione #22: mai fail-state; basta 1 impianto
        di riciclo per invertire la rotta). Numeri tarati perché in Fase 0 la
        pressione si avverta solo nel lungo periodo su colonie sviluppate. */
-    WASTE_PER_POP:       0.15,   // rifiuti / unità pop / Ι
-    WASTE_BY_CAT: {              // rifiuti / modulo / Ι per categoria struttura
-      estrattiva: 0.30, produttiva: 0.60, militare: 0.30,
-      ricerca:    0.10, civile:    0.10, avanzata:  0.25
+    /* Gestione rifiuti — RETUNE (decisione #48): problema di LUNGO TERMINE,
+       legato alla POPOLAZIONE e tarato sul MAX STRESS della colonia.
+       - generazione pop SUPER-LINEARE (K·pop²): trascurabile a pop bassa,
+         sale solo avvicinandosi al cap → ci si pensa solo a colonia matura.
+       - industria = sorgente SECONDARIA (contributo piccolo).
+       - capacità ALTA: a generazione massima il contenitore si riempie in
+         ~170 Ι (non in pochi Ι), con ~120 Ι di margine prima del malus.
+       - UN impianto di riciclo lvl1 (wasteProcess 10) regge lo stress max di
+         un mondo-giardino pieno → niente più "rincorsa" agli upgrade.
+       Filosofia invariata (decisione #22): mai fail-state, malus progressivo. */
+    WASTE_POP_K:         0.04,   // rifiuti pop / Ι = K · pop² (super-lineare)
+    WASTE_BY_CAT: {              // rifiuti / modulo / Ι per categoria (sorgente secondaria)
+      estrattiva: 0.10, produttiva: 0.15, militare: 0.08,
+      ricerca:    0.04, civile:    0.04, avanzata:  0.08
     },
-    WASTE_BASE_CAPACITY: 500,    // contenimento di base della colonia
-    WASTE_ENERGY_YIELD:  0.25,   // energia recuperata per unità di rifiuto trattato
-    WASTE_SAT_WARN:      0.70,   // saturazione oltre cui inizia il malus (stato 'saturo')
+    WASTE_BASE_CAPACITY: 2000,   // contenimento di base (buffer ampio → lungo termine)
+    WASTE_ENERGY_YIELD:  0.30,   // energia recuperata per unità di rifiuto trattato
+    WASTE_SAT_WARN:      0.75,   // saturazione oltre cui inizia il malus (stato 'saturo')
     WASTE_MALUS_SAT:     0.10,   // malus produzione a saturazione = 1.0
     WASTE_MALUS_CRIT:    0.25,   // malus massimo (saturazione ≥ 2.0, overflow ignorato)
 
@@ -263,13 +273,17 @@
   /* Helper di lettura per la UI (robusto anche prima del primo tick:
      ricalcola la capacità sullo stato corrente). */
   function wasteStatus(colony) {
-    const w = colony.waste || { stock: 0, net: 0 };
+    const w = colony.waste || { stock: 0, net: 0, energyGain: 0 };
     const cap = wasteCapacity(colony);
     const sat = cap > 0 ? (w.stock || 0) / cap : 0;
     let state = 'ok';
     if (sat >= 1.0) state = 'critico';
     else if (sat >= CFG.WASTE_SAT_WARN) state = 'saturo';
-    return { stock: w.stock || 0, net: w.net || 0, capacity: cap, saturation: sat, state: state };
+    return {
+      stock: w.stock || 0, net: w.net || 0,
+      capacity: cap, saturation: sat, state: state,
+      energyGain: w.energyGain || 0   // en/Ι recuperata dal riciclo (finché brucia)
+    };
   }
 
   /* Calcola il malus globale di produzione in base alla scarsità.
@@ -674,8 +688,10 @@
     const waste = ensureWaste(colony);
     const S = root.ORION.structures;
 
-    // 1) Generazione (popolazione) + 2) industria/trattamento in un solo giro
-    let gen = (colony.pop.total || 0) * CFG.WASTE_PER_POP;
+    // 1) Generazione (popolazione SUPER-LINEARE K·pop²) + 2) industria/trattamento
+    //    Super-lineare: a pop bassa è trascurabile, conta solo vicino al cap.
+    const pt = colony.pop.total || 0;
+    let gen = pt * pt * CFG.WASTE_POP_K;
     let process = 0;
     Object.keys(colony.structures || {}).forEach(function (id) {
       const def = S.get(id);
@@ -691,11 +707,15 @@
     if (after < 0) after = 0;
     // energia recuperata = rifiuti EFFETTIVAMENTE trattati × resa
     const processed = Math.max(0, (before + gen) - after);
-    if (processed > 0 && CFG.WASTE_ENERGY_YIELD > 0) {
-      colony.stock.en = (colony.stock.en || 0) + processed * CFG.WASTE_ENERGY_YIELD;
+    const energyGain = (processed > 0 && CFG.WASTE_ENERGY_YIELD > 0) ? processed * CFG.WASTE_ENERGY_YIELD : 0;
+    if (energyGain > 0) {
+      colony.stock.en = (colony.stock.en || 0) + energyGain;
     }
     waste.stock = after;
     waste.net = gen - process;
+    /* Guadagno energia temporaneo da riciclo, finché ci sono rifiuti da
+       bruciare — esposto alla UI (decisione #48). */
+    waste.energyGain = energyGain;
 
     // 3) Saturazione → stato (progressivo, recovery-friendly)
     const cap = wasteCapacity(colony);

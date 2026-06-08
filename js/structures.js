@@ -62,7 +62,7 @@
       desc: 'Pannelli ad alta efficienza per catturare l\'irradianza stellare.',
       cost: { met: 35, en: 5 }, time: 9,
       upkeep: {},
-      rates: { en: 6 },
+      rates: { en: 8 },   // decisione #48 (rebalance energia): 6 → 8 (+33% a tutti i livelli)
       slots: 1, maxLevel: 5,
       bodyTypes: HABITABLE.concat(['gassoso'])
     },
@@ -114,7 +114,7 @@
       id: 'laboratorio', name: 'Laboratorio', cat: 'ricerca', glyph: '⌬',
       desc: 'Contribuisce alla ricerca distribuita della civiltà.',
       cost: { met: 60, en: 20 }, time: 14,
-      upkeep: { en: 2 },
+      upkeep: { en: 1 },   // decisione #48: 2 → 1 (alleggerito budget energia)
       rates: { research: 3 },
       slots: 1, maxLevel: 4,
       bodyTypes: HABITABLE,
@@ -136,7 +136,7 @@
       id: 'cantiere-navale', name: 'Hangar di costruzione', cat: 'militare', glyph: '▱',
       desc: 'Necessario per costruire astronavi. Offre cantieri (build paralleli) e attracchi (porto a terra). Cresce coi livelli.',
       cost: { met: 120, en: 40 }, time: 50,
-      upkeep: { en: 4, met: 1 },
+      upkeep: { en: 3, met: 1 },   // decisione #48: 4 → 3
       rates: {},
       slots: 2, maxLevel: 5,
       bodyTypes: HABITABLE,
@@ -155,7 +155,7 @@
       id: 'accademia-militare', name: 'Accademia militare', cat: 'militare', glyph: '⚔',
       desc: 'Forma quadri militari e veterani (figure speciali, M14).',
       cost: { met: 60, en: 30, food: 10 }, time: 22,
-      upkeep: { en: 2, food: 1 },
+      upkeep: { en: 1, food: 1 },   // decisione #48: 2 → 1
       rates: {},
       slots: 1, maxLevel: 2,
       bodyTypes: HABITABLE,
@@ -179,7 +179,7 @@
       id: 'ospedale', name: 'Ospedale', cat: 'civile', glyph: '✚',
       desc: 'Accelera la crescita della popolazione e ne migliora la qualità.',
       cost: { met: 55, en: 20, food: 5 }, time: 14,
-      upkeep: { en: 2, food: 1 },
+      upkeep: { en: 1, food: 1 },   // decisione #48: 2 → 1
       rates: { popGrowth: 0.2 },
       slots: 1, maxLevel: 3,
       bodyTypes: HABITABLE
@@ -204,14 +204,17 @@
        su mondi ostili (Fase 1, quando M13 sbloccherà le tech dedicate). */
     {
       id: 'impianto-riciclo', name: 'Impianto di riciclo', cat: 'civile', glyph: '♻',
-      desc: 'Tratta i rifiuti prodotti da popolazione e industria, recuperandone energia. Aumenta la capacità di contenimento e abbatte la saturazione.',
+      desc: 'Tratta i rifiuti prodotti da popolazione e industria, recuperandone energia. Si autoalimenta col rifiuto (nessun upkeep). Un solo impianto regge una grande colonia.',
       cost: { met: 50, en: 15 }, time: 12,
-      upkeep: { en: 1 },
+      /* Decisione #48 (retune): nessun upkeep energia — l'impianto è
+         alimentato dal rifiuto che brucia (waste-to-energy). Così smaltire
+         non litiga col budget energetico. */
+      upkeep: {},
       rates: {},
       slots: 1, maxLevel: 5,
       bodyTypes: HABITABLE.concat(ORBITAL),
-      wasteProcess: 3,        // rifiuti trattati per modulo / Ι (→ energia)
-      wasteCapacity: 150      // contenimento aggiunto per modulo
+      wasteProcess: 12,       // rifiuti trattati per modulo / Ι (→ energia) — un lvl1 regge lo stress max con margine
+      wasteCapacity: 300      // contenimento aggiunto per modulo
     },
 
     // ===== Avanzate (3 — decisione #45 aggiunge bonifica + terraformazione) =====
