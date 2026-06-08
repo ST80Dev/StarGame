@@ -654,8 +654,9 @@
         'Un solo impianto a livello 1 tratta <strong>12 rifiuti/Ι</strong> — abbastanza da reggere lo stress di un ' +
         'mondo-giardino pieno. Niente "rincorsa" agli upgrade.</p>' +
         '<p><strong>Energia come bonus:</strong> mentre brucia rifiuti dà un guadagno di energia <em>temporaneo</em> ' +
-        '(visibile nella scheda Colonia, finché c\'è rifiuto). Puoi sfruttarlo come fonte extra, ma rende solo se c\'è ' +
-        'molto rifiuto da trattare → cioè a popolazione alta.</p>' +
+        '(visibile nella scheda Colonia, finché c\'è rifiuto). Rende solo se c\'è molto rifiuto → cioè a popolazione alta. ' +
+        '<strong>Potenziando l\'impianto la resa per unità sale</strong> (+5%/livello): a colonia molto popolosa, un riciclo ' +
+        'di livello alto ottimizza ulteriormente l\'energia recuperata.</p>' +
         '<p><strong>In arrivo:</strong> con le rotte commerciali potrai <em>esportare</em> i rifiuti, e i mondi ostili ' +
         'diventeranno <em>colonie riciclanti</em> dedicate.</p>'
     },
