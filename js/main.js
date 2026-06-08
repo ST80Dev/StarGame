@@ -2156,8 +2156,22 @@ function tryColonize(planet) {
   const homeInTrouble = !!(homeColony._scar &&
     (homeColony._scar.food.state === 'crit' || homeColony._scar.water.state === 'crit'));
   const mul = (homeInTrouble || colony.isHomeBase) ? 1 : 5;
+  const totalCost = { met: cost.met * mul, en: cost.en * mul, food: cost.food * mul, water: cost.water * mul };
+  const msg = '<p>Lanciare una spedizione coloniale verso <strong>' + escapeHtml(planet.name) + '</strong>?</p>' +
+    '<p>Costo (×' + mul + '): <strong>' + formatCostHtml(totalCost) + '</strong><br>' +
+    'Viaggio: <strong>' + cost.impulsi + ' Ι</strong> (' + ORION.time.format(cost.impulsi, 'duration') + ')</p>' +
+    (mul > 1 ? '<p class="confirm-hint">Il moltiplicatore ×5 scade automaticamente se la base entra in carestia critica.</p>' : '');
+  confirmAction({
+    title: 'Spedizione coloniale',
+    message: msg,
+    confirmLabel: 'Lancia spedizione',
+    onConfirm: function () { _doColonize(planet, colKey, colony, homeColony, totalCost, cost); }
+  });
+}
+function _doColonize(planet, colKey, colony, homeColony, totalCost, cost) {
+  const g = ORION.game;
   ['met', 'en', 'water', 'food'].forEach(function (k) {
-    homeColony.stock[k] = Math.max(0, (homeColony.stock[k] || 0) - cost[k] * mul);
+    homeColony.stock[k] = Math.max(0, (homeColony.stock[k] || 0) - totalCost[k]);
   });
   // M05: la colonia entra in stato "in arrivo" — il loop la attiverà al
   // termine del countdown (Impulsi da §4.4/§6.2).
@@ -2435,22 +2449,52 @@ function renderPlanetStruttureTab(host, planet, colony) {
   });
 }
 
+/* Helper: formatta il costo come riga "12 ⛭ · 5 ⚡" (HTML con resIcon). */
+function formatCostHtml(cost) {
+  if (!cost) return '—';
+  const parts = [];
+  ['met','en','food','water'].forEach(function (k) {
+    const v = cost[k]; if (v == null || v === 0) return;
+    const icon = (typeof resIcon === 'function') ? resIcon(k) : (typeof resGlyph === 'function' ? resGlyph(k) : '');
+    parts.push(Math.round(v) + ' ' + icon);
+  });
+  return parts.join(' · ') || '—';
+}
+
 function tryBuild(id) {
   const g = ORION.game;
   const colony = g.colonies[ORION.openPlanetKey];
   const planet = ORION.currentPlanet;
-  // M05: la struttura va in coda e maturerà col game loop. Niente più
-  // auto-complete (era lo stub M04).
+  const def = ORION.structures.get(id);
+  if (!def) return;
+  /* Pre-check (azione ammessa) prima di chiedere conferma — niente modal
+     se l'azione poi fallirebbe per slot/risorse/prerequisiti. */
+  const chk = ORION.planet.canBuild(colony, planet, id, g);
+  if (!chk.ok) { console.info('Costruzione rifiutata:', chk.reason); return; }
+  const nextLevel = chk.nextLevel || 1;
+  const cost = ORION.structures.stepCost(def, nextLevel);
+  const time = ORION.structures.stepTime(def, nextLevel);
+  const verb = chk.isUpgrade ? ('Espandere ' + def.name + ' a livello ' + nextLevel) : ('Costruire ' + def.name);
+  const msg = '<p>' + verb + ' su <strong>' + escapeHtml(planet.name) + '</strong>?</p>' +
+    '<p>Costo: <strong>' + formatCostHtml(cost) + '</strong><br>' +
+    'Tempo: <strong>' + time + ' Ι</strong> (' + ORION.time.format(time, 'duration') + ')</p>';
+  confirmAction({
+    title: chk.isUpgrade ? 'Conferma espansione' : 'Conferma costruzione',
+    message: msg,
+    confirmLabel: chk.isUpgrade ? 'Espandi' : 'Costruisci',
+    onConfirm: function () { _doBuild(id); }
+  });
+}
+function _doBuild(id) {
+  const g = ORION.game;
+  const colony = g.colonies[ORION.openPlanetKey];
+  const planet = ORION.currentPlanet;
   const r = ORION.planet.startBuild(colony, planet, id, ORION.time.currentDS(g), g);
   if (!r.ok) { console.info('Costruzione rifiutata:', r.reason); return; }
   const def = ORION.structures.get(id);
   pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione: <strong>' + def.name + '</strong> su ' + planet.name + bodyTagHtml(planet.systemId) + ' (' + def.time + ' ' + iU() + ').', 'planet');
-  /* M06.7: alla prima costruzione di un certo tipo, mostra la scheda
-     tutorial dedicata (rispetta isEnabled + isSeen — niente spam). */
   if (ORION.tutorial && ORION.tutorial.fire) {
     ORION.tutorial.fire('struct:' + id);
-    /* Decisione #45: alla prima costruzione della Bonifica territoriale,
-       mostra anche la scheda concettuale "terraforming" (introduce il tier 2). */
     if (id === 'centro-ingegneria-planetaria') ORION.tutorial.fire('terraforming');
   }
   persistGame(g);
@@ -2460,9 +2504,28 @@ function tryBuild(id) {
 
 function tryCancel(idx) {
   const colony = ORION.game.colonies[ORION.openPlanetKey];
-  ORION.planet.cancelBuild(colony, idx);
-  updateGlobalResourceHud();
-  updatePlanetUI();
+  const q = colony.queue && colony.queue[idx];
+  if (!q) return;
+  const def = ORION.structures.get(q.id);
+  const name = def ? def.name : q.id;
+  const isDemo = q.target === 'demolish';
+  const msg = isDemo
+    ? '<p>Annullare lo smantellamento di <strong>' + escapeHtml(name) + '</strong>?</p>' +
+      '<p>La struttura resterà intatta.</p>'
+    : '<p>Annullare la costruzione di <strong>' + escapeHtml(name) + '</strong> ' +
+      (q.toLevel > 1 ? ('(espansione a L' + q.toLevel + ') ') : '') + '?</p>' +
+      '<p>Rimborso: <strong>80%</strong> del costo speso.</p>';
+  confirmAction({
+    title: isDemo ? 'Annulla smantellamento' : 'Annulla costruzione',
+    message: msg,
+    confirmLabel: 'Sì, annulla',
+    cancelLabel: 'Continua',
+    onConfirm: function () {
+      ORION.planet.cancelBuild(colony, idx);
+      updateGlobalResourceHud();
+      updatePlanetUI();
+    }
+  });
 }
 
 function tryDemolish(id) {
@@ -2473,12 +2536,26 @@ function tryDemolish(id) {
   if (!def) return;
   const refundPct = colony.isHomeBase ? 70 : 50;
   const dur = Math.max(1, Math.round((def.time || 2) / 2));
-  const confirmMsg = 'Smantellare "' + def.name + '"?\n\n'
-    + '· Tempo: ' + dur + ' Ι (occupa il cantiere)\n'
-    + '· Rimborso: ' + refundPct + '% del costo originale\n'
-    + '· Morale −0,10 per 30 Ι (decadimento lineare)\n\n'
-    + 'La struttura resta operativa fino alla fine dello smantellamento.';
-  if (!window.confirm(confirmMsg)) return;
+  const msg = '<p>Smantellare <strong>' + escapeHtml(def.name) + '</strong>?</p>' +
+    '<p>Tempo: <strong>' + dur + ' Ι</strong> (occupa il cantiere)<br>' +
+    'Rimborso: <strong>' + refundPct + '%</strong> del costo originale<br>' +
+    'Morale: <strong>−0,10 per 30 Ι</strong> (decadimento lineare)</p>' +
+    '<p class="confirm-hint">La struttura resta operativa fino alla fine dello smantellamento.</p>';
+  confirmAction({
+    title: 'Conferma smantellamento',
+    message: msg,
+    confirmLabel: 'Smantella',
+    danger: true,
+    onConfirm: function () { _doDemolish(id); }
+  });
+}
+function _doDemolish(id) {
+  const g = ORION.game;
+  const colony = g.colonies[ORION.openPlanetKey];
+  const planet = ORION.currentPlanet;
+  const def = ORION.structures.get(id);
+  if (!def) return;
+  const dur = Math.max(1, Math.round((def.time || 2) / 2));
   const r = ORION.planet.startDemolish(colony, planet, id, ORION.time.currentDS(g));
   if (!r.ok) { console.info('Smantellamento rifiutato:', r.reason); return; }
   pushChronicle(ORION.time.currentDS(g) + ' — Avviato smantellamento: <strong>' + def.name + '</strong> su ' + planet.name + bodyTagHtml(planet.systemId) + ' (' + dur + ' Ι).', 'planet');
@@ -2818,27 +2895,44 @@ function tryBuildShip() {
   const g = ORION.game;
   const colony = g.colonies[ORION.openPlanetKey];
   const planet = ORION.currentPlanet;
-  /* M08 Fase A: la classe nave viene dal dropdown (default explorer). */
   const kind = (ORION.cantieriPickedKind && ORION.cantieriPickedKind[ORION.openPlanetKey]) || 'explorer';
-  const r = ORION.planet.startShipBuild(colony, planet, g, ORION.openPlanetKey, kind);
-  if (!r.ok) { console.info('Costruzione scafo rifiutata:', r.reason); showToast(r.reason); return; }
-  const cls = (ORION.fleet && ORION.fleet.getClass(kind)) || { name: 'Scafo esploratore' };
-  pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione di una <strong>' + cls.name + '</strong> su ' + planet.name + bodyTagHtml(planet.systemId) + '.', 'planet');
-  persistGame(g);
-  updateGlobalResourceHud();
-  updatePlanetUI();
+  const cls = (ORION.fleet && ORION.fleet.getClass(kind)) || { name: 'Scafo esploratore', cost: {}, time: 0 };
+  const msg = '<p>Costruire <strong>' + escapeHtml(cls.name) + '</strong> su <strong>' + escapeHtml(planet.name) + '</strong>?</p>' +
+    '<p>Costo: <strong>' + formatCostHtml(cls.cost) + '</strong><br>' +
+    'Tempo: <strong>' + (cls.time || 0) + ' Ι</strong></p>';
+  confirmAction({
+    title: 'Costruzione scafo',
+    message: msg,
+    confirmLabel: 'Costruisci',
+    onConfirm: function () {
+      const r = ORION.planet.startShipBuild(colony, planet, g, ORION.openPlanetKey, kind);
+      if (!r.ok) { console.info('Costruzione scafo rifiutata:', r.reason); showToast(r.reason); return; }
+      pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione di una <strong>' + cls.name + '</strong> su ' + planet.name + bodyTagHtml(planet.systemId) + '.', 'planet');
+      persistGame(g);
+      updateGlobalResourceHud();
+      updatePlanetUI();
+    }
+  });
 }
 
 function tryBuildCrew() {
   const g = ORION.game;
   const colony = g.colonies[ORION.openPlanetKey];
   const planet = ORION.currentPlanet;
-  const r = ORION.planet.startCrewBuild(colony, planet);
-  if (!r.ok) { console.info('Formazione equipaggio rifiutata:', r.reason); showToast(r.reason); return; }
-  pushChronicle(ORION.time.currentDS(g) + ' — Avviata formazione di un <strong>equipaggio esploratore</strong> presso l\'Accademia di ' + planet.name + bodyTagHtml(planet.systemId) + '.', 'planet');
-  persistGame(g);
-  updateGlobalResourceHud();
-  updatePlanetUI();
+  const msg = '<p>Formare un <strong>equipaggio esploratore</strong> presso l\'Accademia di <strong>' + escapeHtml(planet.name) + '</strong>?</p>';
+  confirmAction({
+    title: 'Formazione equipaggio',
+    message: msg,
+    confirmLabel: 'Forma',
+    onConfirm: function () {
+      const r = ORION.planet.startCrewBuild(colony, planet);
+      if (!r.ok) { console.info('Formazione equipaggio rifiutata:', r.reason); showToast(r.reason); return; }
+      pushChronicle(ORION.time.currentDS(g) + ' — Avviata formazione di un <strong>equipaggio esploratore</strong> presso l\'Accademia di ' + planet.name + bodyTagHtml(planet.systemId) + '.', 'planet');
+      persistGame(g);
+      updateGlobalResourceHud();
+      updatePlanetUI();
+    }
+  });
 }
 
 function tryCancelShip(idx) {
@@ -3282,33 +3376,56 @@ function doBankTrade(colony, dir, resource) {
 }
 
 function doBuildMercantile(colony, tier) {
-  const g = ORION.game;
-  /* Deriva la chiave dalla colonia (robusto sia per il centro che per la
-     dx, dove ORION.openPlanetKey al click è già ripristinato al centro). */
-  const colKey = colony.systemId + ':' + colony.bodyKey;
-  const r = ORION.trade.startMercantileBuild(colony, null, g, colKey, tier);
-  if (!r.ok) { showToast(r.reason || 'Costruzione rifiutata'); return; }
   const t = ORION.trade.getTier(tier);
-  if (ORION.tutorial) ORION.tutorial.fire('mercantili');
-  showToast((t ? t.name : 'Mercantile') + ' in costruzione');
-  persistGame(g);
-  updatePlanetUI();
+  const msg = '<p>Costruire <strong>' + escapeHtml(t ? t.name : 'Mercantile') + '</strong> presso l\'Hangar di <strong>' + escapeHtml((colony && colony.body && colony.body.name) || '—') + '</strong>?</p>' +
+    (t && t.cost ? '<p>Costo: <strong>' + formatCostHtml(t.cost) + '</strong><br>Tempo: <strong>' + (t.time || 0) + ' Ι</strong></p>' : '');
+  confirmAction({
+    title: 'Costruzione mercantile',
+    message: msg,
+    confirmLabel: 'Costruisci',
+    onConfirm: function () {
+      const g = ORION.game;
+      const colKey = colony.systemId + ':' + colony.bodyKey;
+      const r = ORION.trade.startMercantileBuild(colony, null, g, colKey, tier);
+      if (!r.ok) { showToast(r.reason || 'Costruzione rifiutata'); return; }
+      if (ORION.tutorial) ORION.tutorial.fire('mercantili');
+      showToast((t ? t.name : 'Mercantile') + ' in costruzione');
+      persistGame(g);
+      updatePlanetUI();
+    }
+  });
 }
 function doCancelMercantile(colony, idx) {
-  const g = ORION.game;
-  const r = ORION.trade.cancelMercantileBuild(colony, idx);
-  if (!r.ok) { showToast(r.reason || 'Annullamento rifiutato'); return; }
-  persistGame(g);
-  updatePlanetUI();
+  confirmAction({
+    title: 'Annulla costruzione mercantile',
+    message: '<p>Annullare la costruzione del mercantile in coda?</p>',
+    confirmLabel: 'Sì, annulla',
+    cancelLabel: 'Continua',
+    onConfirm: function () {
+      const g = ORION.game;
+      const r = ORION.trade.cancelMercantileBuild(colony, idx);
+      if (!r.ok) { showToast(r.reason || 'Annullamento rifiutato'); return; }
+      persistGame(g);
+      updatePlanetUI();
+    }
+  });
 }
 function doCancelRoute(routeId) {
-  const g = ORION.game;
-  const r = ORION.trade.cancelRoute(g, routeId);
-  if (!r.ok) { showToast(r.reason || 'Chiusura rifiutata'); return; }
-  showToast('Rotta chiusa');
-  persistGame(g);
-  updatePlanetUI();
-  if (ORION._currentView === 'market') renderView(document.querySelector('[data-view-stage]'), 'market');
+  confirmAction({
+    title: 'Chiudi rotta commerciale',
+    message: '<p>Chiudere la rotta? Il mercantile assegnato torna a riposo.</p>',
+    confirmLabel: 'Chiudi rotta',
+    cancelLabel: 'Mantieni',
+    onConfirm: function () {
+      const g = ORION.game;
+      const r = ORION.trade.cancelRoute(g, routeId);
+      if (!r.ok) { showToast(r.reason || 'Chiusura rifiutata'); return; }
+      showToast('Rotta chiusa');
+      persistGame(g);
+      updatePlanetUI();
+      if (ORION._currentView === 'market') renderView(document.querySelector('[data-view-stage]'), 'market');
+    }
+  });
 }
 
 /* Overlay creazione rotta: destinazione (colonia raggiungibile) + risorsa
@@ -4082,9 +4199,21 @@ function handleSiegeTribute(battleId, stage) {
 /* Leva di recovery: evacua una colonia (recupera metà risorse alla capitale,
    sistema neutrale). Recovery-friendly: le flotte non si perdono. */
 function handleEvacuate(colonyKey, stage) {
+  const name = colonyNameFromKey(colonyKey).replace(/<[^>]+>/g, '');
+  const msg = '<p>Evacuare <strong>' + escapeHtml(name) + '</strong>?</p>' +
+    '<p>Recuperi <strong>metà delle risorse</strong> alla capitale; la colonia viene abbandonata.</p>' +
+    '<p class="confirm-hint">Le flotte assegnate non si perdono — leva di recovery.</p>';
+  confirmAction({
+    title: 'Conferma evacuazione',
+    message: msg,
+    confirmLabel: 'Evacua',
+    danger: true,
+    force: true,    // sempre conferma anche se il toggle è OFF
+    onConfirm: function () { _doEvacuate(colonyKey, stage); }
+  });
+}
+function _doEvacuate(colonyKey, stage) {
   const g = ORION.game;
-  if (!confirm('Evacuare ' + colonyNameFromKey(colonyKey).replace(/<[^>]+>/g, '') +
-    '? Recuperi metà delle risorse alla capitale; la colonia viene abbandonata.')) return;
   const r = ORION.time.evacuateColony(g, colonyKey);
   if (!r.ok) { showToast(r.reason || 'Evacuazione fallita'); return; }
   const parts = ['met', 'en', 'food', 'water'].filter(function (k) { return (r.recovered || {})[k] > 0; })
@@ -4539,13 +4668,25 @@ function renderCivView(stage) {
     btn.addEventListener('click', function () {
       const sid = Number(btn.dataset.sys);
       if (!Number.isFinite(sid)) return;
-      if (!window.confirm('Abbandonare l\'occupazione di questo sistema?')) return;
-      const r = ORION.time.releaseOccupation(g, sid);
-      if (!r.ok) { showToast(r.reason || 'Rilascio rifiutato'); return; }
-      chronicleEvent({ kind: 'system-released', sysId: sid, impulso: g.timeImpulsi });
-      persistGame(g);
-      updateGlobalIndicesHud();
-      renderCivView(stage);
+      const sys = g.galaxy.systems[sid];
+      const sysName = sys ? sys.name : ('sistema ' + sid);
+      confirmAction({
+        title: 'Rilascia occupazione',
+        message: '<p>Abbandonare l\'occupazione di <strong>' + escapeHtml(sysName) + '</strong>?</p>' +
+          '<p class="confirm-hint">Se hai conquistato il sistema da una civiltà buona o neutrale, ' +
+          'il rilascio è un atto di clemenza (+3 reputazione).</p>',
+        confirmLabel: 'Rilascia',
+        danger: true,
+        force: true,
+        onConfirm: function () {
+          const r = ORION.time.releaseOccupation(g, sid);
+          if (!r.ok) { showToast(r.reason || 'Rilascio rifiutato'); return; }
+          chronicleEvent({ kind: 'system-released', sysId: sid, impulso: g.timeImpulsi });
+          persistGame(g);
+          updateGlobalIndicesHud();
+          renderCivView(stage);
+        }
+      });
     });
   });
   /* M12 Fase A2 (#56 §15.3): handler accordi commerciali. */
@@ -4717,21 +4858,49 @@ function collectOrderSystems(g, fleet, order) {
 }
 
 function runDiplomacyAction(civ, actionId) {
+  const danger = (actionId === 'declare-war' || actionId === 'break-alliance');
+  let title, msg, confirmLabel;
+  if (actionId === 'declare-war') {
+    title = 'Dichiara guerra';
+    msg = '<p>Dichiarare guerra a <strong>' + escapeHtml(civ.name) + '</strong>?</p>' +
+      (civ.alignment !== 'male'
+        ? '<p>Aggredire una civiltà <strong>non maligna</strong> costa reputazione (verbo morale dark).</p>'
+        : '<p>Aggredire una civiltà maligna è un atto di luce (+reputazione).</p>');
+    confirmLabel = 'Dichiara guerra';
+  } else if (actionId === 'break-alliance') {
+    title = 'Rompi alleanza';
+    msg = '<p>Rompere l\'alleanza con <strong>' + escapeHtml(civ.name) + '</strong>?</p>' +
+      '<p>Costo: <strong>−10 reputazione</strong>. La civiltà ti vedrà come traditore.</p>';
+    confirmLabel = 'Rompi';
+  } else if (actionId === 'propose-peace') {
+    title = 'Proponi pace';
+    msg = '<p>Proporre pace a <strong>' + escapeHtml(civ.name) + '</strong>?</p>';
+    confirmLabel = 'Proponi';
+  } else if (actionId === 'propose-alliance') {
+    title = 'Proponi alleanza';
+    msg = '<p>Proporre alleanza a <strong>' + escapeHtml(civ.name) + '</strong>?</p>';
+    confirmLabel = 'Proponi';
+  } else {
+    title = 'Dispaccio diplomatico';
+    msg = '<p>Procedere?</p>';
+    confirmLabel = 'Invia';
+  }
+  confirmAction({
+    title: title,
+    message: msg,
+    confirmLabel: confirmLabel,
+    danger: danger,
+    force: danger,   // guerra + rottura sempre confermate
+    onConfirm: function () { _doDiplomacyAction(civ, actionId); }
+  });
+}
+function _doDiplomacyAction(civ, actionId) {
   const g = ORION.game;
   const DIP = ORION.diplomacy;
   if (!g || !DIP) return;
-  const danger = (actionId === 'declare-war' || actionId === 'break-alliance');
-  if (danger) {
-    const msg = (actionId === 'declare-war')
-      ? 'Dichiarare guerra a ' + civ.name + '?' +
-        (civ.alignment !== 'male' ? ' (aggredire una civiltà non maligna costa reputazione)' : '')
-      : 'Rompere l\'alleanza con ' + civ.name + '? Costa reputazione.';
-    if (!window.confirm(msg)) return;
-  }
   const events = [];
   const res = DIP.apply(g, civ, actionId, events);
   if (!res.ok) { showToast(res.reason || 'Dispaccio rifiutato'); return; }
-  /* Riusa il pipeline eventi → cronaca/auto-pausa (coerente col resto). */
   events.forEach(function (ev) { chronicleEvent(ev); });
   persistGame(g);
   updateGlobalIndicesHud();
@@ -5427,6 +5596,133 @@ function bodyDotColor(b) {
   const pal = ORION.system.BODY_TYPES[b.type].palette;
   if (pal.bands) return ORION.system.GAS_VARIANTS[b.variant || 0].base;
   return pal.land || pal.rock || '#9aa6cc';
+}
+
+/* ---------------------------------------------------------------------
+   Decisione di sessione (action-confirm): preferenze giocatore + modale
+   di conferma per le azioni costose/irreversibili. Toggle globale
+   `orion.confirmActions` (default ON per nuovi utenti, persistito in
+   localStorage). Alcune azioni "sempre confermate" ignorano il toggle
+   (guerra, rottura alleanza, evacua, rilascia occupazione).
+   --------------------------------------------------------------------- */
+const PREFS_LS_KEY = 'orion.prefs';
+const DEFAULT_PREFS = {
+  confirmActions: true   // chiede conferma su build/demolisci/colonizza/...
+};
+ORION.prefs = Object.assign({}, DEFAULT_PREFS);
+
+function loadPrefs() {
+  try {
+    const raw = localStorage.getItem(PREFS_LS_KEY);
+    if (raw) ORION.prefs = Object.assign({}, DEFAULT_PREFS, JSON.parse(raw));
+    else ORION.prefs = Object.assign({}, DEFAULT_PREFS);
+  } catch (_) { ORION.prefs = Object.assign({}, DEFAULT_PREFS); }
+}
+function savePrefs() {
+  try { localStorage.setItem(PREFS_LS_KEY, JSON.stringify(ORION.prefs)); }
+  catch (_) { /* private mode */ }
+}
+function isConfirmActionsOn() { return !!(ORION.prefs && ORION.prefs.confirmActions); }
+
+/* confirmAction(opts) — apre la modale di conferma e chiama onConfirm
+   se l'utente conferma. Se `force` è false E il toggle delle conferme
+   è OFF, esegue subito onConfirm senza chiedere.
+   opts: { title, message (html ok), confirmLabel, cancelLabel, danger,
+           force, onConfirm } */
+function confirmAction(opts) {
+  opts = opts || {};
+  if (!opts.force && !isConfirmActionsOn()) {
+    if (typeof opts.onConfirm === 'function') opts.onConfirm();
+    return;
+  }
+  const host = document.querySelector('[data-bind="confirm-modal"]');
+  if (!host) { if (opts.onConfirm) opts.onConfirm(); return; }
+  const title = escapeHtml(opts.title || 'Confermi?');
+  const message = opts.message || '';   // HTML consentito
+  const confirmLabel = escapeHtml(opts.confirmLabel || 'Conferma');
+  const cancelLabel = escapeHtml(opts.cancelLabel || 'Annulla');
+  const danger = !!opts.danger;
+  host.innerHTML =
+    '<div class="confirm-modal__panel' + (danger ? ' is-danger' : '') + '">' +
+      '<h3 class="confirm-modal__title">' + title + '</h3>' +
+      '<div class="confirm-modal__body">' + message + '</div>' +
+      '<div class="confirm-modal__actions">' +
+        '<button class="btn btn--mini" data-confirm-action="cancel" type="button">' + cancelLabel + '</button>' +
+        '<button class="btn btn--primary' + (danger ? ' btn--danger' : '') + '" data-confirm-action="ok" type="button">' + confirmLabel + '</button>' +
+      '</div>' +
+    '</div>';
+  host.hidden = false;
+  /* Focus iniziale sul Conferma per Enter veloce. */
+  const okBtn = host.querySelector('[data-confirm-action="ok"]');
+  if (okBtn) setTimeout(function () { okBtn.focus(); }, 0);
+
+  function close() {
+    host.hidden = true;
+    host.innerHTML = '';
+    document.removeEventListener('keydown', onKey, true);
+  }
+  function onKey(e) {
+    if (e.key === 'Escape') { e.preventDefault(); close(); if (opts.onCancel) opts.onCancel(); }
+    else if (e.key === 'Enter') { e.preventDefault(); close(); if (opts.onConfirm) opts.onConfirm(); }
+  }
+  document.addEventListener('keydown', onKey, true);
+
+  host.addEventListener('click', function (e) {
+    if (e.target === host) { close(); if (opts.onCancel) opts.onCancel(); return; }
+    const btn = e.target.closest && e.target.closest('[data-confirm-action]');
+    if (!btn) return;
+    if (btn.dataset.confirmAction === 'ok') { close(); if (opts.onConfirm) opts.onConfirm(); }
+    else { close(); if (opts.onCancel) opts.onCancel(); }
+  }, { once: false });
+}
+
+/* --- Modale Preferenze --- */
+function openPrefsModal() {
+  const host = document.querySelector('[data-bind="prefs-modal"]');
+  if (!host) return;
+  const checked = isConfirmActionsOn() ? 'checked' : '';
+  host.innerHTML =
+    '<div class="prefs-modal__panel">' +
+      '<header class="prefs-modal__header">' +
+        '<h2 class="prefs-modal__title">Preferenze giocatore</h2>' +
+        '<button class="btn btn--mini btn--icon-only" data-action="prefs-close" type="button" aria-label="Chiudi">' +
+          '<span class="ui-icon" data-icon="close" aria-hidden="true"></span>' +
+        '</button>' +
+      '</header>' +
+      '<div class="prefs-modal__body">' +
+        '<label class="prefs-row">' +
+          '<input type="checkbox" data-pref="confirmActions" ' + checked + '> ' +
+          '<span class="prefs-row__label">Chiedi conferma sulle azioni</span>' +
+          '<span class="prefs-row__hint">Costruzioni, espansioni, demolizioni, ordini di flotta, ' +
+          'commercio. Alcune azioni con effetti pesanti (dichiara guerra, evacua colonia) ' +
+          'chiedono comunque conferma anche se questa opzione è disattiva.</span>' +
+        '</label>' +
+      '</div>' +
+    '</div>';
+  host.hidden = false;
+  if (typeof ORION.injectStaticSvgIcons === 'function') ORION.injectStaticSvgIcons(host);
+
+  host.querySelector('input[data-pref="confirmActions"]').addEventListener('change', function (e) {
+    ORION.prefs.confirmActions = !!e.target.checked;
+    savePrefs();
+  });
+  host.querySelector('[data-action="prefs-close"]').addEventListener('click', closePrefsModal);
+  host.addEventListener('click', function (e) {
+    if (e.target === host) closePrefsModal();
+  });
+  document.addEventListener('keydown', function escClose(e) {
+    if (e.key === 'Escape') { closePrefsModal(); document.removeEventListener('keydown', escClose, true); }
+  }, true);
+}
+function closePrefsModal() {
+  const host = document.querySelector('[data-bind="prefs-modal"]');
+  if (host) { host.hidden = true; host.innerHTML = ''; }
+}
+
+function initPrefsControls() {
+  loadPrefs();
+  const btn = document.querySelector('[data-action="open-prefs"]');
+  if (btn) btn.addEventListener('click', openPrefsModal);
 }
 
 /* ---------------------------------------------------------------------
@@ -8594,6 +8890,7 @@ function boot() {
   initTimeControls();
   initSaveControls();
   initTutorialControls();
+  initPrefsControls();
   initMobileNav();
   initMainMenu();
   showMainMenu('home');

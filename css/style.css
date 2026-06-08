@@ -4154,6 +4154,53 @@ select.main-menu__input { cursor: pointer; }
   .deck-res { flex: 1 1 110px; min-width: 110px; }
 }
 
+/* Plancia di Colonia su TELEFONO (≤760): solo colpo d'occhio — le azioni
+   si fanno dalla schermata Colonia (decisione #65 follow-up). Card condensate
+   fino a misure minime, niente pulsanti azione, cronaca collassata. */
+@media (max-width: 760px) {
+  .colony-deck { padding: 8px 8px calc(var(--mnav-h, 60px) + 16px); }
+
+  /* Risorse: griglia fluida, 4 card che si stringono fino a ~72px */
+  .deck-resources {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+    gap: 6px;
+  }
+  .deck-res { flex: none; min-width: 0; padding: 5px 7px; }
+  .deck-res__label { font-size: 0.58rem; letter-spacing: 0; }
+  .deck-res__value { font-size: 0.95rem; }
+  .deck-res__rate  { font-size: 0.58rem; }
+
+  /* Strutture read-only: niente "vai a costruzione" né "+Espandi" */
+  .deck-structures__hint,
+  .deck-struct__expand { display: none; }
+
+  /* Popolazione: chip classi fluide fino a misure minime */
+  .deck-pop__chips {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+    gap: 5px;
+  }
+  .deck-pop__chip { min-width: 0; font-size: 0.62rem; padding: 3px 6px; }
+  .deck-pop__chip-label { letter-spacing: 0; }
+
+  /* Cronaca: header cliccabile (collassata di default su mobile) */
+  .deck-cron-toggle {
+    display: flex; align-items: center; gap: 6px; width: 100%;
+    background: none; border: none; color: inherit; cursor: pointer;
+    padding: 4px 0; font: inherit; text-align: left;
+  }
+  .deck-cron-icon { color: var(--c-text-soft); flex: 0 0 auto; font-size: 0.95rem; }
+  .deck-cron-caret { margin-left: auto; color: var(--c-text-faint); }
+}
+/* La cronaca collassata nasconde il log a qualsiasi larghezza. */
+.deck-footer.is-collapsed .deck-footer-log,
+.deck-footer.is-collapsed .deck-section__empty { display: none; }
+.deck-cron-toggle { display: flex; align-items: center; gap: 6px; width: 100%;
+  background: none; border: 1px solid transparent; color: inherit; cursor: pointer;
+  padding: 2px 0; font: inherit; text-align: left; }
+.deck-cron-caret { margin-left: auto; color: var(--c-text-faint); }
+
 /* =====================================================================
    M07.3 (decisione #62) — Dashboard Impero
    Overlay al centro a livello Galassia/Gruppo: griglia di card-colonia
@@ -5711,4 +5758,122 @@ select.main-menu__input { cursor: pointer; }
 @keyframes fleet-picker-pulse {
   0%, 100% { box-shadow: 0 6px 24px rgba(0,0,0,0.55), 0 0 0 1px rgba(110,220,255,0.18) inset; }
   50%      { box-shadow: 0 6px 32px rgba(0,0,0,0.55), 0 0 0 2px rgba(110,220,255,0.45) inset; }
+}
+
+/* =====================================================================
+   Decisione di sessione (action-confirm) — modale di conferma azioni
+   + modale Preferenze giocatore. Riusano la palette NASA/Visions.
+   ===================================================================== */
+.btn--prefs {
+  margin-left: 6px;
+  padding: 6px 8px;
+  font-size: 0.95rem;
+}
+.btn--prefs:hover { background: rgba(138, 108, 255, 0.18); }
+
+.confirm-modal,
+.prefs-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 320;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(4, 6, 15, 0.62);
+  backdrop-filter: blur(4px);
+}
+.confirm-modal[hidden],
+.prefs-modal[hidden] { display: none; }
+
+.confirm-modal__panel {
+  width: min(440px, 100%);
+  padding: 16px 18px;
+  background: var(--c-panel-solid);
+  border: 2px solid var(--c-accent-dim);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel), 0 0 22px rgba(47, 230, 224, 0.18);
+}
+.confirm-modal__panel.is-danger {
+  border-color: rgba(255, 138, 124, 0.7);
+  box-shadow: var(--shadow-panel), 0 0 22px rgba(255, 138, 124, 0.18);
+}
+.confirm-modal__title {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-accent);
+}
+.confirm-modal__panel.is-danger .confirm-modal__title { color: var(--c-bad); }
+.confirm-modal__body {
+  margin: 0 0 14px;
+  font-size: 0.86rem;
+  color: var(--c-text);
+  line-height: 1.45;
+}
+.confirm-modal__body strong { color: var(--c-accent); }
+.confirm-modal__panel.is-danger .confirm-modal__body strong { color: var(--c-bad); }
+.confirm-modal__actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+/* ---- Modale Preferenze ---- */
+.prefs-modal__panel {
+  width: min(520px, 100%);
+  padding: 0;
+  background: var(--c-panel-solid);
+  border: 2px solid var(--c-border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
+}
+.prefs-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--c-border-soft);
+  background: rgba(138, 108, 255, 0.08);
+}
+.prefs-modal__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-violet);
+}
+.prefs-modal__body { padding: 16px 18px; display: flex; flex-direction: column; gap: 16px; }
+.prefs-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "check label"
+    ".     hint";
+  gap: 4px 10px;
+  align-items: start;
+  cursor: pointer;
+}
+.prefs-row input[type="checkbox"] {
+  grid-area: check;
+  margin-top: 2px;
+  accent-color: var(--c-accent);
+  width: 18px; height: 18px;
+}
+.prefs-row__label {
+  grid-area: label;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  color: var(--c-text);
+}
+.prefs-row__hint {
+  grid-area: hint;
+  font-size: 0.74rem;
+  color: var(--c-text-soft);
+  line-height: 1.45;
 }

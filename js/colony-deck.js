@@ -486,11 +486,19 @@
           matches.map(function (h) { return '<li>' + h + '</li>'; }).join('') +
           '</ul>';
       }
-      return '<footer class="deck-footer" aria-label="Cronaca colonia">' +
-        '<header class="deck-section__head">' +
+      /* Cronaca collassabile (header cliccabile). Default: aperta su desktop,
+         chiusa su mobile (≤760) — lì il deck è solo colpo d'occhio. Stato
+         volatile in ORION.deckCronOpen (tri-stato: undefined = auto). */
+      const wide = (typeof window !== 'undefined') && window.innerWidth > 760;
+      const isOpen = (ORION.deckCronOpen === undefined) ? wide : !!ORION.deckCronOpen;
+      const icon = (ORION.icon && ORION.icon('chronicle')) || '';
+      return '<footer class="deck-footer' + (isOpen ? '' : ' is-collapsed') + '" aria-label="Cronaca colonia">' +
+        '<button type="button" class="deck-section__head deck-cron-toggle" data-deck-action="toggle-cron" aria-expanded="' + isOpen + '">' +
+          '<span class="deck-cron-icon ui-icon" aria-hidden="true">' + icon + '</span>' +
           '<span class="deck-section__title">Cronaca</span>' +
-        '</header>' +
-        inner +
+          '<span class="deck-cron-caret" aria-hidden="true">' + (isOpen ? '▾' : '▸') + '</span>' +
+        '</button>' +
+        (isOpen ? inner : '') +
       '</footer>';
     }
 
@@ -512,6 +520,11 @@
         this.opts.onOpenTab(t.dataset.tab);
       } else if (action === 'filter-cat') {
         ORION.deckCatFilter = t.dataset.cat;
+        this._render();
+      } else if (action === 'toggle-cron') {
+        const wide = (typeof window !== 'undefined') && window.innerWidth > 760;
+        const cur = (ORION.deckCronOpen === undefined) ? wide : !!ORION.deckCronOpen;
+        ORION.deckCronOpen = !cur;
         this._render();
       }
     }
