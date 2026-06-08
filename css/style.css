@@ -16,9 +16,11 @@
   /* Superfici (pannelli / card / sheet): UN SOLO knob RGB; l'alpha vive
      per-uso come `rgb(var(--c-surface-rgb) / .xx)`. Cambia questo e TUTTE
      le superfici si spostano insieme (fonte di verità della luminosità). */
-  --c-surface-rgb:        41 55 98;    /* navy scuro percepibile (un filo più chiaro) */
-  --c-surface-violet-rgb: 52 40 86;    /* superfici a tinta viola     */
-  --c-bg-deep-rgb:        28 37 76;    /* fondo profondo: viewport/dashboard */
+  /* Default = livello "medio-scuro" (decisione #67). Regolabile dal giocatore
+     in Preferenze → applySurfaceLevel() sovrascrive a runtime. */
+  --c-surface-rgb:        33 44 82;    /* navy scuro (default più scuro) */
+  --c-surface-violet-rgb: 42 32 70;    /* superfici a tinta viola     */
+  --c-bg-deep-rgb:        21 28 60;    /* fondo profondo: viewport/dashboard */
 
   --c-panel:       rgb(var(--c-surface-rgb) / 0.92);   /* deriva dal token superficie */
   --c-panel-solid: rgb(var(--c-surface-rgb));
@@ -6085,4 +6087,37 @@ select.main-menu__input { cursor: pointer; }
   font-size: 0.74rem;
   color: var(--c-text-soft);
   line-height: 1.45;
+}
+
+/* Selettore livelli luminosità (decisione #67) — riga senza checkbox */
+.prefs-row--levels {
+  grid-template-columns: 1fr;
+  grid-template-areas: "label" "levels" "hint";
+  cursor: default;
+}
+.prefs-levels {
+  grid-area: levels;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 2px 0;
+}
+.prefs-level {
+  flex: 1 1 auto;
+  min-width: 72px;
+  padding: 7px 10px;
+  background: rgb(var(--c-surface-rgb) / 0.6);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 6px;
+  color: var(--c-text-soft);
+  font-family: var(--font-display);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.prefs-level:hover { border-color: var(--c-accent); color: var(--c-text); }
+.prefs-level.is-active {
+  border-color: var(--c-accent);
+  color: var(--c-accent);
+  box-shadow: inset 2px 0 0 var(--c-accent);
 }
