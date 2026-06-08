@@ -632,9 +632,9 @@
   }
   function currentDsLabel(payload) {
     if (!payload || !ORION.time || !ORION.time.format) return '—';
-    const orb = payload.startEpochOrbita || 0;
-    const i = payload.timeImpulsi || 0;
-    return ORION.time.format(orb * 100 + i, 'compact');
+    /* Decisione di sessione: il tempo parte da 0, ignoriamo startEpochOrbita
+       anche sui save vecchi (= sottrazione dell'offset iniziale). */
+    return ORION.time.format(payload.timeImpulsi || 0, 'compact');
   }
 
   function saveSlot(idx, game, name) {
@@ -698,16 +698,17 @@
         .replace(/\s+/g, '-')
         .replace(/[^a-zA-Z0-9_-]/g, '');
     }
-    const orb = payload.startEpochOrbita || 0;
+    /* Decisione di sessione (opzione A): nel filename solo l'Ι totale
+       della partita corrente. Ordinabile lessicograficamente con padding
+       fisso a 7 cifre (copre fino a Ω99 = 9.9M Ι), ASCII-safe. */
     const i = payload.timeImpulsi || 0;
-    const dsOrb = orb + Math.floor(i / 100);
-    const dsI = i % 100;
+    const dsStr = String(i).padStart(7, '0');
     const d = new Date();
     const pad = function (n) { return n < 10 ? '0' + n : '' + n; };
     const ts = d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) +
                pad(d.getHours()) + pad(d.getMinutes());
     const prefix = gslug ? 'orion_' + gslug + '_' + seed : 'orion_' + seed;
-    return prefix + '_DS' + dsOrb + '-' + pad(dsI) + '_' + ts + '.json';
+    return prefix + '_DS' + dsStr + '_' + ts + '.json';
   }
 
   /* Parsa + valida un blob .json. Ritorna { ok, payload, reason }. */

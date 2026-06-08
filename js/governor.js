@@ -324,7 +324,7 @@
     /* 1) Prova un BUILD nuovo (entrambi i livelli). */
     const newBuild = decideNextBuild(game, colony, planet, colKey);
     if (newBuild.ok) {
-      const startedDS = (game.startEpochOrbita || 0) * 100 + T;
+      const startedDS = T;
       const res = root.ORION.planet.startBuild(colony, planet, newBuild.structId, startedDS, game);
       if (res && res.ok) {
         pushDecision(gov, 'build', newBuild.structId, 1, T);
@@ -337,7 +337,7 @@
     if (gov.level === 'operativo-attivo' && hasSurplusForExpand(colony)) {
       const exp = decideExpansion(game, colony, planet, colKey);
       if (exp.ok) {
-        const startedDS = (game.startEpochOrbita || 0) * 100 + T;
+        const startedDS = T;
         const res = root.ORION.planet.startBuild(colony, planet, exp.structId, startedDS, game);
         if (res && res.ok) {
           pushDecision(gov, 'expand', exp.structId, exp.nextLevel, T);
