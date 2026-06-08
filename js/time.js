@@ -400,34 +400,47 @@
         const def = root.ORION.structures.get(q.id);
         if (!def) continue;
         if (q.target === 'demolish') {
-          /* Smantellamento completato (decisione recovery-friendly):
-             - rimuove la struttura,
-             - rimborsa il 50% del costo originale (70% sulla natale: il
-               cantiere principale ha infrastruttura di smontaggio migliore),
-             - applica un malus morale -0.10 con decadimento lineare su
-               30 Ι (gestito in processPopulation). Mai fail-state.
-             Se l'osservatorio smontato era l'origine della scansione,
-             interrompe la scansione in corso (riavviabile ricostruendo). */
-          delete colony.structures[q.id];
+          /* Smantellamento completato (decisione #66 + recovery-friendly #22):
+             - se la struttura è a livello ≥ 2 → DOWNGRADE: rimuove solo il
+               modulo superiore (level -= 1), rimborso = stepCost del livello
+               appena smantellato × refundRate (50% / 70% sulla natale).
+               Simmetrico a cancelBuild che rimborsa lo step interrotto.
+             - se è a livello 1 → DEMOLIZIONE COMPLETA: rimuove la struttura,
+               rimborso = costo BASE × refundRate (comportamento storico).
+             - sempre malus morale -0.10 per 30 Ι (decadimento lineare in
+               processPopulation). Mai fail-state.
+             Se l'osservatorio smantellato era l'origine della scansione e va
+             a livello 0, interrompe la scansione in corso (riavviabile). */
+          const struct = colony.structures[q.id];
+          const lvlBefore = struct ? (struct.level || 0) : 0;
           const refundRate = colony.isHomeBase ? 0.7 : 0.5;
-          if (def.cost) {
-            Object.keys(def.cost).forEach(function (k) {
-              colony.stock[k] = (colony.stock[k] || 0) + Math.floor(def.cost[k] * refundRate);
-            });
+          const isDowngrade = lvlBefore >= 2;
+          let refundDef;
+          if (isDowngrade) {
+            refundDef = root.ORION.structures.stepCost(def, lvlBefore);
+            struct.level = lvlBefore - 1;
+          } else {
+            refundDef = def.cost || {};
+            delete colony.structures[q.id];
           }
+          Object.keys(refundDef || {}).forEach(function (k) {
+            colony.stock[k] = (colony.stock[k] || 0) + Math.floor((refundDef[k] || 0) * refundRate);
+          });
           colony.moraleMalus = {
             amount: 0.10,
             startedAt: game.timeImpulsi,
             expiresAt: game.timeImpulsi + 30
           };
-          if (q.id === 'osservatorio' && !colony.scanned.active) {
+          if (q.id === 'osservatorio' && !colony.scanned.active && !isDowngrade) {
             colony.scanned.progress = 0;
           }
           events.push({
-            kind: 'demolish-done',
+            kind: isDowngrade ? 'downgrade-done' : 'demolish-done',
             colony: colony, planet: planet,
             structId: q.id, structName: def.name,
             refundRate: refundRate,
+            fromLevel: lvlBefore,
+            toLevel: isDowngrade ? lvlBefore - 1 : 0,
             impulso: game.timeImpulsi
           });
         } else {

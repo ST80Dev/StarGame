@@ -2367,7 +2367,7 @@ function renderPlanetStruttureTab(host, planet, colony) {
         const maxL = def.maxLevel || 1;
         const demoCheck = ORION.planet.canDemolish(colony, planet, def.id);
         const demoBtn = demoCheck.ok
-          ? '<button class="btn btn--mini btn--icon-only struct-item__demolish" data-demolish="' + def.id + '" type="button" title="Smantella (rimborso 50% · 70% sulla colonia natale · morale −0,10 per 30 Ι)" aria-label="Smantella">' + uiIcon('trash', 'pink') + '</button>'
+          ? '<button class="btn btn--mini btn--icon-only struct-item__demolish" data-demolish="' + def.id + '" type="button" title="' + (lvl >= 2 ? ('Downgrade lvl ' + lvl + '→' + (lvl - 1) + ' (rimborso 50% / 70% natale dello step lvl ' + lvl + ' · morale −0,10 per 30 Ι)') : 'Smantella (rimborso 50% / 70% natale del costo base · morale −0,10 per 30 Ι)') + '" aria-label="' + (lvl >= 2 ? 'Downgrade' : 'Smantella') + '">' + uiIcon('trash', 'pink') + '</button>'
           : '<span class="struct-item__locked is-busy" title="' + demoCheck.reason + '">' + uiIcon('trash', 'soft') + '</span>';
         let upBtn, infoLine, timeChip = '';
         if (lvl >= maxL) {
@@ -2548,16 +2548,38 @@ function tryDemolish(id) {
   const def = ORION.structures.get(id);
   if (!def) return;
   const refundPct = colony.isHomeBase ? 70 : 50;
+  const refundRate = colony.isHomeBase ? 0.7 : 0.5;
   const dur = Math.max(1, Math.round((def.time || 2) / 2));
-  const msg = '<p>Smantellare <strong>' + escapeHtml(def.name) + '</strong>?</p>' +
+  const struct = colony.structures[id];
+  const lvl = struct ? (struct.level || 0) : 0;
+  /* Decisione #66: smantellamento è "modulo per modulo".
+     Livello ≥ 2 → DOWNGRADE (lvl N → N-1, rimborso stepCost(lvl N)).
+     Livello = 1 → DEMOLIZIONE completa (rimborso costo BASE). */
+  const isDowngrade = lvl >= 2;
+  const refundCost = isDowngrade
+    ? ORION.structures.stepCost(def, lvl)
+    : (def.cost || {});
+  const refundPreview = Object.keys(refundCost).map(function (k) {
+    return resIcon(k) + ' ' + Math.floor((refundCost[k] || 0) * refundRate);
+  }).join(' · ') || '—';
+  const title = isDowngrade ? 'Conferma downgrade' : 'Conferma smantellamento';
+  const verb = isDowngrade
+    ? ('Ridurre <strong>' + escapeHtml(def.name) + '</strong> dal livello ' + lvl + ' al livello ' + (lvl - 1) + '?')
+    : ('Smantellare definitivamente <strong>' + escapeHtml(def.name) + '</strong> (livello 1)?');
+  const note = isDowngrade
+    ? '<p class="confirm-hint">Solo il modulo superiore viene smontato. I livelli inferiori restano operativi.</p>'
+    : '<p class="confirm-hint">La struttura resta operativa fino alla fine. A 0 viene rimossa dalla colonia.</p>';
+  const msg = '<p>' + verb + '</p>' +
     '<p>Tempo: <strong>' + dur + ' Ι</strong> (occupa il cantiere)<br>' +
-    'Rimborso: <strong>' + refundPct + '%</strong> del costo originale<br>' +
+    'Rimborso: <strong>' + refundPct + '%</strong> ' +
+    (isDowngrade ? 'del costo del modulo livello ' + lvl : 'del costo base') +
+    ' → <strong>' + refundPreview + '</strong><br>' +
     'Morale: <strong>−0,10 per 30 Ι</strong> (decadimento lineare)</p>' +
-    '<p class="confirm-hint">La struttura resta operativa fino alla fine dello smantellamento.</p>';
+    note;
   confirmAction({
-    title: 'Conferma smantellamento',
+    title: title,
     message: msg,
-    confirmLabel: 'Smantella',
+    confirmLabel: isDowngrade ? 'Downgrade' : 'Smantella',
     danger: true,
     onConfirm: function () { _doDemolish(id); }
   });
@@ -2569,9 +2591,14 @@ function _doDemolish(id) {
   const def = ORION.structures.get(id);
   if (!def) return;
   const dur = Math.max(1, Math.round((def.time || 2) / 2));
+  const struct = colony.structures[id];
+  const lvl = struct ? (struct.level || 0) : 0;
   const r = ORION.planet.startDemolish(colony, planet, id, ORION.time.currentDS(g));
   if (!r.ok) { console.info('Smantellamento rifiutato:', r.reason); return; }
-  pushChronicle(ORION.time.currentDS(g) + ' — Avviato smantellamento: <strong>' + def.name + '</strong> su ' + planet.name + bodyTagHtml(planet.systemId) + ' (' + dur + ' Ι).', 'planet');
+  const verb = lvl >= 2
+    ? ('Avviato downgrade: <strong>' + def.name + '</strong> (lvl ' + lvl + '→' + (lvl - 1) + ')')
+    : ('Avviato smantellamento: <strong>' + def.name + '</strong>');
+  pushChronicle(ORION.time.currentDS(g) + ' — ' + verb + ' su ' + planet.name + bodyTagHtml(planet.systemId) + ' (' + dur + ' Ι).', 'planet');
   persistGame(g);
   updateGlobalResourceHud();
   updatePlanetUI();
@@ -5753,7 +5780,7 @@ const PLAY_DEFAULT_LEVEL = 1;                     // default: 1× (30s/Ι)
 const PLAY_LS_LEVEL  = 'orion.playSpeed';
 const PLAY_LS_PAUSES = 'orion.autopause';
 const DEFAULT_AUTOPAUSE = {
-  'build-done': true, 'demolish-done': true, 'colony-done': true, 'scan-done': true,
+  'build-done': true, 'demolish-done': true, 'downgrade-done': true, 'colony-done': true, 'scan-done': true,
   'scarcity': true, 'scarcity-recover': true, 'pop-loss': true,
   /* Decisione #48 (Fase 0): la saturazione rifiuti (saturo/critico) merita
      una pausa — è il nudge per agire prima del deperimento. Il rientro è
@@ -6102,6 +6129,7 @@ function showEventOverlay(events) {
   const KIND_LABELS = {
     'build-done': 'Completamento struttura',
     'demolish-done': 'Smantellamento completato',
+    'downgrade-done': 'Modulo smantellato',
     'colony-done': 'Nuova colonia',
     'scan-done': 'Scansione completata',
     'scarcity': 'Carenza',
@@ -6288,6 +6316,9 @@ function chronicleEvent(ev) {
   } else if (ev.kind === 'demolish-done') {
     const refundPct = Math.round((ev.refundRate || 0) * 100);
     pushChronicle(ds + ' — <strong>' + ev.structName + '</strong> smantellata su ' + pname + ptag + ' (rimborso ' + refundPct + '%, morale −0,10 per 30 Ι).', 'planet');
+  } else if (ev.kind === 'downgrade-done') {
+    const refundPct = Math.round((ev.refundRate || 0) * 100);
+    pushChronicle(ds + ' — <strong>' + ev.structName + '</strong> ridotta a livello ' + ev.toLevel + ' su ' + pname + ptag + ' (rimborso ' + refundPct + '% dello step lvl ' + ev.fromLevel + ', morale −0,10 per 30 Ι).', 'planet');
   } else if (ev.kind === 'colony-done') {
     pushChronicle(ds + ' — Nuova colonia attiva su <strong>' + pname + '</strong>' + ptag + '.', 'planet');
   } else if (ev.kind === 'scan-done') {
