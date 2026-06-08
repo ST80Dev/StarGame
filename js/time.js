@@ -179,22 +179,24 @@
      CALENDARIO DEL FARO (decisione #30 — sostituisce "DS <orb>.<imp>" di M05).
      Quattro unità ancorate alla pulsar di Orion:
        Ι (iota)  = Impulso (battito)     — atomica
-       Κ (kappa) = Ciclo di nutazione    = 50 Ι
-       Φ (phi)   = Fase di precessione   = 20 Κ = 1000 Ι
-       Ω (omega) = Eone (grande risonanza) = 100 Φ = 100 000 Ι
-     I rapporti irregolari (50:20:100) sono *intenzionalmente* non potenze
+       Κ (kappa) = Ciclo di nutazione    = 10 Ι
+       Φ (phi)   = Fase di precessione   = 12 Κ = 120 Ι
+       Ω (omega) = Eone (grande risonanza) = 20 Φ = 2400 Ι
+     I rapporti irregolari (10:12:20) sono *intenzionalmente* non potenze
      di 10: l'occhio non collassa più i campi a un decimale e ogni unità
      "conta" davvero (vedi discussione di sessione → CLAUDE.md decisione #30).
+     Rapporti ridotti rispetto alla v1 (50:20:100) per far comparire Φ/Ω
+     anche in campagne brevi — vedi decisione di sessione.
 
      Decisione di sessione: il tempo parte da 0 per ogni partita.
      `startEpochOrbita` resta nel payload per retro-compat di shape, ma
      non viene più letto dal formatter — i save vecchi mostrano la loro
      `timeImpulsi` netta (equivalente a sottrarre l'offset iniziale). */
-  const I_PER_K = 50;
-  const K_PER_PHI = 20;
-  const PHI_PER_OMEGA = 100;
-  const I_PER_PHI = I_PER_K * K_PER_PHI;          // 1000
-  const I_PER_OMEGA = I_PER_PHI * PHI_PER_OMEGA;  // 100 000
+  const I_PER_K = 10;
+  const K_PER_PHI = 12;
+  const PHI_PER_OMEGA = 20;
+  const I_PER_PHI = I_PER_K * K_PER_PHI;          // 120
+  const I_PER_OMEGA = I_PER_PHI * PHI_PER_OMEGA;  // 2400
 
   function splitFaro(absI) {
     absI = Math.max(0, Math.floor(absI || 0));
