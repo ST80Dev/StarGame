@@ -5693,8 +5693,25 @@ function confirmAction(opts) {
     if (typeof opts.onConfirm === 'function') opts.onConfirm();
     return;
   }
-  const host = document.querySelector('[data-bind="confirm-modal"]');
-  if (!host) { if (opts.onConfirm) opts.onConfirm(); return; }
+  const orig = document.querySelector('[data-bind="confirm-modal"]');
+  if (!orig) { if (opts.onConfirm) opts.onConfirm(); return; }
+  /* BUG FIX: ogni chiamata precedente aveva fatto host.addEventListener
+     senza removeEventListener in close(), accumulando listener fantasma
+     ognuno con un onConfirm/onCancel "vecchio" catturato per closure.
+     Al click di "Conferma" tutti i listener accumulati facevano fuoco e
+     ciascuno chiamava il proprio onConfirm → l'utente vedeva azioni che
+     non aveva richiesto (es. click su "Costruisci Centrale" eseguiva la
+     vecchia "Costruisci Miniera" tutta insieme).
+     Soluzione doppia:
+     (1) cloniamo il nodo per buttare via TUTTI i listener pre-esistenti
+         (compresi quelli lasciati dal vecchio codice e quelli di possibili
+         dialog aperti e mai chiusi correttamente);
+     (2) nominiamo onClick/onKey e li rimuoviamo esplicitamente in close();
+     (3) latch `consumed` come cintura+bretelle: anche se per qualche
+         ragione un listener fantasma fosse sopravvissuto, l'onConfirm
+         può scattare al massimo una volta per invocazione. */
+  const host = orig.cloneNode(false);
+  orig.parentNode.replaceChild(host, orig);
   const title = escapeHtml(opts.title || 'Confermi?');
   const message = opts.message || '';   // HTML consentito
   const confirmLabel = escapeHtml(opts.confirmLabel || 'Conferma');
@@ -5714,24 +5731,28 @@ function confirmAction(opts) {
   const okBtn = host.querySelector('[data-confirm-action="ok"]');
   if (okBtn) setTimeout(function () { okBtn.focus(); }, 0);
 
+  let consumed = false;
   function close() {
     host.hidden = true;
     host.innerHTML = '';
     document.removeEventListener('keydown', onKey, true);
+    host.removeEventListener('click', onClick);
   }
   function onKey(e) {
-    if (e.key === 'Escape') { e.preventDefault(); close(); if (opts.onCancel) opts.onCancel(); }
-    else if (e.key === 'Enter') { e.preventDefault(); close(); if (opts.onConfirm) opts.onConfirm(); }
+    if (consumed) return;
+    if (e.key === 'Escape') { consumed = true; e.preventDefault(); close(); if (opts.onCancel) opts.onCancel(); }
+    else if (e.key === 'Enter') { consumed = true; e.preventDefault(); close(); if (opts.onConfirm) opts.onConfirm(); }
   }
-  document.addEventListener('keydown', onKey, true);
-
-  host.addEventListener('click', function (e) {
-    if (e.target === host) { close(); if (opts.onCancel) opts.onCancel(); return; }
+  function onClick(e) {
+    if (consumed) return;
+    if (e.target === host) { consumed = true; close(); if (opts.onCancel) opts.onCancel(); return; }
     const btn = e.target.closest && e.target.closest('[data-confirm-action]');
     if (!btn) return;
-    if (btn.dataset.confirmAction === 'ok') { close(); if (opts.onConfirm) opts.onConfirm(); }
-    else { close(); if (opts.onCancel) opts.onCancel(); }
-  }, { once: false });
+    if (btn.dataset.confirmAction === 'ok') { consumed = true; close(); if (opts.onConfirm) opts.onConfirm(); }
+    else { consumed = true; close(); if (opts.onCancel) opts.onCancel(); }
+  }
+  document.addEventListener('keydown', onKey, true);
+  host.addEventListener('click', onClick);
 }
 
 /* --- Modale Preferenze --- */
