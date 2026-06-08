@@ -2476,34 +2476,45 @@ function formatCostHtml(cost) {
 
 function tryBuild(id) {
   const g = ORION.game;
-  const colony = g.colonies[ORION.openPlanetKey];
-  const planet = ORION.currentPlanet;
+  /* Cattura il contesto colonia/pianeta AL MOMENTO del click, non al confirm:
+     il dialog è asincrono, e se il click viene dalla Plancia dx (decisione #50)
+     `withDxScope` ripristina `ORION.openPlanetKey` nel finally *prima* che
+     l'utente confermi. Senza snapshot, _doBuild legge null e crasha. */
+  const ctxKey = ORION.openPlanetKey;
+  const ctxPlanet = ORION.currentPlanet;
+  const colony = g.colonies[ctxKey];
+  if (!colony || !ctxPlanet) { showToast('Nessuna colonia in focus'); return; }
   const def = ORION.structures.get(id);
   if (!def) return;
-  /* Pre-check (azione ammessa) prima di chiedere conferma — niente modal
-     se l'azione poi fallirebbe per slot/risorse/prerequisiti. */
-  const chk = ORION.planet.canBuild(colony, planet, id, g);
-  if (!chk.ok) { console.info('Costruzione rifiutata:', chk.reason); return; }
+  const chk = ORION.planet.canBuild(colony, ctxPlanet, id, g);
+  if (!chk.ok) { showToast(chk.reason || 'Costruzione rifiutata'); return; }
   const nextLevel = chk.nextLevel || 1;
   const cost = ORION.structures.stepCost(def, nextLevel);
   const time = ORION.structures.stepTime(def, nextLevel);
   const verb = chk.isUpgrade ? ('Espandere ' + def.name + ' a livello ' + nextLevel) : ('Costruire ' + def.name);
-  const msg = '<p>' + verb + ' su <strong>' + escapeHtml(planet.name) + '</strong>?</p>' +
+  const msg = '<p>' + verb + ' su <strong>' + escapeHtml(ctxPlanet.name) + '</strong>?</p>' +
     '<p>Costo: <strong>' + formatCostHtml(cost) + '</strong><br>' +
     'Tempo: <strong>' + time + ' Ι</strong> (' + ORION.time.format(time, 'duration') + ')</p>';
   confirmAction({
     title: chk.isUpgrade ? 'Conferma espansione' : 'Conferma costruzione',
     message: msg,
     confirmLabel: chk.isUpgrade ? 'Espandi' : 'Costruisci',
-    onConfirm: function () { _doBuild(id); }
+    onConfirm: function () { _doBuild(id, ctxKey, ctxPlanet); }
   });
 }
-function _doBuild(id) {
+function _doBuild(id, ctxKey, ctxPlanet) {
   const g = ORION.game;
-  const colony = g.colonies[ORION.openPlanetKey];
-  const planet = ORION.currentPlanet;
+  /* Fallback ai globali per i call-site legacy che non passano lo scope. */
+  const key = ctxKey || ORION.openPlanetKey;
+  const planet = ctxPlanet || ORION.currentPlanet;
+  const colony = g.colonies[key];
+  if (!colony || !planet) { showToast('Colonia non trovata'); return; }
   const r = ORION.planet.startBuild(colony, planet, id, ORION.time.currentDS(g), g);
-  if (!r.ok) { console.info('Costruzione rifiutata:', r.reason); return; }
+  if (!r.ok) {
+    console.info('Costruzione rifiutata:', r.reason);
+    showToast(r.reason || 'Costruzione rifiutata');
+    return;
+  }
   const def = ORION.structures.get(id);
   pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione: <strong>' + def.name + '</strong> su ' + planet.name + bodyTagHtml(planet.systemId) + ' (' + def.time + ' ' + iU() + ').', 'planet');
   if (ORION.tutorial && ORION.tutorial.fire) {
@@ -2543,8 +2554,12 @@ function tryCancel(idx) {
 
 function tryDemolish(id) {
   const g = ORION.game;
-  const colony = g.colonies[ORION.openPlanetKey];
-  const planet = ORION.currentPlanet;
+  /* Stesso pattern di tryBuild: snapshot del contesto per sopravvivere al
+     ripristino di `withDxScope` mentre il dialog è aperto (decisione #50). */
+  const ctxKey = ORION.openPlanetKey;
+  const ctxPlanet = ORION.currentPlanet;
+  const colony = g.colonies[ctxKey];
+  if (!colony || !ctxPlanet) { showToast('Nessuna colonia in focus'); return; }
   const def = ORION.structures.get(id);
   if (!def) return;
   const refundPct = colony.isHomeBase ? 70 : 50;
@@ -2552,9 +2567,6 @@ function tryDemolish(id) {
   const dur = Math.max(1, Math.round((def.time || 2) / 2));
   const struct = colony.structures[id];
   const lvl = struct ? (struct.level || 0) : 0;
-  /* Decisione #66: smantellamento è "modulo per modulo".
-     Livello ≥ 2 → DOWNGRADE (lvl N → N-1, rimborso stepCost(lvl N)).
-     Livello = 1 → DEMOLIZIONE completa (rimborso costo BASE). */
   const isDowngrade = lvl >= 2;
   const refundCost = isDowngrade
     ? ORION.structures.stepCost(def, lvl)
@@ -2581,20 +2593,26 @@ function tryDemolish(id) {
     message: msg,
     confirmLabel: isDowngrade ? 'Downgrade' : 'Smantella',
     danger: true,
-    onConfirm: function () { _doDemolish(id); }
+    onConfirm: function () { _doDemolish(id, ctxKey, ctxPlanet); }
   });
 }
-function _doDemolish(id) {
+function _doDemolish(id, ctxKey, ctxPlanet) {
   const g = ORION.game;
-  const colony = g.colonies[ORION.openPlanetKey];
-  const planet = ORION.currentPlanet;
+  const key = ctxKey || ORION.openPlanetKey;
+  const planet = ctxPlanet || ORION.currentPlanet;
+  const colony = g.colonies[key];
+  if (!colony || !planet) { showToast('Colonia non trovata'); return; }
   const def = ORION.structures.get(id);
   if (!def) return;
   const dur = Math.max(1, Math.round((def.time || 2) / 2));
   const struct = colony.structures[id];
   const lvl = struct ? (struct.level || 0) : 0;
   const r = ORION.planet.startDemolish(colony, planet, id, ORION.time.currentDS(g));
-  if (!r.ok) { console.info('Smantellamento rifiutato:', r.reason); return; }
+  if (!r.ok) {
+    console.info('Smantellamento rifiutato:', r.reason);
+    showToast(r.reason || 'Smantellamento rifiutato');
+    return;
+  }
   const verb = lvl >= 2
     ? ('Avviato downgrade: <strong>' + def.name + '</strong> (lvl ' + lvl + '→' + (lvl - 1) + ')')
     : ('Avviato smantellamento: <strong>' + def.name + '</strong>');
