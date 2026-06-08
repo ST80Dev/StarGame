@@ -1778,12 +1778,19 @@ function renderPlanetColoniaTab(host, planet, colony) {
       const stateLbl = W.state === 'critico' ? 'critica' : W.state === 'saturo' ? 'satura' : 'nominale';
       const netTxt = (W.net > 0 ? '+' : '') + (Math.round(W.net * 10) / 10);
       const barPct = Math.min(100, pct);
+      /* Guadagno energia temporaneo da riciclo (finché ci sono rifiuti da
+         bruciare) — richiesta utente: renderlo visibile (decisione #48). */
+      const enGain = Math.round((W.energyGain || 0) * 10) / 10;
+      const enGainRow = enGain > 0
+        ? row('Energia da riciclo', '<span class="waste-energy">+' + enGain + ' ' + resIcon('en') + '/' + iU() + '</span> <span class="waste-energy__note">(finché brucia)</span>')
+        : '';
       wasteRow =
         '<p class="sysinfo__sub">Rifiuti ♻</p>' +
         '<dl class="sysinfo__list">' +
           row('Accumulo', Math.round(W.stock) + ' / ' + Math.round(W.capacity)) +
           row('Saturazione', '<span class="waste-tag waste--' + cls + '">' + stateLbl + ' · ' + pct + '%</span>') +
           row('Netto', impHtml(netTxt, '/') + (W.net > 0 ? ' (in accumulo)' : W.net < 0 ? ' (in calo)' : ' (stabile)')) +
+          enGainRow +
         '</dl>' +
         '<div class="progress-bar"><div class="progress-bar__fill waste-fill--' + cls + '" style="width:' + barPct + '%"></div></div>' +
         (W.state !== 'ok'

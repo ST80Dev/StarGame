@@ -204,13 +204,15 @@
       tag: 'Pianeta',
       title: 'Rifiuti e gestione',
       body:
-        '<p>Popolazione e industria producono <strong>rifiuti</strong> in continuazione. Non sono una crisi: sono una ' +
-        '<strong>leva</strong>. Si accumulano in un contenimento di colonia; la <strong>saturazione</strong> (accumulo / capacità) ' +
-        'è ciò che conta.</p>' +
-        '<p>Oltre il <strong>70%</strong> di saturazione la produzione inizia a <strong>deperire</strong> in modo progressivo ' +
-        '(fino a −25% in overflow). Non è mai un fail-state (recovery-friendly): basta agire.</p>' +
-        '<p>La leva principale è l\'<strong>Impianto di riciclo</strong>: tratta i rifiuti, ne <strong>recupera energia</strong> ' +
-        'e <strong>alza la capacità</strong> di contenimento. Pochi moduli invertono la rotta.</p>' +
+        '<p>Popolazione e industria producono <strong>rifiuti</strong>, ma è un problema di <strong>lungo termine</strong>: ' +
+        'la generazione cresce con il <strong>quadrato della popolazione</strong>, quindi è trascurabile a colonia piccola/media ' +
+        'e diventa rilevante <strong>solo avvicinandoti al tetto demografico</strong>.</p>' +
+        '<p>Si accumulano in un grande contenimento; oltre il <strong>75%</strong> di saturazione la produzione inizia a ' +
+        '<strong>deperire</strong> in modo progressivo (fino a −25% in overflow). Mai un fail-state (recovery-friendly): hai ' +
+        'molto tempo per reagire.</p>' +
+        '<p>La leva è l\'<strong>Impianto di riciclo</strong>: <strong>un solo impianto</strong> regge una colonia matura. ' +
+        'Si <strong>autoalimenta</strong> (nessun upkeep) e mentre brucia rifiuti <strong>recupera energia</strong> — un guadagno ' +
+        'temporaneo mostrato nella scheda Colonia, finché c\'è rifiuto da trattare.</p>' +
         '<p><strong>In arrivo:</strong> esportare i rifiuti alle civiltà AI (commercio) e dedicare i mondi ostili a ' +
         '<em>colonie riciclanti</em>, trasformando una zavorra in infrastruttura d\'impero.</p>'
     },
@@ -646,12 +648,15 @@
       id: 'struct:impianto-riciclo', tag: 'Strutture · ♻', title: 'Impianto di riciclo',
       body:
         '<p>Tratta i <strong>rifiuti</strong> generati da popolazione e industria: ne <strong>recupera energia</strong> ' +
-        '(≈0.25 en per unità trattata) e <strong>alza la capacità</strong> di contenimento (+150 per modulo). Uso 1 en/I.</p>' +
-        '<p><strong>Perché conta:</strong> sopra il 70% di saturazione la produzione della colonia inizia a deperire ' +
-        '(fino a −25%). Un solo impianto a livello 1 tratta 3 rifiuti/Ι; espandendolo (rendimento crescente dei moduli) ' +
-        'porti il netto in negativo e <strong>svuoti</strong> l\'accumulo.</p>' +
-        '<p><strong>Sinergia:</strong> più popolazione e più industria → più rifiuti. Su colonie grandi e mature è una ' +
-        'struttura quasi obbligata; su mondi piccoli può bastare un modulo.</p>' +
+        '(≈0.30 en per unità trattata) e <strong>alza la capacità</strong> di contenimento (+300 per modulo). ' +
+        '<strong>Nessun upkeep</strong>: si autoalimenta col rifiuto che brucia.</p>' +
+        '<p><strong>Perché conta:</strong> sopra il 75% di saturazione la produzione inizia a deperire (fino a −25%). ' +
+        'Un solo impianto a livello 1 tratta <strong>12 rifiuti/Ι</strong> — abbastanza da reggere lo stress di un ' +
+        'mondo-giardino pieno. Niente "rincorsa" agli upgrade.</p>' +
+        '<p><strong>Energia come bonus:</strong> mentre brucia rifiuti dà un guadagno di energia <em>temporaneo</em> ' +
+        '(visibile nella scheda Colonia, finché c\'è rifiuto). Rende solo se c\'è molto rifiuto → cioè a popolazione alta. ' +
+        '<strong>Potenziando l\'impianto la resa per unità sale</strong> (+5%/livello): a colonia molto popolosa, un riciclo ' +
+        'di livello alto ottimizza ulteriormente l\'energia recuperata.</p>' +
         '<p><strong>In arrivo:</strong> con le rotte commerciali potrai <em>esportare</em> i rifiuti, e i mondi ostili ' +
         'diventeranno <em>colonie riciclanti</em> dedicate.</p>'
     },

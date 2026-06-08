@@ -1944,6 +1944,8 @@ button { font-family: inherit; }
   line-height: 1.4;
   color: var(--c-text-dim, rgba(255,255,255,0.7));
 }
+.waste-energy { color: #f0d670; font-family: var(--font-data); }
+.waste-energy__note { font-size: 0.72rem; color: var(--c-text-dim, rgba(255,255,255,0.6)); }
 
 /* Progress bar generica per code (costruzione, scansione, colonizzazione) */
 .progress-bar {
