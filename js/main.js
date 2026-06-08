@@ -7650,6 +7650,121 @@ function renderContextActionBar(ctx) {
   }
 
   const buttons = [];
+  let infoCardHtml = '';
+  /* PR-N: a livello SISTEMA con corpo selezionato → info card contestuale
+     (nome+tipo+stato+potenziali) + bottoni di azione. Chiude il buco UX
+     della decisione #50: con la dx fissa sulla MIA colonia, navigando in
+     sistema non si vedeva nulla cliccando sui corpi altrui. */
+  if (ctx && ctx.level === 'system' && ctx.bodyKey && ORION.currentSystem) {
+    const sysId = ctx.systemId;
+    const system = ORION.currentSystem;
+    const body = ORION.system && ORION.system.findBody ? ORION.system.findBody(system, ctx.bodyKey) : null;
+    if (body) {
+      /* Genera (o riusa) il planet per leggere potentials/colCost. */
+      const memoKey = sysId + ':' + ctx.bodyKey;
+      ORION._planetMemo = ORION._planetMemo || {};
+      let planet = ORION._planetMemo[memoKey];
+      if (!planet && ORION.planet && ORION.planet.generate) {
+        try {
+          planet = ORION.planet.generate(g.galaxy, system, ctx.bodyKey);
+          if (planet) ORION._planetMemo[memoKey] = planet;
+        } catch (_) { /* fallback below */ }
+      }
+      const def = ORION.system && ORION.system.BODY_TYPES ? ORION.system.BODY_TYPES[body.type] : null;
+      const typeLabel = def ? def.label : body.type;
+      const habitable = !!(def && def.habitable);
+      const colKey = sysId + ':' + ctx.bodyKey;
+      const colony = g.colonies[colKey];
+      const civ = (ORION.ai && ORION.ai.civForSystem) ? ORION.ai.civForSystem(g, sysId) : null;
+      const isMine = !!(colony && colony.colonized);
+      const isForeign = !!(civ && !isMine);
+      const isFree = !isMine && !isForeign;
+
+      /* Badge stato del corpo */
+      let badgeHtml = '';
+      if (isMine && colony.isHomeBase) {
+        badgeHtml = '<span class="bodyinfo__badge bodyinfo__badge--home">' + icnHtml('star', 'amber') + ' Pianeta base</span>';
+      } else if (isMine) {
+        badgeHtml = '<span class="bodyinfo__badge bodyinfo__badge--colony">' + icnHtml('star', 'cyan') + ' Colonia attiva</span>';
+      } else if (isForeign) {
+        const align = (civ.alignment || '').toLowerCase();
+        const aClass = align === 'bene' ? 'good' : align === 'male' ? 'bad' : 'warn';
+        badgeHtml = '<span class="bodyinfo__badge bodyinfo__badge--civ bodyinfo__badge--' + aClass + '">' + icnHtml('civ', 'pink') + ' ' + escapeHtml(civ.name) + '</span>';
+      } else if (body.homeWorld) {
+        badgeHtml = '<span class="bodyinfo__badge bodyinfo__badge--candidate">' + icnHtml('star', 'amber') + ' Mondo natale candidato</span>';
+      } else if (isFree && habitable) {
+        badgeHtml = '<span class="bodyinfo__badge bodyinfo__badge--free">Libero · colonizzabile</span>';
+      } else if (isFree && !habitable) {
+        badgeHtml = '<span class="bodyinfo__badge bodyinfo__badge--inhospital">Non abitabile</span>';
+      }
+
+      /* Mini-barre dei 4 potenziali (sempre, se disponibili dal planet). */
+      let potsHtml = '';
+      if (planet && planet.potentials) {
+        const labels = { met: 'Met', en: 'En', food: 'Cib', water: 'Acq' };
+        potsHtml = '<div class="bodyinfo__pots" title="Potenziali risorse base (0-100)">';
+        ['met', 'en', 'food', 'water'].forEach(function (k) {
+          const v = planet.potentials[k] || 0;
+          potsHtml +=
+            '<span class="bodyinfo__pot bodyinfo__pot--' + k + '">' +
+              '<span class="bodyinfo__pot-lbl">' + labels[k] + '</span>' +
+              '<span class="bodyinfo__pot-bar"><i style="width:' + Math.max(0, Math.min(100, v)) + '%"></i></span>' +
+              '<span class="bodyinfo__pot-val">' + v + '</span>' +
+            '</span>';
+        });
+        potsHtml += '</div>';
+      }
+
+      /* Moons + anomalie quick info */
+      let extraHtml = '';
+      const moonCount = body.moons ? body.moons.length : 0;
+      if (moonCount) {
+        extraHtml += '<span class="bodyinfo__meta">● ' + moonCount + ' lun' + (moonCount === 1 ? 'a' : 'e') + '</span>';
+      }
+
+      infoCardHtml =
+        '<div class="bodyinfo">' +
+          '<div class="bodyinfo__head">' +
+            '<span class="bodyinfo__name">' + escapeHtml(body.name) + '</span>' +
+            '<span class="bodyinfo__type">' + escapeHtml(typeLabel) + '</span>' +
+            badgeHtml + extraHtml +
+          '</div>' +
+          potsHtml +
+        '</div>';
+
+      /* Bottoni di azione coerenti con il livello pianeta. */
+      buttons.push('<button class="actionbar__btn actionbar__btn--primary btn--with-icon" data-action="ctx-open-body" data-body="' + escapeHtml(ctx.bodyKey) + '" title="Apri vista pianeta per ' + escapeHtml(body.name) + '">' +
+        icnHtml('planet', 'blue') + ' Apri ' + escapeHtml(body.name) +
+      '</button>');
+
+      if (isFree && habitable && planet && planet.colCost) {
+        const home = g.colonies[g.homePlanetKey];
+        const homeColonized = !!(home && home.colonized);
+        const homeInTrouble = !!(home && home._scar &&
+          (home._scar.food.state === 'crit' || home._scar.water.state === 'crit'));
+        const costMul = (homeColonized && !body.homeWorld && !homeInTrouble) ? 5 : 1;
+        const cost = planet.colCost;
+        const stockHome = homeColonized ? home.stock : { met: 0, en: 0, food: 0, water: 0 };
+        const canPay =
+          stockHome.met   >= cost.met   * costMul &&
+          stockHome.en    >= cost.en    * costMul &&
+          stockHome.water >= cost.water * costMul &&
+          stockHome.food  >= cost.food  * costMul;
+        const tooltip = canPay
+          ? 'Avvia spedizione coloniale (' + cost.impulsi + ' ' + iU() + ')'
+          : 'Risorse insufficienti sulla colonia base' + (costMul > 1 ? ' (×' + costMul + ' per produttiva)' : '');
+        buttons.push('<button class="actionbar__btn btn--with-icon" data-action="ctx-colonize-body" data-body="' + escapeHtml(ctx.bodyKey) + '"' +
+          (canPay ? '' : ' disabled') + ' title="' + escapeHtml(tooltip) + '">' +
+          icnHtml('build', 'cyan') + ' Colonizza</button>');
+      }
+
+      if (isForeign) {
+        buttons.push('<button class="actionbar__btn btn--with-icon" data-action="ctx-civ-dossier" data-civ="' + escapeHtml(civ.id) + '">' +
+          icnHtml('civ', 'pink') + ' Dossier civiltà</button>');
+      }
+    }
+  }
+
   if (ctx && ctx.level === 'planet' && ORION.currentPlanet) {
     const sysId = ctx.systemId;
     const planet = ORION.currentPlanet;
@@ -7704,8 +7819,12 @@ function renderContextActionBar(ctx) {
     }
   }
 
-  if (!buttons.length) { host.hidden = true; host.innerHTML = ''; return; }
-  host.innerHTML = buttons.join('');
+  /* PR-N: l'action bar a livello sistema appare anche con la sola info
+     card (senza bottoni). Mostriamola se c'è uno qualsiasi dei due. */
+  if (!buttons.length && !infoCardHtml) { host.hidden = true; host.innerHTML = ''; return; }
+  host.innerHTML =
+    (infoCardHtml || '') +
+    (buttons.length ? '<div class="actionbar__buttons">' + buttons.join('') + '</div>' : '');
   host.hidden = false;
   /* Handlers */
   const cBtn = host.querySelector('[data-action="ctx-colonize"]');
@@ -7719,6 +7838,23 @@ function renderContextActionBar(ctx) {
   const aBtn = host.querySelector('[data-action="ctx-attack"]');
   if (aBtn) aBtn.addEventListener('click', function () {
     openAttackPicker(parseInt(aBtn.dataset.sys, 10), aBtn.dataset.civ);
+  });
+  /* PR-N: nuovi handler per livello SISTEMA con corpo selezionato. */
+  const oBtn = host.querySelector('[data-action="ctx-open-body"]');
+  if (oBtn) oBtn.addEventListener('click', function () {
+    const sys = ORION.currentSystem;
+    if (sys) openPlanet(sys.id, oBtn.dataset.body);
+  });
+  const cbBtn = host.querySelector('[data-action="ctx-colonize-body"]');
+  if (cbBtn) cbBtn.addEventListener('click', function () {
+    const sys = ORION.currentSystem;
+    if (!sys) return;
+    const key = sys.id + ':' + cbBtn.dataset.body;
+    let p = ORION._planetMemo && ORION._planetMemo[key];
+    if (!p && ORION.planet && ORION.planet.generate) {
+      try { p = ORION.planet.generate(ORION.game.galaxy, sys, cbBtn.dataset.body); } catch (_) {}
+    }
+    if (p) tryColonize(p);
   });
 }
 
