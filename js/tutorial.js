@@ -808,7 +808,7 @@
     {
       id: 'fleet-classes',
       tag: 'M08 · Classi',
-      title: 'Cinque classi navi',
+      title: 'Sei classi navi',
       body:
         '<p>Trade-off di base: velocità ↔ corazza ↔ fuoco. Le classi pesanti richiedono Hangar di livello superiore.</p>' +
         '<ul>' +
@@ -817,8 +817,32 @@
           '<li><strong>➤ Intercettore</strong> — hp 45, fp 8, spd 1.4 · classe più veloce, eccellente in inseguimento.</li>' +
           '<li><strong>◅ Corvetta</strong> — hp 80, fp 12, spd 1.0 · scorta multiruolo, equilibrata.</li>' +
           '<li><strong>◣ Fregata</strong> — hp 160, fp 25, spd 0.85 · linea di battaglia, lenta ma cara da abbattere.</li>' +
+          '<li><strong>◉ Pioniere coloniale</strong> — hp 70, fp 0, spd 0.8 · trasporto colonizzatore (vedi lezione dedicata).</li>' +
         '</ul>' +
         '<p>Le grandi navi (incrociatore/dreadnought/ammiraglia) arriveranno con M15 + Bacino orbitale (M16).</p>'
+    },
+    {
+      id: 'colonial-ship',
+      tag: 'Colonizzazione',
+      title: 'Pioniere coloniale: come si colonizza',
+      body:
+        '<p>Dalla decisione #66: <strong>colonizzare richiede una nave coloniale</strong> (Pioniere ◉) — la home iniziale è ' +
+        'auto-colonizzata, ma ogni nuova colonia parte da una nave. L\'azione "Colonizza" sui pianeti liberi apre un selettore ' +
+        'di flotta: scegli quella con il Pioniere + crew sufficiente + risorse.</p>' +
+        '<p>Il Pioniere è <strong>multi-uso</strong>: non viene consumato, è riparabile, e dopo l\'atterraggio resta in orbita al ' +
+        'nuovo pianeta pronto per una nuova missione. Costa <strong>80 met + 40 en + 10 food + 10 water</strong> ' +
+        'all\'Hangar lvl 1, build time 25 Ι, equipaggio 4 (riusa l\'array esploratori).</p>' +
+        '<p>La colonizzazione avviene in <strong>3 fasi</strong>:</p>' +
+        '<ul>' +
+          '<li><strong>Travel</strong> — viaggio iperspaziale (intra-sistema: skip).</li>' +
+          '<li><strong>Orbit</strong> — ~10 Ι di scout/preparazione atterraggio.</li>' +
+          '<li><strong>Foundation</strong> — il resto del countdown §6.2; la nave è "atterrata", la colonia compare come "in arrivo".</li>' +
+        '</ul>' +
+        '<p>Puoi <strong>scortare</strong> il Pioniere con altre navi nella stessa flotta. Senza scorta è esposta: ' +
+        'se intercettata e distrutta, refund <strong>50%</strong> del costo nave + colonizzazione (recovery-friendly). ' +
+        'L\'equipaggio si salva sempre.</p>' +
+        '<p>M13 (iperguida) ridurrà drasticamente il travel. M15 (grandi navi) aggiungerà classi capitali. La pista vittoria ' +
+        '<em>Colonizzatore</em> ora richiede infrastruttura (Hangar + nave + crew + risorse + tempo).</p>'
     },
     {
       id: 'fleet-orders',

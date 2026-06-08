@@ -2142,34 +2142,201 @@ function bindGovernorHandlers(host, planet, colony) {
   }
 }
 
+/* Decisione #66: la colonizzazione richiede una nave coloniale "Pioniere"
+   in una flotta. tryColonize ora apre il fleet picker invece di colonizzare
+   astrattamente. La home iniziale è auto-colonizzata in newGame (no ship).
+   Recovery-friendly: se nessuna flotta valida, toast informativo. */
 function tryColonize(planet) {
   const g = ORION.game;
+  if (!g) return;
   const colKey = planet.systemId + ':' + planet.bodyKey;
   const colony = g.colonies[colKey];
   if (!colony || colony.colonized || colony.colonizing) return;
   const homeColony = g.colonies[g.homePlanetKey];
   if (!homeColony || !homeColony.colonized) return;
-  const cost = planet.colCost;
-  // §6.2: finché il primo pianeta è "produttivo" il costo è elevato.
-  // §6.2 eccezione: se il pianeta base è in carestia/critico, il costo
-  // torna basso (migrazione naturale forzata) — recovery-friendly.
-  const homeInTrouble = !!(homeColony._scar &&
-    (homeColony._scar.food.state === 'crit' || homeColony._scar.water.state === 'crit'));
-  const mul = (homeInTrouble || colony.isHomeBase) ? 1 : 5;
-  ['met', 'en', 'water', 'food'].forEach(function (k) {
-    homeColony.stock[k] = Math.max(0, (homeColony.stock[k] || 0) - cost[k] * mul);
+  openColonizePicker(planet);
+}
+
+/* Flotte candidate per colonizzare il pianeta dato. Filtri:
+   - non in-transit
+   - almeno 1 coloniale
+   - crew sufficiente per la composizione
+   - sistema target raggiungibile (o già stesso sistema → intra) */
+function colonizeCapableFleets(g, planet) {
+  const out = [];
+  const F = ORION.fleet;
+  if (!F) return out;
+  const sysId = planet.systemId;
+  (g.fleets || []).forEach(function (f) {
+    if (!f || !f.location || f.location.status === 'in-transit') return;
+    if (!F.fleetHasColonial(f)) return;
+    /* Non già impegnata in altra colonizzazione. */
+    if (f.orders && f.orders.type === 'colonize') return;
+    const crewReq = F.fleetCrewRequired(f);
+    if ((f.crew || []).length < crewReq) return;
+    if (f.location.systemId === sysId) { out.push(f); return; }
+    if (F.computePath(g.galaxy, f.location.systemId, sysId)) out.push(f);
   });
-  // M05: la colonia entra in stato "in arrivo" — il loop la attiverà al
-  // termine del countdown (Impulsi da §4.4/§6.2).
-  colony.colonizing = {
-    startedAt: ORION.time.currentDS(g),
-    duration: cost.impulsi
+  return out;
+}
+
+/* Costo colonizzazione effettivo + check fondi sulla colonia origine
+   della flotta (non più solo home base). */
+function colonizeCostInfo(g, planet, fleet) {
+  const cost = planet.colCost;
+  const homeColony = g.colonies[g.homePlanetKey];
+  const homeInTrouble = !!(homeColony && homeColony._scar &&
+    (homeColony._scar.food.state === 'crit' || homeColony._scar.water.state === 'crit'));
+  /* Il moltiplicatore §6.2 si applica se la home è ancora produttiva.
+     Per coerenza con il flusso legacy, il check è sulla home (non sulla
+     colonia origine della flotta). */
+  const mul = (homeInTrouble || (g.colonies[planet.systemId + ':' + planet.bodyKey] || {}).isHomeBase) ? 1 : 5;
+  const totalCost = {
+    met:   Math.round(cost.met   * mul),
+    en:    Math.round(cost.en    * mul),
+    water: Math.round(cost.water * mul),
+    food:  Math.round(cost.food  * mul)
   };
-  pushChronicle(ORION.time.currentDS(g) + ' — Spedizione coloniale in viaggio verso <strong>' + planet.name + '</strong>' + bodyTagHtml(planet.systemId) + ' (' + cost.impulsi + ' ' + iU() + ').', 'planet');
-  if (ORION.tutorial) ORION.tutorial.fire('specialization');
+  /* Le risorse vengono prese dalla colonia origine della flotta. */
+  const payerKey = fleet ? fleet.ownerColonyKey : g.homePlanetKey;
+  const payer = g.colonies[payerKey];
+  const stock = payer ? payer.stock : { met: 0, en: 0, food: 0, water: 0 };
+  const canPay =
+    (stock.met   || 0) >= totalCost.met   &&
+    (stock.en    || 0) >= totalCost.en    &&
+    (stock.water || 0) >= totalCost.water &&
+    (stock.food  || 0) >= totalCost.food;
+  return { totalCost: totalCost, mul: mul, homeInTrouble: homeInTrouble, payerKey: payerKey, payer: payer, canPay: canPay, baseImpulsi: cost.impulsi };
+}
+
+function openColonizePicker(planet) {
+  const g = ORION.game;
+  const F = ORION.fleet;
+  if (!g || !F) return;
+  const fleets = colonizeCapableFleets(g, planet);
+  if (!fleets.length) {
+    /* Spiega perché: nessuna nave coloniale o nessuna raggiungibile. */
+    const anyColonial = (g.fleets || []).some(function (f) { return f && F.fleetHasColonial(f); });
+    if (!anyColonial) {
+      showToast('Nessuna nave coloniale: costruisci un Pioniere all\'Hangar');
+    } else {
+      showToast('Nessuna flotta coloniale può raggiungere il sistema');
+    }
+    return;
+  }
+  /* Auto-fire lezione tutorial al primo openColonizePicker. */
+  if (ORION.tutorial) ORION.tutorial.fire('colonial-ship');
+  const sys = g.galaxy.systems[planet.systemId];
+  const rows = fleets.map(function (f) {
+    const intra = (f.location.systemId === planet.systemId);
+    const path = intra ? [planet.systemId] : F.computePath(g.galaxy, f.location.systemId, planet.systemId);
+    const hops = path ? path.length - 1 : 0;
+    const info = colonizeCostInfo(g, planet, f);
+    const orbit = 10;
+    const minSpeed = F.fleetMinSpeed(f);
+    const travelEst = intra ? 2 : hops * F.tempoLeg(g.galaxy, f.location.systemId, planet.systemId, minSpeed);
+    const total = travelEst + orbit + Math.max(20, info.baseImpulsi - travelEst - orbit);
+    const cost = info.totalCost;
+    const payerName = colonyNameFromKey(info.payerKey);
+    const costHtml = (info.canPay ? '' : '<span class="colonize-pick__warn">Risorse insufficienti</span>');
+    return '<button class="attack-pick__row" data-fleet="' + escapeHtml(f.id) + '"' + (info.canPay ? '' : ' disabled') + ' type="button">' +
+      '<span class="attack-pick__name">' + escapeHtml(f.name) + '</span>' +
+      '<span class="attack-pick__meta">' +
+        (f.ships || []).length + ' navi · ' + (hops === 0 ? 'intra-sistema' : hops + ' salti') +
+        ' · ~' + total + ' ' + iU() +
+        ' · costo da ' + escapeHtml(payerName) +
+        ' (' + cost.met + ' ' + resGlyph('met') + ' · ' + cost.en + ' ' + resGlyph('en') +
+        ' · ' + cost.water + ' ' + resGlyph('water') + ' · ' + cost.food + ' ' + resGlyph('food') + ')' +
+        (costHtml ? ' · ' + costHtml : '') +
+      '</span>' +
+    '</button>';
+  }).join('');
+  const html =
+    '<div class="attack-overlay" data-colonize-overlay>' +
+      '<div class="attack-overlay__panel">' +
+        '<header class="attack-overlay__head"><h3>' +
+          '<span class="ui-icon ui-icon--cyan" aria-hidden="true">' + ((ORION.icon && ORION.icon('star')) || '◉') + '</span> ' +
+          'Colonizza ' + escapeHtml(planet.name) +
+        '</h3>' +
+          '<button class="attack-overlay__x" data-colonize-close type="button" aria-label="Chiudi">' +
+            '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+          '</button></header>' +
+        '<p class="attack-overlay__sub">Destinazione: <strong>' + escapeHtml(planet.name) + '</strong>' +
+          (sys ? ' nel sistema ' + escapeHtml(sys.name) : '') +
+          ' · scegli una flotta con una nave coloniale Pioniere.</p>' +
+        '<div class="attack-pick__list">' + rows + '</div>' +
+        '<p class="attack-overlay__hint">La nave coloniale viaggia, orbita per il setup, poi atterra come avamposto. La flotta resta in orbita al termine.</p>' +
+      '</div>' +
+    '</div>';
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  const node = wrap.firstChild;
+  document.body.appendChild(node);
+  function close() { if (node.parentNode) node.parentNode.removeChild(node); }
+  node.querySelector('[data-colonize-close]').addEventListener('click', close);
+  node.addEventListener('click', function (e) { if (e.target === node) close(); });
+  node.querySelectorAll('[data-fleet]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const fleet = (g.fleets || []).filter(function (f) { return f.id === b.dataset.fleet; })[0];
+      if (!fleet) { close(); return; }
+      doColonize(planet, fleet);
+      close();
+    });
+  });
+}
+
+/* Esegue la colonizzazione: deduce il costo, imposta l'ordine `colonize`
+   sulla flotta. Decisione #66: il costo è pagato all'inizio (UX), refund
+   gestito da combat.js se la coloniale è persa in transit. */
+function doColonize(planet, fleet) {
+  const g = ORION.game;
+  const F = ORION.fleet;
+  if (!g || !F) return;
+  const colKey = planet.systemId + ':' + planet.bodyKey;
+  const colony = g.colonies[colKey];
+  if (!colony || colony.colonized || colony.colonizing) return;
+  const info = colonizeCostInfo(g, planet, fleet);
+  if (!info.canPay) { showToast('Risorse insufficienti'); return; }
+  /* Deduce dal payer (colonia origine della flotta). */
+  ['met', 'en', 'water', 'food'].forEach(function (k) {
+    info.payer.stock[k] = Math.max(0, (info.payer.stock[k] || 0) - info.totalCost[k]);
+  });
+  /* Calcola le 3 fasi e imposta l'ordine. */
+  const intra = (fleet.location.systemId === planet.systemId);
+  const orbitI = 10;
+  const travelEst = intra ? 0 : 1;   /* nominale, il vero travel è ETA della rotta */
+  const foundationI = Math.max(20, info.baseImpulsi - travelEst - orbitI);
+  /* Memo del costo pagato per refund 50% se nave persa in transit. */
+  fleet._colonizePaidCost = {
+    coloniale: F.getClass('coloniale').cost,
+    colonization: { met: info.totalCost.met, en: info.totalCost.en, food: info.totalCost.food, water: info.totalCost.water },
+    payerKey: info.payerKey
+  };
+  const r = F.setOrder(g, fleet, {
+    type: 'colonize',
+    toSysId: planet.systemId,
+    bodyKey: planet.bodyKey,
+    orbitI: orbitI,
+    foundationI: foundationI
+  });
+  if (!r.ok) {
+    /* Rollback risorse. */
+    ['met', 'en', 'water', 'food'].forEach(function (k) {
+      info.payer.stock[k] = (info.payer.stock[k] || 0) + info.totalCost[k];
+    });
+    fleet._colonizePaidCost = null;
+    showToast(r.reason || 'Ordine rifiutato');
+    return;
+  }
+  pushChronicle(ORION.time.currentDS(g) + ' — Spedizione coloniale <strong>' + escapeHtml(fleet.name) +
+    '</strong> in viaggio verso <strong>' + escapeHtml(planet.name) + '</strong>' + bodyTagHtml(planet.systemId) +
+    (intra ? ' (rotta intra-sistema)' : ' (' + (r.path ? r.path.length - 1 : 1) + ' salti)') + '.', 'planet');
+  if (ORION.tutorial) {
+    ORION.tutorial.fire('specialization');
+    ORION.tutorial.fire('colonial-ship');
+  }
   /* M10 Fase B (decisione #52 §13.6): colonizzare in un sistema coeso
-     costa −15 disposizione a ciascun proprietario AI. Recovery-friendly
-     (#22): scelta consapevole, mai blocco. */
+     costa −15 disposizione a ciascun proprietario AI. */
   if (ORION.cohesion && ORION.cohesion.applyColonizePenalty) {
     const nHit = ORION.cohesion.applyColonizePenalty(g, planet.systemId);
     if (nHit > 0) {
@@ -2180,6 +2347,8 @@ function tryColonize(planet) {
   updateGlobalResourceHud();
   updatePlanetUI();
   if (ORION.planetView) ORION.planetView.refresh(colony);
+  if (typeof renderLeftPanel === 'function') renderLeftPanel();
+  if (typeof renderDxPanel === 'function') renderDxPanel();
 }
 
 /* --- Tab Risorse --- */
@@ -5550,7 +5719,15 @@ const DEFAULT_AUTOPAUSE = {
   'trade-raid': false, 'trade-mercantile-lost': true,
   /* M12 Fase A2 (§15.3): accordi commerciali AI. Tutti OFF (atmosferici,
      recovery-friendly: le sospensioni riprendono da sole). */
-  'agreement-suspended': false, 'agreement-resumed': false, 'agreement-ended': false
+  'agreement-suspended': false, 'agreement-resumed': false, 'agreement-ended': false,
+  /* Decisione #66: fasi della nave coloniale. L'orbit phase è breve e
+     scenografica → OFF. Foundation start è atmosferico (la colonia
+     "in arrivo" appare già in UI) → OFF. Failure (colonia perduta) è
+     notevole → ON. La fine della foundation emette `colony-done` che è
+     già auto-pausa ON. */
+  'fleet-colonize-orbit': false,
+  'fleet-colonize-foundation': false,
+  'fleet-colonize-failed': true
 };
 
 ORION.timer = {
@@ -5815,6 +5992,9 @@ function showEventOverlay(events) {
     'fleet-launched': 'Flotta: salto iperspaziale',
     'fleet-leg-hop': 'Flotta: hop intermedio',
     'fleet-waypoint-reached': 'Flotta: tappa raggiunta',
+    'fleet-colonize-orbit': 'Coloniale: orbita di setup',
+    'fleet-colonize-foundation': 'Coloniale: fondazione in corso',
+    'fleet-colonize-failed': 'Coloniale: fondazione fallita',
     'commander-promoted': 'Nuovo Comandante nominato',
     'capital-declared': 'Capitale di gruppo dichiarata',
     'capital-transition-end': 'Capitale entrata in carica',
@@ -6107,6 +6287,27 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — <strong>' + escapeHtml(fname) + '</strong>: sistema <strong>' +
       (sys ? sys.name : '—') + '</strong>' + stag + ' esplorato.', 'explore');
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+  } else if (ev.kind === 'fleet-colonize-orbit') {
+    /* Decisione #66: la coloniale è arrivata e orbita per il setup
+       atterraggio. Voce informativa, niente auto-pausa di default. */
+    const fname = ev.fleetName || '—';
+    const sys = ORION.game.galaxy.systems[ev.systemId];
+    const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
+    pushChronicle(ds + ' — <strong>' + escapeHtml(fname) + '</strong> in orbita di scout presso <strong>' +
+      (sys ? sys.name : '—') + '</strong>' + stag + ' — preparazione atterraggio.', 'planet');
+    if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+  } else if (ev.kind === 'fleet-colonize-foundation') {
+    /* Decisione #66: foundation phase iniziata, la colonia è formalmente
+       "in arrivo" (colony.colonizing). */
+    const fname = ev.fleetName || '—';
+    const sys = ORION.game.galaxy.systems[ev.systemId];
+    pushChronicle(ds + ' — <strong>' + escapeHtml(fname) + '</strong>: primo avamposto fondato su <strong>' +
+      (sys ? sys.name : '—') + '</strong>. Fondazione in corso.', 'planet');
+  } else if (ev.kind === 'fleet-colonize-failed') {
+    const fname = ev.fleetName || '—';
+    const sys = ORION.game.galaxy.systems[ev.systemId];
+    pushChronicle(ds + ' — <strong>' + escapeHtml(fname) + '</strong>: fondazione annullata presso <strong>' +
+      (sys ? sys.name : '—') + '</strong> · motivo: ' + escapeHtml(ev.reason || '—') + '.', 'planet');
   } else if (ev.kind === 'fleet-waypoint-reached') {
     /* Fase B (decisione #46): cronaca breve per ogni tappa. La voce è
        silenziata dal log se si chiude la prima tappa di un singolo move

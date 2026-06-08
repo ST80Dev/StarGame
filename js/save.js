@@ -55,7 +55,7 @@
      DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
      nuovo gioco la preserva e una recovery best-effort prova a dedurla
      da colonie/flotte/spedizioni/cronaca. */
-  const SCHEMA_VERSION = 20;
+  const SCHEMA_VERSION = 21;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -259,6 +259,8 @@
        presente). */
     if ((payload.schema || 5) < 6) {
       if (!Array.isArray(payload.fleets)) payload.fleets = [];
+      /* Nota: la classe 'coloniale' (decisione #66) viene normalizzata
+         nella sub-migrazione v20→v21 più sotto. */
       const KINDS = ['explorer', 'caccia', 'intercettore', 'corvetta', 'fregata'];
       if (payload.colonies && typeof payload.colonies === 'object') {
         Object.keys(payload.colonies).forEach(function (k) {
@@ -503,6 +505,25 @@
     if ((payload.schema || 19) < 20) {
       if (payload.empire === undefined) payload.empire = null;
       payload.schema = 20;
+    }
+    /* v20 → v21 (decisione #66): nave coloniale "Pioniere". Migrazione
+       LAZY: i save vecchi con `colony.colonizing` in corso non hanno
+       `fleetId` → il path legacy `processColonizing` continua a finire
+       quei countdown senza nave (recovery-friendly, niente disruzione).
+       Le NUOVE colonizzazioni dopo il load richiederanno la nave
+       (gate in main.js → openColonizePicker). Counter ship 'coloniale'
+       aggiunto a 0 su tutte le colonie esistenti. shipQueue legacy senza
+       kind = 'explorer' (era già il default). Schema bumped. */
+    if ((payload.schema || 20) < 21) {
+      if (payload.colonies && typeof payload.colonies === 'object') {
+        Object.keys(payload.colonies).forEach(function (k) {
+          const c = payload.colonies[k];
+          if (!c) return;
+          if (!c.ships) c.ships = {};
+          if (c.ships.coloniale == null) c.ships.coloniale = 0;
+        });
+      }
+      payload.schema = 21;
     }
     return payload;
   }
