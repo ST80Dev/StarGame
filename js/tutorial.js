@@ -125,7 +125,12 @@
         'che si sbloccheranno con l\'albero tech. Puoi <strong>rinviarli senza penalità</strong>, oggi non danno benefici immediati.</p>' +
         '<p>Servono più slot? Più avanti sblocchi <strong>Centro di ingegneria planetaria</strong> (bonifica territoriale) e ' +
         '<strong>Terraformatori</strong>: strutture tech-gated che <strong>espandono lo spazio costruibile</strong> ' +
-        'del pianeta. Inoltre la <strong>capitale di gruppo</strong> riceve +10 slot di riserva.</p>'
+        'del pianeta. Inoltre la <strong>capitale di gruppo</strong> riceve +10 slot di riserva.</p>' +
+        '<p><strong>Sbagliato un\'espansione?</strong> Il bottone <em>cestino</em> sulla struttura costruita è ' +
+        '<strong>modulo per modulo</strong>: se sei a livello ≥ 2 fa un <strong>downgrade</strong> (lvl N → N-1) e ti ' +
+        'rimborsa <strong>il 50% / 70% sulla natale</strong> del costo dello <em>step</em> appena smontato, ' +
+        'lasciando i livelli inferiori operativi. A livello 1 invece smantella per davvero (struttura rimossa, ' +
+        'rimborso sul costo base). Sempre malus morale −0,10 per 30 <span class="ds-unit">Ι</span>, che decade da solo.</p>'
     },
     {
       id: 'advance',
