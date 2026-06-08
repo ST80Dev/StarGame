@@ -388,8 +388,13 @@
         const def = S.get(q.id);
         if (!def) return;
         const isDemo = q.target === 'demolish';
-        const total = q.totalTime || (isDemo ? Math.max(1, Math.round((def.time || 2) / 2)) : (def.time || 1));
-        const remain = Math.max(0, q.duration | 0);
+        /* Stesso pattern del pannello sidebar (main.js): se totalTime non è
+           presente (save legacy), ricalcola da stepTime al livello giusto. */
+        const fallbackTotal = isDemo
+          ? Math.max(1, Math.round((def.time || 2) / 2))
+          : (S.stepTime ? S.stepTime(def, q.toLevel || 1) : (def.time || 1));
+        const total = q.totalTime || fallbackTotal;
+        const remain = Math.max(0, Math.ceil(q.duration || 0));
         const pct = Math.round(((total - remain) / total) * 100);
         const label = isDemo ? ('Smantellamento di ' + def.name) : def.name;
         const cancelTitle = isDemo ? 'Annulla smantellamento' : 'Annulla (rimborso 80%)';

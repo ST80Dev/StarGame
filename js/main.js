@@ -2277,8 +2277,13 @@ function renderPlanetStruttureTab(host, planet, colony) {
     colony.queue.forEach(function (q, idx) {
       const def = S.get(q.id);
       const isDemo = q.target === 'demolish';
-      const total = isDemo ? Math.max(1, Math.round((def.time || 2) / 2)) : (def.time || 1);
-      const remain = Math.max(0, q.duration | 0);
+      /* Usa il totalTime memorizzato sull'entry (cattura stepTime al livello
+         giusto). Fallback per save legacy: ricalcola da stepTime(toLevel). */
+      const fallbackTotal = isDemo
+        ? Math.max(1, Math.round((def.time || 2) / 2))
+        : (S.stepTime ? S.stepTime(def, q.toLevel || 1) : (def.time || 1));
+      const total = q.totalTime || fallbackTotal;
+      const remain = Math.max(0, Math.ceil(q.duration || 0));
       const pct = Math.round(((total - remain) / total) * 100);
       const label = isDemo ? ('Smantellamento di ' + def.name) : def.name;
       const cancelTitle = isDemo ? 'Annulla smantellamento (nessuna penalità)' : 'Annulla (rimborso 80%)';

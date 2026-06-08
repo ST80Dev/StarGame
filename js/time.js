@@ -385,15 +385,15 @@
   /* 1) Coda di costruzione: decrementa duration, completa quelle a 0. */
   function processQueue(game, colony, planet, events) {
     if (!colony.queue || !colony.queue.length) return;
-    /* M06.5 (decisione #27): durante l'Insediamento la PRIMA entry in
-       coda matura il 50% più in fretta (bonus "moduli avanguardia"
-       della fondazione). Decremento 1.5 invece di 1.0 sulla prima. */
-    const settling = (colony.phase === 'settling');
+    /* Decisione di sessione (revert parziale #27): rimosso il bonus +50%
+       sulla prima entry durante l'Insediamento. Decremento sempre 1.0,
+       così la duration resta sempre intera e il display non lascia
+       l'utente con "8/9" o "7/9" inspiegabili dopo 1 Ι. Il sapore della
+       fase Insediamento resta nei 4 stage scriptati + banner + pop bloccata. */
     const stillQueued = [];
     for (let i = 0; i < colony.queue.length; i++) {
       const q = colony.queue[i];
-      const dec = (settling && i === 0) ? 1.5 : 1;
-      q.duration = (q.duration || 0) - dec;
+      q.duration = (q.duration || 0) - 1;
       if (q.duration <= 0) {
         const def = root.ORION.structures.get(q.id);
         if (!def) continue;
