@@ -3629,8 +3629,11 @@ select.main-menu__input { cursor: pointer; }
 .deck-grid {
   display: grid;
   grid-template-columns: 200px 1fr 320px;
-  grid-template-rows: 1fr auto;
+  /* PR-L: nuova riga "status" in cima (auto height) — chip compatti
+     per slot/rifiuti/capitale/morale. Hidden on mobile. */
+  grid-template-rows: auto 1fr auto;
   grid-template-areas:
+    "status    status     status"
     "resources .          queue"
     "pop       structs    footer";
   gap: 6px;
@@ -3641,6 +3644,74 @@ select.main-menu__input { cursor: pointer; }
 
 /* I figli del deck-grid catturano click (il root ha pointer-events:none). */
 .deck-grid > * { pointer-events: auto; }
+
+/* ---- Status bar (PR-L: situazione veloce pianeta/colonia) -----
+   Striscia orizzontale di chip compatti che riassume slot, rifiuti,
+   capitale e morale — visibile da tablet in su (≥900px), nascosta su
+   mobile per non appesantire. Sta in cima alla deck-grid. */
+.deck-statusbar {
+  grid-area: status;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  background: rgb(var(--c-surface-rgb) / 0.55);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+  backdrop-filter: blur(6px);
+  flex-wrap: wrap;
+  font-family: var(--font-data, monospace);
+}
+.deck-status__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  background: rgba(8, 12, 30, 0.55);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  color: var(--c-text-soft);
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.deck-status__chip strong { color: var(--c-text); font-weight: 600; }
+.deck-status__chip .ui-icon { font-size: 0.95rem; }
+.deck-status__chip .deck-status__mini {
+  display: inline-block;
+  width: 48px;
+  height: 5px;
+  background: rgba(120, 160, 255, 0.15);
+  border-radius: 3px;
+  overflow: hidden;
+  vertical-align: middle;
+}
+.deck-status__chip .deck-status__mini i {
+  display: block;
+  height: 100%;
+  background: var(--c-accent);
+  transition: width 0.4s ease;
+}
+/* Stato semantico chip (UI_GUIDE §7) */
+.deck-status__chip--ok    { border-color: rgba(111,224,184,0.4); color: #6fe0b8; }
+.deck-status__chip--ok strong { color: #6fe0b8; }
+.deck-status__chip--warn  { border-color: rgba(240,214,112,0.5); color: #f0d670; }
+.deck-status__chip--warn strong { color: #f0d670; }
+.deck-status__chip--warn .deck-status__mini i { background: #f0d670; }
+.deck-status__chip--crit  { border-color: rgba(240,130,150,0.55); color: #f08296; background: rgba(240,130,150,0.08); }
+.deck-status__chip--crit strong { color: #f08296; }
+.deck-status__chip--crit .deck-status__mini i { background: #f08296; }
+.deck-status__chip--capital {
+  border-color: rgba(240,215,112,0.55);
+  color: #f0d670;
+  background: rgba(240,215,112,0.10);
+}
+.deck-status__chip--capital strong { color: #f0d670; }
+
+/* Mobile (<900px): nascondi la status bar — risparmia spazio verticale */
+@media (max-width: 899px) {
+  .deck-statusbar { display: none; }
+}
 
 /* ---- Top-bar --------------------------------------------------- */
 .deck-topbar {
