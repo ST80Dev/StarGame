@@ -387,7 +387,9 @@
     if (!colony.queue || !colony.queue.length) return;
     /* M06.5 (decisione #27): durante l'Insediamento la PRIMA entry in
        coda matura il 50% più in fretta (bonus "moduli avanguardia"
-       della fondazione). Decremento 1.5 invece di 1.0 sulla prima. */
+       della fondazione). Decremento 1.5 invece di 1.0 sulla prima.
+       Il display usa Math.ceil sulla duration per non mostrare frazioni
+       (decisione di sessione, vedi PR build-progress). */
     const settling = (colony.phase === 'settling');
     const stillQueued = [];
     for (let i = 0; i < colony.queue.length; i++) {
