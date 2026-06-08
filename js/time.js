@@ -105,7 +105,8 @@
       ricerca:    0.04, civile:    0.04, avanzata:  0.08
     },
     WASTE_BASE_CAPACITY: 2000,   // contenimento di base (buffer ampio → lungo termine)
-    WASTE_ENERGY_YIELD:  0.30,   // energia recuperata per unità di rifiuto trattato
+    WASTE_ENERGY_YIELD:  0.30,   // energia recuperata per unità di rifiuto trattato (a livello 1)
+    WASTE_EFF_PER_LEVEL: 0.05,   // +5% resa energia per livello del riciclo (L1 0.30 → L5 0.36)
     WASTE_SAT_WARN:      0.75,   // saturazione oltre cui inizia il malus (stato 'saturo')
     WASTE_MALUS_SAT:     0.10,   // malus produzione a saturazione = 1.0
     WASTE_MALUS_CRIT:    0.25,   // malus massimo (saturazione ≥ 2.0, overflow ignorato)
@@ -693,21 +694,26 @@
     const pt = colony.pop.total || 0;
     let gen = pt * pt * CFG.WASTE_POP_K;
     let process = 0;
+    let recyLevel = 0;   // livello dell'impianto di riciclo (per l'efficienza energia)
     Object.keys(colony.structures || {}).forEach(function (id) {
       const def = S.get(id);
       if (!def) return;
-      const msum = S.moduleSum(colony.structures[id].level || 1);
+      const lvl = colony.structures[id].level || 1;
+      const msum = S.moduleSum(lvl);
       const wcat = CFG.WASTE_BY_CAT[def.cat];
       if (wcat) gen += wcat * msum;
-      if (def.wasteProcess) process += def.wasteProcess * msum;
+      if (def.wasteProcess) { process += def.wasteProcess * msum; if (lvl > recyLevel) recyLevel = lvl; }
     });
 
     const before = waste.stock || 0;
     let after = before + gen - process;
     if (after < 0) after = 0;
-    // energia recuperata = rifiuti EFFETTIVAMENTE trattati × resa
+    // energia recuperata = rifiuti EFFETTIVAMENTE trattati × resa.
+    // Resa cresce col livello del riciclo (+WASTE_EFF_PER_LEVEL/livello, decisione #48):
+    // un impianto più potenziato estrae più energia per unità bruciata.
     const processed = Math.max(0, (before + gen) - after);
-    const energyGain = (processed > 0 && CFG.WASTE_ENERGY_YIELD > 0) ? processed * CFG.WASTE_ENERGY_YIELD : 0;
+    const effYield = CFG.WASTE_ENERGY_YIELD * (1 + CFG.WASTE_EFF_PER_LEVEL * Math.max(0, recyLevel - 1));
+    const energyGain = (processed > 0 && effYield > 0) ? processed * effYield : 0;
     if (energyGain > 0) {
       colony.stock.en = (colony.stock.en || 0) + energyGain;
     }
