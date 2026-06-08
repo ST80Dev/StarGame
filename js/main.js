@@ -702,7 +702,7 @@ function renderView(stage, view) {
   // M08 Fase A: vista Flotta dedicata (lista + ordini). La mappa attiva
   // sui canvas è Fase B.
   if (view === 'fleet') {
-    if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; }
+    if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; } if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
     if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
     if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
     renderFleetView(stage);
@@ -713,7 +713,7 @@ function renderView(stage, view) {
   // contattate + anteprima ICG/Reputazione. Read-only, niente diplomazia
   // interattiva (M11).
   if (view === 'civ') {
-    if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; }
+    if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; } if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
     if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
     if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
     if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
@@ -725,7 +725,7 @@ function renderView(stage, view) {
   // commercio interno (capacità, rotte, mercantili). La gestione operativa
   // (crea/cancella, costruisci mercantili) vive nella tab Rotte per-colonia.
   if (view === 'market') {
-    if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; }
+    if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; } if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
     if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
     if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
     if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
@@ -734,7 +734,7 @@ function renderView(stage, view) {
   }
 
   // Altre viste: smonta tutto e mostra il placeholder.
-  if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; }
+  if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; } if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
   if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
   if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
   if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
@@ -756,6 +756,7 @@ function renderViewPlaceholder(stage, view) {
    --------------------------------------------------------------------- */
 function renderGalaxyView(stage) {
   if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; }
+  if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
   if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
   ORION.openPlanetKey = null;
   ORION.currentPlanet = null;
@@ -1363,10 +1364,17 @@ function openPlanet(sysId, bodyKey) {
   if (planetHolder) planetHolder.hidden = false;
 
   if (ORION.planetView) ORION.planetView.destroy();
+  if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
   ORION.planetView = new ORION.PlanetView().mount(planetHolder, system, body, planet, colony, {
     onSelectMoon: function (mk) { openPlanet(sysId, mk); },
     onExit: function () { closePlanet(); }
   });
+
+  /* Decisione #66: overlay SVG sopra il planet-canvas (sotto il deck)
+     con marker strutture, anello orbitale, badge cardinali "vivi". */
+  if (ORION.PlanetOverlay) {
+    ORION.planetOverlay = new ORION.PlanetOverlay().mount(planetHolder, system, body, planet, colony);
+  }
 
   /* M07.2 (decisione #44): Plancia di Colonia — overlay DOM con widget
      a cardinali (top-bar, risorse XXL, strutture costruite con "+Espandi",
@@ -1386,6 +1394,7 @@ function openPlanet(sysId, bodyKey) {
 
 function closePlanet() {
   if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; }
+  if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
   if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
   ORION.openPlanetKey = null;
   ORION.currentPlanet = null;
@@ -1418,6 +1427,9 @@ function updatePlanetUI() {
     } else {
       ORION.colonyDeck.refresh(ORION.currentPlanet, colony);
     }
+    /* Decisione #66: tieni vivo l'overlay (marker + cardinali) ad ogni
+       cambio di colonia (build/cancel/scarsità/insediamento/flotte). */
+    if (ORION.planetOverlay) ORION.planetOverlay.refresh(ORION.currentPlanet, colony);
   } else if (ORION.colonyDeck) {
     /* Non più colonizzato (es. test/edge) o nessuna colonia: smonta. */
     ORION.colonyDeck.destroy();
@@ -2194,6 +2206,7 @@ function _doColonize(planet, colKey, colony, homeColony, totalCost, cost) {
   updateGlobalResourceHud();
   updatePlanetUI();
   if (ORION.planetView) ORION.planetView.refresh(colony);
+  if (ORION.planetOverlay) ORION.planetOverlay.refresh(planet, colony);
 }
 
 /* --- Tab Risorse --- */
@@ -8260,7 +8273,7 @@ function migrateLegacyCrewIds(game) {
 }
 
 function enterGame() {
-  if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; }
+  if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; } if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
   if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
   if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
   if (ORION.map) { ORION.map.destroy(); ORION.map = null; }

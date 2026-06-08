@@ -3474,6 +3474,144 @@ select.main-menu__input { cursor: pointer; }
    il colpo d'occhio e le azioni ad alta frequenza (espandi modulo,
    annulla in coda). Sincronia con la sidebar — stessi tryBuild/tryCancel.
    ===================================================================== */
+/* =====================================================================
+   Decisione #66 — Planet Overlay (marker strutture + cardinali "vivi")
+   Layer SVG+DOM tra planet-canvas (z=2) e colony-deck (z=3). Anima
+   tramite CSS keyframes (niente rAF JS). Posizionato in sync() da
+   planet-overlay.js. Mobile (≤999px): nascosto per leggibilità.
+   ===================================================================== */
+.planet-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+.planet-overlay__svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+/* Anello orbitale decorativo: rotazione lenta CSS-only. */
+.planet-overlay__orbit { transform-origin: center; animation: po-orbit-spin 80s linear infinite; }
+.po-orbit {
+  fill: none;
+  stroke: rgba(216,226,255,0.16);
+  stroke-width: 1;
+  stroke-dasharray: 2 6;
+}
+@keyframes po-orbit-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+/* Marker struttura (SVG <g>) */
+.pm {
+  --pm-color: #cfe0ff;
+  --pm-lit: 1;
+  animation: po-breath 5.6s ease-in-out infinite;
+  animation-delay: var(--pm-delay, 0s);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.pm__halo {
+  fill: var(--pm-color);
+  fill-opacity: calc(0.10 + 0.20 * var(--pm-lit));
+  filter: drop-shadow(0 0 4px var(--pm-color));
+}
+.pm__dot {
+  fill: var(--pm-color);
+  fill-opacity: calc(0.50 + 0.45 * var(--pm-lit));
+  stroke: rgba(8,12,30,0.55);
+  stroke-width: 0.8;
+}
+.pm__glyph {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 7px;
+  fill: rgba(10,14,32,0.92);
+  font-weight: 700;
+  pointer-events: none;
+}
+.pm__lvl {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 7px;
+  fill: var(--pm-color);
+  font-weight: 700;
+  transform: translate(7px, -7px);
+  filter: drop-shadow(0 0 2px rgba(8,12,30,0.9));
+}
+@keyframes po-breath {
+  0%, 100% { transform: scale(1.0); }
+  50%      { transform: scale(1.12); }
+}
+/* Struttura in costruzione: pulse più marcato, ambra di costruzione */
+.pm--building .pm__halo {
+  fill: #f0b870;
+  fill-opacity: 0.45;
+  animation: po-build-pulse 1.3s ease-in-out infinite;
+}
+.pm--building .pm__dot { stroke: #f0b870; stroke-width: 1.1; }
+.pm--ghost .pm__dot { fill-opacity: 0.3; stroke-dasharray: 1.5 1.5; }
+@keyframes po-build-pulse {
+  0%, 100% { transform: scale(1.0); fill-opacity: 0.30; }
+  50%      { transform: scale(1.55); fill-opacity: 0.65; }
+}
+
+/* Badge cardinali (DOM, posizionati in sync()) */
+.planet-overlay__cardinals { position: absolute; inset: 0; pointer-events: none; }
+.planet-overlay__badge {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(var(--c-surface-rgb, 34 46 86) / 0.78);
+  border: 1px solid rgba(216, 226, 255, 0.18);
+  color: var(--c-text-soft, #d8e2ff);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+  animation: po-badge-breath 4.8s ease-in-out infinite;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+.planet-overlay__badge[hidden] { display: none; }
+.planet-overlay__badge .po-glyph { font-size: 0.95rem; line-height: 1; }
+.planet-overlay__badge .po-label { letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.62rem; opacity: 0.82; }
+.planet-overlay__badge .po-value { font-weight: 700; }
+@keyframes po-badge-breath {
+  0%, 100% { opacity: 0.85; }
+  50%      { opacity: 1.0; }
+}
+/* Tinte per tipo (UI_GUIDE §1 / §7 stati semantici) */
+.planet-overlay__badge--capital  { color: #f0d670; border-color: rgba(240,214,112,0.55); }
+.planet-overlay__badge--settling { color: #f0b870; border-color: rgba(240,184,112,0.45); }
+.planet-overlay__badge--fleet    { color: #7ad9e8; border-color: rgba(122,217,232,0.45); }
+.planet-overlay__badge--waste.planet-overlay__badge--ok   { color: #9fd0a8; border-color: rgba(159,208,168,0.40); }
+.planet-overlay__badge--waste.planet-overlay__badge--warn { color: #f0b870; border-color: rgba(240,184,112,0.55); }
+.planet-overlay__badge--waste.planet-overlay__badge--crit { color: #e88a8a; border-color: rgba(232,138,138,0.65); animation: po-badge-alarm 1.6s ease-in-out infinite; }
+.planet-overlay__badge--scar.planet-overlay__badge--low   { color: #f0b870; border-color: rgba(240,184,112,0.55); animation: po-badge-alarm 2.2s ease-in-out infinite; }
+.planet-overlay__badge--scar.planet-overlay__badge--crit  { color: #e88a8a; border-color: rgba(232,138,138,0.65); animation: po-badge-alarm 1.3s ease-in-out infinite; }
+@keyframes po-badge-alarm {
+  0%, 100% { box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35); }
+  50%      { box-shadow: 0 2px 22px rgba(232,138,138,0.45); }
+}
+
+/* Mobile / tablet stretto: nasconde l'overlay per non sovraffollare la
+   sfera in portrait (decisione #63 — i widget vivono nella sheet). */
+@media (max-width: 999px) {
+  .planet-overlay { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .planet-overlay__orbit,
+  .pm,
+  .pm--building .pm__halo,
+  .planet-overlay__badge { animation: none; }
+}
+
 .colony-deck {
   position: absolute;
   inset: 0;
