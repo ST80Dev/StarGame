@@ -4154,6 +4154,53 @@ select.main-menu__input { cursor: pointer; }
   .deck-res { flex: 1 1 110px; min-width: 110px; }
 }
 
+/* Plancia di Colonia su TELEFONO (≤760): solo colpo d'occhio — le azioni
+   si fanno dalla schermata Colonia (decisione #65 follow-up). Card condensate
+   fino a misure minime, niente pulsanti azione, cronaca collassata. */
+@media (max-width: 760px) {
+  .colony-deck { padding: 8px 8px calc(var(--mnav-h, 60px) + 16px); }
+
+  /* Risorse: griglia fluida, 4 card che si stringono fino a ~72px */
+  .deck-resources {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+    gap: 6px;
+  }
+  .deck-res { flex: none; min-width: 0; padding: 5px 7px; }
+  .deck-res__label { font-size: 0.58rem; letter-spacing: 0; }
+  .deck-res__value { font-size: 0.95rem; }
+  .deck-res__rate  { font-size: 0.58rem; }
+
+  /* Strutture read-only: niente "vai a costruzione" né "+Espandi" */
+  .deck-structures__hint,
+  .deck-struct__expand { display: none; }
+
+  /* Popolazione: chip classi fluide fino a misure minime */
+  .deck-pop__chips {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+    gap: 5px;
+  }
+  .deck-pop__chip { min-width: 0; font-size: 0.62rem; padding: 3px 6px; }
+  .deck-pop__chip-label { letter-spacing: 0; }
+
+  /* Cronaca: header cliccabile (collassata di default su mobile) */
+  .deck-cron-toggle {
+    display: flex; align-items: center; gap: 6px; width: 100%;
+    background: none; border: none; color: inherit; cursor: pointer;
+    padding: 4px 0; font: inherit; text-align: left;
+  }
+  .deck-cron-icon { color: var(--c-text-soft); flex: 0 0 auto; font-size: 0.95rem; }
+  .deck-cron-caret { margin-left: auto; color: var(--c-text-faint); }
+}
+/* La cronaca collassata nasconde il log a qualsiasi larghezza. */
+.deck-footer.is-collapsed .deck-footer-log,
+.deck-footer.is-collapsed .deck-section__empty { display: none; }
+.deck-cron-toggle { display: flex; align-items: center; gap: 6px; width: 100%;
+  background: none; border: 1px solid transparent; color: inherit; cursor: pointer;
+  padding: 2px 0; font: inherit; text-align: left; }
+.deck-cron-caret { margin-left: auto; color: var(--c-text-faint); }
+
 /* =====================================================================
    M07.3 (decisione #62) — Dashboard Impero
    Overlay al centro a livello Galassia/Gruppo: griglia di card-colonia
