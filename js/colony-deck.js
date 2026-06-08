@@ -150,6 +150,7 @@
          main.js). Niente più _renderTopBar() qui, per non duplicare. */
       const html =
         '<div class="deck-grid">' +
+          this._renderStatusBar() +
           this._renderResources() +
           this._renderStructures() +
           this._renderQueue() +
@@ -196,6 +197,95 @@
           phaseChip +
         '</div>' +
       '</div>';
+    }
+
+    /* PR-L: status bar in cima (≥tablet) — slot/rifiuti/capitale/morale
+       come chip compatti. Esposizione veloce delle metriche strategiche
+       della colonia senza dover aprire le tab della sidebar dx. */
+    _renderStatusBar() {
+      const colony = this.colony, planet = this.planet;
+      const game = ORION.game;
+      if (!planet || !colony || !game) return '';
+      const icon = (name) => (ORION.icon ? ORION.icon(name) : '');
+      const ico = (name, tone) =>
+        '<span class="ui-icon' + (tone ? ' ui-icon--' + tone : '') + '" aria-hidden="true">' + icon(name) + '</span>';
+
+      const chips = [];
+
+      /* Slot: usati / cap (effettivo include bonifica/terraf/capitale) */
+      const S = ORION.structures;
+      let slotsUsed = 0;
+      Object.keys(colony.structures).forEach(function (id) {
+        const def = S && S.get(id);
+        if (def) slotsUsed += S.slotFootprint(def, colony.structures[id].level || 1);
+      });
+      const slotsCap = ORION.planet.effectiveSlots
+        ? ORION.planet.effectiveSlots(planet, colony, game)
+        : (planet.slots || 0);
+      const slotsPct = slotsCap > 0 ? Math.min(100, Math.round(slotsUsed * 100 / slotsCap)) : 0;
+      const slotsCls = slotsPct >= 95 ? ' deck-status__chip--crit' : slotsPct >= 80 ? ' deck-status__chip--warn' : ' deck-status__chip--ok';
+      chips.push(
+        '<span class="deck-status__chip' + slotsCls + '" title="Slot occupati / capacità planetaria">' +
+          ico('build', 'cyan') +
+          '<strong>' + slotsUsed + ' / ' + slotsCap + '</strong> slot' +
+          '<span class="deck-status__mini"><i style="width:' + slotsPct + '%"></i></span>' +
+        '</span>'
+      );
+
+      /* Rifiuti (decisione #48 M06.7): stato + saturazione */
+      const waste = colony.waste;
+      if (waste && waste.capacity > 0) {
+        const sat = Math.round((waste.saturation || 0) * 100);
+        const st = waste.state || 'ok';
+        const wCls = st === 'crit' ? ' deck-status__chip--crit' : st === 'saturo' ? ' deck-status__chip--warn' : ' deck-status__chip--ok';
+        const wLabel = st === 'crit' ? 'critico' : st === 'saturo' ? 'saturo' : 'ok';
+        chips.push(
+          '<span class="deck-status__chip' + wCls + '" title="Stato rifiuti planetari — ' + waste.stock + ' / ' + waste.capacity + '">' +
+            ico('refresh', 'green') +
+            'Rifiuti <strong>' + wLabel + '</strong>' +
+            '<span class="deck-status__mini"><i style="width:' + Math.min(100, sat) + '%"></i></span>' +
+          '</span>'
+        );
+      }
+
+      /* Capitale di gruppo (decisione #45) */
+      const capKey = (typeof root.systemBodyKey === 'function' && this.body)
+        ? planet.systemId + ':' + this.body.key
+        : null;
+      const isCap = capKey && ORION.capital && ORION.capital.isCapital
+        ? ORION.capital.isCapital(game, capKey)
+        : false;
+      if (isCap) {
+        chips.push(
+          '<span class="deck-status__chip deck-status__chip--capital" title="Capitale di gruppo — bonus +15% produzione, +10 slot riserva">' +
+            ico('star', 'gold') +
+            '<strong>Capitale</strong>' +
+          '</span>'
+        );
+      } else if (colony.isHomeBase) {
+        chips.push(
+          '<span class="deck-status__chip deck-status__chip--capital" title="Pianeta base">' +
+            ico('star', 'amber') +
+            '<strong>Pianeta base</strong>' +
+          '</span>'
+        );
+      }
+
+      /* Morale d'impero (warState M09) o morale colonia */
+      const ws = game.warState;
+      if (ws && typeof ws.morale === 'number') {
+        const mor = Math.round(ws.morale * 100);
+        const mCls = mor >= 90 ? ' deck-status__chip--ok' : mor >= 70 ? ' deck-status__chip--warn' : ' deck-status__chip--crit';
+        chips.push(
+          '<span class="deck-status__chip' + mCls + '" title="Morale d\'impero — sotto pressione cala con perdite belliche">' +
+            ico('forces', mor >= 70 ? 'green' : 'pink') +
+            'Morale <strong>' + mor + '%</strong>' +
+          '</span>'
+        );
+      }
+
+      if (!chips.length) return '';
+      return '<div class="deck-statusbar" aria-label="Situazione veloce">' + chips.join('') + '</div>';
     }
 
     /* Card risorse XXL (colonna sinistra). */
