@@ -4205,6 +4205,14 @@ function renderFleetView(stage) {
       const cmdBtnLabel = cmd
         ? (starHtml + ' ' + escapeHtml(cmd.name))
         : (starHtml + ' Comandante');
+      /* Decisione #66 estensione (P0): mostra coloni a bordo se la flotta
+         ha capienza demografica (≥1 nave coloniale). */
+      const popCap = ORION.fleet && ORION.fleet.fleetPopCargoCap ? ORION.fleet.fleetPopCargoCap(f) : 0;
+      const popOnboard = f.popOnboard || 0;
+      const popHtml = popCap > 0
+        ? '<div class="fleet-item__pop"><span class="ui-icon ui-icon--amber" aria-hidden="true">◉</span> ' +
+            'Coloni a bordo: <strong>' + popOnboard + '</strong> / ' + popCap + ' livell' + (popCap === 1 ? 'o' : 'i') + '</div>'
+        : '';
       return '<li class="fleet-item" data-fleet-id="' + escapeHtml(f.id) + '">' +
         '<div class="fleet-item__head">' +
           '<span class="fleet-item__name"><strong>' + escapeHtml(f.name) + '</strong> ' +
@@ -4218,6 +4226,7 @@ function renderFleetView(stage) {
         '<div class="fleet-item__ships">' + counterHtml +
           ' · <span class="cantieri-row__base">equipaggio ' + (f.crew ? f.crew.length : 0) + ' / ' +
           (ORION.fleet ? ORION.fleet.fleetCrewRequired(f) : 0) + '</span></div>' +
+        popHtml +
         vetHtml +
         cmdHtml +
         '<div class="fleet-item__actions">' +
@@ -5347,6 +5356,56 @@ function openFleetManageOverlay(fleetId) {
   const crewInFleet = fleet.crew ? fleet.crew.length : 0;
   const crewReq = ORION.fleet.fleetCrewRequired(fleet);
 
+  /* Decisione #66 estensione (P0): Imbarca/Sbarca coloni.
+     Trova tutte le colonie del giocatore nello stesso sistema della flotta
+     che siano operative (`colonized: true`). Per ognuna mostra una riga
+     con bottoni che chiamano embarkPop/disembarkPop. Il caso più frequente
+     è la colonia origine (rebalance natio→nuova) ma supporta anche il
+     trasferimento colony-to-colony per bilanciare carestia/rifiuti. */
+  const popCap = ORION.fleet.fleetPopCargoCap(fleet);
+  const popOnboard = fleet.popOnboard || 0;
+  const canDock = (fleet.location.status === 'docked' || fleet.location.status === 'orbiting');
+  const sameSys = fleet.location.systemId;
+  const popOpsKeys = Object.keys(g.colonies || {}).filter(function (k) {
+    const c = g.colonies[k];
+    return c && c.colonized && c.systemId === sameSys && c.pop;
+  });
+  let popHtml = '';
+  if (popCap > 0) {
+    let popRows = '';
+    if (popOpsKeys.length === 0 || !canDock) {
+      popRows = '<div class="fleet-crew-row"><span class="cantieri-row__base">' +
+        (canDock ? 'Nessuna colonia operativa in questo sistema.' : 'La flotta deve essere all\'attracco o in orbita di una colonia.') +
+        '</span></div>';
+    } else {
+      popRows = popOpsKeys.map(function (ck) {
+        const c = g.colonies[ck];
+        const cname = colonyName_(g, ck);
+        const cpop = (c.pop && c.pop.total) || 0;
+        const ccap = (c.pop && c.pop.cap) || 0;
+        const canEmbark = cpop > 1 && popOnboard < popCap;
+        const canDisembark = popOnboard > 0 && cpop < ccap;
+        const isDiaspora = c.diaspora && c.diaspora.until > (g.timeImpulsi || 0);
+        const dLeft = isDiaspora ? (c.diaspora.until - (g.timeImpulsi || 0)) : 0;
+        const dChip = isDiaspora ? ' <span class="fleet-pop__diaspora" title="Crescita pop ×' + c.diaspora.multiplier + ' attiva">⚡ Diaspora · ' + dLeft + ' Ι</span>' : '';
+        return '<div class="fleet-crew-row">' +
+          '<span><strong>' + escapeHtml(cname) + '</strong>: ' + cpop + ' / ' + ccap + ' liv.' + dChip + '</span>' +
+          '<button class="btn btn--mini" data-action="fleet-embark-pop" data-colony="' + escapeHtml(ck) + '" type="button"' +
+            (canEmbark ? '' : ' disabled') +
+            ' title="Imbarca 1 livello demografico (avvia Bonus Diaspora ×2 per 60 Ι sulla sorgente)">+ Imbarca 1</button>' +
+          '<button class="btn btn--mini" data-action="fleet-disembark-pop" data-colony="' + escapeHtml(ck) + '" type="button"' +
+            (canDisembark ? '' : ' disabled') +
+            ' title="Sbarca 1 livello demografico">− Sbarca 1</button>' +
+          '</div>';
+      }).join('');
+    }
+    popHtml =
+      '<p class="sysinfo__sub" style="margin-top:14px;">Coloni a bordo <span class="cantieri-row__base">(' + popOnboard + ' / ' + popCap + ' liv.)</span></p>' +
+      '<p class="panel__note">Imbarcare innesca il <strong>Bonus Diaspora</strong>: la colonia sorgente cresce a ×2 per 60 Ι. ' +
+        'Sbarcare aggiunge livelli alla colonia destinatario (mai oltre il tetto demografico).</p>' +
+      popRows;
+  }
+
   host.innerHTML =
     '<div class="fleet-create-overlay__panel" role="document">' +
       '<header class="fleet-create-overlay__head">' +
@@ -5374,6 +5433,7 @@ function openFleetManageOverlay(fleetId) {
           (crewInFleet <= 0 || fleet.location.status !== 'docked' || fleet.location.systemId !== colony.systemId ? ' disabled' : '') +
           '>− Equipaggio</button>' +
       '</div>' +
+      popHtml +
       '<div class="fleet-create-overlay__actions">' +
         '<button class="btn btn--primary" data-action="fleet-overlay-close" type="button">Chiudi</button>' +
       '</div>' +
@@ -5405,6 +5465,35 @@ function openFleetManageOverlay(fleetId) {
     const r = ORION.fleet.unassignCrew(g, fleet, fleet.ownerColonyKey, 1);
     if (!r.ok) { showToast(r.reason); return; }
     persistGame(g); openFleetManageOverlay(fleet.id);
+  });
+  /* Decisione #66 estensione (P0): Imbarca/Sbarca coloni. */
+  host.querySelectorAll('[data-action="fleet-embark-pop"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const ck = b.dataset.colony;
+      const r = ORION.fleet.embarkPop(g, fleet, ck, 1);
+      if (!r.ok) { showToast(r.reason); return; }
+      const cname = colonyName_(g, ck);
+      pushChronicle(ORION.time.currentDS(g) + ' — <strong>' + escapeHtml(fleet.name) +
+        '</strong>: 1 livello di pionieri imbarcato da <strong>' + escapeHtml(cname) +
+        '</strong> · Bonus Diaspora ×2 attivo per 60 Ι.', 'planet');
+      persistGame(g); openFleetManageOverlay(fleet.id);
+      if (ORION.openPlanetKey === ck && typeof updatePlanetUI === 'function') updatePlanetUI();
+      if (typeof renderDxPanel === 'function') renderDxPanel();
+    });
+  });
+  host.querySelectorAll('[data-action="fleet-disembark-pop"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const ck = b.dataset.colony;
+      const r = ORION.fleet.disembarkPop(g, fleet, ck, 1);
+      if (!r.ok) { showToast(r.reason); return; }
+      const cname = colonyName_(g, ck);
+      pushChronicle(ORION.time.currentDS(g) + ' — <strong>' + escapeHtml(fleet.name) +
+        '</strong>: 1 livello di pionieri sbarcato a <strong>' + escapeHtml(cname) +
+        '</strong>.', 'planet');
+      persistGame(g); openFleetManageOverlay(fleet.id);
+      if (ORION.openPlanetKey === ck && typeof updatePlanetUI === 'function') updatePlanetUI();
+      if (typeof renderDxPanel === 'function') renderDxPanel();
+    });
   });
 }
 
@@ -7101,7 +7190,11 @@ function chronicleEvent(ev) {
     const refundPct = Math.round((ev.refundRate || 0) * 100);
     pushChronicle(ds + ' — <strong>' + ev.structName + '</strong> ridotta a livello ' + ev.toLevel + ' su ' + pname + ptag + ' (rimborso ' + refundPct + '% dello step lvl ' + ev.fromLevel + ', morale −0,10 per 30 Ι).', 'planet');
   } else if (ev.kind === 'colony-done') {
-    pushChronicle(ds + ' — Nuova colonia attiva su <strong>' + pname + '</strong>' + ptag + '.', 'planet');
+    /* Decisione #66 estensione: se la nave coloniale ha trasportato coloni,
+       la colonia nasce con N livelli iniziali invece di 1. */
+    const seed = ev.seedLevels || 1;
+    const seedTxt = seed > 1 ? ' con <strong>' + seed + ' livelli</strong> di pionieri sbarcati' : '';
+    pushChronicle(ds + ' — Nuova colonia attiva su <strong>' + pname + '</strong>' + ptag + seedTxt + '.', 'planet');
   } else if (ev.kind === 'scan-done') {
     const n = (ev.planet && ev.planet.advanced) ? ev.planet.advanced.length : 0;
     pushChronicle(ds + ' — Osservatorio di ' + pname + ptag + ': scansione completata, ' + n + ' risorse avanzate rivelate.', 'explore');
@@ -7252,8 +7345,13 @@ function chronicleEvent(ev) {
   } else if (ev.kind === 'fleet-colonize-failed') {
     const fname = ev.fleetName || '—';
     const sys = ORION.game.galaxy.systems[ev.systemId];
+    /* Decisione #66 estensione (P0): mostra coloni salvati in scialuppa. */
+    const saved = ev.popSaved || 0;
+    const savedTxt = saved > 0
+      ? ' · <strong>' + saved + ' livell' + (saved === 1 ? 'o' : 'i') + '</strong> di pionieri tornati in scialuppa'
+      : '';
     pushChronicle(ds + ' — <strong>' + escapeHtml(fname) + '</strong>: fondazione annullata presso <strong>' +
-      (sys ? sys.name : '—') + '</strong> · motivo: ' + escapeHtml(ev.reason || '—') + '.', 'planet');
+      (sys ? sys.name : '—') + '</strong> · motivo: ' + escapeHtml(ev.reason || '—') + savedTxt + '.', 'planet');
   } else if (ev.kind === 'fleet-waypoint-reached') {
     /* Fase B (decisione #46): cronaca breve per ogni tappa. La voce è
        silenziata dal log se si chiude la prima tappa di un singolo move

@@ -6150,6 +6150,17 @@ select.main-menu__input { cursor: pointer; }
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
 }
 .fleet-item__cmdbonus { color: var(--c-text-faint); font-size: 0.74rem; }
+/* Decisione #66 estensione: indicatore "Coloni a bordo" sulle card flotta
+   con nave coloniale; tinta ambra coerente con Pioniere/insediamento. */
+.fleet-item__pop {
+  margin: 4px 0 2px; font-size: 0.8rem; color: #f0d8a0;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.fleet-pop__diaspora {
+  display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 4px;
+  background: rgba(240, 216, 160, 0.14); border: 1px solid rgba(240, 216, 160, 0.4);
+  color: #f0d8a0; font-size: 0.7rem; font-weight: 600;
+}
 .cmd-pick__current {
   margin: 0 0 8px; padding: 7px 9px; border-radius: 6px;
   background: rgba(215,201,166,0.08); border: 1px solid rgba(215,201,166,0.25);
