@@ -1080,6 +1080,47 @@
     }
   }
 
+  /* Decisione intra-sistema: sorveglianza per le flotte in `garrison`.
+     A ogni tick, per ogni flotta che osserva un pianeta, verifica se nel
+     sistema target è apparsa una presenza ostile (covo pirata, civ AI
+     ostile, incursione inbound già visibile). Se sì emette
+     `garrison-threat-detected` UNA SOLA VOLTA per minaccia distinta
+     (anti-spam tramite `fleet._garrisonNotified`).
+     L'evento è ON in auto-pausa di default (decisione #31): l'utente
+     decide il da farsi via overlay (Ingaggia / Ritira / Resta).
+     Recovery-friendly: nessun ingaggio automatico, nessun fail-state. */
+  function processGarrisonThreats(game, events) {
+    if (!Array.isArray(game.fleets) || !game.fleets.length) return;
+    const CO = root.ORION.combat;
+    if (!CO || !CO.hostilePresenceAt) return;
+    for (let i = 0; i < game.fleets.length; i++) {
+      const f = game.fleets[i];
+      if (!f || !f.orders || f.orders.type !== 'garrison') continue;
+      if (!f.location || f.location.status === 'in-transit') continue;
+      const sysId = f.location.systemId;
+      if (sysId == null) continue;
+      const hostile = CO.hostilePresenceAt(game, sysId);
+      const key = String(sysId);
+      if (!hostile) {
+        /* Minaccia rientrata → resetta il flag così una nuova minaccia
+           riavvisa l'utente. */
+        if (f._garrisonNotified && f._garrisonNotified[key]) {
+          delete f._garrisonNotified[key];
+        }
+        continue;
+      }
+      if (!f._garrisonNotified) f._garrisonNotified = {};
+      if (f._garrisonNotified[key]) continue;
+      f._garrisonNotified[key] = game.timeImpulsi || 0;
+      events.push({
+        kind: 'garrison-threat-detected',
+        fleetId: f.id, fleetName: f.name,
+        systemId: sysId, bodyKey: f.location.bodyKey || (f.orders && f.orders.bodyKey) || null,
+        impulso: game.timeImpulsi
+      });
+    }
+  }
+
   /* ==================================================================
      M09 Fase A (decisione #49) — COMBATTIMENTO
      Tre trigger: scaramuccia anti-pirata [lampo], scaramuccia offensiva
@@ -1144,7 +1185,16 @@
       if (playerColonyKeyForSystem(game, sysId) != null) continue;
 
       const nest = pirateNestAt(game, sysId);
-      const civ = (root.ORION.ai && root.ORION.ai.civForSystem) ? root.ORION.ai.civForSystem(game, sysId) : null;
+      /* Decisione intra-sistema: se l'attack ha `attackBodyKey`, cerca la
+         civ che possiede QUEL pianeta specifico (sistemi condivisi #52).
+         Fallback su `civForSystem` per attacchi che non specificano il body. */
+      let civ = null;
+      if (fleet.attackBodyKey && root.ORION.ai && root.ORION.ai.civForPlanet) {
+        civ = root.ORION.ai.civForPlanet(game, sysId, fleet.attackBodyKey);
+      }
+      if (!civ) {
+        civ = (root.ORION.ai && root.ORION.ai.civForSystem) ? root.ORION.ai.civForSystem(game, sysId) : null;
+      }
       /* La flotta ingaggia una civiltà se questa è già ostile OPPURE se il
          giocatore ha dato un ordine d'attacco esplicito su questo sistema
          (M09 — decisione #49: aggressione offensiva, anche contro neutrali). */
@@ -1160,7 +1210,10 @@
            deteriora (la diplomazia piena è M11). */
         if (civAttacked && !civHostile) civ.disposition = Math.max(-100, civ.disposition - 25);
       }
-      if (!enemy) { if (fleet.attackTarget === sysId) fleet.attackTarget = null; continue; }
+      if (!enemy) {
+        if (fleet.attackTarget === sysId) { fleet.attackTarget = null; fleet.attackBodyKey = null; }
+        continue;
+      }
 
       fleet.combatResolvedAt = sysId;
       const A = C.forceFromFleet(game, fleet, 'A');
@@ -1267,7 +1320,7 @@
       }
 
       // L'intento offensivo è stato consumato
-      if (fleet.attackTarget === sysId) fleet.attackTarget = null;
+      if (fleet.attackTarget === sysId) { fleet.attackTarget = null; fleet.attackBodyKey = null; }
 
       events.push({
         kind: 'battle-skirmish', report: report,
@@ -1758,6 +1811,9 @@
     processExpeditions(game, events);
     /* M08 Fase A: flotte mobili (movimento + ordini). */
     processFleets(game, events);
+    /* Decisione intra-sistema: sorveglianza garrison (notifica + auto-pausa
+       quando una minaccia ostile entra nel sistema osservato). */
+    processGarrisonThreats(game, events);
     /* M12 Fase A1 (decisione #53, §15.2): rotte commerciali interne —
        flusso passivo di risorse colonia→colonia entro il budget di
        throughput dei Mercati, maturazione xp dei mercantili, interruzioni

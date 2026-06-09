@@ -631,17 +631,70 @@
        INGAGGIA — `attackTarget` segnala l'intento offensivo a
        processSkirmishes, che risolve lo scontro anche se la civiltà non è
        già ostile (atto di aggressione → verbo morale dark se buona/neutrale,
-       light se maligna). Richiede potenza di fuoco. */
+       light se maligna). Richiede potenza di fuoco.
+       Decisione intra-sistema: l'ordine accetta opzionalmente un
+       `bodyKey` per ingaggiare *quel* pianeta specifico (es. AI con più
+       colonie nello stesso sistema). Se intra-sistema il viaggio
+       inter-sistema viene saltato. */
     if (type === 'attack') {
       const to = order.toSysId;
       if (to == null) return { ok: false, reason: 'Sistema di destinazione assente' };
       if (!fleetHasGunsLocal(fleet)) return { ok: false, reason: 'La flotta è disarmata (nessuna potenza di fuoco)' };
-      const path = computePath(game.galaxy, fleet.location.systemId, to);
+      const bodyKey = (order.bodyKey != null) ? String(order.bodyKey) : null;
+      const currentSys = fleet.location.systemId;
+      /* Intra-sistema: zero viaggio, ingaggia subito al prossimo tick. */
+      if (to === currentSys) {
+        fleet.orders = { type: 'attack', toSysId: to, bodyKey: bodyKey };
+        fleet.route = [currentSys];
+        fleet.routeIdx = 0;
+        fleet.location.status = 'orbiting';
+        if (bodyKey) fleet.location.bodyKey = bodyKey;
+        fleet.attackTarget = to;
+        fleet.attackBodyKey = bodyKey;
+        fleet.etaImpulsi = 0;
+        return { ok: true };
+      }
+      const path = computePath(game.galaxy, currentSys, to);
       if (!path) return { ok: false, reason: 'Nessuna rotta verso il sistema target' };
-      fleet.orders = { type: 'attack', toSysId: to };
+      fleet.orders = { type: 'attack', toSysId: to, bodyKey: bodyKey };
       fleet.route = path;
       fleet.routeIdx = 0;
       fleet.attackTarget = to;
+      fleet.attackBodyKey = bodyKey;
+      fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
+      return { ok: true };
+    }
+
+    /* Decisione intra-sistema: ordine `garrison`.
+       order = { type:'garrison', toSysId, bodyKey }
+       La flotta orbita VICINO al pianeta indicato (mio, neutrale, o AI in
+       osservazione) restando pronta a reagire. NON ingaggia automaticamente:
+       una minaccia in arrivo emette `garrison-threat-detected` che fa
+       auto-pausa (decisione #31) e l'utente decide il da farsi.
+       Intra-sistema: skip viaggio. Inter-sistema: viaggia come move, poi
+       all'arrivo entra in garrison. */
+    if (type === 'garrison') {
+      const to = order.toSysId;
+      const bodyKey = order.bodyKey != null ? String(order.bodyKey) : null;
+      if (to == null || !bodyKey) return { ok: false, reason: 'Sistema/pianeta target assenti' };
+      const sys = game.galaxy.systems[to];
+      if (!sys) return { ok: false, reason: 'Sistema target inesistente' };
+      const currentSys = fleet.location.systemId;
+      const baseOrder = { type: 'garrison', toSysId: to, bodyKey: bodyKey };
+      if (to === currentSys) {
+        fleet.orders = baseOrder;
+        fleet.route = [currentSys];
+        fleet.routeIdx = 0;
+        fleet.location.status = 'orbiting';
+        fleet.location.bodyKey = bodyKey;
+        fleet.etaImpulsi = 0;
+        return { ok: true };
+      }
+      const path = computePath(game.galaxy, currentSys, to);
+      if (!path) return { ok: false, reason: 'Nessuna rotta verso il sistema target' };
+      fleet.orders = baseOrder;
+      fleet.route = path;
+      fleet.routeIdx = 0;
       fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
       return { ok: true };
     }
@@ -1044,9 +1097,13 @@
     }
 
     if (order.type === 'move' || order.type === 'attack') {
-      /* L'attacco mantiene `fleet.attackTarget`: all'arrivo la flotta orbita
-         e processSkirmishes ingaggia il bersaglio al tick successivo. */
+      /* L'attacco mantiene `fleet.attackTarget` (+ opzionale
+         `fleet.attackBodyKey`): all'arrivo la flotta orbita e
+         processSkirmishes ingaggia il bersaglio al tick successivo. */
       fleet.location.status = 'orbiting';
+      if (order.type === 'attack' && order.bodyKey) {
+        fleet.location.bodyKey = order.bodyKey;
+      }
       fleet.etaImpulsi = 0;
       fleet.route = [arrivedAt];
       fleet.routeIdx = 0;
@@ -1054,9 +1111,29 @@
         kind: 'fleet-arrived',
         fleetId: fleet.id, fleetName: fleet.name,
         systemId: arrivedAt,
+        bodyKey: (order.type === 'attack') ? (order.bodyKey || null) : null,
         impulso: game.timeImpulsi
       });
       fleet.orders = { type: 'idle' };
+      return;
+    }
+
+    /* Decisione intra-sistema: arrivo `garrison` → la flotta entra in
+       osservazione vicino al pianeta target. L'ordine RESTA attivo (non
+       torna a idle): processGarrisonThreats vigila a ogni tick. */
+    if (order.type === 'garrison') {
+      fleet.location.status = 'orbiting';
+      fleet.location.bodyKey = order.bodyKey || null;
+      fleet.etaImpulsi = 0;
+      fleet.route = [arrivedAt];
+      fleet.routeIdx = 0;
+      events.push({
+        kind: 'fleet-arrived',
+        fleetId: fleet.id, fleetName: fleet.name,
+        systemId: arrivedAt, bodyKey: order.bodyKey || null,
+        impulso: game.timeImpulsi
+      });
+      /* L'ordine garrison rimane attivo. */
       return;
     }
 

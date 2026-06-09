@@ -888,6 +888,28 @@
         '<p><strong>Scorciatoia mappa:</strong> click su una flotta (il pallino colorato) → i sistemi raggiungibili si accendono → ' +
         'click sul sistema target per dare l\'ordine. Default <em>rotta</em>; <kbd>Shift</kbd>=<em>attacca</em>, ' +
         '<kbd>Alt</kbd>=<em>esplora</em>; <kbd>Esc</kbd> annulla. Coesiste col wizard per gli ordini composti.</p>'
+    },
+    {
+      id: 'intra-system-orders',
+      tag: 'M08 · Intra-sistema',
+      title: 'Pianeti specifici dentro un sistema',
+      body:
+        '<p>Quando un sistema contiene più colonie (tue, AI, neutrali), gli ordini di flotta ' +
+        'possono mirare al <strong>pianeta specifico</strong>, non solo al sistema.</p>' +
+        '<p>Dalla scheda di un <strong>pianeta AI</strong>:</p>' +
+        '<ul>' +
+          '<li><strong>⚔ Attacca <em>nome pianeta</em></strong> — la flotta ingaggia QUEL pianeta. Se sei già nel sistema, parte subito; ' +
+            'altrimenti vola al sistema e ingaggia all\'arrivo.</li>' +
+        '</ul>' +
+        '<p>Su qualunque pianeta (tuo / neutrale / AI):</p>' +
+        '<ul>' +
+          '<li><strong>⊕ Schiera in difesa</strong> — la flotta orbita vicino al pianeta in <em>osservazione</em>. ' +
+            'Non ingaggia automaticamente. ' +
+            'Una minaccia in arrivo (covo pirata, AI ostile, incursione) fa <strong>auto-pausa</strong>: ' +
+            'puoi decidere se ingaggiare, ritirarti, o restare ferma.</li>' +
+        '</ul>' +
+        '<p>Il pattugliamento <em>tra più pianeti</em> dello stesso sistema arriverà in un polish successivo ' +
+        '(oggi: una flotta in garrison per pianeta).</p>'
     }
   ];
 
