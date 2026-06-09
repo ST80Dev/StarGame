@@ -6556,6 +6556,9 @@ const DEFAULT_AUTOPAUSE = {
      non sorpresa. Hop intermedi mai. */
   'fleet-arrived': true, 'fleet-route-complete': true, 'fleet-discovery': true,
   'fleet-launched': false, 'fleet-leg-hop': false,
+  /* Decisione intra-sistema: minaccia sopra una flotta in garrison.
+     Default ON — l'utente decide il da farsi (Ingaggia/Ritira/Resta). */
+  'garrison-threat-detected': true,
   /* Fase B (decisione #46): tappa intermedia raggiunta. Default OFF —
      non interrompiamo a ogni waypoint, può essere una rotta lunga. L'arrivo
      finale e la `route-complete` continuano a fermare il tempo. */
@@ -6935,6 +6938,7 @@ function showEventOverlay(events) {
     'fleet-launched': 'Flotta: salto iperspaziale',
     'fleet-leg-hop': 'Flotta: hop intermedio',
     'fleet-waypoint-reached': 'Flotta: tappa raggiunta',
+    'garrison-threat-detected': 'Garrison: minaccia rilevata',
     'fleet-colonize-orbit': 'Coloniale: orbita di setup',
     'fleet-colonize-foundation': 'Coloniale: fondazione in corso',
     'fleet-colonize-failed': 'Coloniale: fondazione fallita',
@@ -7219,6 +7223,13 @@ function chronicleEvent(ev) {
     const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
     pushChronicle(ds + ' — <strong>' + escapeHtml(fname) + '</strong> in orbita di <strong>' +
       (sys ? sys.name : '—') + '</strong>' + stag + '.', 'explore');
+    if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+  } else if (ev.kind === 'garrison-threat-detected') {
+    const fname = ev.fleetName || '—';
+    const sys = ORION.game.galaxy.systems[ev.systemId];
+    const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
+    pushChronicle(ds + ' — ⚠ <strong>Minaccia rilevata</strong> presso <strong>' +
+      escapeHtml(fname) + '</strong> in difesa di ' + (sys ? sys.name : '—') + stag + '.', 'system');
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
   } else if (ev.kind === 'fleet-route-complete') {
     const fname = ev.fleetName || '—';
@@ -8533,7 +8544,12 @@ function renderContextActionBar(ctx) {
     const planet = ORION.currentPlanet;
     const colKey = sysId + ':' + planet.bodyKey;
     const colony = g.colonies[colKey];
-    const civ = (ORION.ai && ORION.ai.civForSystem) ? ORION.ai.civForSystem(g, sysId) : null;
+    /* Decisione intra-sistema: preferisci `civForPlanet` (planet-level) a
+       `civForSystem` (system-level) — è più preciso quando un sistema è
+       condiviso da civ diverse (#52 §13.6). Fallback per save legacy. */
+    const civ = (ORION.ai && ORION.ai.civForPlanet)
+      ? ORION.ai.civForPlanet(g, sysId, planet.bodyKey)
+      : ((ORION.ai && ORION.ai.civForSystem) ? ORION.ai.civForSystem(g, sysId) : null);
     const isMine = !!(colony && colony.colonized);
     const isForeign = !!(civ && !isMine);
     const isFree = !isMine && !isForeign;
@@ -8568,17 +8584,30 @@ function renderContextActionBar(ctx) {
       buttons.push('<button class="actionbar__btn btn--with-icon" data-action="ctx-diplomacy" data-civ="' + escapeHtml(civ.id) + '" title="Apri la diplomazia con questa civiltà">' +
         icnHtml('diplomacy', 'pink') + ' Diplomazia</button>');
       /* M09 (decisione #49): attacco offensivo. Abilitato se c'è almeno una
-         flotta armata che può raggiungere il sistema. */
+         flotta armata che può raggiungere il sistema.
+         Decisione intra-sistema: passa anche `data-body` per ingaggiare il
+         pianeta SPECIFICO (sistema condiviso). openAttackPicker userà il
+         bodyKey nell'ordine setOrder. */
       const strikers = attackCapableFleets(g, sysId);
       if (strikers.length) {
-        buttons.push('<button class="actionbar__btn actionbar__btn--danger btn--with-icon" data-action="ctx-attack" data-sys="' + sysId + '" data-civ="' + escapeHtml(civ.id) + '" title="Ordina a una flotta armata di attaccare questo sistema">' +
-          icnHtml('sword', 'pink') + ' Attacca</button>');
+        buttons.push('<button class="actionbar__btn actionbar__btn--danger btn--with-icon" data-action="ctx-attack" data-sys="' + sysId + '" data-body="' + escapeHtml(planet.bodyKey) + '" data-civ="' + escapeHtml(civ.id) + '" title="Ordina a una flotta armata di attaccare questo pianeta">' +
+          icnHtml('sword', 'pink') + ' Attacca ' + escapeHtml(planet.name) + '</button>');
       } else {
         buttons.push('<button class="actionbar__btn btn--with-icon" disabled title="Serve una flotta armata che possa raggiungere il sistema">' +
           icnHtml('sword', 'soft') + ' Attacca</button>');
       }
       buttons.push('<button class="actionbar__btn btn--with-icon" disabled title="Richiede M19 Spionaggio">' +
         icnHtml('spy', 'violet') + ' Pianifica spionaggio (M19)</button>');
+    }
+
+    /* Decisione intra-sistema: bottone "⊕ Schiera in difesa" per qualunque
+       pianeta (mio/neutrale/AI) se ho almeno una flotta nel suo sistema.
+       Pone la flotta in `garrison` orbita di osservazione. Una minaccia
+       in arrivo emette `garrison-threat-detected` con auto-pausa (#31). */
+    const garrFleets = garrisonCandidateFleets(g, sysId);
+    if (garrFleets.length) {
+      buttons.push('<button class="actionbar__btn btn--with-icon" data-action="ctx-garrison" data-sys="' + sysId + '" data-body="' + escapeHtml(planet.bodyKey) + '" title="Schiera una tua flotta in osservazione di questo pianeta. Una minaccia in arrivo metterà in pausa il tempo e ti chiederà cosa fare.">' +
+        icnHtml('shield', 'cyan') + ' Schiera in difesa</button>');
     }
   }
 
@@ -8600,7 +8629,12 @@ function renderContextActionBar(ctx) {
   if (dipBtn) dipBtn.addEventListener('click', function () { navigateView('civ'); });
   const aBtn = host.querySelector('[data-action="ctx-attack"]');
   if (aBtn) aBtn.addEventListener('click', function () {
-    openAttackPicker(parseInt(aBtn.dataset.sys, 10), aBtn.dataset.civ);
+    /* Decisione intra-sistema: passa anche bodyKey per ingaggio mirato. */
+    openAttackPicker(parseInt(aBtn.dataset.sys, 10), aBtn.dataset.civ, aBtn.dataset.body || null);
+  });
+  const gBtn = host.querySelector('[data-action="ctx-garrison"]');
+  if (gBtn) gBtn.addEventListener('click', function () {
+    openGarrisonPicker(parseInt(gBtn.dataset.sys, 10), gBtn.dataset.body || null);
   });
   /* PR-N: nuovi handler per livello SISTEMA con corpo selezionato. */
   const oBtn = host.querySelector('[data-action="ctx-open-body"]');
@@ -8636,6 +8670,91 @@ function attackCapableFleets(g, sysId) {
     if (F.computePath(g.galaxy, f.location.systemId, sysId)) out.push(f);
   });
   return out;
+}
+
+/* Decisione intra-sistema: flotte che possono essere messe in `garrison`
+   su un pianeta del sistema target. A differenza di `attack`, non serve
+   essere armati (anche una flotta di scout può osservare). Devono però
+   poter raggiungere il sistema (BFS). */
+function garrisonCandidateFleets(g, sysId) {
+  const out = [];
+  const F = ORION.fleet;
+  if (!F) return out;
+  (g.fleets || []).forEach(function (f) {
+    if (!f || !f.location || f.location.status === 'in-transit') return;
+    if (!(f.ships && f.ships.length)) return;
+    if (f.location.systemId === sysId) { out.push(f); return; }
+    if (F.computePath(g.galaxy, f.location.systemId, sysId)) out.push(f);
+  });
+  return out;
+}
+
+/* Overlay di scelta flotta per la garrison di un pianeta. Lista delle
+   flotte candidate (vedi sopra), con metadata (composizione + hop). */
+function openGarrisonPicker(sysId, bodyKey) {
+  const g = ORION.game;
+  const sys = g.galaxy.systems[sysId];
+  const fleets = garrisonCandidateFleets(g, sysId);
+  if (!fleets.length) { showToast('Nessuna flotta disponibile può raggiungere il sistema'); return; }
+  let planetName = null;
+  if (bodyKey && ORION.system && ORION.system.generate) {
+    try {
+      const ss = ORION.system.generate(g.galaxy, sysId);
+      const body = ss && ORION.system.findBody(ss, bodyKey);
+      planetName = body ? body.name : null;
+    } catch (_) {}
+  }
+  const F = ORION.fleet;
+  const rows = fleets.map(function (f) {
+    const path = F.computePath(g.galaxy, f.location.systemId, sysId);
+    const hops = path ? path.length - 1 : 0;
+    const fp = (f.ships || []).reduce(function (a, s) { const c = F.getClass(s.kind); return a + (c ? c.fp || 0 : 0); }, 0);
+    const intra = (f.location.systemId === sysId) ? ' · <em>già nel sistema</em>' : '';
+    return '<button class="attack-pick__row" data-fleet="' + escapeHtml(f.id) + '" type="button">' +
+      '<span class="attack-pick__name">' + escapeHtml(f.name) + '</span>' +
+      '<span class="attack-pick__meta">' + (f.ships || []).length + ' navi · fp ' + fp + ' · ' + hops + ' salti' + intra + '</span>' +
+    '</button>';
+  }).join('');
+  const tgtTxt = planetName ? (planetName + ' (' + (sys ? sys.name : '—') + ')') : (sys ? sys.name : '—');
+  const html =
+    '<div class="attack-overlay" data-garrison-overlay>' +
+      '<div class="attack-overlay__panel">' +
+        '<header class="attack-overlay__head"><h3>' +
+          '<span class="ui-icon ui-icon--cyan" aria-hidden="true">' + ((ORION.icon && ORION.icon('shield')) || '⊕') + '</span> ' +
+          'Schiera in difesa di ' + escapeHtml(tgtTxt) +
+        '</h3>' +
+          '<button class="attack-overlay__x" data-garr-close type="button" aria-label="Chiudi">' +
+            '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+          '</button></header>' +
+        '<p class="attack-overlay__sub">La flotta orbiterà vicino al pianeta in osservazione. ' +
+          '<strong>Non ingaggia automaticamente</strong>: una minaccia in arrivo metterà il tempo in pausa e ti chiederà cosa fare ' +
+          '(Ingaggia / Ritira / Resta).</p>' +
+        '<div class="attack-pick__list">' + rows + '</div>' +
+        '<p class="attack-overlay__hint">Recovery-friendly: niente combattimento senza consenso esplicito.</p>' +
+      '</div>' +
+    '</div>';
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  const node = wrap.firstChild;
+  document.body.appendChild(node);
+  function close() { if (node.parentNode) node.parentNode.removeChild(node); }
+  node.querySelector('[data-garr-close]').addEventListener('click', close);
+  node.addEventListener('click', function (e) { if (e.target === node) close(); });
+  node.querySelectorAll('[data-fleet]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const fleet = (g.fleets || []).filter(function (f) { return f.id === b.dataset.fleet; })[0];
+      if (!fleet) { close(); return; }
+      const r = ORION.fleet.setOrder(g, fleet, { type: 'garrison', toSysId: sysId, bodyKey: bodyKey });
+      if (!r.ok) { showToast(r.reason || 'Ordine rifiutato'); return; }
+      pushChronicle(ORION.time.currentDS(g) + ' — Schieramento difensivo: <strong>' + escapeHtml(fleet.name) +
+        '</strong> in osservazione di <strong>' + escapeHtml(tgtTxt) + '</strong>' +
+        (sysId >= 0 ? systemTagHtml(sysId) : '') + '.', 'system');
+      persistGame(g);
+      close();
+      if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+      showToast(fleet.name + ' schierata in difesa');
+    });
+  });
 }
 
 /* =====================================================================
@@ -8912,13 +9031,24 @@ function applyFleetOrderFromMap(req) {
   if (typeof renderLeftPanel === 'function') renderLeftPanel();
 }
 
-/* Overlay di scelta flotta per un attacco offensivo su un sistema AI. */
-function openAttackPicker(sysId, civId) {
+/* Overlay di scelta flotta per un attacco offensivo su un sistema AI.
+   Decisione intra-sistema: `bodyKey` opzionale → l'ordine d'attacco
+   ingaggia QUEL pianeta specifico (sistemi condivisi #52 §13.6). */
+function openAttackPicker(sysId, civId, bodyKey) {
   const g = ORION.game;
   const sys = g.galaxy.systems[sysId];
   const civ = (g.civs || []).filter(function (c) { return c.id === civId; })[0];
   const fleets = attackCapableFleets(g, sysId);
   if (!fleets.length) { showToast('Nessuna flotta armata può raggiungere il sistema'); return; }
+  const targetBodyKey = bodyKey ? String(bodyKey) : null;
+  let targetPlanetName = null;
+  if (targetBodyKey && ORION.system && ORION.system.generate) {
+    try {
+      const ss = ORION.system.generate(g.galaxy, sysId);
+      const body = ss && ORION.system.findBody(ss, targetBodyKey);
+      targetPlanetName = body ? body.name : null;
+    } catch (_) {}
+  }
   const aggressive = civ && civ.alignment !== 'male';   // verbo morale dark
   const F = ORION.fleet;
   const rows = fleets.map(function (f) {
@@ -8957,10 +9087,11 @@ function openAttackPicker(sysId, civId) {
     b.addEventListener('click', function () {
       const fleet = (g.fleets || []).filter(function (f) { return f.id === b.dataset.fleet; })[0];
       if (!fleet) { close(); return; }
-      const r = ORION.fleet.setOrder(g, fleet, { type: 'attack', toSysId: sysId });
+      const r = ORION.fleet.setOrder(g, fleet, { type: 'attack', toSysId: sysId, bodyKey: targetBodyKey });
       if (!r.ok) { showToast(r.reason || 'Ordine rifiutato'); return; }
+      const tgtTxt = targetPlanetName ? (targetPlanetName + ' (' + (sys ? sys.name : '—') + ')') : (sys ? sys.name : '—');
       pushChronicle(ORION.time.currentDS(g) + ' — Ordine d\'attacco: <strong>' + escapeHtml(fleet.name) +
-        '</strong> in rotta verso <strong>' + (sys ? sys.name : '—') + '</strong>' +
+        '</strong> in rotta verso <strong>' + escapeHtml(tgtTxt) + '</strong>' +
         (sysId >= 0 ? systemTagHtml(sysId) : '') + ' (' + escapeHtml(civ ? civ.name : '—') + ').', 'system');
       persistGame(g);
       close();

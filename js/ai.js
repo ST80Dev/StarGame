@@ -355,6 +355,23 @@
     return null;
   }
 
+  /* Decisione intra-sistema: trova la civiltà che possiede SPECIFICAMENTE
+     quel pianeta. Necessario quando il giocatore impartisce un ordine
+     `attack{toSysId, bodyKey}` o `garrison{toSysId, bodyKey}` mirato a
+     un pianeta preciso di un sistema condiviso (coabitazione, #52 §13.6).
+     Ritorna null se il pianeta non è di alcuna civ AI viva. */
+  function civForPlanet(game, sysId, bodyKey) {
+    if (sysId == null || bodyKey == null) return null;
+    const key = sysId + ':' + String(bodyKey);
+    const civs = game.civs || [];
+    for (let i = 0; i < civs.length; i++) {
+      const c = civs[i];
+      if (!c || !c.alive || !Array.isArray(c.planets)) continue;
+      if (c.planets.indexOf(key) >= 0) return c;
+    }
+    return null;
+  }
+
   function groupById(galaxy, gid) {
     const groups = galaxy.groups || [];
     for (let i = 0; i < groups.length; i++) if (groups[i].id === gid) return groups[i];
@@ -1517,6 +1534,7 @@
     /* Lookups */
     ownerMap: ownerMap,
     civForSystem: civForSystem,
+    civForPlanet: civForPlanet,
     pirateThreat: pirateThreat,
     /* Dossier / intel */
     dossier: dossier,
