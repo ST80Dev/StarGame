@@ -90,6 +90,9 @@
         <button class="btn btn--tutorial" data-action="open-tutorial" type="button" title="Tutorial — indice schede">
           <span class="ui-icon" data-icon="info" aria-hidden="true"></span>
         </button>
+        <button class="btn btn--prefs" data-action="open-prefs" type="button" title="Preferenze giocatore">
+          <span class="ui-icon" data-icon="settings" aria-hidden="true"></span>
+        </button>
         <button class="btn btn--save" data-action="open-save" type="button" title="Salva / Carica / Esporta">
           <span class="ui-icon" data-icon="save" aria-hidden="true"></span> <span class="btn__label">SAVE</span>
         </button>
@@ -103,6 +106,12 @@
 
     <!-- ---- Overlay di auto-pausa (decisione #31) ---- -->
     <div class="event-overlay" data-bind="event-overlay" aria-live="polite" hidden></div>
+
+    <!-- ---- Modale di conferma azioni (decisione di sessione: action-confirm) ---- -->
+    <div class="confirm-modal" data-bind="confirm-modal" role="alertdialog" aria-modal="true" aria-label="Conferma azione" hidden></div>
+
+    <!-- ---- Modale Preferenze giocatore (decisione di sessione) ---- -->
+    <div class="prefs-modal" data-bind="prefs-modal" role="dialog" aria-modal="true" aria-label="Preferenze giocatore" hidden></div>
 
     <!-- ---- Modale Salva/Carica/Esporta (M06) ---- -->
     <div class="save-modal" data-bind="save-modal" role="dialog" aria-modal="true" aria-label="Salvataggi" hidden>
@@ -208,6 +217,7 @@
   <script src="js/structures.js"></script>
   <script src="js/planet.js"></script>
   <script src="js/planet-view.js"></script>
+  <script src="js/planet-overlay.js"></script>
   <script src="js/colony-deck.js"></script>
   <script src="js/empire-deck.js"></script>
   <script src="js/fleet.js"></script>

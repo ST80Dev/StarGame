@@ -125,7 +125,12 @@
         'che si sbloccheranno con l\'albero tech. Puoi <strong>rinviarli senza penalità</strong>, oggi non danno benefici immediati.</p>' +
         '<p>Servono più slot? Più avanti sblocchi <strong>Centro di ingegneria planetaria</strong> (bonifica territoriale) e ' +
         '<strong>Terraformatori</strong>: strutture tech-gated che <strong>espandono lo spazio costruibile</strong> ' +
-        'del pianeta. Inoltre la <strong>capitale di gruppo</strong> riceve +10 slot di riserva.</p>'
+        'del pianeta. Inoltre la <strong>capitale di gruppo</strong> riceve +10 slot di riserva.</p>' +
+        '<p><strong>Sbagliato un\'espansione?</strong> Il bottone <em>cestino</em> sulla struttura costruita è ' +
+        '<strong>modulo per modulo</strong>: se sei a livello ≥ 2 fa un <strong>downgrade</strong> (lvl N → N-1) e ti ' +
+        'rimborsa <strong>il 50% / 70% sulla natale</strong> del costo dello <em>step</em> appena smontato, ' +
+        'lasciando i livelli inferiori operativi. A livello 1 invece smantella per davvero (struttura rimossa, ' +
+        'rimborso sul costo base). Sempre malus morale −0,10 per 30 <span class="ds-unit">Ι</span>, che decade da solo.</p>'
     },
     {
       id: 'advance',
@@ -199,13 +204,15 @@
       tag: 'Pianeta',
       title: 'Rifiuti e gestione',
       body:
-        '<p>Popolazione e industria producono <strong>rifiuti</strong> in continuazione. Non sono una crisi: sono una ' +
-        '<strong>leva</strong>. Si accumulano in un contenimento di colonia; la <strong>saturazione</strong> (accumulo / capacità) ' +
-        'è ciò che conta.</p>' +
-        '<p>Oltre il <strong>70%</strong> di saturazione la produzione inizia a <strong>deperire</strong> in modo progressivo ' +
-        '(fino a −25% in overflow). Non è mai un fail-state (recovery-friendly): basta agire.</p>' +
-        '<p>La leva principale è l\'<strong>Impianto di riciclo</strong>: tratta i rifiuti, ne <strong>recupera energia</strong> ' +
-        'e <strong>alza la capacità</strong> di contenimento. Pochi moduli invertono la rotta.</p>' +
+        '<p>Popolazione e industria producono <strong>rifiuti</strong>, ma è un problema di <strong>lungo termine</strong>: ' +
+        'la generazione cresce con il <strong>quadrato della popolazione</strong>, quindi è trascurabile a colonia piccola/media ' +
+        'e diventa rilevante <strong>solo avvicinandoti al tetto demografico</strong>.</p>' +
+        '<p>Si accumulano in un grande contenimento; oltre il <strong>75%</strong> di saturazione la produzione inizia a ' +
+        '<strong>deperire</strong> in modo progressivo (fino a −25% in overflow). Mai un fail-state (recovery-friendly): hai ' +
+        'molto tempo per reagire.</p>' +
+        '<p>La leva è l\'<strong>Impianto di riciclo</strong>: <strong>un solo impianto</strong> regge una colonia matura. ' +
+        'Si <strong>autoalimenta</strong> (nessun upkeep) e mentre brucia rifiuti <strong>recupera energia</strong> — un guadagno ' +
+        'temporaneo mostrato nella scheda Colonia, finché c\'è rifiuto da trattare.</p>' +
         '<p><strong>In arrivo:</strong> esportare i rifiuti alle civiltà AI (commercio) e dedicare i mondi ostili a ' +
         '<em>colonie riciclanti</em>, trasformando una zavorra in infrastruttura d\'impero.</p>'
     },
@@ -641,12 +648,15 @@
       id: 'struct:impianto-riciclo', tag: 'Strutture · ♻', title: 'Impianto di riciclo',
       body:
         '<p>Tratta i <strong>rifiuti</strong> generati da popolazione e industria: ne <strong>recupera energia</strong> ' +
-        '(≈0.25 en per unità trattata) e <strong>alza la capacità</strong> di contenimento (+150 per modulo). Uso 1 en/I.</p>' +
-        '<p><strong>Perché conta:</strong> sopra il 70% di saturazione la produzione della colonia inizia a deperire ' +
-        '(fino a −25%). Un solo impianto a livello 1 tratta 3 rifiuti/Ι; espandendolo (rendimento crescente dei moduli) ' +
-        'porti il netto in negativo e <strong>svuoti</strong> l\'accumulo.</p>' +
-        '<p><strong>Sinergia:</strong> più popolazione e più industria → più rifiuti. Su colonie grandi e mature è una ' +
-        'struttura quasi obbligata; su mondi piccoli può bastare un modulo.</p>' +
+        '(≈0.30 en per unità trattata) e <strong>alza la capacità</strong> di contenimento (+300 per modulo). ' +
+        '<strong>Nessun upkeep</strong>: si autoalimenta col rifiuto che brucia.</p>' +
+        '<p><strong>Perché conta:</strong> sopra il 75% di saturazione la produzione inizia a deperire (fino a −25%). ' +
+        'Un solo impianto a livello 1 tratta <strong>12 rifiuti/Ι</strong> — abbastanza da reggere lo stress di un ' +
+        'mondo-giardino pieno. Niente "rincorsa" agli upgrade.</p>' +
+        '<p><strong>Energia come bonus:</strong> mentre brucia rifiuti dà un guadagno di energia <em>temporaneo</em> ' +
+        '(visibile nella scheda Colonia, finché c\'è rifiuto). Rende solo se c\'è molto rifiuto → cioè a popolazione alta. ' +
+        '<strong>Potenziando l\'impianto la resa per unità sale</strong> (+5%/livello): a colonia molto popolosa, un riciclo ' +
+        'di livello alto ottimizza ulteriormente l\'energia recuperata.</p>' +
         '<p><strong>In arrivo:</strong> con le rotte commerciali potrai <em>esportare</em> i rifiuti, e i mondi ostili ' +
         'diventeranno <em>colonie riciclanti</em> dedicate.</p>'
     },
@@ -803,7 +813,11 @@
         '<strong>return</strong> (rientra alla base) · <strong>rotta a tappe</strong> (multi-waypoint con sosta opzionale) · ' +
         '<strong>pattuglia su N sistemi</strong> (loop ciclico).</p>' +
         '<p>La flotta viaggia alla velocità della <strong>nave più lenta</strong>. M13 introdurrà i 3 tier di <em>iperguida</em> ' +
-        'che ridurranno drasticamente i tempi di salto iperspaziale.</p>'
+        'che ridurranno drasticamente i tempi di salto iperspaziale.</p>' +
+        '<p><strong>Sulla mappa galattica</strong> ogni flotta ha una <em>etichetta col nome</em> + tempo all\'arrivo se in viaggio. ' +
+        'Cliccando un marker si apre un <em>popup info</em> con tutti i dettagli (composizione, ordine corrente, rotta), ' +
+        'da cui puoi aprire il <em>wizard ordini</em> o usare <em>"Scegli rotta da mappa"</em> per impostare la destinazione ' +
+        'cliccando direttamente su un sistema della mappa.</p>'
     },
     {
       id: 'fleet-classes',
@@ -848,23 +862,21 @@
     {
       id: 'fleet-orders',
       tag: 'M08 · Rotte',
-      title: 'Rotte a tappe e pattuglie',
+      title: 'Pianifica un viaggio',
       body:
-        '<p>Dalla finestra <strong>Ordini</strong> di una flotta puoi pianificare due ordini composti:</p>' +
-        '<ul>' +
-          '<li><strong>Rotta a tappe (move-route)</strong>: una catena di sistemi visitati in sequenza. ' +
-            'Per ogni tappa puoi impostare una <em>sosta orbitale</em> in Ι. Opzioni: <em>Esplora ogni tappa</em> ' +
-            '(rivela ogni sistema all\'arrivo) · <em>Rientra alla base alla fine</em>.</li>' +
-          '<li><strong>Pattuglia su N sistemi (patrol-loop)</strong>: come <em>patrol</em>, ma su 2+ nodi in loop. ' +
-            'La pattuglia non si ferma — perfetta per presidiare un confine.</li>' +
-        '</ul>' +
-        '<p>Senza consumo né uso, una flotta può <strong>vagare a lungo</strong> tra i sistemi favorevoli. ' +
-        'I rifugi presso popoli terzi (recupero/rifornimento) arriveranno con <strong>M10 Civiltà AI</strong> + ' +
-        '<strong>M11 Diplomazia</strong> (diritto di passaggio/d\'attracco) + <strong>M16 Stazioni orbitali</strong>.</p>' +
-        '<p><strong>Anche dalla mappa:</strong> click su una flotta (il pallino colorato) → ' +
-        'i sistemi raggiungibili si accendono → click sul sistema target per dare l\'ordine. ' +
-        'Default <em>rotta</em>; con <kbd>Shift</kbd>=<em>attacca</em>, con <kbd>Alt</kbd>=<em>esplora</em>; ' +
-        '<kbd>Esc</kbd> annulla. È un secondo entry-point — l\'overlay sidebar resta per gli ordini composti.</p>'
+        '<p>Dal bottone <strong>Ordini</strong> apri un <em>wizard a 3 step</em>:</p>' +
+        '<ol>' +
+          '<li><strong>Scopo viaggio</strong>: 🔍 Esplorazione · ➜ Trasferimento · ⇄ Pattuglia A↔B · ↻ Pattuglia ciclica · ✈ Rotta a tappe · ⌂ Rientro.</li>' +
+          '<li><strong>Destinazione</strong>: solo sistemi <em>conosciuti sulla mappa</em> (coerente con la nebbia di guerra), ' +
+            'ordinati per distanza in hop, con gli appartenenti al <em>tuo gruppo stellare</em> in cima.</li>' +
+          '<li><strong>Opzioni finali</strong>: per esplorazione e rotta a tappe puoi decidere se rientrare alla base, ' +
+            'se esplorare ogni tappa, e quanto sostare in orbita per nodo.</li>' +
+        '</ol>' +
+        '<p>Senza consumo né upkeep, una flotta può <strong>vagare a lungo</strong> tra i sistemi favorevoli. ' +
+        'I rifugi presso popoli terzi (recupero/rifornimento) verranno con <strong>M10/M11/M16</strong>.</p>' +
+        '<p><strong>Scorciatoia mappa:</strong> click su una flotta (il pallino colorato) → i sistemi raggiungibili si accendono → ' +
+        'click sul sistema target per dare l\'ordine. Default <em>rotta</em>; <kbd>Shift</kbd>=<em>attacca</em>, ' +
+        '<kbd>Alt</kbd>=<em>esplora</em>; <kbd>Esc</kbd> annulla. Coesiste col wizard per gli ordini composti.</p>'
     }
   ];
 

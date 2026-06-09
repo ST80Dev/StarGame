@@ -189,6 +189,112 @@
     return path;
   }
 
+  /* Decisione di sessione (M08 wizard): variante di computePath che
+     rispetta la NEBBIA DI GUERRA — non si può pianificare un viaggio
+     attraverso sistemi UNKNOWN. Coerente col gioco: vedi solo ciò che
+     conosci (EXPLORED + DETECTED).
+       - `state.discovery[i]` ∈ { UNKNOWN, DETECTED, EXPLORED }
+       - i nodi intermedi devono essere EXPLORED (li hai già visitati);
+       - il nodo target può essere DETECTED se `allowDetectedTarget` è true
+         (caso classico: "esploro un sistema rilevato sulla frontiera").
+     Ritorna null se non c'è un cammino coerente.
+     Nota: questa funzione NON sostituisce computePath — viene usata solo
+     dalla UI di pianificazione (wizard). Il tick e gli ordini "vecchi"
+     continuano a usare computePath sul grafo completo (la flotta
+     potrebbe trovarsi in viaggio attraverso sistemi che vengono perduti
+     di vista in seguito, ma quella è l'orchestrazione di M09/M11).      */
+  function computeVisiblePath(galaxy, state, fromSysId, toSysId, allowDetectedTarget) {
+    if (!galaxy || !galaxy.systems) return null;
+    if (!state || !Array.isArray(state.discovery)) return null;
+    if (fromSysId === toSysId) return [fromSysId];
+    const D = (ORION.galaxy && ORION.galaxy.DISCOVERY) || { UNKNOWN: 0, DETECTED: 1, EXPLORED: 2 };
+    const disc = state.discovery;
+    /* il target deve essere visibile (DETECTED se permesso, altrimenti EXPLORED). */
+    const dT = disc[toSysId];
+    if (dT == null) return null;
+    if (dT < D.DETECTED) return null;
+    if (!allowDetectedTarget && dT < D.EXPLORED) return null;
+    /* la sorgente deve essere a tutti gli effetti raggiungibile: di norma
+       è EXPLORED (la flotta è lì), ma in scenari edge potrebbe essere
+       DETECTED → accettiamo entrambi. */
+    if (disc[fromSysId] < D.DETECTED) return null;
+    const n = galaxy.systems.length;
+    const visited = new Array(n).fill(false);
+    const prev = new Array(n).fill(-1);
+    visited[fromSysId] = true;
+    const queue = [fromSysId];
+    let head = 0;
+    while (head < queue.length) {
+      const u = queue[head++];
+      if (u === toSysId) break;
+      const links = galaxy.systems[u].links || [];
+      for (let i = 0; i < links.length; i++) {
+        const v = links[i];
+        if (visited[v]) continue;
+        /* Per attraversare un nodo intermedio deve essere EXPLORED:
+           non si pianifica un cammino attraverso sistemi solo "rilevati".
+           Il TARGET è un'eccezione (può essere DETECTED se l'ordine
+           lo permette esplicitamente). */
+        if (v !== toSysId && disc[v] < D.EXPLORED) continue;
+        if (v === toSysId && disc[v] < (allowDetectedTarget ? D.DETECTED : D.EXPLORED)) continue;
+        visited[v] = true;
+        prev[v] = u;
+        queue.push(v);
+      }
+    }
+    if (!visited[toSysId]) return null;
+    const path = [];
+    let cur = toSysId;
+    while (cur !== -1) { path.unshift(cur); cur = prev[cur]; }
+    return path;
+  }
+
+  /* Helper UI: lista delle destinazioni VISIBILI raggiungibili da
+     `fromSysId` rispettando la nebbia di guerra, ognuna con il numero di
+     hop (distanza BFS) e il discovery level. Ordinata per hop crescente.
+     Pensata per il wizard dei viaggi (Step 2): l'utente sceglie tra
+     sistemi conosciuti, sa la distanza, vede se può esplorare o solo
+     trasferirsi/pattugliare. */
+  function visibleDestinations(galaxy, state, fromSysId, opts) {
+    opts = opts || {};
+    const includeDetected = opts.includeDetected !== false;   // default true
+    const includeExplored = opts.includeExplored !== false;   // default true
+    const out = [];
+    if (!galaxy || !state || !Array.isArray(state.discovery)) return out;
+    const D = (ORION.galaxy && ORION.galaxy.DISCOVERY) || { UNKNOWN: 0, DETECTED: 1, EXPLORED: 2 };
+    const n = galaxy.systems.length;
+    /* BFS sui soli nodi EXPLORED + il target che può essere DETECTED. */
+    const dist = new Array(n).fill(-1);
+    dist[fromSysId] = 0;
+    const queue = [fromSysId];
+    let head = 0;
+    while (head < queue.length) {
+      const u = queue[head++];
+      const links = galaxy.systems[u].links || [];
+      for (let i = 0; i < links.length; i++) {
+        const v = links[i];
+        if (dist[v] >= 0) continue;
+        const dv = state.discovery[v];
+        if (dv < D.DETECTED) continue;          // niente UNKNOWN
+        dist[v] = dist[u] + 1;
+        /* solo i nodi EXPLORED proseguono la BFS (attraversabili).
+           I DETECTED sono "foglia": raggiungibili come target ma non
+           come transito. Coerente con computeVisiblePath. */
+        if (dv >= D.EXPLORED) queue.push(v);
+      }
+    }
+    for (let i = 0; i < n; i++) {
+      if (i === fromSysId) continue;
+      if (dist[i] < 0) continue;
+      const dv = state.discovery[i];
+      if (dv >= D.EXPLORED && !includeExplored) continue;
+      if (dv === D.DETECTED && !includeDetected) continue;
+      out.push({ sysId: i, hops: dist[i], discovery: dv });
+    }
+    out.sort(function (a, b) { return a.hops - b.hops || a.sysId - b.sysId; });
+    return out;
+  }
+
   /* ------------------------------------------------------------------
      ID generators in-process (deterministici per sequenza, salvati nel
      game.fleets[] dopo la creazione).
@@ -1305,6 +1411,8 @@
     classList: classList,
     getClass: getClass,
     computePath: computePath,
+    computeVisiblePath: computeVisiblePath,
+    visibleDestinations: visibleDestinations,
     buildChainedRoute: buildChainedRoute,
     tempoLeg: tempoLeg,
     fleetMinSpeed: fleetMinSpeed,

@@ -1944,6 +1944,8 @@ button { font-family: inherit; }
   line-height: 1.4;
   color: var(--c-text-dim, rgba(255,255,255,0.7));
 }
+.waste-energy { color: #f0d670; font-family: var(--font-data); }
+.waste-energy__note { font-size: 0.72rem; color: var(--c-text-dim, rgba(255,255,255,0.6)); }
 
 /* Progress bar generica per code (costruzione, scansione, colonizzazione) */
 .progress-bar {
@@ -3474,6 +3476,144 @@ select.main-menu__input { cursor: pointer; }
    il colpo d'occhio e le azioni ad alta frequenza (espandi modulo,
    annulla in coda). Sincronia con la sidebar — stessi tryBuild/tryCancel.
    ===================================================================== */
+/* =====================================================================
+   Decisione #66 — Planet Overlay (marker strutture + cardinali "vivi")
+   Layer SVG+DOM tra planet-canvas (z=2) e colony-deck (z=3). Anima
+   tramite CSS keyframes (niente rAF JS). Posizionato in sync() da
+   planet-overlay.js. Mobile (≤999px): nascosto per leggibilità.
+   ===================================================================== */
+.planet-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+.planet-overlay__svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+/* Anello orbitale decorativo: rotazione lenta CSS-only. */
+.planet-overlay__orbit { transform-origin: center; animation: po-orbit-spin 80s linear infinite; }
+.po-orbit {
+  fill: none;
+  stroke: rgba(216,226,255,0.16);
+  stroke-width: 1;
+  stroke-dasharray: 2 6;
+}
+@keyframes po-orbit-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+/* Marker struttura (SVG <g>) */
+.pm {
+  --pm-color: #cfe0ff;
+  --pm-lit: 1;
+  animation: po-breath 5.6s ease-in-out infinite;
+  animation-delay: var(--pm-delay, 0s);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.pm__halo {
+  fill: var(--pm-color);
+  fill-opacity: calc(0.10 + 0.20 * var(--pm-lit));
+  filter: drop-shadow(0 0 4px var(--pm-color));
+}
+.pm__dot {
+  fill: var(--pm-color);
+  fill-opacity: calc(0.50 + 0.45 * var(--pm-lit));
+  stroke: rgba(8,12,30,0.55);
+  stroke-width: 0.8;
+}
+.pm__glyph {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 7px;
+  fill: rgba(10,14,32,0.92);
+  font-weight: 700;
+  pointer-events: none;
+}
+.pm__lvl {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 7px;
+  fill: var(--pm-color);
+  font-weight: 700;
+  transform: translate(7px, -7px);
+  filter: drop-shadow(0 0 2px rgba(8,12,30,0.9));
+}
+@keyframes po-breath {
+  0%, 100% { transform: scale(1.0); }
+  50%      { transform: scale(1.12); }
+}
+/* Struttura in costruzione: pulse più marcato, ambra di costruzione */
+.pm--building .pm__halo {
+  fill: #f0b870;
+  fill-opacity: 0.45;
+  animation: po-build-pulse 1.3s ease-in-out infinite;
+}
+.pm--building .pm__dot { stroke: #f0b870; stroke-width: 1.1; }
+.pm--ghost .pm__dot { fill-opacity: 0.3; stroke-dasharray: 1.5 1.5; }
+@keyframes po-build-pulse {
+  0%, 100% { transform: scale(1.0); fill-opacity: 0.30; }
+  50%      { transform: scale(1.55); fill-opacity: 0.65; }
+}
+
+/* Badge cardinali (DOM, posizionati in sync()) */
+.planet-overlay__cardinals { position: absolute; inset: 0; pointer-events: none; }
+.planet-overlay__badge {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(var(--c-surface-rgb, 34 46 86) / 0.78);
+  border: 1px solid rgba(216, 226, 255, 0.18);
+  color: var(--c-text-soft, #d8e2ff);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+  animation: po-badge-breath 4.8s ease-in-out infinite;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+.planet-overlay__badge[hidden] { display: none; }
+.planet-overlay__badge .po-glyph { font-size: 0.95rem; line-height: 1; }
+.planet-overlay__badge .po-label { letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.62rem; opacity: 0.82; }
+.planet-overlay__badge .po-value { font-weight: 700; }
+@keyframes po-badge-breath {
+  0%, 100% { opacity: 0.85; }
+  50%      { opacity: 1.0; }
+}
+/* Tinte per tipo (UI_GUIDE §1 / §7 stati semantici) */
+.planet-overlay__badge--capital  { color: #f0d670; border-color: rgba(240,214,112,0.55); }
+.planet-overlay__badge--settling { color: #f0b870; border-color: rgba(240,184,112,0.45); }
+.planet-overlay__badge--fleet    { color: #7ad9e8; border-color: rgba(122,217,232,0.45); }
+.planet-overlay__badge--waste.planet-overlay__badge--ok   { color: #9fd0a8; border-color: rgba(159,208,168,0.40); }
+.planet-overlay__badge--waste.planet-overlay__badge--warn { color: #f0b870; border-color: rgba(240,184,112,0.55); }
+.planet-overlay__badge--waste.planet-overlay__badge--crit { color: #e88a8a; border-color: rgba(232,138,138,0.65); animation: po-badge-alarm 1.6s ease-in-out infinite; }
+.planet-overlay__badge--scar.planet-overlay__badge--low   { color: #f0b870; border-color: rgba(240,184,112,0.55); animation: po-badge-alarm 2.2s ease-in-out infinite; }
+.planet-overlay__badge--scar.planet-overlay__badge--crit  { color: #e88a8a; border-color: rgba(232,138,138,0.65); animation: po-badge-alarm 1.3s ease-in-out infinite; }
+@keyframes po-badge-alarm {
+  0%, 100% { box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35); }
+  50%      { box-shadow: 0 2px 22px rgba(232,138,138,0.45); }
+}
+
+/* Mobile / tablet stretto: nasconde l'overlay per non sovraffollare la
+   sfera in portrait (decisione #63 — i widget vivono nella sheet). */
+@media (max-width: 999px) {
+  .planet-overlay { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .planet-overlay__orbit,
+  .pm,
+  .pm--building .pm__halo,
+  .planet-overlay__badge { animation: none; }
+}
+
 .colony-deck {
   position: absolute;
   inset: 0;
@@ -3503,6 +3643,66 @@ select.main-menu__input { cursor: pointer; }
 
 /* I figli del deck-grid catturano click (il root ha pointer-events:none). */
 .deck-grid > * { pointer-events: auto; }
+
+/* ---- Status cards (PR-M: situazione veloce sotto le risorse) -----
+   Le card slot/rifiuti/capitale/morale vivono in fondo a .deck-resources,
+   stesso pattern .deck-res per coerenza visiva (glyph + label + value +
+   sub bar). Niente più strip orizzontale in cima → la sfera planet
+   recupera tutta l'altezza superiore. */
+.deck-status-card {
+  /* eredita tutto da .deck-res: padding, font, border-left colorato, ecc. */
+  /* qui solo i tweak specifici per le 4 status card */
+}
+.deck-status-card .deck-res__value {
+  font-size: 0.92rem;        /* leggermente più piccolo dei valori risorse */
+  letter-spacing: 0.02em;
+}
+.deck-status-card__bar {
+  height: 4px;
+  margin-top: 3px;
+  background: rgba(120, 160, 255, 0.15);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.deck-status-card__bar i {
+  display: block;
+  height: 100%;
+  background: var(--c-accent);
+  transition: width 0.4s ease;
+}
+
+/* Tinta semantica per slot/rifiuti/morale via stati ereditati (.is-low,
+   .is-crit di .deck-res) — coerente con le card risorse. */
+.deck-status-card.is-low .deck-status-card__bar i  { background: #f0d670; }
+.deck-status-card.is-crit .deck-status-card__bar i { background: #f08296; }
+
+/* Capitale e Pianeta base: chip "premium" oro/ambra senza barra */
+.deck-status-card--capital {
+  border-left-color: #f0d670;
+  background: rgba(240, 215, 112, 0.08);
+}
+.deck-status-card--capital .deck-res__icon,
+.deck-status-card--capital .deck-res__value {
+  color: #f0d670;
+}
+.deck-status-card--home {
+  border-left-color: var(--c-accent-warm);
+  background: rgba(240, 168, 104, 0.08);
+}
+.deck-status-card--home .deck-res__icon,
+.deck-status-card--home .deck-res__value {
+  color: var(--c-accent-warm);
+}
+
+/* Icone tematiche delle status card (UI_GUIDE §3, glow morbido eredita
+   da .ui-icon-svg generale). */
+.deck-status-card--slot    .deck-res__icon { color: var(--c-accent); }
+.deck-status-card--waste   .deck-res__icon { color: #6fe0b8; }
+.deck-status-card--morale  .deck-res__icon { color: #6fe0b8; }
+.deck-status-card.is-low   .deck-res__icon,
+.deck-status-card.is-low   .deck-res__value { color: #f0d670; }
+.deck-status-card.is-crit  .deck-res__icon,
+.deck-status-card.is-crit  .deck-res__value { color: #f08296; }
 
 /* ---- Top-bar --------------------------------------------------- */
 .deck-topbar {
@@ -4572,7 +4772,8 @@ select.main-menu__input { cursor: pointer; }
 
 /* Overlays creazione/ordini — riusa il pattern di expedition-pick-overlay. */
 .fleet-create-overlay,
-.fleet-orders-overlay {
+.fleet-orders-overlay,
+.fleet-wizard {
   position: fixed;
   inset: 0;
   z-index: 360;
@@ -4585,7 +4786,8 @@ select.main-menu__input { cursor: pointer; }
   padding: 24px;
 }
 .fleet-create-overlay[hidden],
-.fleet-orders-overlay[hidden] { display: none; }
+.fleet-orders-overlay[hidden],
+.fleet-wizard[hidden] { display: none; }
 .fleet-create-overlay__panel,
 .fleet-orders-overlay__panel {
   background: rgb(var(--c-surface-rgb) / 0.95);
@@ -4721,6 +4923,357 @@ select.main-menu__input { cursor: pointer; }
   border-radius: 3px;
   padding: 3px 6px;
 }
+
+/* =====================================================================
+   FLEET WIZARD — Ordini guidati a 3 step (post-feedback utente)
+   ===================================================================== */
+/* .fleet-wizard è gestito sopra insieme a .fleet-create-overlay / .fleet-orders-overlay */
+.fleet-wizard__panel {
+  background: rgb(var(--c-surface-rgb) / 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  padding: 18px 22px;
+  max-width: 640px;
+  width: 100%;
+  max-height: 92vh;
+  overflow-y: auto;
+  color: var(--c-text, #e9ecf6);
+}
+.fleet-wizard__head {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.fleet-wizard__title h2 {
+  margin: 0 0 2px;
+  font-family: var(--font-display, sans-serif);
+  font-size: 1.15em;
+  letter-spacing: 0.04em;
+}
+.fleet-wizard__fleet {
+  margin: 0;
+  font-size: 0.85em;
+  color: var(--c-muted, #8a93b8);
+}
+.fleet-wizard__crumbs {
+  display: flex;
+  gap: 4px;
+  font-size: 0.78em;
+  color: var(--c-muted, #8a93b8);
+}
+.fleet-wizard__crumb {
+  padding: 2px 8px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+.fleet-wizard__crumb b { font-weight: 700; color: var(--c-text, #e9ecf6); }
+.fleet-wizard__crumb.is-active {
+  border-color: var(--c-cyan, #2fe6e0);
+  color: var(--c-cyan, #2fe6e0);
+  background: rgba(47, 230, 224, 0.08);
+}
+.fleet-wizard__crumb.is-done {
+  border-color: rgba(127, 230, 160, 0.45);
+  color: rgba(127, 230, 160, 0.85);
+}
+
+.fleet-wizard__body { padding: 4px 2px 12px; }
+.fleet-wizard__lead {
+  margin: 0 0 12px;
+  font-size: 0.95em;
+}
+.fleet-wizard__empty {
+  margin: 16px 0;
+  padding: 12px 14px;
+  text-align: center;
+  color: var(--c-muted, #8a93b8);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+}
+.fleet-wizard__empty--small {
+  font-size: 0.85em;
+  margin: 6px 0;
+  padding: 6px 8px;
+}
+
+/* ----- Step 1: cards scopo viaggio ----- */
+.fleet-wizard__cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.fleet-wizard__card {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  color: var(--c-text, #e9ecf6);
+  cursor: pointer;
+  text-align: left;
+  transition: background 120ms, border-color 120ms;
+}
+.fleet-wizard__card:hover:not(:disabled) {
+  background: rgba(47, 230, 224, 0.08);
+  border-color: var(--c-cyan, #2fe6e0);
+}
+.fleet-wizard__card:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.fleet-wizard__card-glyph {
+  grid-row: 1 / 3;
+  font-size: 1.6em;
+  color: var(--c-cyan, #2fe6e0);
+  text-align: center;
+}
+.fleet-wizard__card-label {
+  font-weight: 700;
+  font-family: var(--font-display, sans-serif);
+  font-size: 0.95em;
+}
+.fleet-wizard__card-hint {
+  font-size: 0.78em;
+  color: var(--c-muted, #8a93b8);
+  line-height: 1.3;
+}
+
+/* ----- Step 2: lista destinazioni + waypoint ----- */
+.fleet-wizard__group-h {
+  margin: 14px 0 6px;
+  font-size: 0.82em;
+  font-family: var(--font-display, sans-serif);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--c-muted, #8a93b8);
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+  padding-bottom: 3px;
+}
+.fleet-wizard__group-h em { color: var(--c-cyan, #2fe6e0); font-style: normal; }
+
+.fleet-wizard__dest-list {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.fleet-wizard__dest {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  font-size: 0.88em;
+}
+.fleet-wizard__dest.is-selected {
+  background: rgba(47, 230, 224, 0.10);
+  border-color: var(--c-cyan, #2fe6e0);
+}
+.fleet-wizard__dest-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.fleet-wizard__dest-name { font-weight: 600; }
+.fleet-wizard__dest-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85em;
+  color: var(--c-muted, #8a93b8);
+}
+
+.fleet-wizard__wp-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.fleet-wizard__wp {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(47, 230, 224, 0.05);
+  border-radius: 3px;
+  font-size: 0.88em;
+}
+.fleet-wizard__wp-n {
+  color: var(--c-cyan, #2fe6e0);
+  font-family: var(--font-display, sans-serif);
+  font-weight: 700;
+  min-width: 18px;
+}
+.fleet-wizard__wp-name { flex: 1; }
+.fleet-wizard__wp-dwell { color: var(--c-muted, #8a93b8); font-size: 0.85em; }
+
+.fleet-wizard__dwell-row {
+  margin: 10px 0;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 4px;
+  font-size: 0.88em;
+}
+.fleet-wizard__dwell-row input[type="number"] {
+  width: 56px;
+  background: rgb(var(--c-surface-rgb) / 0.85);
+  color: var(--c-text, #e9ecf6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  padding: 2px 6px;
+  margin: 0 4px;
+}
+
+/* ----- Step 3: opzioni + riepilogo ----- */
+.fleet-wizard__opt {
+  display: block;
+  margin: 10px 0;
+  font-size: 0.92em;
+  cursor: pointer;
+}
+.fleet-wizard__opt small {
+  display: block;
+  margin-top: 2px;
+  margin-left: 22px;
+  font-size: 0.82em;
+  color: var(--c-muted, #8a93b8);
+}
+.fleet-wizard__note {
+  margin: 12px 0;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 2px solid var(--c-cyan, #2fe6e0);
+  border-radius: 0 4px 4px 0;
+  font-size: 0.9em;
+}
+.fleet-wizard__summary {
+  margin: 14px 0;
+  padding: 12px 14px;
+  background: rgba(47, 230, 224, 0.06);
+  border: 1px solid rgba(47, 230, 224, 0.30);
+  border-radius: 5px;
+}
+.fleet-wizard__sum-line {
+  margin: 4px 0;
+  font-size: 0.92em;
+}
+.fleet-wizard__sum-line span { color: var(--c-cyan, #2fe6e0); font-weight: 600; }
+.fleet-wizard__sum-crew { font-size: 0.85em; color: var(--c-muted, #8a93b8); }
+
+/* ----- Navigazione step ----- */
+.fleet-wizard__nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.fleet-wizard__nav [data-wz-back] { margin-right: auto; }
+
+/* Mobile: stack delle cards a una colonna sotto 480px */
+@media (max-width: 480px) {
+  .fleet-wizard__cards { grid-template-columns: 1fr; }
+  .fleet-wizard__head { grid-template-columns: 1fr auto; }
+  .fleet-wizard__crumbs { grid-column: 1 / -1; flex-wrap: wrap; }
+}
+
+/* =====================================================================
+   FLEET INFO POPUP — click su marker flotta → popup informativo
+   ===================================================================== */
+.fleet-info-popup {
+  position: fixed;
+  z-index: 1200;
+  width: 260px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: rgb(var(--c-surface-rgb) / 0.97);
+  border: 1px solid rgba(255, 220, 60, 0.45);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  color: var(--c-text, #e9ecf6);
+  padding: 12px 14px;
+  font-size: 0.9em;
+  animation: fleet-info-pop 120ms ease-out;
+}
+@keyframes fleet-info-pop {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.fleet-info-popup__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 220, 60, 0.20);
+}
+.fleet-info-popup__name {
+  margin: 0;
+  font-family: var(--font-display, sans-serif);
+  font-size: 1.0em;
+  letter-spacing: 0.03em;
+  color: rgb(255, 232, 110);
+}
+.fleet-info-popup__meta {
+  margin: 0 0 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.88em;
+}
+.fleet-info-popup__meta > div {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 6px;
+  align-items: baseline;
+}
+.fleet-info-popup__meta dt {
+  margin: 0;
+  font-weight: 600;
+  color: var(--c-muted, #8a93b8);
+  font-size: 0.85em;
+}
+.fleet-info-popup__meta dd {
+  margin: 0;
+  word-break: break-word;
+}
+.fleet-info-popup__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+.fleet-info-popup__actions .btn {
+  width: 100%;
+  justify-content: center;
+  white-space: nowrap;
+  text-align: center;
+  padding: 6px 10px;
+  font-size: 0.86em;
+}
+
 .fleet-manage-table {
   width: 100%;
   border-collapse: collapse;
@@ -5278,7 +5831,12 @@ select.main-menu__input { cursor: pointer; }
 .viewport__actionbar {
   position: absolute;
   bottom: 12px; left: 12px; right: 12px;
-  display: flex; gap: 8px; flex-wrap: wrap;
+  /* PR-N: ora può contenere info card + bottoni in colonna, non più
+     solo bottoni in riga. Mantiene flex-wrap per il layout esistente. */
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
   padding: 8px 10px;
   background: rgb(var(--c-surface-rgb) / 0.78);
   border: 1px solid var(--c-border);
@@ -5288,6 +5846,148 @@ select.main-menu__input { cursor: pointer; }
   box-shadow: var(--shadow-panel);
 }
 .viewport__actionbar[hidden] { display: none; }
+.actionbar__buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* PR-N: info card del corpo selezionato a livello Sistema. Nasce per
+   chiudere il buco UX della decisione #50 (dx fissa, niente più
+   contesto sistema/corpo nella sidebar) — mostra inline le info base
+   §6.3 e i potenziali §7.1 senza dover entrare nella vista pianeta. */
+.bodyinfo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bodyinfo__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bodyinfo__name {
+  font-family: var(--font-display, inherit);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--c-text);
+}
+.bodyinfo__type {
+  font-size: 0.78rem;
+  color: var(--c-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.bodyinfo__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(120, 160, 255, 0.12);
+  border: 1px solid var(--c-border-soft);
+  font-size: 0.74rem;
+  color: var(--c-text-soft);
+}
+.bodyinfo__badge--home {
+  background: rgba(240, 168, 104, 0.16);
+  border-color: rgba(240, 168, 104, 0.45);
+  color: var(--c-accent-warm);
+}
+.bodyinfo__badge--colony {
+  background: rgba(47, 230, 224, 0.14);
+  border-color: rgba(47, 230, 224, 0.45);
+  color: var(--c-accent);
+}
+.bodyinfo__badge--candidate {
+  background: rgba(240, 215, 112, 0.16);
+  border-color: rgba(240, 215, 112, 0.5);
+  color: #f0d670;
+}
+.bodyinfo__badge--free {
+  background: rgba(111, 224, 184, 0.12);
+  border-color: rgba(111, 224, 184, 0.45);
+  color: #6fe0b8;
+}
+.bodyinfo__badge--inhospital {
+  background: rgba(120, 160, 255, 0.06);
+  color: var(--c-text-faint);
+}
+.bodyinfo__badge--civ.bodyinfo__badge--good {
+  background: rgba(111, 224, 184, 0.12);
+  border-color: rgba(111, 224, 184, 0.45);
+  color: #6fe0b8;
+}
+.bodyinfo__badge--civ.bodyinfo__badge--bad {
+  background: rgba(240, 130, 150, 0.12);
+  border-color: rgba(240, 130, 150, 0.45);
+  color: #f08296;
+}
+.bodyinfo__badge--civ.bodyinfo__badge--warn {
+  background: rgba(240, 214, 112, 0.12);
+  border-color: rgba(240, 214, 112, 0.5);
+  color: #f0d670;
+}
+.bodyinfo__meta {
+  font-size: 0.74rem;
+  color: var(--c-text-faint);
+  font-family: var(--font-data, monospace);
+}
+.bodyinfo__pots {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.bodyinfo__pot {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-data, monospace);
+  font-size: 0.74rem;
+  min-width: 0;
+}
+.bodyinfo__pot-lbl {
+  flex: 0 0 26px;
+  color: var(--c-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.bodyinfo__pot-bar {
+  flex: 1;
+  height: 5px;
+  background: rgba(120, 160, 255, 0.15);
+  border-radius: 2px;
+  overflow: hidden;
+  min-width: 24px;
+}
+.bodyinfo__pot-bar i {
+  display: block;
+  height: 100%;
+  transition: width 0.3s ease;
+}
+.bodyinfo__pot-val {
+  flex: 0 0 22px;
+  text-align: right;
+  color: var(--c-text);
+  font-weight: 600;
+}
+/* Tinte per risorsa coerenti con .res-icon--* (decisione #28) */
+.bodyinfo__pot--met   .bodyinfo__pot-bar i { background: #c8d2e4; }
+.bodyinfo__pot--en    .bodyinfo__pot-bar i { background: #f0d670; }
+.bodyinfo__pot--food  .bodyinfo__pot-bar i { background: #9fd0a8; }
+.bodyinfo__pot--water .bodyinfo__pot-bar i { background: #80c8e6; }
+.bodyinfo__pot--met   .bodyinfo__pot-lbl   { color: #c8d2e4; }
+.bodyinfo__pot--en    .bodyinfo__pot-lbl   { color: #f0d670; }
+.bodyinfo__pot--food  .bodyinfo__pot-lbl   { color: #9fd0a8; }
+.bodyinfo__pot--water .bodyinfo__pot-lbl   { color: #80c8e6; }
+
+/* Mobile: potenziali in 2x2 invece di 1x4 per leggibilità */
+@media (max-width: 760px) {
+  .bodyinfo__pots { grid-template-columns: repeat(2, 1fr); }
+  .bodyinfo__name { font-size: 0.92rem; }
+}
 .actionbar__btn {
   font-family: inherit;
   font-size: 0.82rem;
@@ -5764,4 +6464,122 @@ select.main-menu__input { cursor: pointer; }
 @keyframes fleet-picker-pulse {
   0%, 100% { box-shadow: 0 6px 24px rgba(0,0,0,0.55), 0 0 0 1px rgba(110,220,255,0.18) inset; }
   50%      { box-shadow: 0 6px 32px rgba(0,0,0,0.55), 0 0 0 2px rgba(110,220,255,0.45) inset; }
+}
+
+/* =====================================================================
+   Decisione di sessione (action-confirm) — modale di conferma azioni
+   + modale Preferenze giocatore. Riusano la palette NASA/Visions.
+   ===================================================================== */
+.btn--prefs {
+  margin-left: 6px;
+  padding: 6px 8px;
+  font-size: 0.95rem;
+}
+.btn--prefs:hover { background: rgba(138, 108, 255, 0.18); }
+
+.confirm-modal,
+.prefs-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 320;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(4, 6, 15, 0.62);
+  backdrop-filter: blur(4px);
+}
+.confirm-modal[hidden],
+.prefs-modal[hidden] { display: none; }
+
+.confirm-modal__panel {
+  width: min(440px, 100%);
+  padding: 16px 18px;
+  background: var(--c-panel-solid);
+  border: 2px solid var(--c-accent-dim);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel), 0 0 22px rgba(47, 230, 224, 0.18);
+}
+.confirm-modal__panel.is-danger {
+  border-color: rgba(255, 138, 124, 0.7);
+  box-shadow: var(--shadow-panel), 0 0 22px rgba(255, 138, 124, 0.18);
+}
+.confirm-modal__title {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-accent);
+}
+.confirm-modal__panel.is-danger .confirm-modal__title { color: var(--c-bad); }
+.confirm-modal__body {
+  margin: 0 0 14px;
+  font-size: 0.86rem;
+  color: var(--c-text);
+  line-height: 1.45;
+}
+.confirm-modal__body strong { color: var(--c-accent); }
+.confirm-modal__panel.is-danger .confirm-modal__body strong { color: var(--c-bad); }
+.confirm-modal__actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+/* ---- Modale Preferenze ---- */
+.prefs-modal__panel {
+  width: min(520px, 100%);
+  padding: 0;
+  background: var(--c-panel-solid);
+  border: 2px solid var(--c-border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
+}
+.prefs-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--c-border-soft);
+  background: rgba(138, 108, 255, 0.08);
+}
+.prefs-modal__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-violet);
+}
+.prefs-modal__body { padding: 16px 18px; display: flex; flex-direction: column; gap: 16px; }
+.prefs-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "check label"
+    ".     hint";
+  gap: 4px 10px;
+  align-items: start;
+  cursor: pointer;
+}
+.prefs-row input[type="checkbox"] {
+  grid-area: check;
+  margin-top: 2px;
+  accent-color: var(--c-accent);
+  width: 18px; height: 18px;
+}
+.prefs-row__label {
+  grid-area: label;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  color: var(--c-text);
+}
+.prefs-row__hint {
+  grid-area: hint;
+  font-size: 0.74rem;
+  color: var(--c-text-soft);
+  line-height: 1.45;
 }

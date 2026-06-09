@@ -450,6 +450,23 @@
       this.requestRender();
     }
 
+    /* Decisione #66: geometria proiettata della sfera (px, py centrali +
+       raggio R + lightDir). Letta dal PlanetOverlay per posizionare i
+       marker SVG strutture in coordinate schermo coerenti col bake. */
+    getSphereGeometry() {
+      const cx = this.cssW / 2;
+      const cy = this.cssH / 2 + (this._cyOffset || 0);
+      const R = this.fitR * this.scale;
+      return {
+        px: cx + this.offX,
+        py: cy + this.offY,
+        R: R,
+        cssW: this.cssW,
+        cssH: this.cssH,
+        lightDir: this.lightDir ? this.lightDir.slice() : [0, 0, 1]
+      };
+    }
+
     _computeLightDir() {
       // luce dalla stella verso il pianeta: la direzione 2D nello spazio
       // del sistema è (-px, -py) normalizzata; aggiungiamo una componente
@@ -732,6 +749,12 @@
          I badge canvas (titleBadge/infoBadge) sono stati rimossi per
          evitare ridondanza visiva. Le funzioni restano definite ma non
          più chiamate da render(). */
+
+      /* Decisione #66: dopo ogni render notifica l'overlay SVG così
+         riallinea marker e ring alla nuova geometria (resize/pan/zoom). */
+      if (root.ORION && root.ORION.planetOverlay && root.ORION.planetOverlay.sync) {
+        root.ORION.planetOverlay.sync();
+      }
     }
 
     _starGlow(ctx, px, py, R) {

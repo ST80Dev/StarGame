@@ -198,6 +198,114 @@
       '</div>';
     }
 
+    /* PR-M: status cards in fondo alla colonna risorse (sx) — stesso
+       stile delle .deck-res, così non rubano riga in alto al pianeta.
+       Esposte da tablet in su (≥768px); su mobile collassano col resto
+       della grid mobile. Ogni card: glyph + label + valore principale +
+       sub (barra mini o ratio). */
+    _renderStatusCards() {
+      const colony = this.colony, planet = this.planet;
+      const game = ORION.game;
+      if (!planet || !colony || !game) return '';
+      const icon = (name) => (ORION.icon ? ORION.icon(name) : '');
+      /* Glyph SVG nel pattern .deck-res__icon — span con ui-icon class
+         così eredita il glow morbido UI_GUIDE §3. */
+      const glyph = (name) =>
+        '<span class="ui-icon" aria-hidden="true">' + icon(name) + '</span>';
+
+      const cards = [];
+
+      /* === Slot: usati / cap (decisione #45) === */
+      const S = ORION.structures;
+      let slotsUsed = 0;
+      Object.keys(colony.structures).forEach(function (id) {
+        const def = S && S.get(id);
+        if (def) slotsUsed += S.slotFootprint(def, colony.structures[id].level || 1);
+      });
+      const slotsCap = ORION.planet.effectiveSlots
+        ? ORION.planet.effectiveSlots(planet, colony, game)
+        : (planet.slots || 0);
+      const slotsPct = slotsCap > 0 ? Math.min(100, Math.round(slotsUsed * 100 / slotsCap)) : 0;
+      const slotsStateCls = slotsPct >= 95 ? ' is-crit' : slotsPct >= 80 ? ' is-low' : '';
+      cards.push(
+        '<div class="deck-res deck-status-card deck-status-card--slot' + slotsStateCls + '" title="Slot occupati / capacità planetaria">' +
+          '<div class="deck-res__head">' +
+            glyph('build') +
+            '<span class="deck-res__label">Slot</span>' +
+          '</div>' +
+          '<div class="deck-res__value">' + slotsUsed + ' / ' + slotsCap + '</div>' +
+          '<div class="deck-status-card__bar"><i style="width:' + slotsPct + '%"></i></div>' +
+        '</div>'
+      );
+
+      /* === Rifiuti (decisione #48): stato + saturazione === */
+      const waste = colony.waste;
+      if (waste && waste.capacity > 0) {
+        const sat = Math.round((waste.saturation || 0) * 100);
+        const st = waste.state || 'ok';
+        const wStateCls = st === 'crit' ? ' is-crit' : st === 'saturo' ? ' is-low' : '';
+        const wLabel = st === 'crit' ? 'critico' : st === 'saturo' ? 'saturo' : 'ok';
+        cards.push(
+          '<div class="deck-res deck-status-card deck-status-card--waste' + wStateCls + '" title="Rifiuti — ' + waste.stock + ' / ' + waste.capacity + '">' +
+            '<div class="deck-res__head">' +
+              glyph('refresh') +
+              '<span class="deck-res__label">Rifiuti</span>' +
+            '</div>' +
+            '<div class="deck-res__value">' + wLabel + '</div>' +
+            '<div class="deck-status-card__bar"><i style="width:' + Math.min(100, sat) + '%"></i></div>' +
+          '</div>'
+        );
+      }
+
+      /* === Capitale / Pianeta base (decisione #45 / #8) === */
+      const capKey = this.body ? planet.systemId + ':' + this.body.key : null;
+      const isCap = capKey && ORION.capital && ORION.capital.isCapital
+        ? ORION.capital.isCapital(game, capKey)
+        : false;
+      if (isCap) {
+        cards.push(
+          '<div class="deck-res deck-status-card deck-status-card--capital" title="Capitale di gruppo — bonus +15% produzione, +10 slot riserva">' +
+            '<div class="deck-res__head">' +
+              glyph('star') +
+              '<span class="deck-res__label">Capitale</span>' +
+            '</div>' +
+            '<div class="deck-res__value">+15%</div>' +
+            '<div class="deck-res__rate">prod · +10 slot</div>' +
+          '</div>'
+        );
+      } else if (colony.isHomeBase) {
+        cards.push(
+          '<div class="deck-res deck-status-card deck-status-card--home" title="Pianeta base — bonus produzione iniziale (decisione #8)">' +
+            '<div class="deck-res__head">' +
+              glyph('star') +
+              '<span class="deck-res__label">Pianeta base</span>' +
+            '</div>' +
+            '<div class="deck-res__value">+20%</div>' +
+            '<div class="deck-res__rate">produzione</div>' +
+          '</div>'
+        );
+      }
+
+      /* === Morale d'impero (warState M09) === */
+      const ws = game.warState;
+      if (ws && typeof ws.morale === 'number') {
+        const mor = Math.round(ws.morale * 100);
+        const mStateCls = mor < 70 ? ' is-crit' : mor < 90 ? ' is-low' : '';
+        cards.push(
+          '<div class="deck-res deck-status-card deck-status-card--morale' + mStateCls + '" title="Morale d\'impero — sotto pressione cala con perdite belliche">' +
+            '<div class="deck-res__head">' +
+              glyph('forces') +
+              '<span class="deck-res__label">Morale</span>' +
+            '</div>' +
+            '<div class="deck-res__value">' + mor + '%</div>' +
+            '<div class="deck-status-card__bar"><i style="width:' + mor + '%"></i></div>' +
+          '</div>'
+        );
+      }
+
+      return cards.join('');
+    }
+
     /* Card risorse XXL (colonna sinistra). */
     _renderResources() {
       const colony = this.colony, planet = this.planet;
@@ -231,6 +339,9 @@
             '<div class="deck-res__rate ' + netCls + '">' + fmtRate(net) + ' / Ι</div>' +
           '</div>';
       });
+      /* PR-M: status cards (slot/rifiuti/capitale/morale) sotto le 4 res
+         card, stesso pattern .deck-res per coerenza visiva. */
+      html += this._renderStatusCards();
       html += '</aside>';
       return html;
     }
@@ -388,8 +499,13 @@
         const def = S.get(q.id);
         if (!def) return;
         const isDemo = q.target === 'demolish';
-        const total = q.totalTime || (isDemo ? Math.max(1, Math.round((def.time || 2) / 2)) : (def.time || 1));
-        const remain = Math.max(0, q.duration | 0);
+        /* Stesso pattern del pannello sidebar (main.js): se totalTime non è
+           presente (save legacy), ricalcola da stepTime al livello giusto. */
+        const fallbackTotal = isDemo
+          ? Math.max(1, Math.round((def.time || 2) / 2))
+          : (S.stepTime ? S.stepTime(def, q.toLevel || 1) : (def.time || 1));
+        const total = q.totalTime || fallbackTotal;
+        const remain = Math.max(0, Math.ceil(q.duration || 0));
         const pct = Math.round(((total - remain) / total) * 100);
         const label = isDemo ? ('Smantellamento di ' + def.name) : def.name;
         const cancelTitle = isDemo ? 'Annulla smantellamento' : 'Annulla (rimborso 80%)';

@@ -481,6 +481,15 @@
       this.requestRender();
     }
 
+    /* Fix post-feedback: una flotta può essere "evidenziata" anche fuori
+       dalla picker mode — ad es. mentre il popup info è aperto. Questo
+       attiva l'highlight visivo (rotta gialla, anello pulsante, etichetta
+       in evidenza, altre flotte attenuate) senza entrare in picker. */
+    setHighlightedFleet(fleetId) {
+      this._highlightedFleetId = (fleetId == null) ? null : String(fleetId);
+      this.requestRender();
+    }
+
     pickSystem(sx, sy) {
       const sys = this.galaxy.systems;
       let best = -1, bestD = Infinity;
@@ -688,7 +697,11 @@
       if (this.nodeReveal() >= 0.5) {
         const fleetId = this.pickFleet(sx, sy);
         if (fleetId != null) {
-          if (this.onFleetPicked) this.onFleetPicked(fleetId);
+          /* Polish post-wizard: passiamo anche le coordinate screen, così
+             il consumer (main.js) può ancorare un popup info vicino al
+             marker invece di entrare direttamente in picker mode. La
+             callback decide se aprire popup / entrare picker / altro. */
+          if (this.onFleetPicked) this.onFleetPicked(fleetId, sx, sy);
           return;
         }
         const id = this.pickSystem(sx, sy);
@@ -1560,66 +1573,157 @@
       const fleetsAlpha = clamp(reveal, 0, 1);
       if (fleetsAlpha < 0.05) return;
 
+      /* Polish post-wizard (feedback utente): se l'utente ha cliccato su
+         un marker flotta — popup info aperto O picker mode (#61) — la sua
+         rotta corrente + marker sono evidenziati in giallo brillante; le
+         altre flotte sono attenuate per dare colpo d'occhio sulla flotta
+         selezionata. */
+      const selectedFleetId =
+        (this._fleetPicker && this._fleetPicker.fleetId) ||
+        this._highlightedFleetId || null;
+
       ctx.save();
       ctx.globalAlpha = fleetsAlpha;
 
-      for (let i = 0; i < game.fleets.length; i++) {
-        const f = game.fleets[i];
-        if (!f || !f.location) continue;
-        const curSysId = f.location.systemId;
-        const curSys = g.systems[curSysId];
-        if (!curSys) continue;
+      /* Due passate: prima le non-selezionate (sotto), poi la selezionata
+         (sopra) — così la rotta evidenziata si sovrappone alle altre. */
+      const passes = selectedFleetId
+        ? [ /* pass 1 = others */ false, /* pass 2 = selected */ true ]
+        : [ false ];
 
-        const inTransit = f.location.status === 'in-transit'
-                       && Array.isArray(f.route) && f.routeIdx + 1 < f.route.length;
-        let pos;
-        if (inTransit) {
-          const fromId = f.route[f.routeIdx];
-          const toId   = f.route[f.routeIdx + 1];
-          const fromS = g.systems[fromId];
-          const toS   = g.systems[toId];
-          if (!fromS || !toS) continue;
-          /* Interpolazione lineare tra i due sistemi sulla base del progresso
-             del leg corrente. Il tempo totale del leg lo deriviamo dalla
-             velocità della flotta (stessa formula tempoLeg). */
-          const minSpd = (root.ORION.fleet && root.ORION.fleet.fleetMinSpeed)
-                       ? root.ORION.fleet.fleetMinSpeed(f) : 1;
-          const total = (root.ORION.fleet && root.ORION.fleet.tempoLeg)
-                      ? root.ORION.fleet.tempoLeg(g, fromId, toId, minSpd)
-                      : 60;
-          const remain = Math.max(0, f.etaImpulsi || 0);
-          const t = total > 0 ? clamp(1 - remain / total, 0, 1) : 1;
-          const wx = fromS.x + (toS.x - fromS.x) * t;
-          const wy = fromS.y + (toS.y - fromS.y) * t;
-          const wz = (fromS.z || 0) + ((toS.z || 0) - (fromS.z || 0)) * t;
-          pos = this.project(wx, wy, wz);
-          /* Linea piena dietro la nave (già percorso), tratteggiata davanti. */
-          this._drawFleetRoute(ctx, f, fromId, toId, t);
-        } else {
-          /* Statica: offset deterministico in pixel basato sull'id della flotta
-             (semplice hash → angolo + raggio). Così navi diverse stesso sys
-             non si sovrappongono visivamente. */
-          const p = this.project(curSys.x, curSys.y, curSys.z || 0);
-          const hash = hashStr(f.id || ('f' + i));
-          const ang  = (hash % 360) * Math.PI / 180;
-          const rad  = 14 + ((hash >> 8) % 6);
-          pos = { x: p.x + Math.cos(ang) * rad, y: p.y + Math.sin(ang) * rad,
-                  depth: p.depth, parallax: p.parallax };
+      for (let pi = 0; pi < passes.length; pi++) {
+        const isSelectedPass = passes[pi];
+        for (let i = 0; i < game.fleets.length; i++) {
+          const f = game.fleets[i];
+          if (!f || !f.location) continue;
+          const fSelected = (selectedFleetId && f.id === selectedFleetId);
+          /* skip se non è il turno giusto */
+          if (selectedFleetId) {
+            if (isSelectedPass !== fSelected) continue;
+          }
+          const curSysId = f.location.systemId;
+          const curSys = g.systems[curSysId];
+          if (!curSys) continue;
+
+          const inTransit = f.location.status === 'in-transit'
+                         && Array.isArray(f.route) && f.routeIdx + 1 < f.route.length;
+          let pos;
+          if (inTransit) {
+            const fromId = f.route[f.routeIdx];
+            const toId   = f.route[f.routeIdx + 1];
+            const fromS = g.systems[fromId];
+            const toS   = g.systems[toId];
+            if (!fromS || !toS) continue;
+            /* Interpolazione lineare tra i due sistemi sulla base del progresso
+               del leg corrente. Il tempo totale del leg lo deriviamo dalla
+               velocità della flotta (stessa formula tempoLeg). */
+            const minSpd = (root.ORION.fleet && root.ORION.fleet.fleetMinSpeed)
+                         ? root.ORION.fleet.fleetMinSpeed(f) : 1;
+            const total = (root.ORION.fleet && root.ORION.fleet.tempoLeg)
+                        ? root.ORION.fleet.tempoLeg(g, fromId, toId, minSpd)
+                        : 60;
+            const remain = Math.max(0, f.etaImpulsi || 0);
+            const t = total > 0 ? clamp(1 - remain / total, 0, 1) : 1;
+            const wx = fromS.x + (toS.x - fromS.x) * t;
+            const wy = fromS.y + (toS.y - fromS.y) * t;
+            const wz = (fromS.z || 0) + ((toS.z || 0) - (fromS.z || 0)) * t;
+            pos = this.project(wx, wy, wz);
+            /* Linea piena dietro la nave (già percorso), tratteggiata davanti. */
+            this._drawFleetRoute(ctx, f, fromId, toId, t, fSelected, !!selectedFleetId);
+          } else {
+            /* Statica: offset deterministico in pixel basato sull'id della flotta
+               (semplice hash → angolo + raggio). Così navi diverse stesso sys
+               non si sovrappongono visivamente. */
+            const p = this.project(curSys.x, curSys.y, curSys.z || 0);
+            const hash = hashStr(f.id || ('f' + i));
+            const ang  = (hash % 360) * Math.PI / 180;
+            const rad  = 14 + ((hash >> 8) % 6);
+            pos = { x: p.x + Math.cos(ang) * rad, y: p.y + Math.sin(ang) * rad,
+                    depth: p.depth, parallax: p.parallax };
+            /* Polish: se la flotta è SELEZIONATA e ha una rotta pianificata
+               ma non è in transito (dwell o appena impartita), disegniamo
+               comunque la rotta come "tutta pianificata" — così l'utente
+               vede dove andrà. Lo facciamo solo per la flotta selezionata
+               per non appesantire la mappa quando il picker non è attivo. */
+            if (fSelected && Array.isArray(f.route) && f.route.length > f.routeIdx + 1) {
+              this._drawSelectedPlannedRoute(ctx, f);
+            }
+          }
+          this._drawFleetMarker(ctx, pos, f, fSelected, !!selectedFleetId);
+          /* Etichetta nome flotta + ETA. Mostrata sempre (anche se non in
+             transit) per dare colpo d'occhio "chi sta dove". Per le non
+             selezionate quando il picker è attivo, alpha attenuato. */
+          this._drawFleetLabel(ctx, pos, f, fSelected, !!selectedFleetId);
         }
-        this._drawFleetMarker(ctx, pos, f);
       }
       ctx.restore();
     }
 
-    _drawFleetRoute(ctx, fleet, fromId, toId, progress) {
+    /* Polish post-wizard: etichetta accanto al marker col nome della
+       flotta + l'ETA in Ι se in transito. La posizione è offset rispetto
+       al marker per evitare di sovrapporsi al cerchio. */
+    _drawFleetLabel(ctx, pos, fleet, isSelected, someoneSelected) {
+      const name = fleet.name || '—';
+      /* Tronca il nome a 14 char per non invadere la mappa. */
+      const short = name.length > 14 ? (name.slice(0, 13) + '…') : name;
+      const inTransit = fleet.location && fleet.location.status === 'in-transit';
+      const eta = (fleet.etaImpulsi | 0);
+      /* "in NN Ι" (con preposizione) per evitare che l'utente legga "ETA"
+         come "età" — feedback in itinere. */
+      const subText = inTransit ? (' · in ' + eta + ' Ι') : '';
+      const txt = short + subText;
+      const dim = someoneSelected && !isSelected;
+      const aText = isSelected ? 1.0 : (dim ? 0.30 : 0.78);
+      const aStroke = isSelected ? 0.95 : (dim ? 0.30 : 0.78);
+      ctx.save();
+      ctx.font = (isSelected ? '700 ' : '600 ') +
+        '10.5px "JetBrains Mono", ui-monospace, monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      /* offset a destra del marker; se il marker è vicino al bordo destro,
+         metti l'etichetta a sinistra. */
+      const offsetX = (pos.x > this.cssW - 110) ? -8 : 8;
+      const tx = pos.x + offsetX + (offsetX > 0 ? 6 : -6);
+      const ty = pos.y;
+      if (offsetX < 0) ctx.textAlign = 'right';
+      /* stroke scuro per leggibilità su nebulose */
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 2.6;
+      ctx.strokeStyle = 'rgba(0,0,0,' + aStroke + ')';
+      ctx.strokeText(txt, tx, ty);
+      ctx.fillStyle = isSelected ? 'rgba(255, 232, 110, ' + aText + ')'
+                                 : 'rgba(220, 232, 255, ' + aText + ')';
+      ctx.fillText(txt, tx, ty);
+      ctx.restore();
+    }
+
+    /* Polish post-wizard: `isSelected` + `someoneSelected` modulano colore,
+       spessore e alpha. Una flotta selezionata (click su marker → picker)
+       ha rotta gialla brillante più spessa; quelle non selezionate vengono
+       dimmate per dare colpo d'occhio. */
+    _drawFleetRoute(ctx, fleet, fromId, toId, progress, isSelected, someoneSelected) {
       const g = this.galaxy;
       const fromS = g.systems[fromId], toS = g.systems[toId];
       if (!fromS || !toS) return;
       const pf = this.project(fromS.x, fromS.y, fromS.z || 0);
       const pt = this.project(toS.x, toS.y, toS.z || 0);
+
+      /* Tinta + spessori + alpha modulati dalla selezione. */
+      const baseR = 110, baseG = 220, baseB = 255;     /* ciano predefinito */
+      const selR  = 255, selG  = 220, selB  = 60;      /* giallo selezione */
+      const R = isSelected ? selR : baseR;
+      const G = isSelected ? selG : baseG;
+      const B = isSelected ? selB : baseB;
+      const dimDashed = isSelected ? 0.75 : (someoneSelected ? 0.18 : 0.55);
+      const dimSolid  = isSelected ? 1.00 : (someoneSelected ? 0.30 : 0.85);
+      const dimPlan   = isSelected ? 0.55 : (someoneSelected ? 0.10 : 0.30);
+      const wDashed = isSelected ? 1.8 : 1.2;
+      const wSolid  = isSelected ? 2.4 : 1.6;
+      const wPlan   = isSelected ? 1.5 : 1.0;
+
       ctx.save();
-      ctx.strokeStyle = 'rgba(110, 220, 255, 0.55)';
-      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = 'rgba(' + R + ',' + G + ',' + B + ',' + dimDashed + ')';
+      ctx.lineWidth = wDashed;
       ctx.setLineDash([5, 4]);
       ctx.beginPath();
       ctx.moveTo(pf.x, pf.y);
@@ -1629,8 +1733,8 @@
       const midX = pf.x + (pt.x - pf.x) * progress;
       const midY = pf.y + (pt.y - pf.y) * progress;
       ctx.setLineDash([]);
-      ctx.strokeStyle = 'rgba(110, 220, 255, 0.85)';
-      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = 'rgba(' + R + ',' + G + ',' + B + ',' + dimSolid + ')';
+      ctx.lineWidth = wSolid;
       ctx.beginPath();
       ctx.moveTo(pf.x, pf.y);
       ctx.lineTo(midX, midY);
@@ -1640,8 +1744,8 @@
       /* Rotta pianificata oltre il prossimo hop (waypoint successivi) */
       if (Array.isArray(fleet.route) && fleet.route.length > fleet.routeIdx + 2) {
         ctx.save();
-        ctx.strokeStyle = 'rgba(110, 220, 255, 0.30)';
-        ctx.lineWidth = 1.0;
+        ctx.strokeStyle = 'rgba(' + R + ',' + G + ',' + B + ',' + dimPlan + ')';
+        ctx.lineWidth = wPlan;
         ctx.setLineDash([3, 5]);
         ctx.beginPath();
         const pNext = this.project(toS.x, toS.y, toS.z || 0);
@@ -1657,27 +1761,75 @@
       }
     }
 
-    _drawFleetMarker(ctx, pos, fleet) {
+    /* Rotta intera pianificata di una flotta SELEZIONATA non in transito
+       (es. orbita di dwell, ordine appena impartito senza salto avviato).
+       Disegnata solo per la flotta selezionata, in giallo brillante. */
+    _drawSelectedPlannedRoute(ctx, fleet) {
+      const g = this.galaxy;
+      if (!Array.isArray(fleet.route) || fleet.route.length < 2) return;
+      const startIdx = Math.max(fleet.routeIdx || 0, 0);
+      const pts = [];
+      for (let k = startIdx; k < fleet.route.length; k++) {
+        const s = g.systems[fleet.route[k]];
+        if (!s) continue;
+        pts.push(this.project(s.x, s.y, s.z || 0));
+      }
+      if (pts.length < 2) return;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 220, 60, 0.85)';
+      ctx.lineWidth = 1.8;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k].x, pts[k].y);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    _drawFleetMarker(ctx, pos, fleet, isSelected, someoneSelected) {
       const inTransit = fleet.location.status === 'in-transit';
-      const color = inTransit ? '#5cd0ff'
-                  : fleet.location.status === 'docked' ? '#7fe6a0'
-                  : '#ffae5c';   /* orbiting */
-      const r = 4.5;
+      const baseColor = inTransit ? '#5cd0ff'
+                      : fleet.location.status === 'docked' ? '#7fe6a0'
+                      : '#ffae5c';   /* orbiting */
+      /* Quando una flotta è selezionata, le altre vengono attenuate. */
+      const dim = (someoneSelected && !isSelected);
+      const color = baseColor;
+      const r = isSelected ? 6 : 4.5;
+
+      /* Anello di selezione (dietro al marker, giallo brillante pulsante). */
+      if (isSelected) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, r + 6, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255, 220, 60, 0.85)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, r + 10, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255, 220, 60, 0.35)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      ctx.save();
+      if (dim) ctx.globalAlpha = ctx.globalAlpha * 0.35;
       /* corpo */
       ctx.beginPath();
       ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
       ctx.fillStyle = color;
       ctx.fill();
       /* contorno */
-      ctx.lineWidth = 1.2;
+      ctx.lineWidth = isSelected ? 1.6 : 1.2;
       ctx.strokeStyle = 'rgba(8,12,22,0.85)';
       ctx.stroke();
       /* alone tenue */
       ctx.beginPath();
       ctx.arc(pos.x, pos.y, r + 3, 0, Math.PI * 2);
-      ctx.strokeStyle = hexA(color, 0.35);
+      ctx.strokeStyle = hexA(color, isSelected ? 0.60 : 0.35);
       ctx.lineWidth = 1;
       ctx.stroke();
+      ctx.restore();
     }
 
     /* M08 polish (decisione #61): overlay highlight per la modalità picker.

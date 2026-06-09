@@ -97,14 +97,25 @@
        sempre recuperabile (decisione #22: mai fail-state; basta 1 impianto
        di riciclo per invertire la rotta). Numeri tarati perché in Fase 0 la
        pressione si avverta solo nel lungo periodo su colonie sviluppate. */
-    WASTE_PER_POP:       0.15,   // rifiuti / unità pop / Ι
-    WASTE_BY_CAT: {              // rifiuti / modulo / Ι per categoria struttura
-      estrattiva: 0.30, produttiva: 0.60, militare: 0.30,
-      ricerca:    0.10, civile:    0.10, avanzata:  0.25
+    /* Gestione rifiuti — RETUNE (decisione #48): problema di LUNGO TERMINE,
+       legato alla POPOLAZIONE e tarato sul MAX STRESS della colonia.
+       - generazione pop SUPER-LINEARE (K·pop²): trascurabile a pop bassa,
+         sale solo avvicinandosi al cap → ci si pensa solo a colonia matura.
+       - industria = sorgente SECONDARIA (contributo piccolo).
+       - capacità ALTA: a generazione massima il contenitore si riempie in
+         ~170 Ι (non in pochi Ι), con ~120 Ι di margine prima del malus.
+       - UN impianto di riciclo lvl1 (wasteProcess 10) regge lo stress max di
+         un mondo-giardino pieno → niente più "rincorsa" agli upgrade.
+       Filosofia invariata (decisione #22): mai fail-state, malus progressivo. */
+    WASTE_POP_K:         0.04,   // rifiuti pop / Ι = K · pop² (super-lineare)
+    WASTE_BY_CAT: {              // rifiuti / modulo / Ι per categoria (sorgente secondaria)
+      estrattiva: 0.10, produttiva: 0.15, militare: 0.08,
+      ricerca:    0.04, civile:    0.04, avanzata:  0.08
     },
-    WASTE_BASE_CAPACITY: 500,    // contenimento di base della colonia
-    WASTE_ENERGY_YIELD:  0.25,   // energia recuperata per unità di rifiuto trattato
-    WASTE_SAT_WARN:      0.70,   // saturazione oltre cui inizia il malus (stato 'saturo')
+    WASTE_BASE_CAPACITY: 2000,   // contenimento di base (buffer ampio → lungo termine)
+    WASTE_ENERGY_YIELD:  0.30,   // energia recuperata per unità di rifiuto trattato (a livello 1)
+    WASTE_EFF_PER_LEVEL: 0.05,   // +5% resa energia per livello del riciclo (L1 0.30 → L5 0.36)
+    WASTE_SAT_WARN:      0.75,   // saturazione oltre cui inizia il malus (stato 'saturo')
     WASTE_MALUS_SAT:     0.10,   // malus produzione a saturazione = 1.0
     WASTE_MALUS_CRIT:    0.25,   // malus massimo (saturazione ≥ 2.0, overflow ignorato)
 
@@ -325,13 +336,17 @@
   /* Helper di lettura per la UI (robusto anche prima del primo tick:
      ricalcola la capacità sullo stato corrente). */
   function wasteStatus(colony) {
-    const w = colony.waste || { stock: 0, net: 0 };
+    const w = colony.waste || { stock: 0, net: 0, energyGain: 0 };
     const cap = wasteCapacity(colony);
     const sat = cap > 0 ? (w.stock || 0) / cap : 0;
     let state = 'ok';
     if (sat >= 1.0) state = 'critico';
     else if (sat >= CFG.WASTE_SAT_WARN) state = 'saturo';
-    return { stock: w.stock || 0, net: w.net || 0, capacity: cap, saturation: sat, state: state };
+    return {
+      stock: w.stock || 0, net: w.net || 0,
+      capacity: cap, saturation: sat, state: state,
+      energyGain: w.energyGain || 0   // en/Ι recuperata dal riciclo (finché brucia)
+    };
   }
 
   /* Stato di guerra d'impero (decisione #49) — lazy init, serializzato come
@@ -387,7 +402,9 @@
     if (!colony.queue || !colony.queue.length) return;
     /* M06.5 (decisione #27): durante l'Insediamento la PRIMA entry in
        coda matura il 50% più in fretta (bonus "moduli avanguardia"
-       della fondazione). Decremento 1.5 invece di 1.0 sulla prima. */
+       della fondazione). Decremento 1.5 invece di 1.0 sulla prima.
+       Il display usa Math.ceil sulla duration per non mostrare frazioni
+       (decisione di sessione, vedi PR build-progress). */
     const settling = (colony.phase === 'settling');
     const stillQueued = [];
     for (let i = 0; i < colony.queue.length; i++) {
@@ -398,34 +415,47 @@
         const def = root.ORION.structures.get(q.id);
         if (!def) continue;
         if (q.target === 'demolish') {
-          /* Smantellamento completato (decisione recovery-friendly):
-             - rimuove la struttura,
-             - rimborsa il 50% del costo originale (70% sulla natale: il
-               cantiere principale ha infrastruttura di smontaggio migliore),
-             - applica un malus morale -0.10 con decadimento lineare su
-               30 Ι (gestito in processPopulation). Mai fail-state.
-             Se l'osservatorio smontato era l'origine della scansione,
-             interrompe la scansione in corso (riavviabile ricostruendo). */
-          delete colony.structures[q.id];
+          /* Smantellamento completato (decisione #66 + recovery-friendly #22):
+             - se la struttura è a livello ≥ 2 → DOWNGRADE: rimuove solo il
+               modulo superiore (level -= 1), rimborso = stepCost del livello
+               appena smantellato × refundRate (50% / 70% sulla natale).
+               Simmetrico a cancelBuild che rimborsa lo step interrotto.
+             - se è a livello 1 → DEMOLIZIONE COMPLETA: rimuove la struttura,
+               rimborso = costo BASE × refundRate (comportamento storico).
+             - sempre malus morale -0.10 per 30 Ι (decadimento lineare in
+               processPopulation). Mai fail-state.
+             Se l'osservatorio smantellato era l'origine della scansione e va
+             a livello 0, interrompe la scansione in corso (riavviabile). */
+          const struct = colony.structures[q.id];
+          const lvlBefore = struct ? (struct.level || 0) : 0;
           const refundRate = colony.isHomeBase ? 0.7 : 0.5;
-          if (def.cost) {
-            Object.keys(def.cost).forEach(function (k) {
-              colony.stock[k] = (colony.stock[k] || 0) + Math.floor(def.cost[k] * refundRate);
-            });
+          const isDowngrade = lvlBefore >= 2;
+          let refundDef;
+          if (isDowngrade) {
+            refundDef = root.ORION.structures.stepCost(def, lvlBefore);
+            struct.level = lvlBefore - 1;
+          } else {
+            refundDef = def.cost || {};
+            delete colony.structures[q.id];
           }
+          Object.keys(refundDef || {}).forEach(function (k) {
+            colony.stock[k] = (colony.stock[k] || 0) + Math.floor((refundDef[k] || 0) * refundRate);
+          });
           colony.moraleMalus = {
             amount: 0.10,
             startedAt: game.timeImpulsi,
             expiresAt: game.timeImpulsi + 30
           };
-          if (q.id === 'osservatorio' && !colony.scanned.active) {
+          if (q.id === 'osservatorio' && !colony.scanned.active && !isDowngrade) {
             colony.scanned.progress = 0;
           }
           events.push({
-            kind: 'demolish-done',
+            kind: isDowngrade ? 'downgrade-done' : 'demolish-done',
             colony: colony, planet: planet,
             structId: q.id, structName: def.name,
             refundRate: refundRate,
+            fromLevel: lvlBefore,
+            toLevel: isDowngrade ? lvlBefore - 1 : 0,
             impulso: game.timeImpulsi
           });
         } else {
@@ -873,28 +903,39 @@
     const waste = ensureWaste(colony);
     const S = root.ORION.structures;
 
-    // 1) Generazione (popolazione) + 2) industria/trattamento in un solo giro
-    let gen = (colony.pop.total || 0) * CFG.WASTE_PER_POP;
+    // 1) Generazione (popolazione SUPER-LINEARE K·pop²) + 2) industria/trattamento
+    //    Super-lineare: a pop bassa è trascurabile, conta solo vicino al cap.
+    const pt = colony.pop.total || 0;
+    let gen = pt * pt * CFG.WASTE_POP_K;
     let process = 0;
+    let recyLevel = 0;   // livello dell'impianto di riciclo (per l'efficienza energia)
     Object.keys(colony.structures || {}).forEach(function (id) {
       const def = S.get(id);
       if (!def) return;
-      const msum = S.moduleSum(colony.structures[id].level || 1);
+      const lvl = colony.structures[id].level || 1;
+      const msum = S.moduleSum(lvl);
       const wcat = CFG.WASTE_BY_CAT[def.cat];
       if (wcat) gen += wcat * msum;
-      if (def.wasteProcess) process += def.wasteProcess * msum;
+      if (def.wasteProcess) { process += def.wasteProcess * msum; if (lvl > recyLevel) recyLevel = lvl; }
     });
 
     const before = waste.stock || 0;
     let after = before + gen - process;
     if (after < 0) after = 0;
-    // energia recuperata = rifiuti EFFETTIVAMENTE trattati × resa
+    // energia recuperata = rifiuti EFFETTIVAMENTE trattati × resa.
+    // Resa cresce col livello del riciclo (+WASTE_EFF_PER_LEVEL/livello, decisione #48):
+    // un impianto più potenziato estrae più energia per unità bruciata.
     const processed = Math.max(0, (before + gen) - after);
-    if (processed > 0 && CFG.WASTE_ENERGY_YIELD > 0) {
-      colony.stock.en = (colony.stock.en || 0) + processed * CFG.WASTE_ENERGY_YIELD;
+    const effYield = CFG.WASTE_ENERGY_YIELD * (1 + CFG.WASTE_EFF_PER_LEVEL * Math.max(0, recyLevel - 1));
+    const energyGain = (processed > 0 && effYield > 0) ? processed * effYield : 0;
+    if (energyGain > 0) {
+      colony.stock.en = (colony.stock.en || 0) + energyGain;
     }
     waste.stock = after;
     waste.net = gen - process;
+    /* Guadagno energia temporaneo da riciclo, finché ci sono rifiuti da
+       bruciare — esposto alla UI (decisione #48). */
+    waste.energyGain = energyGain;
 
     // 3) Saturazione → stato (progressivo, recovery-friendly)
     const cap = wasteCapacity(colony);

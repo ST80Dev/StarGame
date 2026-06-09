@@ -638,13 +638,18 @@
     const nextLevel = check.nextLevel || 1;
     // Decisione #38: costo/tempo del prossimo modulo escalano col livello.
     const cost = S.stepCost(def, nextLevel);
+    const time = S.stepTime(def, nextLevel);
     Object.keys(cost).forEach(function (k) { colony.stock[k] = (colony.stock[k] || 0) - cost[k]; });
     colony.queue.push({
       id: structId,
       target: check.isUpgrade ? 'upgrade' : 'build',
       toLevel: nextLevel,
       startedAt: startedAtDS || null,
-      duration: S.stepTime(def, nextLevel)
+      duration: time,
+      /* Salviamo il tempo totale al momento dell'enqueue così la UI può
+         mostrare progress veri (es. "8/12 Ι" per un L2). Senza questo il
+         display usava def.time base e produceva "14/9" su upgrade. */
+      totalTime: time
     });
     return { ok: true };
   }
@@ -691,7 +696,8 @@
       id: structId,
       target: 'demolish',
       startedAt: startedAtDS || null,
-      duration: dur
+      duration: dur,
+      totalTime: dur
     });
     return { ok: true };
   }
