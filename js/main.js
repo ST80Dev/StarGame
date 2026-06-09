@@ -37,9 +37,6 @@ ORION.openPlanetKey = null;     // "<sysId>:<bodyKey>" — pianeta navigato al c
 ORION.currentPlanet = null;
 ORION.planetTab = 'colonia';    // 'colonia' | 'risorse' | 'strutture' | 'popolazione' | 'esplorazione' (M07)
 
-/* Ultimo sistema annotato in cronaca (evita doppioni consecutivi). */
-ORION.lastChronicleId = -1;
-
 /* =====================================================================
    Decisione #50 — Plancia Operativa pinnata (dx indipendente dalla nav)
    `dxPinnedColonyKey` = colonia "in focus" del pannello dx. Quando l'utente
@@ -1117,8 +1114,6 @@ function openSystem(id) {
   ORION.openSystemId = id;
   ORION.currentSystem = system;
 
-  chronicleSystemEntry(system, disc);
-
   const sysHolder = root.querySelector('[data-system-holder]');
   const galHolder = root.querySelector('.galaxy-holder');
   if (galHolder) galHolder.style.visibility = 'hidden';
@@ -1389,8 +1384,6 @@ function openPlanet(sysId, bodyKey) {
   setGalaxyHint('planet');
   updatePlanetUI();
   updateEmpireDeck();   /* #62: scena = pianeta → nascondi Dashboard Impero */
-
-  pushChronicle(ORION.time.currentDS(g) + ' — Apertura scheda planetaria di <strong>' + body.name + '</strong>' + bodyTagHtml(sysId) + '.', 'planet');
 
   /* M06.6: tutorial — prima apertura di un pianeta. */
   if (ORION.tutorial) ORION.tutorial.fire('planet');
@@ -8783,7 +8776,6 @@ function stopTimerIfRunning() {
 const MAX_CHRONICLE = 40;
 
 function resetChronicle(galaxy, startDS) {
-  ORION.lastChronicleId = -1;
   const home = galaxy.systems[galaxy.homeId];
   const homeGrp = galaxy.groups.find(function (gp) { return gp.id === galaxy.homeGroupId; });
   const homeTag = homeGrp && homeGrp.acronym ? ' <span class="name-tag">[' + homeGrp.acronym + ']</span>' : '';
@@ -8824,31 +8816,6 @@ function restoreChronicleDom(game) {
     const mod = e.mod ? ' chronicle__entry--' + e.mod : '';
     return '<li class="chronicle__entry' + mod + '">' + e.html + '</li>';
   }).join('');
-}
-
-/* Annota in cronaca l'ingresso in un sistema, coerente con la nebbia di
-   guerra §5.1. Il game loop temporale è M05: per ora usa la Data Stellare
-   d'inizio. Evita doppioni consecutivi sullo stesso sistema. */
-function chronicleSystemEntry(system, disc) {
-  if (ORION.lastChronicleId === system.id) return;
-  ORION.lastChronicleId = system.id;
-  const DISCOVERY = ORION.galaxy.DISCOVERY;
-  const ds = ORION.time.currentDS(ORION.game);
-  const n = system.bodies.length;
-  let text, mod;
-  if (disc >= DISCOVERY.EXPLORED) {
-    text = ds + ' — Ingresso nel sistema <strong>' + system.name + '</strong>' + systemTagHtml(system.id) + ' · ' +
-      system.stars.label + ' · ' + n + ' corpi celesti.';
-    mod = 'explore';
-  } else if (disc >= DISCOVERY.DETECTED) {
-    text = ds + ' — Avvicinamento a <strong>' + system.name + '</strong>' + systemTagHtml(system.id) + ' · sensori a lungo raggio: ' +
-      n + ' corpi rilevati, interno da scansionare.';
-    mod = 'system';
-  } else {
-    text = ds + ' — Rotta verso un sistema ignoto · richiede esplorazione.';
-    mod = 'system';
-  }
-  pushChronicle(text, mod);
 }
 
 /* ---------------------------------------------------------------------
