@@ -4921,6 +4921,281 @@ select.main-menu__input { cursor: pointer; }
   border-radius: 3px;
   padding: 3px 6px;
 }
+
+/* =====================================================================
+   FLEET WIZARD — Ordini guidati a 3 step (post-feedback utente)
+   ===================================================================== */
+.fleet-wizard { /* riusa .fleet-orders-overlay come backdrop */ }
+.fleet-wizard__panel {
+  background: rgb(var(--c-surface-rgb) / 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  padding: 18px 22px;
+  max-width: 640px;
+  width: 100%;
+  max-height: 92vh;
+  overflow-y: auto;
+  color: var(--c-text, #e9ecf6);
+}
+.fleet-wizard__head {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.fleet-wizard__title h2 {
+  margin: 0 0 2px;
+  font-family: var(--font-display, sans-serif);
+  font-size: 1.15em;
+  letter-spacing: 0.04em;
+}
+.fleet-wizard__fleet {
+  margin: 0;
+  font-size: 0.85em;
+  color: var(--c-muted, #8a93b8);
+}
+.fleet-wizard__crumbs {
+  display: flex;
+  gap: 4px;
+  font-size: 0.78em;
+  color: var(--c-muted, #8a93b8);
+}
+.fleet-wizard__crumb {
+  padding: 2px 8px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+.fleet-wizard__crumb b { font-weight: 700; color: var(--c-text, #e9ecf6); }
+.fleet-wizard__crumb.is-active {
+  border-color: var(--c-cyan, #2fe6e0);
+  color: var(--c-cyan, #2fe6e0);
+  background: rgba(47, 230, 224, 0.08);
+}
+.fleet-wizard__crumb.is-done {
+  border-color: rgba(127, 230, 160, 0.45);
+  color: rgba(127, 230, 160, 0.85);
+}
+
+.fleet-wizard__body { padding: 4px 2px 12px; }
+.fleet-wizard__lead {
+  margin: 0 0 12px;
+  font-size: 0.95em;
+}
+.fleet-wizard__empty {
+  margin: 16px 0;
+  padding: 12px 14px;
+  text-align: center;
+  color: var(--c-muted, #8a93b8);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+}
+.fleet-wizard__empty--small {
+  font-size: 0.85em;
+  margin: 6px 0;
+  padding: 6px 8px;
+}
+
+/* ----- Step 1: cards scopo viaggio ----- */
+.fleet-wizard__cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.fleet-wizard__card {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  color: var(--c-text, #e9ecf6);
+  cursor: pointer;
+  text-align: left;
+  transition: background 120ms, border-color 120ms;
+}
+.fleet-wizard__card:hover:not(:disabled) {
+  background: rgba(47, 230, 224, 0.08);
+  border-color: var(--c-cyan, #2fe6e0);
+}
+.fleet-wizard__card:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.fleet-wizard__card-glyph {
+  grid-row: 1 / 3;
+  font-size: 1.6em;
+  color: var(--c-cyan, #2fe6e0);
+  text-align: center;
+}
+.fleet-wizard__card-label {
+  font-weight: 700;
+  font-family: var(--font-display, sans-serif);
+  font-size: 0.95em;
+}
+.fleet-wizard__card-hint {
+  font-size: 0.78em;
+  color: var(--c-muted, #8a93b8);
+  line-height: 1.3;
+}
+
+/* ----- Step 2: lista destinazioni + waypoint ----- */
+.fleet-wizard__group-h {
+  margin: 14px 0 6px;
+  font-size: 0.82em;
+  font-family: var(--font-display, sans-serif);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--c-muted, #8a93b8);
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+  padding-bottom: 3px;
+}
+.fleet-wizard__group-h em { color: var(--c-cyan, #2fe6e0); font-style: normal; }
+
+.fleet-wizard__dest-list {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.fleet-wizard__dest {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  font-size: 0.88em;
+}
+.fleet-wizard__dest.is-selected {
+  background: rgba(47, 230, 224, 0.10);
+  border-color: var(--c-cyan, #2fe6e0);
+}
+.fleet-wizard__dest-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.fleet-wizard__dest-name { font-weight: 600; }
+.fleet-wizard__dest-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85em;
+  color: var(--c-muted, #8a93b8);
+}
+
+.fleet-wizard__wp-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.fleet-wizard__wp {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(47, 230, 224, 0.05);
+  border-radius: 3px;
+  font-size: 0.88em;
+}
+.fleet-wizard__wp-n {
+  color: var(--c-cyan, #2fe6e0);
+  font-family: var(--font-display, sans-serif);
+  font-weight: 700;
+  min-width: 18px;
+}
+.fleet-wizard__wp-name { flex: 1; }
+.fleet-wizard__wp-dwell { color: var(--c-muted, #8a93b8); font-size: 0.85em; }
+
+.fleet-wizard__dwell-row {
+  margin: 10px 0;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 4px;
+  font-size: 0.88em;
+}
+.fleet-wizard__dwell-row input[type="number"] {
+  width: 56px;
+  background: rgb(var(--c-surface-rgb) / 0.85);
+  color: var(--c-text, #e9ecf6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  padding: 2px 6px;
+  margin: 0 4px;
+}
+
+/* ----- Step 3: opzioni + riepilogo ----- */
+.fleet-wizard__opt {
+  display: block;
+  margin: 10px 0;
+  font-size: 0.92em;
+  cursor: pointer;
+}
+.fleet-wizard__opt small {
+  display: block;
+  margin-top: 2px;
+  margin-left: 22px;
+  font-size: 0.82em;
+  color: var(--c-muted, #8a93b8);
+}
+.fleet-wizard__note {
+  margin: 12px 0;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 2px solid var(--c-cyan, #2fe6e0);
+  border-radius: 0 4px 4px 0;
+  font-size: 0.9em;
+}
+.fleet-wizard__summary {
+  margin: 14px 0;
+  padding: 12px 14px;
+  background: rgba(47, 230, 224, 0.06);
+  border: 1px solid rgba(47, 230, 224, 0.30);
+  border-radius: 5px;
+}
+.fleet-wizard__sum-line {
+  margin: 4px 0;
+  font-size: 0.92em;
+}
+.fleet-wizard__sum-line span { color: var(--c-cyan, #2fe6e0); font-weight: 600; }
+.fleet-wizard__sum-crew { font-size: 0.85em; color: var(--c-muted, #8a93b8); }
+
+/* ----- Navigazione step ----- */
+.fleet-wizard__nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.fleet-wizard__nav [data-wz-back] { margin-right: auto; }
+
+/* Mobile: stack delle cards a una colonna sotto 480px */
+@media (max-width: 480px) {
+  .fleet-wizard__cards { grid-template-columns: 1fr; }
+  .fleet-wizard__head { grid-template-columns: 1fr auto; }
+  .fleet-wizard__crumbs { grid-column: 1 / -1; flex-wrap: wrap; }
+}
+
 .fleet-manage-table {
   width: 100%;
   border-collapse: collapse;

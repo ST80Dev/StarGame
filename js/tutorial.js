@@ -833,23 +833,21 @@
     {
       id: 'fleet-orders',
       tag: 'M08 · Rotte',
-      title: 'Rotte a tappe e pattuglie',
+      title: 'Pianifica un viaggio',
       body:
-        '<p>Dalla finestra <strong>Ordini</strong> di una flotta puoi pianificare due ordini composti:</p>' +
-        '<ul>' +
-          '<li><strong>Rotta a tappe (move-route)</strong>: una catena di sistemi visitati in sequenza. ' +
-            'Per ogni tappa puoi impostare una <em>sosta orbitale</em> in Ι. Opzioni: <em>Esplora ogni tappa</em> ' +
-            '(rivela ogni sistema all\'arrivo) · <em>Rientra alla base alla fine</em>.</li>' +
-          '<li><strong>Pattuglia su N sistemi (patrol-loop)</strong>: come <em>patrol</em>, ma su 2+ nodi in loop. ' +
-            'La pattuglia non si ferma — perfetta per presidiare un confine.</li>' +
-        '</ul>' +
-        '<p>Senza consumo né uso, una flotta può <strong>vagare a lungo</strong> tra i sistemi favorevoli. ' +
-        'I rifugi presso popoli terzi (recupero/rifornimento) arriveranno con <strong>M10 Civiltà AI</strong> + ' +
-        '<strong>M11 Diplomazia</strong> (diritto di passaggio/d\'attracco) + <strong>M16 Stazioni orbitali</strong>.</p>' +
-        '<p><strong>Anche dalla mappa:</strong> click su una flotta (il pallino colorato) → ' +
-        'i sistemi raggiungibili si accendono → click sul sistema target per dare l\'ordine. ' +
-        'Default <em>rotta</em>; con <kbd>Shift</kbd>=<em>attacca</em>, con <kbd>Alt</kbd>=<em>esplora</em>; ' +
-        '<kbd>Esc</kbd> annulla. È un secondo entry-point — l\'overlay sidebar resta per gli ordini composti.</p>'
+        '<p>Dal bottone <strong>Ordini</strong> apri un <em>wizard a 3 step</em>:</p>' +
+        '<ol>' +
+          '<li><strong>Scopo viaggio</strong>: 🔍 Esplorazione · ➜ Trasferimento · ⇄ Pattuglia A↔B · ↻ Pattuglia ciclica · ✈ Rotta a tappe · ⌂ Rientro.</li>' +
+          '<li><strong>Destinazione</strong>: solo sistemi <em>conosciuti sulla mappa</em> (coerente con la nebbia di guerra), ' +
+            'ordinati per distanza in hop, con gli appartenenti al <em>tuo gruppo stellare</em> in cima.</li>' +
+          '<li><strong>Opzioni finali</strong>: per esplorazione e rotta a tappe puoi decidere se rientrare alla base, ' +
+            'se esplorare ogni tappa, e quanto sostare in orbita per nodo.</li>' +
+        '</ol>' +
+        '<p>Senza consumo né upkeep, una flotta può <strong>vagare a lungo</strong> tra i sistemi favorevoli. ' +
+        'I rifugi presso popoli terzi (recupero/rifornimento) verranno con <strong>M10/M11/M16</strong>.</p>' +
+        '<p><strong>Scorciatoia mappa:</strong> click su una flotta (il pallino colorato) → i sistemi raggiungibili si accendono → ' +
+        'click sul sistema target per dare l\'ordine. Default <em>rotta</em>; <kbd>Shift</kbd>=<em>attacca</em>, ' +
+        '<kbd>Alt</kbd>=<em>esplora</em>; <kbd>Esc</kbd> annulla. Coesiste col wizard per gli ordini composti.</p>'
     }
   ];
 

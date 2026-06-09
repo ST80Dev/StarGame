@@ -5171,7 +5171,469 @@ function openFleetManageOverlay(fleetId) {
   });
 }
 
+/* =====================================================================
+   FLEET WIZARD — Ordini guidati a 3 step (post-feedback utente).
+
+   Sostituisce il vecchio overlay "muro di 7 sezioni" con un flusso
+   guidato in 3 step:
+
+     Step 1 — Scopo viaggio (cards):
+       🔍 Esplorazione · ➜ Trasferimento · ⇄ Pattuglia A↔B ·
+       ↻ Pattuglia ciclica · ✈ Rotta a tappe · ⌂ Rientro alla base
+
+     Step 2 — Destinazione (filtrata + ordinata per hop):
+       lista dei sistemi VISIBILI sulla mappa (decisione utente:
+       coerente con la nebbia di guerra — niente UNKNOWN).
+       Per esplorazione: DETECTED (frontiera).
+       Per gli altri: EXPLORED.
+       Header che separa "Stesso gruppo" da "Altri gruppi".
+
+     Step 3 — Opzioni specifiche per scopo + Conferma.
+
+   Click sul marker della flotta sulla mappa (#61) resta come scorciatoia
+   veloce per ordini singoli; il wizard è il flusso principale dal pannello.
+   ===================================================================== */
+function openFleetWizard(fleetId) {
+  const g = ORION.game;
+  const fleet = findFleet(fleetId);
+  if (!fleet) return;
+  /* M08 Fase B: tutorial — ordini e rotte composte alla prima apertura. */
+  if (ORION.tutorial) ORION.tutorial.fire('fleet-orders');
+
+  /* Stato del wizard. Vive in closure fino alla chiusura dell'overlay. */
+  const state = {
+    step: 1,
+    tripType: null,         /* explore | transfer | patrol | patrol-loop | move-route | return */
+    target: null,           /* sysId per gli ordini singoli */
+    waypoints: [],          /* [{sysId, dwell}] per move-route / patrol-loop */
+    options: {
+      returnHome: true,     /* esplorazione: default ON, togli e resta in orbita */
+      exploreEach: false    /* rotta a tappe */
+    }
+  };
+
+  /* Tipi di viaggio (Step 1). Ordinati per frequenza d'uso. */
+  const TRIP_TYPES = [
+    { id: 'explore',    glyph: '🔍', label: 'Esplorazione',     hint: 'Vai in un sistema rilevato e scoprilo.' },
+    { id: 'transfer',   glyph: '➜', label: 'Trasferimento',     hint: 'Vai in un sistema esplorato e resta.' },
+    { id: 'patrol',     glyph: '⇄', label: 'Pattuglia A↔B',     hint: 'Avanti e indietro tra 2 sistemi.' },
+    { id: 'patrol-loop',glyph: '↻', label: 'Pattuglia ciclica', hint: 'Loop su N≥2 sistemi.' },
+    { id: 'move-route', glyph: '✈', label: 'Rotta a tappe',     hint: 'Multi-waypoint con sosta opzionale per nodo.' },
+    { id: 'return',     glyph: '⌂', label: 'Rientro alla base', hint: 'Torna alla colonia d\'origine.' }
+  ];
+
+  const host = ensureFleetOverlayHost('fleet-wizard');
+  host.addEventListener('click', function (e) {
+    if (e.target === host || e.target.matches('[data-action="fleet-overlay-close"]')) {
+      closeFleetOverlay();
+    }
+  });
+
+  function render() {
+    host.innerHTML =
+      '<div class="fleet-wizard__panel" role="document">' +
+        renderHeader() +
+        renderBody() +
+      '</div>';
+    bindHandlers();
+    host.hidden = false;
+  }
+
+  function renderHeader() {
+    const stepLabels = ['Scopo viaggio', 'Destinazione', 'Opzioni'];
+    let crumbs = '';
+    for (let i = 1; i <= 3; i++) {
+      const cls = (i === state.step) ? 'is-active' : (i < state.step ? 'is-done' : '');
+      crumbs += '<span class="fleet-wizard__crumb ' + cls + '"><b>' + i + '.</b> ' + stepLabels[i - 1] + '</span>';
+    }
+    const fleetInfo = '<strong>' + escapeHtml(fleet.name) + '</strong> · ' +
+      escapeHtml(g.galaxy.systems[fleet.location.systemId].name) +
+      ' · ' + (fleet.ships || []).length + ' nav.';
+    return '<header class="fleet-wizard__head">' +
+      '<div class="fleet-wizard__title">' +
+        '<h2>Pianifica viaggio</h2>' +
+        '<p class="fleet-wizard__fleet">' + fleetInfo + '</p>' +
+      '</div>' +
+      '<div class="fleet-wizard__crumbs">' + crumbs + '</div>' +
+      '<button class="btn btn--mini btn--icon-only" data-action="fleet-overlay-close" type="button" aria-label="Chiudi">' +
+        '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+      '</button>' +
+    '</header>';
+  }
+
+  function renderBody() {
+    if (state.step === 1) return renderStep1();
+    if (state.step === 2) return renderStep2();
+    if (state.step === 3) return renderStep3();
+    return '';
+  }
+
+  /* ----- Step 1: scelta scopo viaggio ----- */
+  function renderStep1() {
+    const cards = TRIP_TYPES.map(function (tt) {
+      const disabled = (tt.id === 'return' && !canReturnHome());
+      const reason = disabled ? ' title="Già alla base"' : '';
+      return '<button class="fleet-wizard__card" data-trip="' + tt.id + '" type="button"' + (disabled ? ' disabled' : '') + reason + '>' +
+        '<span class="fleet-wizard__card-glyph" aria-hidden="true">' + tt.glyph + '</span>' +
+        '<span class="fleet-wizard__card-label">' + escapeHtml(tt.label) + '</span>' +
+        '<span class="fleet-wizard__card-hint">' + escapeHtml(tt.hint) + '</span>' +
+      '</button>';
+    }).join('');
+    return '<div class="fleet-wizard__body">' +
+      '<p class="fleet-wizard__lead">Cosa vuoi che faccia questa flotta?</p>' +
+      '<div class="fleet-wizard__cards">' + cards + '</div>' +
+    '</div>';
+  }
+
+  /* ----- Step 2: destinazione (filtrata per scopo, ordinata per hop) ----- */
+  function renderStep2() {
+    const tt = state.tripType;
+    const isExplore = (tt === 'explore');
+    /* `patrol` semplice è A↔B: tecnicamente 2 waypoint da scegliere → UI
+       multi (lista accumulabile, ma limitata a 2 nel handler). */
+    const isMulti = (tt === 'move-route' || tt === 'patrol-loop' || tt === 'patrol');
+    /* Lista sistemi visibili. Per esplorazione: solo DETECTED (frontiera).
+       Per gli altri: solo EXPLORED (già visitati, di norma sicuri). */
+    const dests = ORION.fleet.visibleDestinations(g.galaxy, g.state, fleet.location.systemId, {
+      includeDetected: isExplore,
+      includeExplored: !isExplore
+    });
+    if (!dests.length) {
+      return '<div class="fleet-wizard__body">' +
+        '<p class="fleet-wizard__empty">' +
+          (isExplore ? 'Nessun sistema rilevato sulla frontiera. Esplora più sistemi vicini per allargare il raggio.'
+                     : 'Nessun sistema esplorato raggiungibile.') +
+        '</p>' +
+        renderNav({ back: true }) +
+      '</div>';
+    }
+    const myGroup = g.galaxy.systems[fleet.location.systemId].cluster;
+    const sameGroup = dests.filter(function (d) { return g.galaxy.systems[d.sysId].cluster === myGroup; });
+    const otherGroup = dests.filter(function (d) { return g.galaxy.systems[d.sysId].cluster !== myGroup; });
+    const myGroupName = (g.galaxy.groups[myGroup] || {}).name || ('Gruppo ' + myGroup);
+    const myGroupAcr = (g.galaxy.groups[myGroup] || {}).acronym || '';
+
+    let html = '<div class="fleet-wizard__body">';
+    if (isMulti) {
+      html += '<p class="fleet-wizard__lead">Aggiungi le tappe in ordine (la prima è la prossima destinazione).</p>';
+      html += renderWaypointList();
+    } else {
+      html += '<p class="fleet-wizard__lead">' +
+        (isExplore ? 'Quale sistema vuoi esplorare?' : 'Dove vuoi spostare la flotta?') +
+        '</p>';
+    }
+    if (sameGroup.length) {
+      html += '<h4 class="fleet-wizard__group-h">Stesso gruppo · <em>' +
+        escapeHtml(myGroupName) + (myGroupAcr ? ' [' + escapeHtml(myGroupAcr) + ']' : '') +
+        '</em></h4>';
+      html += renderDestList(sameGroup, isMulti);
+    }
+    if (otherGroup.length) {
+      html += '<h4 class="fleet-wizard__group-h">Altri gruppi</h4>';
+      html += renderDestList(otherGroup, isMulti);
+    }
+    if (isMulti) {
+      html += '<div class="fleet-wizard__dwell-row">' +
+        '<label>Sosta orbitale per nuove tappe: ' +
+          '<input type="number" data-bind="next-dwell" min="0" max="200" step="1" value="0"> Ι' +
+        '</label>' +
+      '</div>';
+    }
+    html += renderNav({ back: true, next: canAdvanceFromStep2() });
+    html += '</div>';
+    return html;
+  }
+
+  function renderDestList(items, isMulti) {
+    const html = items.map(function (d) {
+      const s = g.galaxy.systems[d.sysId];
+      const grp = g.galaxy.groups[s.cluster] || {};
+      const acr = grp.acronym ? '<span class="name-tag">[' + escapeHtml(grp.acronym) + ']</span>' : '';
+      const danger = s.danger;
+      const tier = s.dangerTier || 'sicuro';
+      const action = isMulti
+        ? '<button class="btn btn--mini" data-add-wp="' + d.sysId + '" type="button">+ Aggiungi</button>'
+        : '<button class="btn btn--mini" data-pick-target="' + d.sysId + '" type="button">' +
+            ((state.target === d.sysId) ? '✓ Selezionato' : 'Scegli') +
+          '</button>';
+      const selCls = (!isMulti && state.target === d.sysId) ? ' is-selected' : '';
+      return '<li class="fleet-wizard__dest' + selCls + '">' +
+        '<div class="fleet-wizard__dest-main">' +
+          '<span class="fleet-wizard__dest-name">' + escapeHtml(s.name) + ' ' + acr + '</span>' +
+          '<span class="fleet-wizard__dest-meta">' +
+            d.hops + ' hop · ' +
+            '<span class="danger-badge tier--' + tier + '">' + danger + ' · ' + tier + '</span>' +
+          '</span>' +
+        '</div>' +
+        action +
+      '</li>';
+    }).join('');
+    return '<ul class="fleet-wizard__dest-list">' + html + '</ul>';
+  }
+
+  function renderWaypointList() {
+    if (!state.waypoints.length) {
+      return '<p class="fleet-wizard__empty fleet-wizard__empty--small">Nessuna tappa. Aggiungine almeno una.</p>';
+    }
+    const items = state.waypoints.map(function (wp, idx) {
+      const s = g.galaxy.systems[wp.sysId];
+      return '<li class="fleet-wizard__wp">' +
+        '<span class="fleet-wizard__wp-n">' + (idx + 1) + '.</span>' +
+        '<span class="fleet-wizard__wp-name">' + escapeHtml(s.name) + '</span>' +
+        '<span class="fleet-wizard__wp-dwell">' + wp.dwell + ' Ι</span>' +
+        '<button class="btn btn--mini" data-rm-wp="' + idx + '" type="button" aria-label="Rimuovi tappa">×</button>' +
+      '</li>';
+    }).join('');
+    return '<ul class="fleet-wizard__wp-list">' + items + '</ul>';
+  }
+
+  /* ----- Step 3: opzioni specifiche per scopo + Conferma ----- */
+  function renderStep3() {
+    let html = '<div class="fleet-wizard__body">';
+    html += '<p class="fleet-wizard__lead">Opzioni finali.</p>';
+
+    if (state.tripType === 'explore') {
+      html += '<label class="fleet-wizard__opt">' +
+        '<input type="checkbox" data-bind="opt-return" ' + (state.options.returnHome ? 'checked' : '') + '>' +
+        ' Rientra alla base dopo aver esplorato' +
+        '<small> (togli la spunta per restare in orbita al target)</small>' +
+      '</label>';
+    } else if (state.tripType === 'move-route') {
+      html += '<label class="fleet-wizard__opt">' +
+        '<input type="checkbox" data-bind="opt-explore-each" ' + (state.options.exploreEach ? 'checked' : '') + '>' +
+        ' Esplora ogni tappa rilevata' +
+        '<small> (utile per rotte multi-frontiera)</small>' +
+      '</label>';
+      html += '<label class="fleet-wizard__opt">' +
+        '<input type="checkbox" data-bind="opt-return" ' + (state.options.returnHome ? 'checked' : '') + '>' +
+        ' Rientra alla base al termine' +
+      '</label>';
+    } else if (state.tripType === 'transfer') {
+      html += '<p class="fleet-wizard__note">Nessuna opzione: la flotta resta in orbita al sistema target dopo l\'arrivo.</p>';
+    } else if (state.tripType === 'patrol' || state.tripType === 'patrol-loop') {
+      html += '<p class="fleet-wizard__note">La pattuglia continua finché non darai un nuovo ordine.</p>';
+    } else if (state.tripType === 'return') {
+      const colony = g.colonies[fleet.ownerColonyKey];
+      const cname = colony ? g.galaxy.systems[colony.systemId].name : '—';
+      html += '<p class="fleet-wizard__note">La flotta rientrerà a <strong>' + escapeHtml(cname) + '</strong>.</p>';
+    }
+
+    /* Riepilogo */
+    html += '<div class="fleet-wizard__summary">' + renderSummary() + '</div>';
+
+    html += renderNav({ back: true, confirm: true });
+    html += '</div>';
+    return html;
+  }
+
+  function renderSummary() {
+    const sysName = function (id) { return g.galaxy.systems[id].name; };
+    let body = '';
+    if (state.tripType === 'explore' || state.tripType === 'transfer') {
+      body = '<strong>' + escapeHtml(sysName(state.target)) + '</strong>';
+    } else if (state.tripType === 'patrol') {
+      body = '<strong>' + escapeHtml(sysName(state.waypoints[0].sysId)) + ' ↔ ' + escapeHtml(sysName(state.waypoints[1].sysId)) + '</strong>';
+    } else if (state.tripType === 'patrol-loop' || state.tripType === 'move-route') {
+      body = '<strong>' + state.waypoints.map(function (wp) { return escapeHtml(sysName(wp.sysId)); }).join(' → ') + '</strong>';
+    } else if (state.tripType === 'return') {
+      const colony = g.colonies[fleet.ownerColonyKey];
+      body = '<strong>' + escapeHtml(colony ? sysName(colony.systemId) : '—') + '</strong>';
+    }
+    const ttDef = TRIP_TYPES.filter(function (t) { return t.id === state.tripType; })[0];
+    const crewOk = fleet.crew.length >= ORION.fleet.fleetCrewRequired(fleet);
+    return '<p class="fleet-wizard__sum-line">' +
+      ttDef.glyph + ' <span>' + ttDef.label + '</span> → ' + body +
+      '</p>' +
+      '<p class="fleet-wizard__sum-line fleet-wizard__sum-crew">' +
+        (crewOk ? '✓ ' : '⚠ ') +
+        'Equipaggio ' + fleet.crew.length + ' / ' + ORION.fleet.fleetCrewRequired(fleet) + ' richiesti' +
+      '</p>';
+  }
+
+  /* ----- Navigation row ----- */
+  function renderNav(opts) {
+    opts = opts || {};
+    let html = '<div class="fleet-wizard__nav">';
+    if (opts.back) html += '<button class="btn btn--mini" data-wz-back type="button">← Indietro</button>';
+    if (opts.next) html += '<button class="btn btn--primary" data-wz-next type="button">Avanti →</button>';
+    if (opts.confirm) html += '<button class="btn btn--primary" data-wz-confirm type="button">✓ Conferma</button>';
+    html += '</div>';
+    return html;
+  }
+
+  function canAdvanceFromStep2() {
+    if (state.tripType === 'explore' || state.tripType === 'transfer') return state.target != null;
+    if (state.tripType === 'patrol') return state.waypoints.length >= 2;
+    if (state.tripType === 'patrol-loop') return state.waypoints.length >= 2;
+    if (state.tripType === 'move-route') return state.waypoints.length >= 1;
+    if (state.tripType === 'return') return true;
+    return false;
+  }
+
+  function canReturnHome() {
+    const colony = g.colonies[fleet.ownerColonyKey];
+    if (!colony) return false;
+    /* Se la flotta è già al sistema della colonia in stato docked, niente. */
+    if (fleet.location.systemId === colony.systemId && fleet.location.status === 'docked') return false;
+    return true;
+  }
+
+  /* ----- Handlers ----- */
+  function bindHandlers() {
+    host.querySelectorAll('[data-trip]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.tripType = b.dataset.trip;
+        state.target = null;
+        state.waypoints = [];
+        /* Per `return` salta direttamente allo step 3 (no destinazione da scegliere). */
+        if (state.tripType === 'return') state.step = 3; else state.step = 2;
+        render();
+      });
+    });
+    host.querySelectorAll('[data-pick-target]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.target = Number(b.dataset.pickTarget);
+        render();
+      });
+    });
+    host.querySelectorAll('[data-add-wp]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        const sid = Number(b.dataset.addWp);
+        /* Patrol semplice A↔B: max 2 waypoint; il terzo sostituisce uno
+           dei due (a rotazione) — recovery-friendly. */
+        if (state.tripType === 'patrol' && state.waypoints.length >= 2) {
+          showToast('Per A↔B servono solo 2 sistemi. Cambia tipo se vuoi un loop più lungo.');
+          return;
+        }
+        const dw = host.querySelector('[data-bind="next-dwell"]');
+        const dwell = dw ? Math.max(0, parseInt(dw.value || '0', 10) || 0) : 0;
+        state.waypoints.push({ sysId: sid, dwell: dwell });
+        render();
+      });
+    });
+    host.querySelectorAll('[data-rm-wp]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.waypoints.splice(Number(b.dataset.rmWp), 1);
+        render();
+      });
+    });
+    const backBtn = host.querySelector('[data-wz-back]');
+    if (backBtn) backBtn.addEventListener('click', function () {
+      if (state.step === 3) state.step = (state.tripType === 'return') ? 1 : 2;
+      else if (state.step === 2) state.step = 1;
+      render();
+    });
+    const nextBtn = host.querySelector('[data-wz-next]');
+    if (nextBtn) nextBtn.addEventListener('click', function () {
+      if (canAdvanceFromStep2()) { state.step = 3; render(); }
+    });
+    const confirmBtn = host.querySelector('[data-wz-confirm]');
+    if (confirmBtn) confirmBtn.addEventListener('click', confirmOrder);
+    /* Patrol A↔B: per uniformità lo modelliamo come 2 waypoint. */
+    /* opzioni step 3 */
+    const optRet = host.querySelector('[data-bind="opt-return"]');
+    if (optRet) optRet.addEventListener('change', function () { state.options.returnHome = optRet.checked; });
+    const optExp = host.querySelector('[data-bind="opt-explore-each"]');
+    if (optExp) optExp.addEventListener('change', function () { state.options.exploreEach = optExp.checked; });
+  }
+
+  /* ----- Conferma → costruisce e dispatcha l'ordine ----- */
+  function confirmOrder() {
+    let order;
+    if (state.tripType === 'explore') {
+      /* Esplorazione: per ora il modello flotta auto-rientra dopo aver
+         esplorato. Se l'utente vuole RESTARE in orbita, mandiamo un
+         move-route con 1 sola tappa + exploreEach=true + returnHome=false. */
+      if (state.options.returnHome) {
+        order = { type: 'explore', toSysId: state.target };
+      } else {
+        order = {
+          type: 'move-route',
+          waypoints: [state.target],
+          dwell: [0],
+          exploreEach: true,
+          returnHome: false
+        };
+      }
+    } else if (state.tripType === 'transfer') {
+      order = { type: 'move', toSysId: state.target };
+    } else if (state.tripType === 'patrol') {
+      order = {
+        type: 'patrol',
+        sysA: state.waypoints[0].sysId,
+        sysB: state.waypoints[1].sysId
+      };
+    } else if (state.tripType === 'patrol-loop') {
+      order = {
+        type: 'patrol-loop',
+        loop:  state.waypoints.map(function (wp) { return wp.sysId; }),
+        dwell: state.waypoints.map(function (wp) { return wp.dwell; })
+      };
+    } else if (state.tripType === 'move-route') {
+      order = {
+        type: 'move-route',
+        waypoints: state.waypoints.map(function (wp) { return wp.sysId; }),
+        dwell:     state.waypoints.map(function (wp) { return wp.dwell; }),
+        exploreEach: state.options.exploreEach,
+        returnHome:  state.options.returnHome
+      };
+    } else if (state.tripType === 'return') {
+      order = { type: 'return' };
+    } else {
+      return;
+    }
+    const r = ORION.fleet.setOrder(g, fleet, order);
+    if (!r.ok) { showToast(r.reason); return; }
+    /* Coesione AI (M10 Fase B, decisione #52 §13.6) — invariato col vecchio overlay. */
+    if (ORION.cohesion && ORION.cohesion.applyTravelPenalty && order.type !== 'idle' && order.type !== 'return') {
+      const sysIds = collectOrderSystems(g, fleet, order);
+      const pen = ORION.cohesion.applyTravelPenalty(g, sysIds);
+      if (pen.applied < 0) {
+        showToast('Rotta attraverso ' + pen.affectedSys.length + ' sistema coeso — disposizione ' + pen.applied + '/proprietari');
+      }
+    }
+    /* Cronaca. */
+    const ttDef = TRIP_TYPES.filter(function (t) { return t.id === state.tripType; })[0];
+    let labelText;
+    if (order.type === 'move-route') {
+      const tappe = order.waypoints.map(function (id) { return g.galaxy.systems[id].name; }).join(' → ');
+      labelText = (ttDef ? ttDef.label : 'rotta') + ': ' + tappe + (order.returnHome ? ' → rientro' : '');
+    } else if (order.type === 'patrol-loop') {
+      const nodi = order.loop.map(function (id) { return g.galaxy.systems[id].name; }).join(' ↻ ');
+      labelText = 'pattuglia ciclica: ' + nodi;
+    } else if (order.type === 'patrol') {
+      labelText = 'pattuglia ' + g.galaxy.systems[order.sysA].name + ' ↔ ' + g.galaxy.systems[order.sysB].name;
+    } else {
+      const target = (order.type === 'return') ? (g.colonies[fleet.ownerColonyKey] || {}).systemId : order.toSysId;
+      labelText = (ttDef ? ttDef.label : order.type) + (target != null ? ' verso ' + g.galaxy.systems[target].name : '');
+    }
+    pushChronicle(ORION.time.currentDS(g) + ' — <strong>' + escapeHtml(fleet.name) + '</strong>: ' + escapeHtml(labelText) + '.', 'explore');
+    persistGame(g);
+    closeFleetOverlay();
+    const stage = document.querySelector('[data-view-stage]');
+    if (stage) renderFleetView(stage);
+  }
+
+  /* Preparazione waypoint per `patrol`: A↔B = 2 waypoint (li tratto come patrol-loop in UI). */
+  /* Patrol semplice cattura solo i primi 2 waypoint nello stato. */
+  if (state.tripType == null) {
+    /* primo avvio: render dello step 1. */
+  }
+  render();
+}
+
+/* Vecchio overlay "muro di 7 sezioni" — sostituito dal wizard. La firma
+   resta uguale così tutti i call site (renderFleetView e #61 picker)
+   continuano a funzionare senza modifiche. Flag dev:
+     window.ORION._useLegacyOrdersOverlay = true   → riapre il vecchio. */
 function openFleetOrdersOverlay(fleetId) {
+  if (ORION._useLegacyOrdersOverlay) return _legacyFleetOrdersOverlay(fleetId);
+  return openFleetWizard(fleetId);
+}
+
+/* DEPRECATED — corpo del vecchio overlay conservato dietro flag per
+   debug/regressione (`ORION._useLegacyOrdersOverlay=true` in console). */
+function _legacyFleetOrdersOverlay(fleetId) {
   const g = ORION.game;
   const fleet = findFleet(fleetId);
   if (!fleet) return;
