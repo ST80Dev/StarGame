@@ -551,12 +551,22 @@
       });
       chips += '</div>';
 
+      /* Decisione #66 estensione (P1): chip ⚡ Diaspora se la colonia
+         ha il bonus crescita ×2 attivo (post-imbarco coloni #66). */
+      const game = ORION.game;
+      const nowI = (game && game.timeImpulsi) || 0;
+      const dia = colony.diaspora;
+      const isDia = dia && dia.until > nowI;
+      const diaChip = isDia
+        ? '<span class="deck-pop__diaspora" title="Bonus Diaspora: crescita pop ×' + dia.multiplier + ' attiva, ' + (dia.until - nowI) + ' Ι rimanenti">⚡ Diaspora · ' + (dia.until - nowI) + ' Ι</span>'
+        : '';
+
       /* Layout verticale per colonna stretta (M07.2 iter 3):
          label · livelli/cap · barra full-width · % sviluppo. */
       const totalHtml =
         '<div class="deck-pop__total" title="Livelli demografici · sviluppo ' + dev + '% verso il cap del pianeta">' +
           '<div class="deck-pop__total-row">' +
-            '<span class="deck-pop__total-label">Popolazione</span>' +
+            '<span class="deck-pop__total-label">Popolazione' + diaChip + '</span>' +
             '<span class="deck-pop__total-pct">' + dev + '%</span>' +
           '</div>' +
           '<span class="deck-pop__total-num">' +

@@ -200,7 +200,11 @@
         '<p><strong>Buffer di tolleranza:</strong> la popolazione cala solo dopo <strong>30 Impulsi consecutivi</strong> di fame ' +
         'o sete, e poi di 1 livello ogni 30 <span class="ds-unit">Ι</span> — hai sempre il tempo di reagire.</p>' +
         '<p>La crescita si ferma in <strong>plateau</strong> quando produzione = consumo. Più fattorie/impianti idrici alzano ' +
-        'il tetto sostenibile, oppure (futuro) rifornimenti via rotte commerciali.</p>'
+        'il tetto sostenibile, oppure (futuro) rifornimenti via rotte commerciali.</p>' +
+        '<p><strong>Bonus Diaspora ⚡</strong> — quando imbarchi coloni su una nave Pioniere (vedi <em>Pioniere coloniale</em>), ' +
+        'la colonia di partenza riceve <strong>×2 crescita pop per 60 <span class="ds-unit">Ι</span></strong>: i livelli ceduti ' +
+        'vengono recuperati rapidamente, le infrastrutture restano. È la leva pensata per <em>seminare</em> nuove colonie senza ' +
+        'svuotare la sorgente.</p>'
     },
     {
       id: 'waste',
@@ -867,8 +871,13 @@
         '<p>Travel e Foundation sono <strong>indipendenti</strong>: mondi grandi richiedono più Foundation, mondi lontani più ' +
         'Travel. Intra-sistema resta veloce (~110 Ι totali).</p>' +
         '<p>Puoi <strong>scortare</strong> il Pioniere con altre navi nella stessa flotta. Senza scorta è esposto: se ' +
-        'intercettato e distrutto, refund <strong>50%</strong> di costo nave + colonizzazione (recovery-friendly). ' +
-        'L\'equipaggio si salva sempre.</p>'
+        'intercettato e distrutto, refund <strong>50%</strong> di costo nave + colonizzazione, e <strong>50% dei coloni ' +
+        'a bordo</strong> torna alla colonia origine in <em>scialuppa di salvataggio</em> (recovery-friendly). ' +
+        'L\'equipaggio si salva sempre.</p>' +
+        '<p><strong>Trasferimento colony-to-colony:</strong> stesso meccanismo embark/sbark dalla scheda <em>Gestisci ' +
+        'navi/eq.</em> della flotta — quando il Pioniere è in orbita di una qualunque tua colonia operativa puoi <strong>imbarcare ' +
+        'o sbarcare livelli</strong> per bilanciare carenze (cibo, rifiuti) tra mondi maturi. Diaspora attiva ogni volta che ' +
+        'imbarchi da una colonia.</p>'
     },
     {
       id: 'fleet-orders',

@@ -1865,10 +1865,25 @@ function renderPlanetColoniaTab(host, planet, colony) {
     } else {
       stateLine = '<p class="sysinfo__home">' + uiIcon('dotCircle', 'cyan') + ' Colonia attiva</p>';
     }
+    /* Decisione #66 estensione (P1 sessione 2026-06-09): chip ⚡ Diaspora
+       quando il bonus crescita pop ×2 è attivo (post-imbarco coloni #66).
+       Visibile finché `colony.diaspora.until > now`. */
+    let diasporaLine = '';
+    if (colony.diaspora && colony.diaspora.until > (g.timeImpulsi || 0)) {
+      const dLeft = colony.diaspora.until - (g.timeImpulsi || 0);
+      const mul = colony.diaspora.multiplier || 2;
+      diasporaLine =
+        '<p class="diaspora-banner" title="Bonus Diaspora: crescita pop ×' + mul + ' attiva post-imbarco coloni">' +
+          '<span class="diaspora-banner__icon">⚡</span> ' +
+          '<strong>Bonus Diaspora</strong> · crescita pop ×' + mul +
+          ' · <strong>' + dLeft + ' ' + iU() + '</strong> rimanenti' +
+        '</p>';
+    }
     host.innerHTML =
       '<div class="sysinfo">' +
         settlingBanner +
         stateLine +
+        diasporaLine +
         '<dl class="sysinfo__list">' +
           row('Colonizzato dal', colony.colonizedDS || '—') +
           row('Popolazione', popRangePeople(colony, planet)) +
