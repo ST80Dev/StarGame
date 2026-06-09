@@ -481,6 +481,15 @@
       this.requestRender();
     }
 
+    /* Fix post-feedback: una flotta può essere "evidenziata" anche fuori
+       dalla picker mode — ad es. mentre il popup info è aperto. Questo
+       attiva l'highlight visivo (rotta gialla, anello pulsante, etichetta
+       in evidenza, altre flotte attenuate) senza entrare in picker. */
+    setHighlightedFleet(fleetId) {
+      this._highlightedFleetId = (fleetId == null) ? null : String(fleetId);
+      this.requestRender();
+    }
+
     pickSystem(sx, sy) {
       const sys = this.galaxy.systems;
       let best = -1, bestD = Infinity;
@@ -1565,10 +1574,13 @@
       if (fleetsAlpha < 0.05) return;
 
       /* Polish post-wizard (feedback utente): se l'utente ha cliccato su
-         un marker flotta (modalità picker, #61), la sua rotta corrente +
-         marker sono evidenziati in giallo brillante; le altre flotte sono
-         attenuate per dare colpo d'occhio sulla flotta selezionata. */
-      const selectedFleetId = (this._fleetPicker && this._fleetPicker.fleetId) || null;
+         un marker flotta — popup info aperto O picker mode (#61) — la sua
+         rotta corrente + marker sono evidenziati in giallo brillante; le
+         altre flotte sono attenuate per dare colpo d'occhio sulla flotta
+         selezionata. */
+      const selectedFleetId =
+        (this._fleetPicker && this._fleetPicker.fleetId) ||
+        this._highlightedFleetId || null;
 
       ctx.save();
       ctx.globalAlpha = fleetsAlpha;
@@ -1656,7 +1668,9 @@
       const short = name.length > 14 ? (name.slice(0, 13) + '…') : name;
       const inTransit = fleet.location && fleet.location.status === 'in-transit';
       const eta = (fleet.etaImpulsi | 0);
-      const subText = inTransit ? (' · ' + eta + ' Ι') : '';
+      /* "in NN Ι" (con preposizione) per evitare che l'utente legga "ETA"
+         come "età" — feedback in itinere. */
+      const subText = inTransit ? (' · in ' + eta + ' Ι') : '';
       const txt = short + subText;
       const dim = someoneSelected && !isSelected;
       const aText = isSelected ? 1.0 : (dim ? 0.30 : 0.78);

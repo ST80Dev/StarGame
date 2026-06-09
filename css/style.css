@@ -4772,7 +4772,8 @@ select.main-menu__input { cursor: pointer; }
 
 /* Overlays creazione/ordini — riusa il pattern di expedition-pick-overlay. */
 .fleet-create-overlay,
-.fleet-orders-overlay {
+.fleet-orders-overlay,
+.fleet-wizard {
   position: fixed;
   inset: 0;
   z-index: 360;
@@ -4785,7 +4786,8 @@ select.main-menu__input { cursor: pointer; }
   padding: 24px;
 }
 .fleet-create-overlay[hidden],
-.fleet-orders-overlay[hidden] { display: none; }
+.fleet-orders-overlay[hidden],
+.fleet-wizard[hidden] { display: none; }
 .fleet-create-overlay__panel,
 .fleet-orders-overlay__panel {
   background: rgb(var(--c-surface-rgb) / 0.95);
@@ -4925,7 +4927,7 @@ select.main-menu__input { cursor: pointer; }
 /* =====================================================================
    FLEET WIZARD — Ordini guidati a 3 step (post-feedback utente)
    ===================================================================== */
-.fleet-wizard { /* riusa .fleet-orders-overlay come backdrop */ }
+/* .fleet-wizard è gestito sopra insieme a .fleet-create-overlay / .fleet-orders-overlay */
 .fleet-wizard__panel {
   background: rgb(var(--c-surface-rgb) / 0.96);
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -5259,11 +5261,18 @@ select.main-menu__input { cursor: pointer; }
 }
 .fleet-info-popup__actions {
   display: flex;
+  flex-direction: column;
   gap: 6px;
   margin-top: 4px;
-  flex-wrap: wrap;
 }
-.fleet-info-popup__actions .btn { flex: 1 0 auto; }
+.fleet-info-popup__actions .btn {
+  width: 100%;
+  justify-content: center;
+  white-space: nowrap;
+  text-align: center;
+  padding: 6px 10px;
+  font-size: 0.86em;
+}
 
 .fleet-manage-table {
   width: 100%;
