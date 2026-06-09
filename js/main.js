@@ -2234,8 +2234,11 @@ function openColonizePicker(planet) {
     const info = colonizeCostInfo(g, planet, f);
     const orbit = 10;
     const minSpeed = F.fleetMinSpeed(f);
-    const travelEst = intra ? 2 : hops * F.tempoLeg(g.galaxy, f.location.systemId, planet.systemId, minSpeed);
-    const total = travelEst + orbit + Math.max(20, info.baseImpulsi - travelEst - orbit);
+    const travelEst = intra ? 0 : hops * F.tempoLeg(g.galaxy, f.location.systemId, planet.systemId, minSpeed);
+    /* Decisione #66 (refinement): foundation = colCost.impulsi pieno (dipende
+       da grandezza+ostilità del pianeta, NON dal viaggio). Travel e orbit
+       sono additivi. */
+    const total = travelEst + orbit + Math.max(20, info.baseImpulsi);
     const cost = info.totalCost;
     const payerName = colonyNameFromKey(info.payerKey);
     const costHtml = (info.canPay ? '' : '<span class="colonize-pick__warn">Risorse insufficienti</span>');
@@ -2301,11 +2304,16 @@ function doColonize(planet, fleet) {
   ['met', 'en', 'water', 'food'].forEach(function (k) {
     info.payer.stock[k] = Math.max(0, (info.payer.stock[k] || 0) - info.totalCost[k]);
   });
-  /* Calcola le 3 fasi e imposta l'ordine. */
+  /* Calcola le 3 fasi e imposta l'ordine.
+     Decisione #66 (refinement, sessione 2026-06-09): foundation dipende solo
+     dal pianeta (grandezza+ostilità via colCost.impulsi §6.2), NON dal viaggio.
+     Travel e orbit si aggiungono sopra. Intra-sistema → totale ≈ orbit + foundation;
+     extra-sistema → totale ≈ travel + orbit + foundation (M13 iperguida scalerà
+     solo il travel). Più fisicamente intuitivo + travel diventa "visibile" come
+     costo, motivazione narrativa per M13. */
   const intra = (fleet.location.systemId === planet.systemId);
   const orbitI = 10;
-  const travelEst = intra ? 0 : 1;   /* nominale, il vero travel è ETA della rotta */
-  const foundationI = Math.max(20, info.baseImpulsi - travelEst - orbitI);
+  const foundationI = Math.max(20, info.baseImpulsi);
   /* Memo del costo pagato per refund 50% se nave persa in transit. */
   fleet._colonizePaidCost = {
     coloniale: F.getClass('coloniale').cost,

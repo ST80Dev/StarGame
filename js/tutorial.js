@@ -832,12 +832,13 @@
         '<p>Il Pioniere è <strong>multi-uso</strong>: non viene consumato, è riparabile, e dopo l\'atterraggio resta in orbita al ' +
         'nuovo pianeta pronto per una nuova missione. Costa <strong>80 met + 40 en + 10 food + 10 water</strong> ' +
         'all\'Hangar lvl 1, build time 25 Ι, equipaggio 4 (riusa l\'array esploratori).</p>' +
-        '<p>La colonizzazione avviene in <strong>3 fasi</strong>:</p>' +
+        '<p>La colonizzazione avviene in <strong>3 fasi indipendenti</strong>:</p>' +
         '<ul>' +
-          '<li><strong>Travel</strong> — viaggio iperspaziale (intra-sistema: skip).</li>' +
-          '<li><strong>Orbit</strong> — ~10 Ι di scout/preparazione atterraggio.</li>' +
-          '<li><strong>Foundation</strong> — il resto del countdown §6.2; la nave è "atterrata", la colonia compare come "in arrivo".</li>' +
+          '<li><strong>Travel</strong> — viaggio iperspaziale, dipende solo dalla <em>distanza</em> (intra-sistema: skip). M13 iperguida lo ridurrà ×3/×8/×20.</li>' +
+          '<li><strong>Orbit</strong> — ~10 Ι di scout/preparazione atterraggio (costante).</li>' +
+          '<li><strong>Foundation</strong> — il <em>vero</em> tempo di colonizzazione (§6.2: scala con <strong>grandezza+ostilità del pianeta</strong>). 90-150 Ι. La nave è "atterrata", la colonia compare come "in arrivo".</li>' +
         '</ul>' +
+        '<p>Modello: travel e foundation sono <strong>indipendenti</strong> (viaggio ≠ fondazione). Mondi grandi richiedono più foundation; mondi lontani richiedono più travel. Intra-sistema resta veloce (~110 Ι totali).</p>' +
         '<p>Puoi <strong>scortare</strong> il Pioniere con altre navi nella stessa flotta. Senza scorta è esposta: ' +
         'se intercettata e distrutta, refund <strong>50%</strong> del costo nave + colonizzazione (recovery-friendly). ' +
         'L\'equipaggio si salva sempre.</p>' +
