@@ -2296,17 +2296,34 @@ function openColonizePicker(planet) {
     const cost = info.totalCost;
     const payerName = colonyNameFromKey(info.payerKey);
     const costHtml = (info.canPay ? '' : '<span class="colonize-pick__warn">Risorse insufficienti</span>');
-    return '<button class="attack-pick__row" data-fleet="' + escapeHtml(f.id) + '"' + (info.canPay ? '' : ' disabled') + ' type="button">' +
-      '<span class="attack-pick__name">' + escapeHtml(f.name) + '</span>' +
-      '<span class="attack-pick__meta">' +
-        (f.ships || []).length + ' navi · ' + (hops === 0 ? 'intra-sistema' : hops + ' salti') +
-        ' · ~' + total + ' ' + iU() +
-        ' · costo da ' + escapeHtml(payerName) +
-        ' (' + cost.met + ' ' + resGlyph('met') + ' · ' + cost.en + ' ' + resGlyph('en') +
-        ' · ' + cost.water + ' ' + resGlyph('water') + ' · ' + cost.food + ' ' + resGlyph('food') + ')' +
-        (costHtml ? ' · ' + costHtml : '') +
-      '</span>' +
-    '</button>';
+    /* Decisione #66 estensione: capienza coloni della flotta + suggerimento
+       default. Suggeriamo popCargo se la sorgente ha ≥ popCargo+1 livelli
+       (per non svuotare la sorgente). Altrimenti il massimo trasferibile. */
+    const popCargoCap = F.fleetPopCargoCap ? F.fleetPopCargoCap(f) : 0;
+    const srcPop = (info.payer && info.payer.pop && info.payer.pop.total) || 0;
+    const maxLoad = Math.max(0, Math.min(popCargoCap, srcPop - 1));
+    const defaultLoad = Math.min(maxLoad, popCargoCap);
+    return '<div class="colonize-pick__card" data-fleet-row="' + escapeHtml(f.id) + '">' +
+      '<button class="attack-pick__row" data-fleet="' + escapeHtml(f.id) + '"' + (info.canPay ? '' : ' disabled') + ' type="button">' +
+        '<span class="attack-pick__name">' + escapeHtml(f.name) + '</span>' +
+        '<span class="attack-pick__meta">' +
+          (f.ships || []).length + ' navi · ' + (hops === 0 ? 'intra-sistema' : hops + ' salti') +
+          ' · ~' + total + ' ' + iU() +
+          ' · costo da ' + escapeHtml(payerName) +
+          ' (' + cost.met + ' ' + resGlyph('met') + ' · ' + cost.en + ' ' + resGlyph('en') +
+          ' · ' + cost.water + ' ' + resGlyph('water') + ' · ' + cost.food + ' ' + resGlyph('food') + ')' +
+          (costHtml ? ' · ' + costHtml : '') +
+        '</span>' +
+      '</button>' +
+      (popCargoCap > 0 ?
+        '<div class="colonize-pick__pop">' +
+          '<label>Coloni a bordo: <strong data-pop-out="' + escapeHtml(f.id) + '">' + defaultLoad + '</strong> / ' + popCargoCap + '</label>' +
+          '<input type="range" min="0" max="' + maxLoad + '" step="1" value="' + defaultLoad + '" data-pop-input="' + escapeHtml(f.id) + '"' + (maxLoad === 0 ? ' disabled' : '') + '>' +
+          (maxLoad === 0 ? '<span class="colonize-pick__warn">Sorgente troppo piccola per imbarcare</span>' : '') +
+        '</div>'
+        : ''
+      ) +
+    '</div>';
   }).join('');
   const html =
     '<div class="attack-overlay" data-colonize-overlay>' +
@@ -2332,11 +2349,22 @@ function openColonizePicker(planet) {
   function close() { if (node.parentNode) node.parentNode.removeChild(node); }
   node.querySelector('[data-colonize-close]').addEventListener('click', close);
   node.addEventListener('click', function (e) { if (e.target === node) close(); });
+  /* Live update del label "Coloni a bordo: N" mentre l'utente muove lo slider. */
+  node.querySelectorAll('[data-pop-input]').forEach(function (inp) {
+    inp.addEventListener('input', function () {
+      const fid = inp.getAttribute('data-pop-input');
+      const out = node.querySelector('[data-pop-out="' + fid + '"]');
+      if (out) out.textContent = inp.value;
+    });
+  });
   node.querySelectorAll('[data-fleet]').forEach(function (b) {
     b.addEventListener('click', function () {
       const fleet = (g.fleets || []).filter(function (f) { return f.id === b.dataset.fleet; })[0];
       if (!fleet) { close(); return; }
-      doColonize(planet, fleet);
+      /* Leggi loadPop dallo slider della card di questa flotta. */
+      const inp = node.querySelector('[data-pop-input="' + fleet.id + '"]');
+      const loadPop = inp ? parseInt(inp.value, 10) || 0 : 0;
+      doColonize(planet, fleet, loadPop);
       close();
     });
   });
@@ -2345,7 +2373,7 @@ function openColonizePicker(planet) {
 /* Esegue la colonizzazione: deduce il costo, imposta l'ordine `colonize`
    sulla flotta. Decisione #66: il costo è pagato all'inizio (UX), refund
    gestito da combat.js se la coloniale è persa in transit. */
-function doColonize(planet, fleet) {
+function doColonize(planet, fleet, loadPop) {
   const g = ORION.game;
   const F = ORION.fleet;
   if (!g || !F) return;
@@ -2354,6 +2382,17 @@ function doColonize(planet, fleet) {
   if (!colony || colony.colonized || colony.colonizing) return;
   const info = colonizeCostInfo(g, planet, fleet);
   if (!info.canPay) { showToast('Risorse insufficienti'); return; }
+  /* Decisione #66 estensione: imbarco coloni sulla nave (default popCargo
+     se la sorgente ne ha abbastanza). loadPop=0 → fondazione cold (1 livello). */
+  const cap = F.fleetPopCargoCap ? F.fleetPopCargoCap(fleet) : 0;
+  const reqLoad = (typeof loadPop === 'number') ? Math.max(0, Math.min(cap, loadPop | 0)) : 0;
+  if (reqLoad > 0) {
+    const embarkRes = F.embarkPop(g, fleet, info.payerKey, reqLoad);
+    if (!embarkRes.ok) {
+      showToast('Imbarco coloni: ' + (embarkRes.reason || 'errore'));
+      return;
+    }
+  }
   /* Deduce dal payer (colonia origine della flotta). */
   ['met', 'en', 'water', 'food'].forEach(function (k) {
     info.payer.stock[k] = Math.max(0, (info.payer.stock[k] || 0) - info.totalCost[k]);

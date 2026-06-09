@@ -67,9 +67,25 @@
     coloniale: {
       id: 'coloniale', name: 'Pioniere coloniale', glyph: '◉',
       cost: { met: 80, en: 40, food: 10, water: 10 }, time: 25,
-      hp: 70, fp: 0, speed: 0.8, crew: 4, hangarLvl: 1
+      hp: 70, fp: 0, speed: 0.8, crew: 4, hangarLvl: 1,
+      /* Decisione #66 estensione (sessione 2026-06-09): la nave coloniale
+         trasporta livelli demografici. popCargo=2 = "seme demografico" che
+         alimenta la fondazione o il rinforzo di una colonia esistente. */
+      popCargo: 2
     }
   };
+
+  /* Decisione #66 estensione: capienza pop per CLASSE coloniale. Le altre
+     classi NON trasportano popolazione (popCargo: 0 implicito). */
+  function fleetPopCargoCap(fleet) {
+    if (!fleet || !Array.isArray(fleet.ships)) return 0;
+    let cap = 0;
+    for (let i = 0; i < fleet.ships.length; i++) {
+      const cls = CLASSES[fleet.ships[i].kind];
+      if (cls && cls.popCargo) cap += cls.popCargo;
+    }
+    return cap;
+  }
   const CLASS_ORDER = ['explorer', 'caccia', 'intercettore', 'corvetta', 'fregata', 'coloniale'];
 
   /* Costanti del viaggio inter-sistema. Coerenti con expedition.js M07
@@ -464,6 +480,72 @@
     }
     if (removed === 0) return { ok: false, reason: 'Flotta senza equipaggio' };
     return { ok: true, returned: removed };
+  }
+
+  /* Decisione #66 estensione: imbarco/sbarco coloni tra una flotta con
+     nave coloniale e una colonia. La flotta deve essere docked O orbiting
+     nella stessa orbita della colonia (no in-transit). Vincoli:
+       - amount > 0
+       - amount ≤ fleetPopCargoCap(fleet) − fleet.popOnboard (in carico)
+       - colony.pop.total − amount ≥ 1 (sempre 1 unità minima sulla sorgente)
+       - target: pop.total + amount ≤ pop.cap (non sforare il tetto). */
+  function embarkPop(game, fleet, colonyKey, amount) {
+    if (!fleet) return { ok: false, reason: 'Flotta inesistente' };
+    const colony = game.colonies && game.colonies[colonyKey];
+    if (!colony) return { ok: false, reason: 'Colonia inesistente' };
+    if (!colony.colonized) return { ok: false, reason: 'Colonia non operativa' };
+    if (fleet.location.systemId !== colony.systemId) {
+      return { ok: false, reason: 'Flotta non nello stesso sistema della colonia' };
+    }
+    if (fleet.location.status === 'in-transit') return { ok: false, reason: 'Flotta in viaggio' };
+    amount = Math.max(0, amount | 0);
+    if (amount <= 0) return { ok: false, reason: 'Quantità non valida' };
+    const cap = fleetPopCargoCap(fleet);
+    const onboard = fleet.popOnboard || 0;
+    if (onboard + amount > cap) return { ok: false, reason: 'Capienza nave insufficiente (' + cap + ' livelli max)' };
+    const popTotal = (colony.pop && colony.pop.total) || 0;
+    if (popTotal - amount < 1) return { ok: false, reason: 'La colonia deve mantenere almeno 1 livello' };
+    /* Imbarco: decremento colonia, increment fleet.popOnboard. */
+    colony.pop.total = popTotal - amount;
+    fleet.popOnboard = onboard + amount;
+    /* Reset accumulo se la colonia scende sotto al livello attuale (display). */
+    if (colony.pop.accum && colony.pop.total < (colony.pop.cap || 0)) {
+      /* mantieni accum se sensato (frazione del livello corrente); il motore
+         lo userà al prossimo tick di crescita. */
+    }
+    /* Avvia/rinnova il Bonus Diaspora sulla sorgente (recovery-friendly):
+       60 Ι di crescita pop ×2. Vive in colony.diaspora { until, multiplier }. */
+    const nowI = game.timeImpulsi || 0;
+    colony.diaspora = {
+      startedAt: nowI,
+      until: nowI + 60,
+      multiplier: 2.0
+    };
+    return { ok: true, popOnboard: fleet.popOnboard };
+  }
+
+  /* Sbarco coloni dalla flotta a una colonia operativa. */
+  function disembarkPop(game, fleet, colonyKey, amount) {
+    if (!fleet) return { ok: false, reason: 'Flotta inesistente' };
+    const colony = game.colonies && game.colonies[colonyKey];
+    if (!colony) return { ok: false, reason: 'Colonia inesistente' };
+    if (!colony.colonized) return { ok: false, reason: 'Colonia non ancora operativa' };
+    if (fleet.location.systemId !== colony.systemId) {
+      return { ok: false, reason: 'Flotta non nello stesso sistema della colonia' };
+    }
+    if (fleet.location.status === 'in-transit') return { ok: false, reason: 'Flotta in viaggio' };
+    amount = Math.max(0, amount | 0);
+    if (amount <= 0) return { ok: false, reason: 'Quantità non valida' };
+    const onboard = fleet.popOnboard || 0;
+    if (amount > onboard) return { ok: false, reason: 'Coloni a bordo insufficienti' };
+    const popTotal = (colony.pop && colony.pop.total) || 0;
+    const popCap = (colony.pop && colony.pop.cap) || 0;
+    if (popCap > 0 && popTotal + amount > popCap) {
+      return { ok: false, reason: 'Tetto demografico raggiunto sulla colonia' };
+    }
+    colony.pop.total = popTotal + amount;
+    fleet.popOnboard = onboard - amount;
+    return { ok: true, popOnboard: fleet.popOnboard };
   }
 
   /* dissolveFleet — riporta navi+equipaggi alla colonia origine (se la
@@ -1269,19 +1351,25 @@
     if (order.phase === 'foundation') {
       /* Foundation completata: promuovi colonia a operativa via helper
          time.js (riusa stock/pop iniziali coerenti). La coloniale si
-         sblocca: la flotta resta in orbita riassegnabile (auto-park). */
+         sblocca: la flotta resta in orbita riassegnabile (auto-park).
+         Decisione #66 estensione: il seme demografico viene dalla
+         nave (popOnboard). Se la nave ha 2 coloni a bordo, la colonia
+         nasce a 2 livelli invece di 1. */
       const colony = game.colonies && game.colonies[colKey];
+      const seedLevels = Math.max(1, fleet.popOnboard || 0);
       if (colony && !colony.colonized && ORION.time && ORION.time.completeColonization) {
-        ORION.time.completeColonization(game, colony, colKey);
+        ORION.time.completeColonization(game, colony, colKey, null, events, { seedLevels: seedLevels });
       } else if (colony && !colony.colonized) {
         /* Fallback se completeColonization non disponibile: applica il
            contratto minimo (coerente con processColonizing legacy). */
         colony.colonized = true;
         if (ORION.time && ORION.time.currentDS) colony.colonizedDS = ORION.time.currentDS(game);
         colony.pop = colony.pop || { total: 0, cap: 0, classes: {} };
-        colony.pop.total = Math.max(colony.pop.total || 0, 1);
+        colony.pop.total = Math.max(colony.pop.total || 0, seedLevels);
         colony.stock = colony.stock || { met: 40, en: 30, food: 20, water: 20 };
       }
+      /* Consuma popOnboard: tutti i coloni sbarcati alla fondazione. */
+      fleet.popOnboard = 0;
       if (colony) {
         colony.colonizing = null;
       }
@@ -1430,6 +1518,10 @@
     ensureColonyShipKinds: ensureColonyShipKinds,
     FORMATIONS: FORMATIONS,
     setFormation: setFormation,
-    fleetHasColonial: fleetHasColonial
+    fleetHasColonial: fleetHasColonial,
+    /* Decisione #66 estensione: API trasporto coloni. */
+    fleetPopCargoCap: fleetPopCargoCap,
+    embarkPop: embarkPop,
+    disembarkPop: disembarkPop
   };
 })(typeof window !== 'undefined' ? window : this);

@@ -547,14 +547,19 @@
      (legacy path) sia da fleet.tickColonizePhase (foundation done).
      Idempotente: se già colonizzata, no-op.
      Recovery-friendly: applica il contratto minimo M05. */
-  function completeColonization(game, colony, colonyKey, planet, events) {
+  function completeColonization(game, colony, colonyKey, planet, events, opts) {
     if (!colony) return;
     if (colony.colonized) return;
     colony.colonized = true;
     colony.colonizedDS = currentDS(game);
     colony.pop = colony.pop || { total: 0, cap: 0, classes: { operai: 0, scienziati: 0, militari: 0, mercanti: 0, tecnici: 0 } };
-    colony.pop.total = 1;
-    addToBestClass(colony, 1);
+    /* Decisione #66 estensione (sessione 2026-06-09): seedLevels permette
+       di nascere con più di 1 livello se la nave coloniale ha trasportato
+       coloni. Default = 1 (founding cold). Capped al popCap del pianeta. */
+    const seed = (opts && opts.seedLevels) ? Math.max(1, opts.seedLevels | 0) : 1;
+    const cap = (colony.pop.cap || (planet && planet.popCap) || seed);
+    colony.pop.total = Math.min(seed, Math.max(1, cap));
+    addToBestClass(colony, colony.pop.total);
     colony.stock = { met: 40, en: 30, food: 20, water: 20 };
     colony.colonizing = null;
     if (events) {
@@ -562,6 +567,7 @@
         kind: 'colony-done',
         colony: colony, planet: planet,
         colKey: colonyKey || null,
+        seedLevels: colony.pop.total,
         impulso: game.timeImpulsi
       });
     }
@@ -783,6 +789,19 @@
 
       let growth = CFG.POP_GROWTH_BASE * morale;
       if (colony.structures['ospedale']) growth *= (1 + CFG.POP_GROWTH_HOSPITAL);
+
+      /* Decisione #66 estensione (sessione 2026-06-09): Bonus Diaspora —
+         dopo un imbarco di coloni, la colonia sorgente ha crescita ×2 per
+         60 Ι. Compensa il "crollo display" del trasferimento facendo
+         risalire rapidamente la pop ai livelli pre-imbarco. Vive in
+         colony.diaspora { until, multiplier }. Auto-cleanup a scadenza. */
+      if (colony.diaspora && colony.diaspora.until != null) {
+        if (game.timeImpulsi <= colony.diaspora.until) {
+          growth *= (colony.diaspora.multiplier || 2.0);
+        } else {
+          colony.diaspora = null;
+        }
+      }
 
       /* Capacità di carico (DECISIONE #45 emenda v3): il consumo pop è
          drenato in processProduction. La crescita NON è gata sul saldo
