@@ -3212,6 +3212,7 @@ function tryBuildShip() {
   const g = ORION.game;
   const colony = g.colonies[ORION.openPlanetKey];
   const planet = ORION.currentPlanet;
+  if (!colony || !planet) { showToast('Nessuna colonia in focus'); return; }
   const kind = (ORION.cantieriPickedKind && ORION.cantieriPickedKind[ORION.openPlanetKey]) || 'explorer';
   const cls = (ORION.fleet && ORION.fleet.getClass(kind)) || { name: 'Scafo esploratore', cost: {}, time: 0 };
   const msg = '<p>Costruire <strong>' + escapeHtml(cls.name) + '</strong> su <strong>' + escapeHtml(planet.name) + '</strong>?</p>' +
@@ -3236,6 +3237,7 @@ function tryBuildCrew() {
   const g = ORION.game;
   const colony = g.colonies[ORION.openPlanetKey];
   const planet = ORION.currentPlanet;
+  if (!colony || !planet) { showToast('Nessuna colonia in focus'); return; }
   const msg = '<p>Formare un <strong>equipaggio esploratore</strong> presso l\'Accademia di <strong>' + escapeHtml(planet.name) + '</strong>?</p>';
   confirmAction({
     title: 'Formazione equipaggio',
@@ -8458,8 +8460,23 @@ function renderDxPanel() {
   rebind('[data-action="colonize"]', function () { tryColonize(planet); });
   rebind('[data-cancel-ship]', function (b) { tryCancelShip(Number(b.dataset.cancelShip)); });
   rebind('[data-cancel-crew]', function (b) { tryCancelCrew(Number(b.dataset.cancelCrew)); });
-  rebind('[data-action="build-ship"]', function () { tryBuildShip(); });
-  rebind('[data-action="build-crew"]', function () { tryBuildCrew(); });
+  /* I bottoni reali della tab Forze emettono `data-build-ship`/`data-build-crew`
+     (non `data-action="..."`): senza i selettori giusti la rebind non li
+     intercettava e il listener centrale girava col contesto già ripristinato
+     (currentPlanet null a livello galassia → crash, o colonia sbagliata). */
+  rebind('[data-build-ship]', function () { tryBuildShip(); });
+  rebind('[data-build-crew]', function () { tryBuildCrew(); });
+  /* Dropdown classe nave: la scelta va scritta sulla colonia dx, non su
+     quella navigata al centro. */
+  content.querySelectorAll('[data-ship-kind]').forEach(function (sel) {
+    const nb = sel.cloneNode(true);
+    sel.parentNode.replaceChild(nb, sel);
+    nb.addEventListener('change', withDxScope(function () {
+      if (!ORION.cantieriPickedKind) ORION.cantieriPickedKind = {};
+      ORION.cantieriPickedKind[dxKey] = nb.value;
+      renderDxPanel();
+    }));
+  });
   rebind('[data-action="capital-declare"]', function () {
     /* Il bind originale di capital-declare contiene logica complessa
        (confirm, pushChronicle); per riusarlo intero, lo richiamiamo dal
