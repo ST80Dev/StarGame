@@ -638,7 +638,59 @@ Su feedback utente (i gruppi 2D si sovrapponevano, distanze poco leggibili) la m
 **Limiti / semplificazioni note (Fase B):**
 - ~~Il drag&drop dal canvas per impartire ordini è rimandato~~ ✅ **Fatto (decisione #61).** Click su marker flotta → modalità picker → click su sistema target. Default `move`, Shift=attack, Alt=explore, Esc=cancel. Gli ordini *composti* (move-route, patrol-loop) restano sulla sidebar (richiedono lista interattiva di tappe + dwell). La pianificazione semplice è ora doppio entry-point.
 - Le flotte non interagiscono tra loro né con i sistemi durante il `dwell` (nessun rifornimento, nessuna interazione AI). Verrà tutto con M09-M16.
-- Il marker sulla mappa è puramente visivo: niente tooltip al hover, niente click-to-select. Polish futuro.
+- ~~Il marker sulla mappa è puramente visivo: niente tooltip al hover, niente click-to-select~~ → polish in arrivo (etichette + click-info marker), task separato successivo al wizard.
+
+---
+
+## M08 polish — Fleet Wizard (Ordini guidati) · cosa è stato fatto
+
+**Obiettivo (feedback utente):** "La costruzione della flotta e l'assegnazione di un viaggio è scomoda. Voglio un flusso più guidato, non un pannello unico con dieci pulsanti e scelte." Sostituisce l'overlay "muro di 7 sezioni" della Fase B (decisione #46) con un **wizard a 3 step**.
+
+**Step 1 — Scopo viaggio** (cards, una scelta singola):
+- 🔍 Esplorazione · ➜ Trasferimento · ⇄ Pattuglia A↔B · ↻ Pattuglia ciclica · ✈ Rotta a tappe · ⌂ Rientro alla base.
+- `return` skippa lo Step 2 (non c'è destinazione da scegliere) e va dritto allo Step 3 con un riepilogo.
+
+**Step 2 — Destinazione** (filtrata per scopo + nebbia di guerra):
+- Solo sistemi VISIBILI sulla mappa (decisione utente: coerente col gioco, niente UNKNOWN, niente "salti dall'altra parte della galassia"). Per esplorazione: solo DETECTED (frontiera). Per gli altri: solo EXPLORED (già visitati).
+- Ordinati per **distanza BFS in hop crescente**.
+- Header che separa "Stesso gruppo · *<nome regione> [SIGLA]*" da "Altri gruppi" — l'utente vede subito cosa c'è "in casa" (riusa `groups[].acronym` decisione #28).
+- Riga sistema: nome + tag regione + N hop + chip pericolo §5.3.
+- Per `move-route`/`patrol-loop`/`patrol`: lista accumulabile (click "+ Aggiungi" per ogni tappa, con dwell impostato in alto); patrol semplice è limitato a 2 waypoint. Per `explore`/`transfer`: scelta singola (button "Scegli" → ✓ Selezionato).
+
+**Step 3 — Opzioni specifiche** + Conferma:
+- *Esplorazione*: checkbox "Rientra alla base" default ON. **Off** → la flotta resta in orbita al target (implementato come `move-route` con 1 tappa + `exploreEach=true` + `returnHome=false`).
+- *Rotta a tappe*: "Esplora ogni tappa rilevata" + "Rientra alla base al termine".
+- *Trasferimento/Pattuglia/Rientro*: note esplicative, nessuna opzione.
+- **Riepilogo** con scopo + destinazione + chip equipaggio (✓ se sufficiente, ⚠ se insufficiente — il warning resta non-bloccante, l'errore vero lo dà `setOrder`).
+
+**Implementazione:**
+- **`js/fleet.js`**: nuove `computeVisiblePath(galaxy, state, from, to, allowDetectedTarget)` e `visibleDestinations(galaxy, state, fromSysId, opts)`. BFS che rispetta la nebbia di guerra: nodi intermedi solo EXPLORED, target può essere DETECTED se permesso esplicitamente. Esposte sull'export.
+- **`js/main.js`**: nuova `openFleetWizard(fleetId)` con stato in closure (3 step, transizioni back/next/confirm), 6 trip types come dati. `openFleetOrdersOverlay` diventa thin wrapper che delega al wizard (firma identica → tutti i call site, inclusi #61 picker, continuano a funzionare). Vecchio body rinominato `_legacyFleetOrdersOverlay` (riapribile col flag `ORION._useLegacyOrdersOverlay=true` da console per debug/regressione).
+- **`js/tutorial.js`**: lezione `fleet-orders` riscritta sul wizard a 3 step (mantiene cenno alla scorciatoia marker-click).
+- **`css/style.css`**: sezione "FLEET WIZARD" con `.fleet-wizard__panel/head/crumbs/cards/dest-list/wp-list/dwell-row/opt/summary/nav`. Layout responsive: cards a 2 colonne, a 1 colonna sotto 480px (mobile #63).
+- **Cohesion AI (#52 §13.6)**: l'hook `ORION.cohesion.applyTravelPenalty` è preservato (chiamato dopo `setOrder` come faceva il vecchio overlay).
+
+**NON toccati:**
+- `galaxy-map.js`, `system.js`, `system-view.js`, `planet-view.js`, `save.js` (zero bump schema — il wizard è pura UI, dispatcha gli stessi ordini di prima).
+- `expedition.js` (la migrazione #60 è già attiva), `combat.js`, `ai.js`, `diplomacy.js` ecc. — il wizard usa l'esistente `setOrder` senza alterare la semantica.
+
+**Test headless OK:** Generazione `WIZ-T`: 6 sistemi DETECTED visibili da home (frontiera), 0 EXPLORED transfer-target inizialmente. Dopo `explore` di un vicino e tick fino a `docked`, 1 nuovo transfer-target (`hops=1`). `move-route` su 2 tappe con dwell `[5,2]` + `exploreEach` + `returnHome` accettato (`crew=2` sufficient per 2 explorer). Validation rifiuta correttamente flotta con crew insufficiente (`'Equipaggio insufficiente: 1 / 2 richiesti'`).
+
+**Confini con i moduli successivi:**
+- **PR successiva**: entry-point unificato "**✈ Pianifica viaggio**" dalla tab Forze del pianeta — che combini creazione flotta + assegnazione navi/equipaggio + wizard ordini in un singolo flusso (oggi sono 3 azioni separate dalla vista Flotta).
+- **M09/M11**: le interruzioni di rotta (combattimento, blocchi diplomatici) potrebbero forzare il wizard a riproporre il pianificatore — non implicato qui.
+
+---
+
+### Polish mappa flotte (stesso PR del wizard, feedback utente in itinere)
+
+Aggiunto allo stesso branch dopo il wizard, su esplicita richiesta dell'utente ("quando clicco su un marker flotta la sua rotta si deve evidenziare in modo diverso", "etichetta + click info viaggio"):
+
+- **Highlight rotta della flotta selezionata** (`_drawFleets`/`_drawFleetRoute` in `galaxy-map.js`): quando l'utente seleziona una flotta sulla mappa (modalità picker, #61), la sua rotta in transito viene disegnata in **giallo brillante** con linewidth maggiorato (1.6→2.4 solid, 1.2→1.8 dashed); le rotte delle altre flotte vengono attenuate (alpha 0.18/0.30/0.10). La flotta selezionata viene anche dotata di un **anello pulsante** giallo attorno al marker (raggio +6/+10). Le 3 passate visive (others sotto → selected sopra) garantiscono che la rotta evidenziata sia sempre on-top.
+- **Rotta pianificata visibile anche fuori transito** (`_drawSelectedPlannedRoute`): se la flotta selezionata ha una rotta non vuota ma è in stato `docked`/`orbiting` (dwell, ordine appena impartito), si disegna comunque la catena di waypoint pianificati (giallo, tratteggio).
+- **Etichetta sul marker** (`_drawFleetLabel`): nome flotta (troncato a 14 char + …) + ETA in Ι se in transito. Sempre visibile, stroke scuro per leggibilità su nebulose. La selezione la colora di **giallo brillante**. Posizione adattiva: a destra del marker, ma si sposta a sinistra se vicina al bordo destro del canvas.
+- **Click su marker → popup info** (`openFleetInfoPopup` in `main.js`): cambia il comportamento di #61 — il click NON entra più direttamente in picker mode, ma apre un popup ancorato al punto di click con: posizione corrente + status, navi (count + glifi classi), equipaggio (count + xp medio), ordine corrente in italiano (`describeFleetOrder` traduce idle/move/explore/attack/return/patrol/move-route/patrol-loop, evidenziando il waypoint corrente nelle rotte composte), summary rotta, ETA leg. Bottoni: **📋 Wizard ordini** (apre il wizard) e **🎯 Imposta dal canvas** (entra in picker mode come prima). Chiusura su Esc o click esterno. CSS dedicato (`.fleet-info-popup`) con bordo giallo e animazione pop-in 120ms.
+- **Signature `onFleetPicked` estesa** a `(fleetId, sx, sy)` per ancorare il popup alle coordinate screen del click. Retro-compat: i consumer che ignorano sx/sy continuano a funzionare.
 
 ---
 
