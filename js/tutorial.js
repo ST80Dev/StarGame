@@ -187,17 +187,20 @@
     {
       id: 'population',
       tag: 'Popolazione',
-      title: 'Popolazione e capacità di carico',
+      title: 'Popolazione: livelli demografici',
       body:
-        '<p>La popolazione è in <strong>unità</strong> (mostrate come abitanti reali) e cresce <strong>lentamente, di lungo ' +
-        'periodo</strong>: ogni livello in più costa progressivamente più tempo.</p>' +
-        '<p>Ogni unità di popolazione <strong>consuma davvero</strong> cibo e acqua dallo stock locale. Se la produzione locale ' +
-        'non basta, lo stock scende → la colonia entra in <strong>allerta</strong> (≤20, malus −10%) o <strong>critico</strong> ' +
-        '(=0, malus −30%). Bastano 3 Impulsi di netto positivo per uscirne.</p>' +
+        '<p>La popolazione di ogni colonia è misurata in <strong>livelli</strong> (da 1 al cap del pianeta: una luna ne ha 3, ' +
+        'un terrestre fino a 12). Ogni livello rappresenta uno stadio di organizzazione demografica della colonia: città, ' +
+        'reti produttive, servizi pubblici.</p>' +
+        '<p>I livelli crescono <strong>lentamente, di lungo periodo</strong>: ogni livello in più costa progressivamente più ' +
+        'tempo (i livelli avanzati richiedono molti più Impulsi degli iniziali).</p>' +
+        '<p>Ogni livello di popolazione <strong>consuma davvero</strong> cibo e acqua dallo stock locale. Se la produzione locale ' +
+        'non basta, lo stock scende → la colonia entra in <strong>allerta</strong> o <strong>critico</strong>. Bastano 3 Impulsi ' +
+        'di netto positivo per uscirne.</p>' +
         '<p><strong>Buffer di tolleranza:</strong> la popolazione cala solo dopo <strong>30 Impulsi consecutivi</strong> di fame ' +
-        'o sete, e poi di 1 unità ogni 30 <span class="ds-unit">Ι</span> — hai sempre il tempo di reagire prima di perdere persone.</p>' +
-        '<p>La crescita si ferma in <strong>plateau</strong> quando produzione = consumo. Guarda la scheda Popolazione per ' +
-        'capire <strong>cosa manca</strong>: più fattorie/impianti idrici, o (futuro) rifornimenti via rotte commerciali.</p>'
+        'o sete, e poi di 1 livello ogni 30 <span class="ds-unit">Ι</span> — hai sempre il tempo di reagire.</p>' +
+        '<p>La crescita si ferma in <strong>plateau</strong> quando produzione = consumo. Più fattorie/impianti idrici alzano ' +
+        'il tetto sostenibile, oppure (futuro) rifornimenti via rotte commerciali.</p>'
     },
     {
       id: 'waste',
@@ -822,7 +825,7 @@
     {
       id: 'fleet-classes',
       tag: 'M08 · Classi',
-      title: 'Cinque classi navi',
+      title: 'Sei classi navi',
       body:
         '<p>Trade-off di base: velocità ↔ corazza ↔ fuoco. Le classi pesanti richiedono Hangar di livello superiore.</p>' +
         '<ul>' +
@@ -831,8 +834,41 @@
           '<li><strong>➤ Intercettore</strong> — hp 45, fp 8, spd 1.4 · classe più veloce, eccellente in inseguimento.</li>' +
           '<li><strong>◅ Corvetta</strong> — hp 80, fp 12, spd 1.0 · scorta multiruolo, equilibrata.</li>' +
           '<li><strong>◣ Fregata</strong> — hp 160, fp 25, spd 0.85 · linea di battaglia, lenta ma cara da abbattere.</li>' +
+          '<li><strong>◉ Pioniere coloniale</strong> — hp 70, fp 0, spd 0.8 · trasporto colonizzatore (vedi lezione dedicata).</li>' +
         '</ul>' +
         '<p>Le grandi navi (incrociatore/dreadnought/ammiraglia) arriveranno con M15 + Bacino orbitale (M16).</p>'
+    },
+    {
+      id: 'colonial-ship',
+      tag: 'Colonizzazione',
+      title: 'Pioniere coloniale: come si colonizza',
+      body:
+        '<p>Per fondare una nuova colonia ti serve una <strong>nave coloniale Pioniere ◉</strong> (la tua casa iniziale è ' +
+        'auto-colonizzata, ma da qui in poi ogni colonia parte da una nave). L\'azione "Colonizza" sui pianeti liberi apre un ' +
+        'selettore di flotta: scegli quella con un Pioniere a bordo, equipaggio sufficiente e risorse.</p>' +
+        '<p>Il Pioniere è <strong>multi-uso e riusabile</strong>: non viene consumato all\'atterraggio, è riparabile come ogni ' +
+        'nave, e a fine missione resta in orbita pronto per una nuova destinazione. Costa <strong>80 met · 40 en · 10 food · ' +
+        '10 water</strong>, si costruisce all\'Hangar lvl 1, build time 25 Ι, equipaggio 4 (presi dall\'array esploratori).</p>' +
+        '<p><strong>Trasporto coloni:</strong> il Pioniere può portare con sé fino a <strong>2 livelli demografici</strong> ' +
+        'dalla colonia di partenza. Pensa a questi livelli come a <em>cadri di pionieri organizzati</em>: ' +
+        'ingegneri, agricoltori, leader civili che bootstrappano la nuova colonia. Una colonia nata con 2 livelli (invece di 1) ' +
+        'comincia subito a produrre meglio e ha più margine di crescita.</p>' +
+        '<p>Nel selettore "Colonizza", uno <strong>slider</strong> ti fa scegliere quanti livelli imbarcare (0-2). La sorgente ' +
+        'mantiene sempre almeno 1 livello (non puoi svuotarla del tutto).</p>' +
+        '<p><strong>Bonus Diaspora:</strong> la colonia di partenza riceve <strong>×2 crescita demografica per 60 Ι</strong> ' +
+        'dopo l\'imbarco. La popolazione cala visibilmente a partenza, ma le infrastrutture restano e i livelli persi vengono ' +
+        'recuperati rapidamente (la migrazione interna riempie i vuoti).</p>' +
+        '<p>La colonizzazione avviene in <strong>3 fasi indipendenti</strong>:</p>' +
+        '<ul>' +
+          '<li><strong>Travel</strong> — viaggio iperspaziale, dipende solo dalla <em>distanza</em> (intra-sistema: skip). M13 iperguida lo ridurrà ×3/×8/×20.</li>' +
+          '<li><strong>Orbit</strong> — ~10 Ι di scout/preparazione atterraggio (costante).</li>' +
+          '<li><strong>Foundation</strong> — il vero tempo di fondazione, dipende da <strong>grandezza+ostilità del pianeta</strong> (§6.2). 90-150 Ι.</li>' +
+        '</ul>' +
+        '<p>Travel e Foundation sono <strong>indipendenti</strong>: mondi grandi richiedono più Foundation, mondi lontani più ' +
+        'Travel. Intra-sistema resta veloce (~110 Ι totali).</p>' +
+        '<p>Puoi <strong>scortare</strong> il Pioniere con altre navi nella stessa flotta. Senza scorta è esposto: se ' +
+        'intercettato e distrutto, refund <strong>50%</strong> di costo nave + colonizzazione (recovery-friendly). ' +
+        'L\'equipaggio si salva sempre.</p>'
     },
     {
       id: 'fleet-orders',

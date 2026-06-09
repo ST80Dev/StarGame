@@ -58,9 +58,35 @@
       id: 'fregata', name: 'Fregata', glyph: '◣',
       cost: { met: 120, en: 50, food: 10 }, time: 40,
       hp: 160, fp: 25, speed: 0.85, crew: 8, hangarLvl: 3
+    },
+    /* Decisione #66: nave coloniale "Pioniere". Multi-uso (non consumata
+       all'arrivo), riusabile, riparabile come ogni nave. fp 0 (civile) →
+       in combattimento contribuisce solo come bersaglio (hp). speed 0.8 →
+       più lenta di tutto (detta il passo della flotta). hangarLvl 1 per
+       consentire colonizzazione intra-sistema già a inizio partita. */
+    coloniale: {
+      id: 'coloniale', name: 'Pioniere coloniale', glyph: '◉',
+      cost: { met: 80, en: 40, food: 10, water: 10 }, time: 25,
+      hp: 70, fp: 0, speed: 0.8, crew: 4, hangarLvl: 1,
+      /* Decisione #66 estensione (sessione 2026-06-09): la nave coloniale
+         trasporta livelli demografici. popCargo=2 = "seme demografico" che
+         alimenta la fondazione o il rinforzo di una colonia esistente. */
+      popCargo: 2
     }
   };
-  const CLASS_ORDER = ['explorer', 'caccia', 'intercettore', 'corvetta', 'fregata'];
+
+  /* Decisione #66 estensione: capienza pop per CLASSE coloniale. Le altre
+     classi NON trasportano popolazione (popCargo: 0 implicito). */
+  function fleetPopCargoCap(fleet) {
+    if (!fleet || !Array.isArray(fleet.ships)) return 0;
+    let cap = 0;
+    for (let i = 0; i < fleet.ships.length; i++) {
+      const cls = CLASSES[fleet.ships[i].kind];
+      if (cls && cls.popCargo) cap += cls.popCargo;
+    }
+    return cap;
+  }
+  const CLASS_ORDER = ['explorer', 'caccia', 'intercettore', 'corvetta', 'fregata', 'coloniale'];
 
   /* Costanti del viaggio inter-sistema. Coerenti con expedition.js M07
      (decisione #32): un hop sub-luce dura 40-80 Ι (+ scaling danger). M13
@@ -70,8 +96,23 @@
   const TRAVEL_MIN = 40;
   const TRAVEL_MAX = 80;
 
+  /* Decisione #66: durata costante della fase orbit (scout/setup atterraggio)
+     dell'ordine `colonize`. La fase foundation usa il countdown già definito
+     in §6.2 dal pianeta (colCost.impulsi), passato come `foundationI`. */
+  const COLONIZE_ORBIT_DURATION = 10;
+
   function getClass(kind) {
     return CLASSES[kind] || null;
+  }
+
+  /* Decisione #66: la flotta ha almeno una nave coloniale? Usato dall'ordine
+     `colonize` come gate di validazione. */
+  function fleetHasColonial(fleet) {
+    if (!fleet || !Array.isArray(fleet.ships)) return false;
+    for (let i = 0; i < fleet.ships.length; i++) {
+      if (fleet.ships[i].kind === 'coloniale') return true;
+    }
+    return false;
   }
 
   /* La flotta ha potenza di fuoco? (almeno una nave con fp > 0). Usato
@@ -441,6 +482,72 @@
     return { ok: true, returned: removed };
   }
 
+  /* Decisione #66 estensione: imbarco/sbarco coloni tra una flotta con
+     nave coloniale e una colonia. La flotta deve essere docked O orbiting
+     nella stessa orbita della colonia (no in-transit). Vincoli:
+       - amount > 0
+       - amount ≤ fleetPopCargoCap(fleet) − fleet.popOnboard (in carico)
+       - colony.pop.total − amount ≥ 1 (sempre 1 unità minima sulla sorgente)
+       - target: pop.total + amount ≤ pop.cap (non sforare il tetto). */
+  function embarkPop(game, fleet, colonyKey, amount) {
+    if (!fleet) return { ok: false, reason: 'Flotta inesistente' };
+    const colony = game.colonies && game.colonies[colonyKey];
+    if (!colony) return { ok: false, reason: 'Colonia inesistente' };
+    if (!colony.colonized) return { ok: false, reason: 'Colonia non operativa' };
+    if (fleet.location.systemId !== colony.systemId) {
+      return { ok: false, reason: 'Flotta non nello stesso sistema della colonia' };
+    }
+    if (fleet.location.status === 'in-transit') return { ok: false, reason: 'Flotta in viaggio' };
+    amount = Math.max(0, amount | 0);
+    if (amount <= 0) return { ok: false, reason: 'Quantità non valida' };
+    const cap = fleetPopCargoCap(fleet);
+    const onboard = fleet.popOnboard || 0;
+    if (onboard + amount > cap) return { ok: false, reason: 'Capienza nave insufficiente (' + cap + ' livelli max)' };
+    const popTotal = (colony.pop && colony.pop.total) || 0;
+    if (popTotal - amount < 1) return { ok: false, reason: 'La colonia deve mantenere almeno 1 livello' };
+    /* Imbarco: decremento colonia, increment fleet.popOnboard. */
+    colony.pop.total = popTotal - amount;
+    fleet.popOnboard = onboard + amount;
+    /* Reset accumulo se la colonia scende sotto al livello attuale (display). */
+    if (colony.pop.accum && colony.pop.total < (colony.pop.cap || 0)) {
+      /* mantieni accum se sensato (frazione del livello corrente); il motore
+         lo userà al prossimo tick di crescita. */
+    }
+    /* Avvia/rinnova il Bonus Diaspora sulla sorgente (recovery-friendly):
+       60 Ι di crescita pop ×2. Vive in colony.diaspora { until, multiplier }. */
+    const nowI = game.timeImpulsi || 0;
+    colony.diaspora = {
+      startedAt: nowI,
+      until: nowI + 60,
+      multiplier: 2.0
+    };
+    return { ok: true, popOnboard: fleet.popOnboard };
+  }
+
+  /* Sbarco coloni dalla flotta a una colonia operativa. */
+  function disembarkPop(game, fleet, colonyKey, amount) {
+    if (!fleet) return { ok: false, reason: 'Flotta inesistente' };
+    const colony = game.colonies && game.colonies[colonyKey];
+    if (!colony) return { ok: false, reason: 'Colonia inesistente' };
+    if (!colony.colonized) return { ok: false, reason: 'Colonia non ancora operativa' };
+    if (fleet.location.systemId !== colony.systemId) {
+      return { ok: false, reason: 'Flotta non nello stesso sistema della colonia' };
+    }
+    if (fleet.location.status === 'in-transit') return { ok: false, reason: 'Flotta in viaggio' };
+    amount = Math.max(0, amount | 0);
+    if (amount <= 0) return { ok: false, reason: 'Quantità non valida' };
+    const onboard = fleet.popOnboard || 0;
+    if (amount > onboard) return { ok: false, reason: 'Coloni a bordo insufficienti' };
+    const popTotal = (colony.pop && colony.pop.total) || 0;
+    const popCap = (colony.pop && colony.pop.cap) || 0;
+    if (popCap > 0 && popTotal + amount > popCap) {
+      return { ok: false, reason: 'Tetto demografico raggiunto sulla colonia' };
+    }
+    colony.pop.total = popTotal + amount;
+    fleet.popOnboard = onboard - amount;
+    return { ok: true, popOnboard: fleet.popOnboard };
+  }
+
   /* dissolveFleet — riporta navi+equipaggi alla colonia origine (se la
      flotta è già nel sistema della colonia), poi rimuove la flotta da
      game.fleets. Recovery-friendly (decisione #22): se la flotta non è
@@ -536,6 +643,60 @@
       fleet.routeIdx = 0;
       fleet.attackTarget = to;
       fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
+      return { ok: true };
+    }
+
+    /* Decisione #66: ordine di colonizzazione.
+       order = { type:'colonize', toSysId, bodyKey, foundationI }
+       3 fasi: travel (BFS multi-hop come move) → orbit (ORBIT_DURATION Ι)
+       → foundation (foundationI Ι, paid by caller). Intra-sistema: skip
+       direttamente a orbit. La nave coloniale è "impegnata" durante
+       foundation; al termine la colonia diventa operativa, la flotta resta
+       in orbita riassegnabile (auto-park, scelta utente #66).
+       Recovery-friendly (#22): se la coloniale è persa in transit, refund
+       50% applicato da combat.js + colony.colonizing annullato.
+       Validazioni: ≥1 coloniale + crew sufficiente + target raggiungibile.
+       Il costo COLONIZZAZIONE viene pagato DAL CHIAMANTE (main.js) prima
+       di setOrder, così l'utente vede subito la deduzione (UX). */
+    if (type === 'colonize') {
+      const to = order.toSysId;
+      const bodyKey = order.bodyKey;
+      if (to == null || bodyKey == null) return { ok: false, reason: 'Destinazione assente' };
+      if (!fleetHasColonial(fleet)) return { ok: false, reason: 'Nessuna nave coloniale in flotta' };
+      const foundationI = Math.max(20, order.foundationI || 60);
+      const orbitI = (typeof order.orbitI === 'number') ? Math.max(0, order.orbitI) : COLONIZE_ORBIT_DURATION;
+      const currentSys = fleet.location.systemId;
+      const intraSystem = (to === currentSys);
+      if (!intraSystem) {
+        const path = computePath(game.galaxy, currentSys, to);
+        if (!path) return { ok: false, reason: 'Nessuna rotta verso il sistema target' };
+        fleet.orders = {
+          type: 'colonize',
+          toSysId: to,
+          bodyKey: bodyKey,
+          phase: 'travel',
+          orbitI: orbitI,
+          foundationI: foundationI
+        };
+        fleet.route = path;
+        fleet.routeIdx = 0;
+        fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
+        return { ok: true };
+      }
+      /* Intra-sistema: salta travel, parte dall'orbit. */
+      fleet.orders = {
+        type: 'colonize',
+        toSysId: to,
+        bodyKey: bodyKey,
+        phase: 'orbit',
+        phaseLeft: orbitI,
+        orbitI: orbitI,
+        foundationI: foundationI
+      };
+      fleet.route = [currentSys];
+      fleet.routeIdx = 0;
+      fleet.location.status = 'orbiting';
+      fleet.etaImpulsi = 0;
       return { ok: true };
     }
 
@@ -798,6 +959,15 @@
       return;
     }
 
+    /* Decisione #66: fasi `orbit` e `foundation` dell'ordine colonize.
+       La flotta è `orbiting` al sistema target e fa il countdown della
+       fase corrente; al termine transita alla fase successiva o completa. */
+    if (fleet.location.status === 'orbiting' && fleet.orders.type === 'colonize' &&
+        (fleet.orders.phase === 'orbit' || fleet.orders.phase === 'foundation')) {
+      tickColonizePhase(game, fleet, events);
+      return;
+    }
+
     if (fleet.location.status !== 'in-transit') {
       /* docked o orbiting senza dwell: nulla da avanzare; gli ordini "arrived"
          sono gestiti immediatamente da setOrder o dal completamento del leg. */
@@ -847,6 +1017,32 @@
 
     /* Rotta completata. Cosa fare dipende dall'ordine. */
     const order = fleet.orders;
+    /* Decisione #66: arrivo della fase `travel` di colonize → transita a
+       `orbit`. La nave coloniale è ora orbitante al sistema target;
+       parte il countdown ORBIT_DURATION, poi foundation.
+       Loss-on-arrival not possible: la colonia non esiste ancora. */
+    if (order.type === 'colonize' && order.phase === 'travel') {
+      fleet.location.status = 'orbiting';
+      fleet.etaImpulsi = 0;
+      fleet.route = [arrivedAt];
+      fleet.routeIdx = 0;
+      events.push({
+        kind: 'fleet-arrived',
+        fleetId: fleet.id, fleetName: fleet.name,
+        systemId: arrivedAt,
+        impulso: game.timeImpulsi
+      });
+      order.phase = 'orbit';
+      order.phaseLeft = order.orbitI || COLONIZE_ORBIT_DURATION;
+      events.push({
+        kind: 'fleet-colonize-orbit',
+        fleetId: fleet.id, fleetName: fleet.name,
+        systemId: arrivedAt, bodyKey: order.bodyKey,
+        impulso: game.timeImpulsi
+      });
+      return;
+    }
+
     if (order.type === 'move' || order.type === 'attack') {
       /* L'attacco mantiene `fleet.attackTarget`: all'arrivo la flotta orbita
          e processSkirmishes ingaggia il bersaglio al tick successivo. */
@@ -1085,6 +1281,117 @@
     }
   }
 
+  /* Decisione #66: countdown delle fasi `orbit` e `foundation` di colonize.
+     - orbit (~10 Ι): scout/setup atterraggio. Al termine: crea/aggiorna
+       `colony.colonizing` con `fleetId`, transita a foundation. La colonia
+       compare in UI come "in arrivo" coerente con la convenzione M05.
+     - foundation (resto del countdown): la nave è "atterrata"/impegnata.
+       Al termine: colonia operativa (delega a ORION.time.completeColonization
+       per stock/pop iniziali coerenti), fleet sblocca la coloniale, evento
+       colony-done emesso. */
+  function tickColonizePhase(game, fleet, events) {
+    const order = fleet.orders;
+    if (!order || order.type !== 'colonize') return;
+    order.phaseLeft = (order.phaseLeft || 0) - 1;
+    if (order.phaseLeft > 0) return;
+
+    const sysId = fleet.location.systemId;
+    const bodyKey = order.bodyKey;
+    const colKey = sysId + ':' + bodyKey;
+
+    if (order.phase === 'orbit') {
+      /* Avvia la fase foundation: crea/aggiorna colony.colonizing con
+         riferimento alla flotta. La colonia esiste già come delta nel
+         game.colonies (creata da colonyForBody / createColony) ma con
+         colonized:false. */
+      const colony = game.colonies && game.colonies[colKey];
+      if (!colony) {
+        /* Errore difensivo: colonia delta inesistente. Recovery-friendly:
+           termina l'ordine in orbita, niente fail-state. */
+        fleet.orders = { type: 'idle' };
+        events.push({
+          kind: 'fleet-colonize-failed',
+          fleetId: fleet.id, fleetName: fleet.name,
+          systemId: sysId, bodyKey: bodyKey,
+          reason: 'colony-delta-missing',
+          impulso: game.timeImpulsi
+        });
+        return;
+      }
+      if (colony.colonized) {
+        /* Già colonizzata da qualcun altro? Nel modello giocatore solo è
+           impossibile, ma protezione difensiva. Annulla l'ordine. */
+        fleet.orders = { type: 'idle' };
+        events.push({
+          kind: 'fleet-colonize-failed',
+          fleetId: fleet.id, fleetName: fleet.name,
+          systemId: sysId, bodyKey: bodyKey,
+          reason: 'already-colonized',
+          impulso: game.timeImpulsi
+        });
+        return;
+      }
+      colony.colonizing = {
+        startedAt: (ORION.time && ORION.time.currentDS) ? ORION.time.currentDS(game) : null,
+        duration: order.foundationI,
+        fleetId: fleet.id
+      };
+      order.phase = 'foundation';
+      order.phaseLeft = order.foundationI;
+      events.push({
+        kind: 'fleet-colonize-foundation',
+        fleetId: fleet.id, fleetName: fleet.name,
+        systemId: sysId, bodyKey: bodyKey,
+        colKey: colKey,
+        impulso: game.timeImpulsi
+      });
+      return;
+    }
+
+    if (order.phase === 'foundation') {
+      /* Foundation completata: promuovi colonia a operativa via helper
+         time.js (riusa stock/pop iniziali coerenti). La coloniale si
+         sblocca: la flotta resta in orbita riassegnabile (auto-park).
+         Decisione #66 estensione: il seme demografico viene dalla
+         nave (popOnboard). Se la nave ha 2 coloni a bordo, la colonia
+         nasce a 2 livelli invece di 1. */
+      const colony = game.colonies && game.colonies[colKey];
+      const seedLevels = Math.max(1, fleet.popOnboard || 0);
+      if (colony && !colony.colonized && ORION.time && ORION.time.completeColonization) {
+        ORION.time.completeColonization(game, colony, colKey, null, events, { seedLevels: seedLevels });
+      } else if (colony && !colony.colonized) {
+        /* Fallback se completeColonization non disponibile: applica il
+           contratto minimo (coerente con processColonizing legacy). */
+        colony.colonized = true;
+        if (ORION.time && ORION.time.currentDS) colony.colonizedDS = ORION.time.currentDS(game);
+        colony.pop = colony.pop || { total: 0, cap: 0, classes: {} };
+        colony.pop.total = Math.max(colony.pop.total || 0, seedLevels);
+        colony.stock = colony.stock || { met: 40, en: 30, food: 20, water: 20 };
+      }
+      /* Consuma popOnboard: tutti i coloni sbarcati alla fondazione. */
+      fleet.popOnboard = 0;
+      if (colony) {
+        colony.colonizing = null;
+      }
+      events.push({
+        kind: 'colony-done',
+        colony: colony,
+        planet: null,    /* il chiamante in main.js ricostruisce dal colKey */
+        colKey: colKey,
+        viaFleet: true,
+        fleetId: fleet.id,
+        impulso: game.timeImpulsi
+      });
+      /* Reset ordine: la flotta resta in orbita riassegnabile. */
+      fleet.orders = { type: 'idle' };
+      fleet.location.status = 'orbiting';
+      fleet.etaImpulsi = 0;
+      fleet.route = [sysId];
+      fleet.routeIdx = 0;
+      return;
+    }
+  }
+
   /* advanceCompoundOrder — dopo aver "consumato" una tappa di un ordine
      compound (move-route o patrol-loop) e l'eventuale dwell, programma
      la prossima sotto-rotta. Estratto in una funzione per essere
@@ -1210,6 +1517,11 @@
     fleetUpkeep: fleetUpkeep,
     ensureColonyShipKinds: ensureColonyShipKinds,
     FORMATIONS: FORMATIONS,
-    setFormation: setFormation
+    setFormation: setFormation,
+    fleetHasColonial: fleetHasColonial,
+    /* Decisione #66 estensione: API trasporto coloni. */
+    fleetPopCargoCap: fleetPopCargoCap,
+    embarkPop: embarkPop,
+    disembarkPop: disembarkPop
   };
 })(typeof window !== 'undefined' ? window : this);

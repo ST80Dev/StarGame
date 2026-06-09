@@ -6130,6 +6130,20 @@ select.main-menu__input { cursor: pointer; }
 .attack-pick__meta { font-size: 0.74rem; color: var(--c-text-faint); }
 .attack-overlay__hint { font-size: 0.74rem; color: var(--c-text-faint); margin: 10px 0 0; }
 
+/* Decisione #66 — picker colonizzazione (riusa attack-overlay con tinta ciano). */
+[data-colonize-overlay] .attack-pick__row:hover { background: rgba(96,196,222,0.12); border-color: rgba(96,196,222,0.5); }
+[data-colonize-overlay] .attack-pick__row[disabled] { opacity: 0.55; cursor: not-allowed; }
+[data-colonize-overlay] .attack-pick__row[disabled]:hover { background: transparent; border-color: rgba(255,255,255,0.08); }
+.colonize-pick__warn { color: var(--c-crit, #e0556e); font-weight: 600; }
+
+/* Decisione #66 estensione: slider coloni a bordo nel picker. */
+.colonize-pick__card { display: flex; flex-direction: column; gap: 6px; padding-bottom: 8px; border-bottom: 1px dashed rgba(255,255,255,0.06); }
+.colonize-pick__card:last-child { border-bottom: none; }
+.colonize-pick__pop { display: flex; align-items: center; gap: 10px; padding: 0 12px 4px; font-size: 0.78rem; color: var(--c-text-dim); flex-wrap: wrap; }
+.colonize-pick__pop label { display: inline-flex; align-items: center; gap: 6px; }
+.colonize-pick__pop input[type="range"] { flex: 1; min-width: 120px; accent-color: var(--c-accent, #60c4de); }
+.colonize-pick__pop strong { color: var(--c-accent, #60c4de); }
+
 /* M09 — Comandante assegnato alla flotta (#43/#49) */
 .fleet-item__cmd {
   margin: 4px 0 2px; font-size: 0.8rem; color: #d7c9a6;

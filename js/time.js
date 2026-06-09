@@ -480,26 +480,94 @@
     colony.queue = stillQueued;
   }
 
-  /* 2) Colonizzazione in corso (per pianeti non natali) */
+  /* 2) Colonizzazione in corso (per pianeti non natali).
+     Decisione #66: se `colony.colonizing.fleetId` è valorizzato, la
+     colonizzazione è "in mano" alla flotta coloniale → il countdown è
+     gestito da fleet.js (tickColonizePhase). Qui processColonizing è
+     no-op per non doppio-decrementare. Il path legacy (senza fleetId)
+     resta attivo per i save vecchi (sub-migrazione v20→v21 non converte
+     le colonizzazioni in corso). */
   function processColonizing(game, colony, planet, events) {
     if (!colony.colonizing) return;
+    if (colony.colonizing.fleetId) return;  /* #66: gestita da fleet */
     colony.colonizing.duration = (colony.colonizing.duration || 0) - 1;
     if (colony.colonizing.duration <= 0) {
-      colony.colonized = true;
-      colony.colonizedDS = currentDS(game);
-      // Ogni nuova colonia nasce con un seme di 1 unità (≈ 50 coloni nel
-      // display §9). In futuro (migrazione, M07+) si potrà seminare di più
-      // spostando popolazione da una colonia sorgente — l'engine accetta
-      // qualsiasi pop.total senza ribilanciare (la pop non guida i calcoli).
-      colony.pop.total = 1;
-      // Distribuisce la prima unità sulle classi proporzionalmente alla
-      // vocazione: senza strutture risulta tutta in operai (target di base).
-      addToBestClass(colony, 1);
-      colony.stock = { met: 40, en: 30, food: 20, water: 20 };
-      colony.colonizing = null;
+      completeColonization(game, colony, null, planet, events);
+    }
+  }
+
+  /* Decisione #66: nave coloniale persa in scaramuccia/imboscata. Refund
+     50% del costo coloniale + 50% del costo colonizzazione pagato. La
+     colonizzazione viene annullata (se foundation in corso, pulisce
+     colony.colonizing). L'ordine della flotta torna a idle.
+     Recovery-friendly (#22): il giocatore non perde tutto, può rimettersi
+     in piedi. Le risorse vengono restituite alla colonia origine (payerKey
+     salvato in fleet._colonizePaidCost al setOrder). */
+  function handleColonialLost(game, fleet, events) {
+    const memo = fleet._colonizePaidCost;
+    if (!memo) return;
+    const payer = game.colonies && game.colonies[memo.payerKey];
+    if (payer && payer.stock) {
+      const refund = {};
+      ['met', 'en', 'food', 'water'].forEach(function (k) {
+        const colCost = (memo.colonization && memo.colonization[k]) || 0;
+        const shipCost = (memo.coloniale && memo.coloniale[k]) || 0;
+        refund[k] = Math.round((colCost + shipCost) * 0.5);
+        payer.stock[k] = (payer.stock[k] || 0) + refund[k];
+      });
+      events.push({
+        kind: 'fleet-colonize-failed',
+        fleetId: fleet.id, fleetName: fleet.name,
+        systemId: fleet.location ? fleet.location.systemId : null,
+        bodyKey: fleet.orders && fleet.orders.bodyKey,
+        reason: 'coloniale-lost',
+        refund: refund,
+        impulso: game.timeImpulsi
+      });
+    }
+    /* Se il foundation era già iniziato, libera la colonia (annulla). */
+    if (fleet.orders && fleet.orders.type === 'colonize') {
+      const bk = fleet.orders.bodyKey;
+      const sysId = fleet.orders.toSysId;
+      if (bk != null && sysId != null) {
+        const colKey = sysId + ':' + bk;
+        const colony = game.colonies && game.colonies[colKey];
+        if (colony && colony.colonizing && colony.colonizing.fleetId === fleet.id) {
+          colony.colonizing = null;
+        }
+      }
+    }
+    /* Reset ordine flotta. */
+    if (fleet.orders) fleet.orders = { type: 'idle' };
+    fleet._colonizePaidCost = null;
+  }
+
+  /* Decisione #66: helper esportato per completare la colonizzazione
+     (stock+pop iniziali coerenti). Chiamato sia da processColonizing
+     (legacy path) sia da fleet.tickColonizePhase (foundation done).
+     Idempotente: se già colonizzata, no-op.
+     Recovery-friendly: applica il contratto minimo M05. */
+  function completeColonization(game, colony, colonyKey, planet, events, opts) {
+    if (!colony) return;
+    if (colony.colonized) return;
+    colony.colonized = true;
+    colony.colonizedDS = currentDS(game);
+    colony.pop = colony.pop || { total: 0, cap: 0, classes: { operai: 0, scienziati: 0, militari: 0, mercanti: 0, tecnici: 0 } };
+    /* Decisione #66 estensione (sessione 2026-06-09): seedLevels permette
+       di nascere con più di 1 livello se la nave coloniale ha trasportato
+       coloni. Default = 1 (founding cold). Capped al popCap del pianeta. */
+    const seed = (opts && opts.seedLevels) ? Math.max(1, opts.seedLevels | 0) : 1;
+    const cap = (colony.pop.cap || (planet && planet.popCap) || seed);
+    colony.pop.total = Math.min(seed, Math.max(1, cap));
+    addToBestClass(colony, colony.pop.total);
+    colony.stock = { met: 40, en: 30, food: 20, water: 20 };
+    colony.colonizing = null;
+    if (events) {
       events.push({
         kind: 'colony-done',
         colony: colony, planet: planet,
+        colKey: colonyKey || null,
+        seedLevels: colony.pop.total,
         impulso: game.timeImpulsi
       });
     }
@@ -721,6 +789,19 @@
 
       let growth = CFG.POP_GROWTH_BASE * morale;
       if (colony.structures['ospedale']) growth *= (1 + CFG.POP_GROWTH_HOSPITAL);
+
+      /* Decisione #66 estensione (sessione 2026-06-09): Bonus Diaspora —
+         dopo un imbarco di coloni, la colonia sorgente ha crescita ×2 per
+         60 Ι. Compensa il "crollo display" del trasferimento facendo
+         risalire rapidamente la pop ai livelli pre-imbarco. Vive in
+         colony.diaspora { until, multiplier }. Auto-cleanup a scadenza. */
+      if (colony.diaspora && colony.diaspora.until != null) {
+        if (game.timeImpulsi <= colony.diaspora.until) {
+          growth *= (colony.diaspora.multiplier || 2.0);
+        } else {
+          colony.diaspora = null;
+        }
+      }
 
       /* Capacità di carico (DECISIONE #45 emenda v3): il consumo pop è
          drenato in processProduction. La crescita NON è gata sul saldo
@@ -1089,9 +1170,17 @@
       report.systemId = sysId;
       report.enemyKind = enemyKind;
 
+      // Decisione #66: snapshot pre-combat per detection nave coloniale persa.
+      const hadColonial = fleet._colonizePaidCost &&
+        fleet.ships && fleet.ships.some(function (s) { return s.kind === 'coloniale'; });
       // Applica esito alla flotta del giocatore (perdite permanenti, +xp)
       const fleetOutcome = C.applyOutcomeToFleet(game, fleet, A);
       const playerWon = (report.winner === 'A');
+      // Decisione #66: refund 50% se la coloniale è stata persa nel scontro.
+      if (hadColonial) {
+        const stillColonial = fleet.ships && fleet.ships.some(function (s) { return s.kind === 'coloniale'; });
+        if (!stillColonial) handleColonialLost(game, fleet, events);
+      }
 
       // Effetti per tipo nemico
       if (enemyKind === 'pirate') {
@@ -1880,13 +1969,21 @@
         if (d > 0 && d < best) best = d;
       }
     }
-    /* M08 Fase A: flotte in transito */
+    /* M08 Fase A: flotte in transito + Decisione #66: fasi orbit/foundation
+       di colonize (la flotta è orbiting con phaseLeft countdown). */
     if (Array.isArray(game.fleets)) {
       for (let i = 0; i < game.fleets.length; i++) {
         const f = game.fleets[i];
-        if (!f || !f.location || f.location.status !== 'in-transit') continue;
-        const d = f.etaImpulsi || 0;
-        if (d > 0 && d < best) best = d;
+        if (!f || !f.location) continue;
+        if (f.location.status === 'in-transit') {
+          const d = f.etaImpulsi || 0;
+          if (d > 0 && d < best) best = d;
+        } else if (f.location.status === 'orbiting' && f.orders &&
+                   f.orders.type === 'colonize' &&
+                   (f.orders.phase === 'orbit' || f.orders.phase === 'foundation')) {
+          const d = f.orders.phaseLeft || 0;
+          if (d > 0 && d < best) best = d;
+        }
       }
     }
     /* Decisione #45: transizioni capitale in corso. */
@@ -1969,6 +2066,9 @@
     evacuateColony: evacuateColony,
     releaseOccupation: releaseOccupation,
     occupationCount: occupationCount,
-    ensureWarState: ensureWarState
+    ensureWarState: ensureWarState,
+    /* Decisione #66 — completamento colonizzazione (chiamato sia dal
+       path legacy processColonizing sia da fleet.tickColonizePhase). */
+    completeColonization: completeColonization
   };
 })(typeof window !== 'undefined' ? window : this);

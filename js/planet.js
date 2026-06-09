@@ -356,7 +356,7 @@
          le 5 classi note (explorer/caccia/intercettore/corvetta/fregata).
          I save schema 5 senza i nuovi kind vengono normalizzati nella
          sub-migrazione v5→v6 e lazy via ORION.fleet.ensureColonyShipKinds. */
-      ships:  { explorer: 0, caccia: 0, intercettore: 0, corvetta: 0, fregata: 0 },
+      ships:  { explorer: 0, caccia: 0, intercettore: 0, corvetta: 0, fregata: 0, coloniale: 0 },
       crews:  { explorer: [] },                     // [{ id, xp }]
       assets: { shipQueue: [], crewQueue: [] }      // [{ kind, duration }]
     };
