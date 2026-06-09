@@ -5830,14 +5830,18 @@ select.main-menu__input { cursor: pointer; }
    ===================================================================== */
 .viewport__actionbar {
   position: absolute;
-  bottom: 12px; left: 12px; right: 12px;
-  /* PR-N: ora può contenere info card + bottoni in colonna, non più
-     solo bottoni in riga. Mantiene flex-wrap per il layout esistente. */
+  /* Compact-left (decisione di sessione): la card non si stira più a
+     destra rubando spazio al canvas — sta a sinistra e cresce solo
+     quanto le serve, con cap responsivo per non andare oltre la metà
+     dello stage su monitor stretti. */
+  bottom: 12px; left: 12px; right: auto;
+  width: fit-content;
+  max-width: min(560px, calc(100vw - 24px));
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 6px;
+  padding: 7px 9px;
   background: rgb(var(--c-surface-rgb) / 0.78);
   border: 1px solid var(--c-border);
   border-radius: var(--radius-sm);
@@ -5864,18 +5868,18 @@ select.main-menu__input { cursor: pointer; }
 .bodyinfo__head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 .bodyinfo__name {
   font-family: var(--font-display, inherit);
-  font-size: 1rem;
+  font-size: 0.92rem;
   font-weight: 600;
   letter-spacing: 0.03em;
   color: var(--c-text);
 }
 .bodyinfo__type {
-  font-size: 0.78rem;
+  font-size: 0.70rem;
   color: var(--c-text-soft);
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -5883,12 +5887,12 @@ select.main-menu__input { cursor: pointer; }
 .bodyinfo__badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 9px;
+  gap: 3px;
+  padding: 1px 7px;
   border-radius: 999px;
   background: rgba(120, 160, 255, 0.12);
   border: 1px solid var(--c-border-soft);
-  font-size: 0.74rem;
+  font-size: 0.68rem;
   color: var(--c-text-soft);
 }
 .bodyinfo__badge--home {
@@ -5936,31 +5940,37 @@ select.main-menu__input { cursor: pointer; }
   font-family: var(--font-data, monospace);
 }
 .bodyinfo__pots {
+  /* Compact (decisione di sessione): non più 4 colonne stirate al 100%.
+     Quattro celle di larghezza fissa, allineate a sinistra; vanno a capo
+     in 2x2 su schermi davvero stretti. */
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(4, 116px);
+  gap: 4px 8px;
+  justify-content: start;
 }
 .bodyinfo__pot {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   font-family: var(--font-data, monospace);
-  font-size: 0.74rem;
+  font-size: 0.70rem;
   min-width: 0;
 }
 .bodyinfo__pot-lbl {
-  flex: 0 0 26px;
+  flex: 0 0 22px;
   color: var(--c-text-soft);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  font-size: 0.65rem;
 }
 .bodyinfo__pot-bar {
-  flex: 1;
-  height: 5px;
+  flex: 1 1 auto;
+  height: 4px;
   background: rgba(120, 160, 255, 0.15);
   border-radius: 2px;
   overflow: hidden;
-  min-width: 24px;
+  min-width: 28px;
+  max-width: 60px;
 }
 .bodyinfo__pot-bar i {
   display: block;
@@ -5968,10 +5978,11 @@ select.main-menu__input { cursor: pointer; }
   transition: width 0.3s ease;
 }
 .bodyinfo__pot-val {
-  flex: 0 0 22px;
+  flex: 0 0 20px;
   text-align: right;
   color: var(--c-text);
   font-weight: 600;
+  font-size: 0.72rem;
 }
 /* Tinte per risorsa coerenti con .res-icon--* (decisione #28) */
 .bodyinfo__pot--met   .bodyinfo__pot-bar i { background: #c8d2e4; }
@@ -5983,10 +5994,14 @@ select.main-menu__input { cursor: pointer; }
 .bodyinfo__pot--food  .bodyinfo__pot-lbl   { color: #9fd0a8; }
 .bodyinfo__pot--water .bodyinfo__pot-lbl   { color: #80c8e6; }
 
-/* Mobile: potenziali in 2x2 invece di 1x4 per leggibilità */
+/* Mobile: potenziali in 2x2 invece di 1x4 per leggibilità.
+   Card può occupare quasi tutta la larghezza (lo stage è già ridotto). */
 @media (max-width: 760px) {
-  .bodyinfo__pots { grid-template-columns: repeat(2, 1fr); }
-  .bodyinfo__name { font-size: 0.92rem; }
+  .viewport__actionbar { max-width: calc(100vw - 16px); }
+  .bodyinfo__pots {
+    grid-template-columns: repeat(2, minmax(108px, 1fr));
+  }
+  .bodyinfo__name { font-size: 0.88rem; }
 }
 
 /* Chip secondari: Slot · Pop max · Pericolo · Ostilità · ⚛ Avanzate
@@ -5994,25 +6009,25 @@ select.main-menu__input { cursor: pointer; }
 .bodyinfo__chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 4px;
 }
 .bodyinfo__chip {
   display: inline-flex;
   align-items: baseline;
-  gap: 5px;
-  padding: 2px 8px;
+  gap: 4px;
+  padding: 1px 6px;
   border-radius: 999px;
   background: rgb(var(--c-surface-rgb) / 0.55);
   border: 1px solid var(--c-border-soft);
   font-family: var(--font-data, monospace);
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   white-space: nowrap;
 }
 .bodyinfo__chip-k {
   color: var(--c-text-soft);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  font-size: 0.66rem;
+  font-size: 0.60rem;
 }
 .bodyinfo__chip-v {
   color: var(--c-text);
@@ -6050,35 +6065,35 @@ select.main-menu__input { cursor: pointer; }
 .bodyinfo__dist {
   display: flex;
   align-items: baseline;
-  gap: 7px;
-  padding: 4px 9px;
+  gap: 6px;
+  padding: 3px 7px;
   border-radius: var(--radius-sm, 6px);
   background: rgba(240, 168, 104, 0.08);
   border: 1px solid rgba(240, 168, 104, 0.30);
   font-family: var(--font-data, monospace);
-  font-size: 0.74rem;
+  font-size: 0.70rem;
   color: var(--c-text);
   flex-wrap: wrap;
 }
 .bodyinfo__dist-icon {
   color: var(--c-accent-warm, #f0a868);
-  font-size: 0.92rem;
+  font-size: 0.85rem;
   line-height: 1;
 }
 .bodyinfo__dist-k {
   color: var(--c-text-soft);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  font-size: 0.66rem;
+  font-size: 0.60rem;
   font-weight: 600;
 }
 .bodyinfo__dist-time {
   color: var(--c-accent-warm, #f0a868);
 }
 @media (max-width: 760px) {
-  .bodyinfo__chip { font-size: 0.68rem; padding: 2px 6px; }
-  .bodyinfo__chip-k { font-size: 0.60rem; }
-  .bodyinfo__dist { font-size: 0.70rem; padding: 3px 7px; }
+  .bodyinfo__chip { font-size: 0.64rem; padding: 1px 5px; }
+  .bodyinfo__chip-k { font-size: 0.56rem; }
+  .bodyinfo__dist { font-size: 0.66rem; padding: 2px 6px; }
 }
 .actionbar__btn {
   font-family: inherit;

@@ -8545,31 +8545,83 @@ function renderContextActionBar(ctx) {
       }
 
       /* Distanza UNIVERSALE dalla colonia più vicina, indipendente dalla
-         velocità delle navi. Salti = BFS sul grafo iperspaziale
-         (galaxy.routes/links); tempo = Σ fleet.tempoLeg(_, _, _, 1.0) →
-         minSpeed=1.0 (Cargo leggero / Caccia base). Vale per "intuito" sulla
-         distanza minima di spostamento flotte e arrivo per colonizzazione.
-         Pesca colonia min hops, ties → min Ι. */
+         velocità delle navi.
+         - INTER-sistema (hops≥1): salti = BFS sul grafo iperspaziale
+           (galaxy.routes/links); tempo = Σ fleet.tempoLeg(_, _, _, 1.0) →
+           minSpeed=1.0 (Cargo leggero / Caccia base).
+         - INTRA-sistema (stessa stella): distanza orbitale euclidea tra i
+           due corpi (riusa la geometria di system.js: orbit×angle + lune
+           in orbita relativa al genitore), convertita in Ι con il
+           placeholder GDD §13 (4-12 Ι base) → fattore 6 dà 2-12 Ι per
+           distanze tipiche 0.3-2.0 unità di mondo. È onesto: oggi
+           l'engine fa 0 Ι intra-sistema (decisione #67), ma la distanza
+           fisica esiste e questo valore servirà quando l'iperdrive
+           intra-sistema (decisione #32) e M16 introdurranno un costo
+           reale di spostamento.
+         Le colonie INTRA-sistema vincono sempre su quelle inter (sono
+         oggettivamente più vicine). Tra intra → min distanza. Tra inter
+         → min hops, ties → min Ι. */
       let distHtml = '';
       const F = ORION.fleet;
       if (F && F.computePath && F.tempoLeg && g.colonies) {
-        let best = null;
+        /* Posizione di mondo di un corpo (riusa la formula di
+           system-view.js#bodyWorldPos). Per le lune: orbita relativa al
+           genitore. */
+        function bodyWorldPos(sys, b) {
+          if (b.parentKey) {
+            const parent = ORION.system.findBody(sys, b.parentKey);
+            const pp = parent ? {
+              x: Math.cos(parent.angle) * parent.orbit,
+              y: Math.sin(parent.angle) * parent.orbit
+            } : { x: 0, y: 0 };
+            return {
+              x: pp.x + Math.cos(b.angle) * (b.moonOrbit || 0),
+              y: pp.y + Math.sin(b.angle) * (b.moonOrbit || 0)
+            };
+          }
+          return {
+            x: Math.cos(b.angle) * (b.orbit || 0),
+            y: Math.sin(b.angle) * (b.orbit || 0)
+          };
+        }
+        const targetPos = bodyWorldPos(system, body);
+        const INTRA_FACTOR = 6;   // dist 0.3-2.0 → ~2-12 Ι (GDD §13 base 4-12)
+        let bestIntra = null, bestInter = null;
         const keys = Object.keys(g.colonies);
         for (let i = 0; i < keys.length; i++) {
           const k = keys[i];
           const c = g.colonies[k];
           if (!c || !c.colonized) continue;
-          const fromSys = parseInt(String(k).split(':')[0], 10);
+          const parts = String(k).split(':');
+          const fromSys = parseInt(parts[0], 10);
+          const fromBk = parts[1];
           if (isNaN(fromSys)) continue;
-          const path = F.computePath(g.galaxy, fromSys, sysId);
-          if (!path) continue;
-          const hops = path.length - 1;
-          let timeI = 0;
-          for (let j = 0; j < hops; j++) timeI += F.tempoLeg(g.galaxy, path[j], path[j + 1], 1);
-          if (!best || hops < best.hops || (hops === best.hops && timeI < best.timeI)) {
-            best = { hops: hops, timeI: timeI, colonyKey: k };
+          if (k === colKey) continue;   // non confrontare con se stesso (es. mia colonia su questo stesso corpo)
+          if (fromSys === sysId) {
+            /* Intra-sistema: distanza orbitale. */
+            const cBody = ORION.system.findBody(system, fromBk);
+            if (!cBody) continue;
+            const cPos = bodyWorldPos(system, cBody);
+            const dx = targetPos.x - cPos.x, dy = targetPos.y - cPos.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const intraI = Math.max(1, Math.round(dist * INTRA_FACTOR));
+            if (!bestIntra || intraI < bestIntra.intraI) {
+              bestIntra = { intraI: intraI, colonyKey: k };
+            }
+          } else {
+            const path = F.computePath(g.galaxy, fromSys, sysId);
+            if (!path) continue;
+            const hops = path.length - 1;
+            let timeI = 0;
+            for (let j = 0; j < hops; j++) timeI += F.tempoLeg(g.galaxy, path[j], path[j + 1], 1);
+            if (!bestInter || hops < bestInter.hops || (hops === bestInter.hops && timeI < bestInter.timeI)) {
+              bestInter = { hops: hops, timeI: timeI, colonyKey: k };
+            }
           }
         }
+        /* Le intra-sistema vincono sempre. */
+        const best = bestIntra ? Object.assign({ kind: 'intra' }, bestIntra)
+                              : bestInter ? Object.assign({ kind: 'inter' }, bestInter) : null;
         if (best) {
           let cname = '—';
           try {
@@ -8579,18 +8631,26 @@ function renderContextActionBar(ctx) {
             const pl2 = ORION.planet.generate(g.galaxy, sys2, cb);
             if (pl2 && pl2.name) cname = pl2.name;
           } catch (_) { /* fallback */ }
-          const durFmt = (ORION.time && ORION.time.format)
-            ? ORION.time.format(best.timeI, 'duration')
-            : (best.timeI + ' I');
           let line;
-          if (best.hops === 0) {
-            line = '<strong>stesso sistema</strong> di <strong>' + escapeHtml(cname) + '</strong>';
+          if (best.kind === 'intra') {
+            const intraFmt = (ORION.time && ORION.time.format)
+              ? ORION.time.format(best.intraI, 'duration')
+              : (best.intraI + ' I');
+            line = '<strong>intra-sistema</strong>' +
+              ' · <span class="bodyinfo__dist-time">~' + intraFmt + '</span>' +
+              ' da <strong>' + escapeHtml(cname) + '</strong>';
           } else {
+            const durFmt = (ORION.time && ORION.time.format)
+              ? ORION.time.format(best.timeI, 'duration')
+              : (best.timeI + ' I');
             line = '<strong>' + best.hops + ' salt' + (best.hops === 1 ? 'o' : 'i') + '</strong>' +
               ' · <span class="bodyinfo__dist-time">~' + durFmt + '</span>' +
               ' da <strong>' + escapeHtml(cname) + '</strong>';
           }
-          distHtml = '<div class="bodyinfo__dist" title="Distanza standard (velocità 1.0): orientativa, le tue navi vere viaggiano più veloci col loro speed">' +
+          const tipText = best.kind === 'intra'
+            ? 'Distanza orbitale stimata (valore standard, indipendente da velocità navi)'
+            : 'Distanza standard (velocità 1.0): le tue navi vere viaggiano più veloci col loro speed';
+          distHtml = '<div class="bodyinfo__dist" title="' + tipText + '">' +
             '<span class="bodyinfo__dist-icon" aria-hidden="true">✦</span> ' +
             '<span class="bodyinfo__dist-k">Distanza</span> ' + line +
           '</div>';
