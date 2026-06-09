@@ -577,7 +577,8 @@ function colonizeHomePlanet(game, startDS) {
    produzione/aggiornamento per Impulso arriverà con M05. */
 function updateGlobalResourceHud() {
   const totals = { met: 0, en: 0, food: 0, water: 0 };
-  let people = 0;
+  let totalUnits = 0;
+  let totalCap = 0;
   if (ORION.game && ORION.game.colonies) {
     Object.keys(ORION.game.colonies).forEach(function (k) {
       const c = ORION.game.colonies[k];
@@ -586,9 +587,11 @@ function updateGlobalResourceHud() {
       totals.en  += c.stock.en  || 0;
       totals.food += c.stock.food || 0;
       totals.water += c.stock.water || 0;
-      // Popolazione: somma delle PERSONE reali (curva per-pianeta §9).
-      const planet = planetForColony(c);
-      if (planet) people += ORION.planet.peopleAt(ORION.planet.popUnits(c), planet);
+      // Popolazione: somma LIVELLI d'impero (refactor 2026-06-09).
+      const units = (c.pop && c.pop.total) || 0;
+      const cap = (c.pop && c.pop.cap) || 0;
+      totalUnits += units;
+      totalCap += cap;
     });
   }
   const setVal = function (key, v) {
@@ -600,7 +603,12 @@ function updateGlobalResourceHud() {
   setVal('cibo', totals.food);
   setVal('acqua', totals.water);
   const popEl = document.querySelector('[data-bind="popolazione"]');
-  if (popEl) { popEl.innerHTML = popAnimSpan('hud:pop', Math.round(people)); ensurePopAnim(); }
+  if (popEl) {
+    /* HUD aggregato: somma livelli / cap d'impero. Refactor 2026-06-09. */
+    popEl.innerHTML = popAnimSpan('hud:pop', totalUnits) +
+      '<span class="pop-ceiling"> / ' + totalCap + '</span>';
+    ensurePopAnim();
+  }
   updateGlobalIndicesHud();
   /* Decisione #50: la dx mostra lo stato della colonia in focus —
      rinfreschiamola con l'HUD globale. La sx (Roster) ha badge che
@@ -885,27 +893,50 @@ function hostilityNoun(planet) {
   return 'pianeta';
 }
 
-/* Popolazione (§9): il motore lavora in unità intere, ma a schermo le
-   traduciamo in PERSONE plausibili via la curva per-pianeta di planet.js
-   (ORION.planet.peopleAt / popCeiling / formatPeople). Solo presentazione:
-   nessun calcolo tarato dipende da questi numeri. `units` può essere
-   frazionario (pop.total + accum) per uno scorrimento fluido. */
-function popPeople(units, planet) {
-  return ORION.planet.formatPeople(ORION.planet.peopleAt(units, planet));
+/* Popolazione (§9) — display LIVELLI ONLY (refactor sessione 2026-06-09,
+   estensione decisione #66). Su feedback utente: la rappresentazione "persone"
+   con curva geometrica creava asimmetrie strane nei trasferimenti (togliere
+   2 unità da un mondo a 10 unità = "milioni che spariscono" sul display
+   mentre il target ne riceve solo qualche centinaio). Soluzione: abbandono
+   completo del display "persone", uso solo i livelli (unità del motore) come
+   fonte di verità visiva. La curva persone↔livelli resta INTERNAMENTE in
+   planet.js (peopleAt/popCeiling/formatPeople) per backward compat con UI
+   future o save, ma TUTTI i call site sono migrati a livelli.
+
+   Vantaggi del modello:
+   • Trasferimento simmetrico: −2 livelli sulla sorgente, +2 livelli sul
+     target. Sempre uguale, sempre chiaro.
+   • Niente "wow 4X" da 10 Mld, ma chiarezza totale (X/Y livelli + barra).
+   • Bilanciamento intatto (curva interna invariata per produzione/scarsità). */
+
+/* Etichetta livello compatta "X / Y" — usata in chip, barre, badge. */
+function popLevelLabel(colony, planet) {
+  const units = (colony && colony.pop && colony.pop.total) || 0;
+  const cap = (colony && colony.pop && colony.pop.cap) || (planet && planet.popCap) || 0;
+  return units + ' / ' + cap;
 }
-function popMaxPeople(planet) {
-  const m = ORION.planet.popCeiling(planet);
-  return m > 0 ? ORION.planet.formatPeople(m) : '—';
+/* Solo cap per uso isolato (es. "tetto del pianeta"). */
+function popMaxLabel(planet) {
+  const cap = (planet && planet.popCap) || 0;
+  return cap > 0 ? String(cap) : '—';
 }
-/* "Persone correnti / tetto del pianeta": il valore corrente è uno span
-   animato (scorre verso il bersaglio, niente scatti), il tetto è il
-   massimo demografico del pianeta (asintoto della curva). */
-function popRangePeople(colony, planet) {
-  const people = ORION.planet.peopleAt(ORION.planet.popUnits(colony), planet);
+/* "Livello corrente / tetto" con animazione — usato dove prima c'era
+   popRangePeople. La frazione (popUnits) anima fluida da X.0 a X.999
+   tra un livello e l'altro; al level-up il motore matura colony.pop.total
+   e il display si stabilizza sul nuovo intero. */
+function popRangeLevel(colony, planet) {
+  const units = ORION.planet.popUnits(colony) || 0;
+  const cap = (colony && colony.pop && colony.pop.cap) || (planet && planet.popCap) || 0;
   const key = 'pop:' + colony.systemId + ':' + colony.bodyKey;
-  return popAnimSpan(key, people) +
-    ' <span class="pop-ceiling">/ ' + popMaxPeople(planet) + '</span>';
+  return popAnimSpan(key, units, { decimals: 1 }) +
+    ' <span class="pop-ceiling">/ ' + cap + '</span>';
 }
+/* Legacy: popPeople/popMaxPeople/popRangePeople sono mantenuti per
+   call site UI esterni che potrebbero ancora referenziarli (es. plugin),
+   ma rinviano alle versioni livelli. */
+function popPeople(units, planet) { void planet; return Math.round(units || 0); }
+function popMaxPeople(planet) { return popMaxLabel(planet); }
+function popRangePeople(colony, planet) { return popRangeLevel(colony, planet); }
 
 /* Memo runtime dei pianeti generati (deterministici dal seed): serve per
    sommare le persone nell'HUD senza rigenerare a ogni refresh. NON è
@@ -6045,19 +6076,19 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
   const classes = colony.pop.classes;
   const total = colony.pop.total;
   const cap = colony.pop.cap;
-  // Persone correnti (units frazionarie per fluidità): le classi ne sono
-  // una quota proporzionale (interi internamente → persone a schermo).
-  const peopleNow = ORION.planet.peopleAt(ORION.planet.popUnits(colony), planet);
+  // Classi §9.2 — refactor 2026-06-09: display in LIVELLI invece di persone.
+  // Le classi sono quote frazionarie del totale unità; mostriamo % + livelli
+  // equivalenti (es. "62% · 4.3 lv").
   const order = ['operai', 'scienziati', 'militari', 'mercanti', 'tecnici'];
   const labels = { operai: 'Operai', scienziati: 'Scienziati', militari: 'Militari', mercanti: 'Mercanti', tecnici: 'Tecnici' };
   let bars = '<ul class="class-list">';
   order.forEach(function (k) {
     const v = classes[k] || 0;
     const pct = total > 0 ? Math.round(v * 100 / total) : 0;
-    const peopleK = total > 0 ? ORION.planet.formatPeople(peopleNow * v / total) : '0';
+    const lvEq = total > 0 ? v.toFixed(1) : '0';
     bars += '<li class="class-item"><span class="class-item__label">' + labels[k] + '</span>' +
       '<div class="class-item__bar"><div class="class-item__fill class--' + k + '" style="width:' + pct + '%"></div></div>' +
-      '<span class="class-item__val">' + peopleK + '</span></li>';
+      '<span class="class-item__val">' + pct + '% · ' + lvEq + ' lv</span></li>';
   });
   bars += '</ul>';
 
@@ -6144,26 +6175,29 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
     growthEst = CFG.POP_GROWTH_BASE * morale * supplyFactor;
     if (colony.structures['ospedale']) growthEst *= (1 + CFG.POP_GROWTH_HOSPITAL);
   }
-  // Crescita in PERSONE/Impulso: pendenza della curva × crescita in unità/I,
-  // diviso il costo del livello (freno temporale: ogni livello costa di più).
+  // Crescita in LIVELLI/Impulso (refactor 2026-06-09): unità/Ι diviso il
+  // costo del livello (freno temporale: ogni livello costa di più).
   let growthStr;
   if (canGrow) {
-    const M = ORION.planet.popCeiling(planet);
-    const refCap = Math.max(2, planet.popCap || 2);
-    const slope = M > 0 ? Math.log(M / ORION.planet.POP_FLOOR) / (refCap - 1) : 0;
     const unitCost = 1 + CFG.POP_LEVEL_COST * (total - 1);
-    const marginal = peopleNow * slope * growthEst / Math.max(1, unitCost);
+    const marginalLv = growthEst / Math.max(1, unitCost);
     let suffix = '';
-    /* Decisione #45 emenda v3: messaggio runway-based.
-       - saldo positivo (runway infinito): pulito, nessun suffisso
-       - saldo neg ma runway > 30 Ι: "consuma riserve (X Ι rimanenti)"
-       - runway 10-30 Ι: "rallentata · scorte basse (X Ι rimanenti)" */
+    /* Decisione #45 emenda v3: messaggio runway-based. */
     if (runway < RUNWAY_LOW && isFinite(runway)) {
       suffix = ' · rallentata · scorte ' + limitRunway + ' basse (' + runway + ' Ι rimanenti)';
     } else if ((drainFood > 0 || drainWater > 0) && isFinite(runway)) {
       suffix = ' · consuma riserve (' + runway + ' Ι rimanenti)';
     }
-    growthStr = '+' + ORION.planet.formatPeople(marginal) + ' / Impulso' + suffix;
+    /* Formato: +0.012 lv/Ι oppure ~1 livello ogni N Ι (più leggibile a bassa
+       velocità). Scegli il formato più informativo. */
+    if (marginalLv >= 0.01) {
+      growthStr = '+' + marginalLv.toFixed(3) + ' livelli / Ι' + suffix;
+    } else if (marginalLv > 0) {
+      const iPerLv = Math.round(1 / marginalLv);
+      growthStr = '~1 livello ogni ' + iPerLv + ' Ι' + suffix;
+    } else {
+      growthStr = 'ferma' + suffix;
+    }
   } else if (settling) {
     growthStr = 'ferma (Insediamento)';
   } else if (total >= cap) {
@@ -6193,9 +6227,8 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
   host.innerHTML =
     '<div class="sysinfo">' +
       '<dl class="sysinfo__list">' +
-        row('Popolazione', popRangePeople(colony, planet)) +
-        row('Sostenibile (locale)', '~' + Math.floor(sustainable) + ' / ' + cap + ' unità · ' +
-            ORION.planet.formatPeople(ORION.planet.peopleAt(sustainable, planet)) +
+        row('Popolazione', popRangeLevel(colony, planet) + ' livelli') +
+        row('Sostenibile (locale)', '~' + Math.floor(sustainable) + ' / ' + cap + ' livelli' +
             ' <span class="pop-limit">(limite: ' + limitRes + ')</span>') +
         row('Morale', morale.toFixed(2) + ' / ' + CFG.POP_MORALE_MAX.toFixed(2) +
             ' <span class="rate-aux" title="' + escapeHtml(moraleParts.join(' · ')) + '">(dettagli)</span>') +
@@ -6730,12 +6763,34 @@ function stopDateInterpolation() {
    target. Indipendente dal play-timer: vale anche per il +1 manuale. */
 ORION._popAnim = ORION._popAnim || { shown: {}, rafId: null };
 
-function popAnimSpan(key, people, extraClass) {
+/* Helper: formatta un numero per la pop-anim. Default = intero; con
+   `decimals` ritorna un float fisso (es. 8.3 con decimals=1). Refactor
+   2026-06-09 (estensione decisione #66): abbandonato `formatPeople` come
+   formattatore default → ora usa numeri puri (livelli). */
+function _popFmt(value, decimals) {
+  if (decimals && decimals > 0) {
+    const n = (typeof value === 'number') ? value : parseFloat(value) || 0;
+    return n.toFixed(decimals);
+  }
+  return String(Math.round(value || 0));
+}
+
+function popAnimSpan(key, value, opts) {
   const a = ORION._popAnim;
-  if (a.shown[key] == null) a.shown[key] = people;   // prima volta: niente animazione da 0
-  return '<span class="pop-anim' + (extraClass ? ' ' + extraClass : '') + '" data-pop-key="' +
-    escapeHtml(key) + '" data-pop-target="' + people + '">' +
-    escapeHtml(ORION.planet.formatPeople(a.shown[key])) + '</span>';
+  /* Back-compat: se opts è una stringa, la trattiamo come extraClass. */
+  let extraClass = '', decimals = 0;
+  if (typeof opts === 'string') extraClass = opts;
+  else if (opts && typeof opts === 'object') {
+    extraClass = opts.extraClass || '';
+    decimals = opts.decimals || 0;
+  }
+  if (a.shown[key] == null) a.shown[key] = value;   // prima volta: niente animazione da 0
+  const cls = 'pop-anim' + (extraClass ? ' ' + extraClass : '');
+  const attrs = ' data-pop-key="' + escapeHtml(key) + '"' +
+                ' data-pop-target="' + value + '"' +
+                (decimals ? ' data-pop-decimals="' + decimals + '"' : '');
+  return '<span class="' + cls + '"' + attrs + '>' +
+    escapeHtml(_popFmt(a.shown[key], decimals)) + '</span>';
 }
 ORION.popAnimSpan = popAnimSpan;
 
@@ -6746,14 +6801,15 @@ function popAnimFrame() {
   els.forEach(function (el) {
     const key = el.getAttribute('data-pop-key');
     const target = parseFloat(el.getAttribute('data-pop-target')) || 0;
+    const decimals = parseInt(el.getAttribute('data-pop-decimals'), 10) || 0;
     let shown = a.shown[key];
     if (shown == null) shown = target;
-    const tol = Math.max(1, target * 0.002);
+    const tol = decimals > 0 ? Math.pow(10, -decimals) * 0.5 : 0.5;
     if (Math.abs(shown - target) > tol) {
       shown = shown + (target - shown) * 0.14;       // approccio esponenziale ~liscio
       if (Math.abs(shown - target) <= tol) shown = target;
       a.shown[key] = shown;
-      el.textContent = ORION.planet.formatPeople(shown);
+      el.textContent = _popFmt(shown, decimals);
       active = true;
     } else {
       a.shown[key] = target;
@@ -7607,10 +7663,12 @@ function sampleEmpireTelemetry() {
     if (!t) t = tel[k] = { pop: [], morale: [], stock: [], lastI: -1 };
     if (t.lastI === g.timeImpulsi) return;  /* dedupe: un campione per Ι */
     t.lastI = g.timeImpulsi;
-    const people = ORION.planet.peopleAt(ORION.planet.popUnits(c), planet);
+    /* Refactor 2026-06-09: telemetria pop in LIVELLI (unità) invece di persone.
+       Sparkline mostra crescita unità (1, 2, 3, … 12). */
+    const levels = ORION.planet.popUnits(c) || 0;
     const morale = ORION.time.colonyMorale ? ORION.time.colonyMorale(g, c) : 1;
     const stock = (c.stock.met || 0) + (c.stock.en || 0) + (c.stock.food || 0) + (c.stock.water || 0);
-    push(t.pop, people); push(t.morale, morale); push(t.stock, stock);
+    push(t.pop, levels); push(t.morale, morale); push(t.stock, stock);
   });
   /* Pulisci la telemetria delle colonie non più mie/operative (perse, evacuate). */
   Object.keys(tel).forEach(function (k) { if (!live[k]) delete tel[k]; });
@@ -7676,9 +7734,10 @@ function buildEmpireState() {
       phaseLabel = '<span class="ecard__phase-chip">◌ Coloniale in viaggio</span>';
     }
 
-    /* Popolazione (persone reali + maturità). */
-    const peopleNow = ORION.planet.peopleAt(ORION.planet.popUnits(c), planet);
-    totalPeople += peopleNow;
+    /* Popolazione — refactor 2026-06-09: LIVELLI invece di persone. */
+    const popUnitsCol = ORION.planet.popUnits(c) || 0;
+    const popCapCol = (c.pop && c.pop.cap) || (planet && planet.popCap) || 0;
+    totalPeople += popUnitsCol;
     const dev = Math.round(ORION.planet.popMaturity(c, planet) * 100);
 
     /* Morale (helper puro). */
@@ -7703,7 +7762,11 @@ function buildEmpireState() {
     cards.push({
       key: k, sysId: sysId, name: planet.name, tag: bodyTagHtml(sysId),
       badges: badges.join(''), phaseLabel: phaseLabel,
-      people: peopleNow, peopleStr: ORION.planet.formatPeople(peopleNow), dev: dev,
+      /* Refactor 2026-06-09: peopleStr → levelStr (display livelli). */
+      people: popUnitsCol,
+      peopleStr: popUnitsCol.toFixed(1) + ' / ' + popCapCol,
+      levelStr: popUnitsCol.toFixed(1) + ' / ' + popCapCol,
+      dev: dev,
       morale: morale, moraleState: moraleState,
       stockTotal: stockTotal, stockTotalStr: fmtStock(stockTotal), stockNet: stockNet,
       scarState: scarState,
@@ -7713,7 +7776,7 @@ function buildEmpireState() {
     });
   });
 
-  /* Ordine: capitale prima, poi per popolazione decrescente. */
+  /* Ordine: capitale prima, poi per livelli decrescenti. */
   cards.sort(function (a, b) {
     if (a.isCapital !== b.isCapital) return a.isCapital ? -1 : 1;
     return b.people - a.people;
@@ -7721,7 +7784,7 @@ function buildEmpireState() {
 
   const totalsHtml =
     '<span class="empire-deck__total">' + uiIcon('home', 'cyan') + ' ' +
-      escapeHtml(ORION.planet.formatPeople(totalPeople)) + ' ab.</span>' +
+      totalPeople.toFixed(1) + ' livelli</span>' +
     (alertCount ? '<span class="empire-deck__total is-crit">' + uiIcon('warning') + ' ' + alertCount + ' in allerta</span>' : '');
 
   return {

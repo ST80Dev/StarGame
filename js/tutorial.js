@@ -187,17 +187,20 @@
     {
       id: 'population',
       tag: 'Popolazione',
-      title: 'Popolazione e capacità di carico',
+      title: 'Popolazione: livelli demografici',
       body:
-        '<p>La popolazione è in <strong>unità</strong> (mostrate come abitanti reali) e cresce <strong>lentamente, di lungo ' +
-        'periodo</strong>: ogni livello in più costa progressivamente più tempo.</p>' +
-        '<p>Ogni unità di popolazione <strong>consuma davvero</strong> cibo e acqua dallo stock locale. Se la produzione locale ' +
-        'non basta, lo stock scende → la colonia entra in <strong>allerta</strong> (≤20, malus −10%) o <strong>critico</strong> ' +
-        '(=0, malus −30%). Bastano 3 Impulsi di netto positivo per uscirne.</p>' +
+        '<p>La popolazione di ogni colonia è misurata in <strong>livelli</strong> (da 1 al cap del pianeta: una luna ne ha 3, ' +
+        'un terrestre fino a 12). Ogni livello rappresenta uno stadio di organizzazione demografica della colonia: città, ' +
+        'reti produttive, servizi pubblici.</p>' +
+        '<p>I livelli crescono <strong>lentamente, di lungo periodo</strong>: ogni livello in più costa progressivamente più ' +
+        'tempo (i livelli avanzati richiedono molti più Impulsi degli iniziali).</p>' +
+        '<p>Ogni livello di popolazione <strong>consuma davvero</strong> cibo e acqua dallo stock locale. Se la produzione locale ' +
+        'non basta, lo stock scende → la colonia entra in <strong>allerta</strong> o <strong>critico</strong>. Bastano 3 Impulsi ' +
+        'di netto positivo per uscirne.</p>' +
         '<p><strong>Buffer di tolleranza:</strong> la popolazione cala solo dopo <strong>30 Impulsi consecutivi</strong> di fame ' +
-        'o sete, e poi di 1 unità ogni 30 <span class="ds-unit">Ι</span> — hai sempre il tempo di reagire prima di perdere persone.</p>' +
-        '<p>La crescita si ferma in <strong>plateau</strong> quando produzione = consumo. Guarda la scheda Popolazione per ' +
-        'capire <strong>cosa manca</strong>: più fattorie/impianti idrici, o (futuro) rifornimenti via rotte commerciali.</p>'
+        'o sete, e poi di 1 livello ogni 30 <span class="ds-unit">Ι</span> — hai sempre il tempo di reagire.</p>' +
+        '<p>La crescita si ferma in <strong>plateau</strong> quando produzione = consumo. Più fattorie/impianti idrici alzano ' +
+        'il tetto sostenibile, oppure (futuro) rifornimenti via rotte commerciali.</p>'
     },
     {
       id: 'waste',

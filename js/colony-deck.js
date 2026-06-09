@@ -532,15 +532,13 @@
       if (!pop) return '';
       const total = pop.total || 0;
       const cap = pop.cap || 0;
-      const peopleNow = ORION.planet.peopleAt(ORION.planet.popUnits(colony), planet);
-      const peopleCap = ORION.planet.peopleAt(cap, planet);
-      /* Barra = maturità demografica (posizione sulla curva-S), NON rapporto
-         lineare di unità: così riempimento e numero di persone restano
-         coerenti (niente più "29% di barra ma 285 persone su 7 Mld"). */
+      /* Refactor 2026-06-09: display LIVELLI invece di persone.
+         Mostra "X.Y / Z" con animazione frazionaria fluida. */
+      const unitsNow = ORION.planet.popUnits(colony) || 0;
       const dev = Math.round(ORION.planet.popMaturity(colony, planet) * 100);
       const numSpan = (typeof ORION.popAnimSpan === 'function')
-        ? ORION.popAnimSpan('pop:' + colony.systemId + ':' + colony.bodyKey, peopleNow)
-        : escapeHtml(ORION.planet.formatPeople(peopleNow));
+        ? ORION.popAnimSpan('pop:' + colony.systemId + ':' + colony.bodyKey, unitsNow, { decimals: 1 })
+        : escapeHtml(unitsNow.toFixed(1));
 
       let chips = '<div class="deck-pop__chips">';
       CLASS_ORDER.forEach(function (k) {
@@ -554,9 +552,9 @@
       chips += '</div>';
 
       /* Layout verticale per colonna stretta (M07.2 iter 3):
-         label · numero+cap · barra full-width · % unit-based. */
+         label · livelli/cap · barra full-width · % sviluppo. */
       const totalHtml =
-        '<div class="deck-pop__total" title="Abitanti · sviluppo ' + dev + '% verso il tetto del pianeta">' +
+        '<div class="deck-pop__total" title="Livelli demografici · sviluppo ' + dev + '% verso il cap del pianeta">' +
           '<div class="deck-pop__total-row">' +
             '<span class="deck-pop__total-label">Popolazione</span>' +
             '<span class="deck-pop__total-pct">' + dev + '%</span>' +
@@ -564,7 +562,7 @@
           '<span class="deck-pop__total-num">' +
             numSpan +
             '<span class="sep">/</span>' +
-            '<span class="cap">' + escapeHtml(ORION.planet.formatPeople(peopleCap)) + '</span>' +
+            '<span class="cap">' + escapeHtml(String(cap)) + '</span>' +
           '</span>' +
           '<div class="deck-pop__bar"><div class="deck-pop__bar-fill" style="width:' + dev + '%"></div></div>' +
         '</div>';

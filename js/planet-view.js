@@ -812,7 +812,7 @@
       if (col && col.colonized) lines.push(col.isHomeBase ? '★ PIANETA BASE' : '◉ COLONIZZATO');
       else lines.push('○ NON COLONIZZATO');
       lines.push('Slot: ' + this.planet.slots);
-      if (this.planet.popCap > 0) lines.push('Pop. max: ' + ORION.planet.formatPeople(ORION.planet.popCeiling(this.planet)));
+      if (this.planet.popCap > 0) lines.push('Cap demografico: ' + this.planet.popCap + ' livelli');
       else lines.push('Solo estrazione');
 
       ctx.font = '11px "JetBrains Mono", ui-monospace, monospace';
