@@ -1048,7 +1048,22 @@ button { font-family: inherit; }
   color: var(--c-text);
 }
 
-/* Classi funzionali (§9.2) */
+/* Classi funzionali (§9.2)
+   Fix sessione 2026-06-09 P1: dopo il refactor "livelli" (decisione #66
+   estensione) la cella valore mostra "55% · 1.1 lv" (~12 char) invece
+   del precedente "55%" (3 char) — la colonna destra a 2.4em del grid
+   condiviso `.pot-item / .class-item / .adv-item` troncava verticalmente
+   il testo. Override locale: colonna label più larga (gestisce "Scienziati"
+   senza ellipsis) + colonna valore generosa, niente wrap. */
+.class-item {
+  grid-template-columns: 6.4em 1fr 6.2em;
+}
+.class-item__val {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.class-item__label { font-weight: 600; }
+
 .class--operai      { background: linear-gradient(90deg, #6a7894, #b9c4d8); }
 .class--scienziati  { background: linear-gradient(90deg, #1b8c8a, #2fe6e0); }
 .class--militari    { background: linear-gradient(90deg, #b8662a, #ff9d3c); }
@@ -6242,6 +6257,39 @@ select.main-menu__input { cursor: pointer; }
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
 }
 .fleet-item__cmdbonus { color: var(--c-text-faint); font-size: 0.74rem; }
+/* Decisione #66 estensione: indicatore "Coloni a bordo" sulle card flotta
+   con nave coloniale; tinta ambra coerente con Pioniere/insediamento. */
+.fleet-item__pop {
+  margin: 4px 0 2px; font-size: 0.8rem; color: #f0d8a0;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.fleet-pop__diaspora {
+  display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 4px;
+  background: rgba(240, 216, 160, 0.14); border: 1px solid rgba(240, 216, 160, 0.4);
+  color: #f0d8a0; font-size: 0.7rem; font-weight: 600;
+}
+/* P1: chip Diaspora compatto nel deck colonia (riga Popolazione). */
+.deck-pop__diaspora {
+  display: inline-block; margin-left: 8px; padding: 1px 6px; border-radius: 4px;
+  background: rgba(240, 216, 160, 0.16); border: 1px solid rgba(240, 216, 160, 0.45);
+  color: #f0d8a0; font-size: 0.68rem; font-weight: 600;
+  animation: diaspora-pulse 2.4s ease-in-out infinite;
+}
+/* P1: banner Diaspora completo nella tab Colonia centrale (più informativo). */
+.diaspora-banner {
+  margin: 8px 0; padding: 8px 12px; border-radius: 6px;
+  background: rgba(240, 216, 160, 0.10); border: 1px solid rgba(240, 216, 160, 0.4);
+  color: #f0d8a0; font-size: 0.86rem; display: flex; align-items: center; gap: 8px;
+  animation: diaspora-pulse 2.4s ease-in-out infinite;
+}
+.diaspora-banner__icon { font-size: 1.1rem; line-height: 1; }
+@keyframes diaspora-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(240, 216, 160, 0); }
+  50% { box-shadow: 0 0 6px 1px rgba(240, 216, 160, 0.3); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .deck-pop__diaspora, .diaspora-banner { animation: none; }
+}
 .cmd-pick__current {
   margin: 0 0 8px; padding: 7px 9px; border-radius: 6px;
   background: rgba(215,201,166,0.08); border: 1px solid rgba(215,201,166,0.25);

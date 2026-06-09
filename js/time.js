@@ -507,6 +507,25 @@
     const memo = fleet._colonizePaidCost;
     if (!memo) return;
     const payer = game.colonies && game.colonies[memo.payerKey];
+    /* Decisione #66 estensione (P0 sessione 2026-06-09):
+       50% dei coloni a bordo si salva in scialuppa di salvataggio e
+       torna alla colonia origine (recovery-friendly #22, analogo al
+       crew M07 esploratore #39). Capped al popCap della destinazione.
+       Quel che eccede è perso. */
+    let popSaved = 0;
+    if (payer && fleet.popOnboard > 0) {
+      popSaved = Math.floor((fleet.popOnboard || 0) / 2);
+      if (popSaved > 0 && payer.pop) {
+        const cap = payer.pop.cap || 0;
+        const popNow = payer.pop.total || 0;
+        const room = Math.max(0, cap - popNow);
+        const added = Math.min(popSaved, room);
+        payer.pop.total = popNow + added;
+        if (added < popSaved) popSaved = added;  /* overflow scartato (no spazio) */
+        if (added > 0) addToBestClass(payer, added);
+      }
+      fleet.popOnboard = 0;
+    }
     if (payer && payer.stock) {
       const refund = {};
       ['met', 'en', 'food', 'water'].forEach(function (k) {
@@ -522,6 +541,8 @@
         bodyKey: fleet.orders && fleet.orders.bodyKey,
         reason: 'coloniale-lost',
         refund: refund,
+        popSaved: popSaved,
+        payerKey: memo.payerKey,
         impulso: game.timeImpulsi
       });
     }
