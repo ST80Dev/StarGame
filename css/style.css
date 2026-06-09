@@ -5196,6 +5196,75 @@ select.main-menu__input { cursor: pointer; }
   .fleet-wizard__crumbs { grid-column: 1 / -1; flex-wrap: wrap; }
 }
 
+/* =====================================================================
+   FLEET INFO POPUP — click su marker flotta → popup informativo
+   ===================================================================== */
+.fleet-info-popup {
+  position: fixed;
+  z-index: 1200;
+  width: 260px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: rgb(var(--c-surface-rgb) / 0.97);
+  border: 1px solid rgba(255, 220, 60, 0.45);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  color: var(--c-text, #e9ecf6);
+  padding: 12px 14px;
+  font-size: 0.9em;
+  animation: fleet-info-pop 120ms ease-out;
+}
+@keyframes fleet-info-pop {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.fleet-info-popup__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 220, 60, 0.20);
+}
+.fleet-info-popup__name {
+  margin: 0;
+  font-family: var(--font-display, sans-serif);
+  font-size: 1.0em;
+  letter-spacing: 0.03em;
+  color: rgb(255, 232, 110);
+}
+.fleet-info-popup__meta {
+  margin: 0 0 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.88em;
+}
+.fleet-info-popup__meta > div {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 6px;
+  align-items: baseline;
+}
+.fleet-info-popup__meta dt {
+  margin: 0;
+  font-weight: 600;
+  color: var(--c-muted, #8a93b8);
+  font-size: 0.85em;
+}
+.fleet-info-popup__meta dd {
+  margin: 0;
+  word-break: break-word;
+}
+.fleet-info-popup__actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.fleet-info-popup__actions .btn { flex: 1 0 auto; }
+
 .fleet-manage-table {
   width: 100%;
   border-collapse: collapse;

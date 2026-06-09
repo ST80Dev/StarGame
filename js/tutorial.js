@@ -813,7 +813,11 @@
         '<strong>return</strong> (rientra alla base) · <strong>rotta a tappe</strong> (multi-waypoint con sosta opzionale) · ' +
         '<strong>pattuglia su N sistemi</strong> (loop ciclico).</p>' +
         '<p>La flotta viaggia alla velocità della <strong>nave più lenta</strong>. M13 introdurrà i 3 tier di <em>iperguida</em> ' +
-        'che ridurranno drasticamente i tempi di salto iperspaziale.</p>'
+        'che ridurranno drasticamente i tempi di salto iperspaziale.</p>' +
+        '<p><strong>Sulla mappa galattica</strong> ogni flotta ha una <em>etichetta col nome</em> + ETA se in viaggio. ' +
+        'Cliccando un marker si apre un <em>popup info</em> con tutti i dettagli (composizione, ordine corrente, rotta), ' +
+        'da cui puoi aprire il <em>wizard ordini</em> o entrare in <em>modalità picker</em> per impostare la destinazione ' +
+        'cliccando direttamente sulla mappa.</p>'
     },
     {
       id: 'fleet-classes',

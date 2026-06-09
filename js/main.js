@@ -788,7 +788,11 @@ function renderGalaxyView(stage) {
     onContext: onMapContext,
     onActivateSystem: (id) => openSystem(id),  // doppio click → vista interna (M03)
     // M08 polish (decisione #61): drag&drop dal canvas per ordinare flotte.
-    onFleetPicked: (fleetId) => enterFleetPicker(fleetId),
+    // Polish post-wizard: il click sul marker NON entra più direttamente
+    // in picker mode — apre un popup info con dettagli del viaggio; il
+    // popup ha bottoni per impostare rotta / aprire wizard. Stesso UX
+    // del feedback utente "se ci clicco mi deve dare le info precise".
+    onFleetPicked: (fleetId, sx, sy) => openFleetInfoPopup(fleetId, sx, sy),
     onFleetOrderRequest: (req) => applyFleetOrderFromMap(req),
     onFleetPickerCancel: () => exitFleetPicker(true)
   });
@@ -8335,6 +8339,152 @@ function attackCapableFleets(g, sysId) {
     if (F.computePath(g.galaxy, f.location.systemId, sysId)) out.push(f);
   });
   return out;
+}
+
+/* =====================================================================
+   FLEET INFO POPUP (polish post-wizard) — click su marker → popup info.
+
+   L'utente ha chiesto: "se ci clicco mi deve dare le info precise del
+   viaggio in corso". Il click sul marker mostra ora un popup ancorato
+   al punto di click con: nome flotta, navi (count + glifi classi),
+   equipaggio (count + xp medio), ordine corrente in italiano, ETA se
+   in transito, e bottoni di azione (Wizard / Imposta rotta dal canvas /
+   Chiudi). Il popup chiude su click esterno o Esc.
+   ===================================================================== */
+function openFleetInfoPopup(fleetId, screenX, screenY) {
+  const g = ORION.game;
+  if (!g) return;
+  const fleet = (g.fleets || []).filter(function (f) { return f.id === fleetId; })[0];
+  if (!fleet) return;
+
+  closeFleetInfoPopup();
+  const node = document.createElement('div');
+  node.className = 'fleet-info-popup';
+  node.id = 'fleet-info-popup';
+  node.setAttribute('role', 'dialog');
+  node.setAttribute('aria-label', 'Informazioni flotta ' + fleet.name);
+
+  /* Composizione navi */
+  const F = ORION.fleet;
+  const byKind = {};
+  (fleet.ships || []).forEach(function (s) { byKind[s.kind] = (byKind[s.kind] || 0) + 1; });
+  const shipsHtml = Object.keys(byKind).map(function (k) {
+    const c = F && F.getClass ? F.getClass(k) : null;
+    const glyph = c ? c.glyph : '?';
+    return '<span title="' + escapeHtml(c ? c.name : k) + '">' + glyph + '×' + byKind[k] + '</span>';
+  }).join(' ');
+  /* Equipaggio + xp medio */
+  const crewN = (fleet.crew || []).length;
+  const xpAvg = crewN ? ((fleet.crew.reduce(function (a, c) { return a + (c.xp || 0); }, 0)) / crewN) : 0;
+  /* Ordine corrente in italiano + dettagli */
+  const orderInfo = describeFleetOrder(g, fleet);
+  /* Posizione corrente */
+  const posSys = g.galaxy.systems[fleet.location.systemId];
+  const posStatus = fleet.location.status === 'docked' ? 'all\'attracco'
+                  : fleet.location.status === 'in-transit' ? 'in transito'
+                  : 'in orbita';
+
+  node.innerHTML =
+    '<header class="fleet-info-popup__head">' +
+      '<h3 class="fleet-info-popup__name">' + escapeHtml(fleet.name) + '</h3>' +
+      '<button class="btn btn--mini btn--icon-only" data-action="fleet-info-close" type="button" aria-label="Chiudi">' +
+        '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+      '</button>' +
+    '</header>' +
+    '<dl class="fleet-info-popup__meta">' +
+      '<div><dt>Posizione</dt><dd>' + escapeHtml(posSys ? posSys.name : '—') + ' · ' + posStatus + '</dd></div>' +
+      '<div><dt>Navi</dt><dd>' + (shipsHtml || '<em>nessuna</em>') + '</dd></div>' +
+      '<div><dt>Equipaggio</dt><dd>' + crewN + (crewN ? ' (xp medio ' + xpAvg.toFixed(1) + ')' : '') + '</dd></div>' +
+      '<div><dt>Ordine</dt><dd>' + orderInfo.label + '</dd></div>' +
+      (orderInfo.targetSummary ? '<div><dt>Rotta</dt><dd>' + orderInfo.targetSummary + '</dd></div>' : '') +
+      (orderInfo.eta != null ? '<div><dt>ETA leg</dt><dd>' + orderInfo.eta + ' Ι</dd></div>' : '') +
+    '</dl>' +
+    '<div class="fleet-info-popup__actions">' +
+      '<button class="btn btn--mini" data-action="fleet-info-wizard" type="button">📋 Wizard ordini</button>' +
+      '<button class="btn btn--mini btn--primary" data-action="fleet-info-pick" type="button">🎯 Imposta dal canvas</button>' +
+    '</div>';
+
+  document.body.appendChild(node);
+  /* Posizionamento: prova a destra del punto, ma se sfora vai a sinistra. */
+  const margin = 12;
+  const rectW = 260;       /* stima */
+  const rectH = 220;       /* stima */
+  let x = screenX + 16;
+  let y = screenY - 16;
+  if (x + rectW > window.innerWidth - margin) x = screenX - rectW - 16;
+  if (x < margin) x = margin;
+  if (y + rectH > window.innerHeight - margin) y = window.innerHeight - rectH - margin;
+  if (y < margin) y = margin;
+  node.style.left = x + 'px';
+  node.style.top = y + 'px';
+
+  /* Handlers */
+  node.querySelector('[data-action="fleet-info-close"]').addEventListener('click', closeFleetInfoPopup);
+  node.querySelector('[data-action="fleet-info-wizard"]').addEventListener('click', function () {
+    closeFleetInfoPopup();
+    openFleetWizard(fleetId);
+  });
+  node.querySelector('[data-action="fleet-info-pick"]').addEventListener('click', function () {
+    closeFleetInfoPopup();
+    enterFleetPicker(fleetId);
+  });
+  /* Chiudi su click esterno (al successivo evento, per non chiudere subito). */
+  setTimeout(function () {
+    document.addEventListener('click', _maybeCloseFleetInfoPopup, true);
+    document.addEventListener('keydown', _fleetInfoEscHandler);
+  }, 0);
+}
+
+function _maybeCloseFleetInfoPopup(e) {
+  const node = document.getElementById('fleet-info-popup');
+  if (!node) { document.removeEventListener('click', _maybeCloseFleetInfoPopup, true); return; }
+  if (node.contains(e.target)) return;
+  closeFleetInfoPopup();
+}
+function _fleetInfoEscHandler(e) {
+  if (e.key === 'Escape') closeFleetInfoPopup();
+}
+function closeFleetInfoPopup() {
+  const node = document.getElementById('fleet-info-popup');
+  if (node && node.parentNode) node.parentNode.removeChild(node);
+  document.removeEventListener('click', _maybeCloseFleetInfoPopup, true);
+  document.removeEventListener('keydown', _fleetInfoEscHandler);
+}
+
+/* describeFleetOrder — testo italiano dell'ordine corrente + summary
+   destinazioni per il popup info. */
+function describeFleetOrder(g, fleet) {
+  const o = fleet.orders || {};
+  const sysName = function (id) { const s = g.galaxy.systems[id]; return s ? s.name : '—'; };
+  const inTransit = fleet.location && fleet.location.status === 'in-transit';
+  const eta = inTransit ? (fleet.etaImpulsi | 0) : null;
+  if (o.type === 'idle' || !o.type) return { label: '<em>in attesa</em>', eta: eta };
+  if (o.type === 'move')    return { label: 'rotta verso ' + escapeHtml(sysName(o.toSysId)),    eta: eta };
+  if (o.type === 'explore') return { label: 'esplorazione di ' + escapeHtml(sysName(o.toSysId)), eta: eta };
+  if (o.type === 'attack')  return { label: 'attacco a ' + escapeHtml(sysName(o.toSysId)),       eta: eta };
+  if (o.type === 'return')  return { label: 'rientro alla base',                                 eta: eta };
+  if (o.type === 'patrol') {
+    return { label: 'pattuglia ' + escapeHtml(sysName(o.sysA)) + ' ↔ ' + escapeHtml(sysName(o.sysB)), eta: eta };
+  }
+  if (o.type === 'move-route') {
+    const wps = o.waypoints || [];
+    const cur = (o.wpIdx || 0) + 1;
+    const summary = wps.map(function (id, i) {
+      const n = escapeHtml(sysName(id));
+      return (i + 1 === cur) ? '<strong>' + n + '</strong>' : n;
+    }).join(' → ') + (o.returnHome ? ' → 🏠' : '');
+    return { label: 'rotta a tappe (' + cur + '/' + wps.length + ')', targetSummary: summary, eta: eta };
+  }
+  if (o.type === 'patrol-loop') {
+    const loop = o.loop || [];
+    const cur = (o.loopIdx || 0);
+    const summary = loop.map(function (id, i) {
+      const n = escapeHtml(sysName(id));
+      return (i === cur) ? '<strong>' + n + '</strong>' : n;
+    }).join(' ↻ ');
+    return { label: 'pattuglia ciclica · ' + loop.length + ' nodi', targetSummary: summary, eta: eta };
+  }
+  return { label: escapeHtml(o.type), eta: eta };
 }
 
 /* =====================================================================
