@@ -8496,6 +8496,107 @@ function renderContextActionBar(ctx) {
         extraHtml += '<span class="bodyinfo__meta">● ' + moonCount + ' lun' + (moonCount === 1 ? 'a' : 'e') + '</span>';
       }
 
+      /* Decisione di sessione: chip secondari "in colpo d'occhio" sotto le
+         barre dei potenziali. Mostriamo i dati che NON sono ancora visibili
+         da nessun'altra parte a livello Sistema: slot/popCap/pericolo/
+         ostilità/avanzate (numero mascherato, l'identità arriva con la
+         scansione §7.3). I gas/cinture non sono colonizzabili → niente
+         slot/pop ma comunque pericolo (sistema) + estrazione. */
+      let chipsHtml = '';
+      if (planet) {
+        const isBelt = def && def.cat === 'belt';
+        const isGas  = def && def.cat === 'gas';
+        const sysDanger = (g.galaxy.systems[sysId] && g.galaxy.systems[sysId].danger) || 0;
+        const sysTier   = (g.galaxy.systems[sysId] && g.galaxy.systems[sysId].dangerTier) || '';
+        const dCls = sysDanger >= 70 ? 'is-crit' : sysDanger >= 40 ? 'is-warn' : 'is-ok';
+        const hostility = planet.hostility != null ? planet.hostility : null;
+        const hCls = hostility == null ? '' :
+          (hostility >= 20 ? 'is-crit' : hostility >= 10 ? 'is-warn' : 'is-ok');
+        const advN = (planet.advanced && planet.advanced.length) || 0;
+        const chips = [];
+        if (!isBelt && !isGas) {
+          chips.push('<span class="bodyinfo__chip" title="Slot di costruzione disponibili §10.2">' +
+            '<span class="bodyinfo__chip-k">Slot</span>' +
+            '<span class="bodyinfo__chip-v">' + (planet.slots != null ? planet.slots : '—') + '</span></span>');
+          if (planet.popCap > 0) {
+            chips.push('<span class="bodyinfo__chip" title="Popolazione massima sostenibile (unità)">' +
+              '<span class="bodyinfo__chip-k">Pop max</span>' +
+              '<span class="bodyinfo__chip-v">' + planet.popCap + '</span></span>');
+          }
+        } else {
+          chips.push('<span class="bodyinfo__chip is-mute" title="' + (isBelt ? 'Cintura asteroidale: solo estrazione orbitale' : 'Gigante gassoso: solo estrazione orbitale') + '">' +
+            '<span class="bodyinfo__chip-k">' + (isBelt ? 'Cintura' : 'Gassoso') + '</span>' +
+            '<span class="bodyinfo__chip-v">estraz. orbitale</span></span>');
+        }
+        chips.push('<span class="bodyinfo__chip ' + dCls + '" title="Pericolo §5.3 del sistema (raggio dalla tua origine)">' +
+          '<span class="bodyinfo__chip-k">Pericolo</span>' +
+          '<span class="bodyinfo__chip-v">' + sysDanger + (sysTier ? (' · ' + sysTier) : '') + '</span></span>');
+        if (hostility != null) {
+          chips.push('<span class="bodyinfo__chip ' + hCls + '" title="Ostilità locale del corpo: clima, geologia, fauna ostile">' +
+            '<span class="bodyinfo__chip-k">Ostilità</span>' +
+            '<span class="bodyinfo__chip-v">' + hostility + '</span></span>');
+        }
+        if (advN > 0) {
+          chips.push('<span class="bodyinfo__chip is-violet" title="Risorse avanzate §7.2 presenti — identità rivelata da un osservatorio">' +
+            '<span class="bodyinfo__chip-k">⚛ Avanzate</span>' +
+            '<span class="bodyinfo__chip-v">' + advN + ' — scansiona</span></span>');
+        }
+        chipsHtml = '<div class="bodyinfo__chips">' + chips.join('') + '</div>';
+      }
+
+      /* Distanza UNIVERSALE dalla colonia più vicina, indipendente dalla
+         velocità delle navi. Salti = BFS sul grafo iperspaziale
+         (galaxy.routes/links); tempo = Σ fleet.tempoLeg(_, _, _, 1.0) →
+         minSpeed=1.0 (Cargo leggero / Caccia base). Vale per "intuito" sulla
+         distanza minima di spostamento flotte e arrivo per colonizzazione.
+         Pesca colonia min hops, ties → min Ι. */
+      let distHtml = '';
+      const F = ORION.fleet;
+      if (F && F.computePath && F.tempoLeg && g.colonies) {
+        let best = null;
+        const keys = Object.keys(g.colonies);
+        for (let i = 0; i < keys.length; i++) {
+          const k = keys[i];
+          const c = g.colonies[k];
+          if (!c || !c.colonized) continue;
+          const fromSys = parseInt(String(k).split(':')[0], 10);
+          if (isNaN(fromSys)) continue;
+          const path = F.computePath(g.galaxy, fromSys, sysId);
+          if (!path) continue;
+          const hops = path.length - 1;
+          let timeI = 0;
+          for (let j = 0; j < hops; j++) timeI += F.tempoLeg(g.galaxy, path[j], path[j + 1], 1);
+          if (!best || hops < best.hops || (hops === best.hops && timeI < best.timeI)) {
+            best = { hops: hops, timeI: timeI, colonyKey: k };
+          }
+        }
+        if (best) {
+          let cname = '—';
+          try {
+            const cs = parseInt(String(best.colonyKey).split(':')[0], 10);
+            const cb = String(best.colonyKey).split(':')[1];
+            const sys2 = ORION.system.generate(g.galaxy, cs);
+            const pl2 = ORION.planet.generate(g.galaxy, sys2, cb);
+            if (pl2 && pl2.name) cname = pl2.name;
+          } catch (_) { /* fallback */ }
+          const durFmt = (ORION.time && ORION.time.format)
+            ? ORION.time.format(best.timeI, 'duration')
+            : (best.timeI + ' I');
+          let line;
+          if (best.hops === 0) {
+            line = '<strong>stesso sistema</strong> di <strong>' + escapeHtml(cname) + '</strong>';
+          } else {
+            line = '<strong>' + best.hops + ' salt' + (best.hops === 1 ? 'o' : 'i') + '</strong>' +
+              ' · <span class="bodyinfo__dist-time">~' + durFmt + '</span>' +
+              ' da <strong>' + escapeHtml(cname) + '</strong>';
+          }
+          distHtml = '<div class="bodyinfo__dist" title="Distanza standard (velocità 1.0): orientativa, le tue navi vere viaggiano più veloci col loro speed">' +
+            '<span class="bodyinfo__dist-icon" aria-hidden="true">✦</span> ' +
+            '<span class="bodyinfo__dist-k">Distanza</span> ' + line +
+          '</div>';
+        }
+      }
+
       infoCardHtml =
         '<div class="bodyinfo">' +
           '<div class="bodyinfo__head">' +
@@ -8504,6 +8605,8 @@ function renderContextActionBar(ctx) {
             badgeHtml + extraHtml +
           '</div>' +
           potsHtml +
+          chipsHtml +
+          distHtml +
         '</div>';
 
       /* Bottoni di azione coerenti con il livello pianeta. */
