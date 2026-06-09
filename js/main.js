@@ -8358,6 +8358,11 @@ function openFleetInfoPopup(fleetId, screenX, screenY) {
   if (!fleet) return;
 
   closeFleetInfoPopup();
+  /* Evidenza visiva sulla mappa: rotta + etichetta + anello giallo della
+     flotta selezionata (anche se non siamo in picker mode). */
+  if (ORION.map && ORION.map.setHighlightedFleet) {
+    ORION.map.setHighlightedFleet(fleetId);
+  }
   const node = document.createElement('div');
   node.className = 'fleet-info-popup';
   node.id = 'fleet-info-popup';
@@ -8397,11 +8402,11 @@ function openFleetInfoPopup(fleetId, screenX, screenY) {
       '<div><dt>Equipaggio</dt><dd>' + crewN + (crewN ? ' (xp medio ' + xpAvg.toFixed(1) + ')' : '') + '</dd></div>' +
       '<div><dt>Ordine</dt><dd>' + orderInfo.label + '</dd></div>' +
       (orderInfo.targetSummary ? '<div><dt>Rotta</dt><dd>' + orderInfo.targetSummary + '</dd></div>' : '') +
-      (orderInfo.eta != null ? '<div><dt>ETA leg</dt><dd>' + orderInfo.eta + ' Ι</dd></div>' : '') +
+      (orderInfo.eta != null ? '<div><dt>Arrivo in</dt><dd>' + orderInfo.eta + ' Ι</dd></div>' : '') +
     '</dl>' +
     '<div class="fleet-info-popup__actions">' +
       '<button class="btn btn--mini" data-action="fleet-info-wizard" type="button">📋 Wizard ordini</button>' +
-      '<button class="btn btn--mini btn--primary" data-action="fleet-info-pick" type="button">🎯 Imposta dal canvas</button>' +
+      '<button class="btn btn--mini btn--primary" data-action="fleet-info-pick" type="button">🎯 Scegli rotta da mappa</button>' +
     '</div>';
 
   document.body.appendChild(node);
@@ -8449,6 +8454,13 @@ function closeFleetInfoPopup() {
   if (node && node.parentNode) node.parentNode.removeChild(node);
   document.removeEventListener('click', _maybeCloseFleetInfoPopup, true);
   document.removeEventListener('keydown', _fleetInfoEscHandler);
+  /* Rimuovi l'evidenza giallo della flotta selezionata. Se sta entrando
+     in picker mode (chiamato da `enterFleetPicker` subito dopo), il
+     `setFleetPickerMode(fleetId,...)` riattiverà l'highlight da quel
+     percorso. */
+  if (ORION.map && ORION.map.setHighlightedFleet) {
+    ORION.map.setHighlightedFleet(null);
+  }
 }
 
 /* describeFleetOrder — testo italiano dell'ordine corrente + summary
