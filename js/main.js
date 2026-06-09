@@ -707,6 +707,14 @@ function renderView(stage, view) {
     return;
   }
 
+  /* Viste NON-mappa (fleet / civ / market / placeholder): la action bar
+     contestuale è agganciata al viewport (sibling dello stage), non si
+     resetta da sola cambiando vista. La nascondiamo esplicitamente qui
+     così non rimane "incollata" con un corpo selezionato da una sessione
+     sistema precedente. Le viste mappa (galaxy/group/system/planet)
+     ri-popolano la bar via onMapContext / updateSystemUI / updatePlanetUI. */
+  renderContextActionBar(null);
+
   // M08 Fase A: vista Flotta dedicata (lista + ordini). La mappa attiva
   // sui canvas è Fase B.
   if (view === 'fleet') {
