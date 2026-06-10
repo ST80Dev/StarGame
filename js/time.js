@@ -1224,6 +1224,15 @@
         /* Aggressione contro una civiltà non già ostile: la relazione si
            deteriora (la diplomazia piena è M11). */
         if (civAttacked && !civHostile) civ.disposition = Math.max(-100, civ.disposition - 25);
+        /* Coesione #54: attaccare un membro di un sistema coeso indispone
+           anche gli ALTRI proprietari (solidarietà locale, −15 ciascuno). */
+        if (civAttacked && root.ORION.cohesion && root.ORION.cohesion.applyAttackPenalty) {
+          const nSolid = root.ORION.cohesion.applyAttackPenalty(game, sysId, civ.id);
+          if (nSolid > 0) {
+            events.push({ kind: 'cohesion-attack-backlash', sysId: sysId,
+              attackedName: civ.name, count: nSolid, impulso: game.timeImpulsi });
+          }
+        }
       }
       if (!enemy) {
         if (fleet.attackTarget === sysId) { fleet.attackTarget = null; fleet.attackBodyKey = null; }

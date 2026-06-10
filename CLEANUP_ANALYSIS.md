@@ -46,7 +46,12 @@
 > `.fleet-order-flag`, `.fleet-route-list/empty/item*/add`). `openFleetOrdersOverlay`
 > resta come thin wrapper → Fleet Wizard (firma invariata per i call site). `.fleet-field`
 > tenuto (usato dall'overlay Crea flotta). Smoke headless: motore identico alla baseline.
-> **Punto 2 (`applyAttackPenalty`)**: in attesa di decisione utente.
+> **Punto 2 (`applyAttackPenalty`) ESEGUITO** (scelta utente "Attivala"): cablata in
+> `time.js → processSkirmishes` sul ramo `civAttacked` (attacco esplicito del giocatore).
+> Nuovo evento `cohesion-attack-backlash` (cronaca categoria civ, auto-pausa OFF).
+> Test mirato 4/4 PASS (backlash emesso · vicino −15 · attaccata esclusa dalla solidarietà ·
+> controprova sistema non-coeso senza effetti). La sezione B sotto è quindi RISOLTA.
+> **La pulizia (3 fasi) è completa.**
 
 ## A. Codice morto VERIFICATO — rimozione sicura (confidenza alta)
 

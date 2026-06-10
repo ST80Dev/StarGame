@@ -6516,6 +6516,7 @@ const DEFAULT_AUTOPAUSE = {
      OFF di default. Le federazioni emergenti, invece, sono eventi geopolitici
      forti (nuova entità composita o sua rottura) → ON. */
   'system-cohesion-formed': false,
+  'cohesion-attack-backlash': false,
   'system-cohesion-broken': false,
   'federation-formed': true,
   'federation-broken': true,
@@ -6870,6 +6871,7 @@ function showEventOverlay(events) {
     'system-occupied': 'Sistema occupato',
     'system-released': 'Occupazione abbandonata',
     'system-cohesion-formed': 'Sistema coeso (consorzio formato)',
+    'cohesion-attack-backlash': 'Sistema coeso: solidarietà contro il tuo attacco',
     'system-cohesion-broken': 'Sistema coeso: dissolto',
     'federation-formed': 'Federazione emergente',
     'federation-broken': 'Federazione dissolta',
@@ -7284,6 +7286,12 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — Occupazione di <strong>' + escapeHtml(sys ? sys.name : '—') + '</strong>' + stag +
       ' <strong>abbandonata</strong>.', 'civ');
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+  } else if (ev.kind === 'cohesion-attack-backlash') {
+    /* Coesione #54 (cablata in pulizia #68 Fase 3): solidarietà locale. */
+    const stag = ev.sysId != null && ev.sysId >= 0 ? systemTagHtml(ev.sysId) : '';
+    pushChronicle(ds + ' — <strong>Solidarietà locale</strong>' + stag + ': il tuo attacco a <strong>' +
+      escapeHtml(ev.attackedName || '—') + '</strong> indigna ' + ev.count +
+      (ev.count === 1 ? ' civiltà vicina' : ' civiltà vicine') + ' del sistema coeso (−15 disposizione).', 'civ');
   } else if (ev.kind === 'system-cohesion-formed') {
     /* M10 Fase B (decisione #52 §13.6): consorzio locale che emerge. */
     const stag = ev.sysId != null && ev.sysId >= 0 ? systemTagHtml(ev.sysId) : '';
