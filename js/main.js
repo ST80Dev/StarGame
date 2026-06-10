@@ -917,12 +917,6 @@ function hostilityNoun(planet) {
    • Niente "wow 4X" da 10 Mld, ma chiarezza totale (X/Y livelli + barra).
    • Bilanciamento intatto (curva interna invariata per produzione/scarsità). */
 
-/* Etichetta livello compatta "X / Y" — usata in chip, barre, badge. */
-function popLevelLabel(colony, planet) {
-  const units = (colony && colony.pop && colony.pop.total) || 0;
-  const cap = (colony && colony.pop && colony.pop.cap) || (planet && planet.popCap) || 0;
-  return units + ' / ' + cap;
-}
 /* Solo cap per uso isolato (es. "tetto del pianeta"). */
 function popMaxLabel(planet) {
   const cap = (planet && planet.popCap) || 0;
@@ -2172,18 +2166,6 @@ function bindGovernorHandlers(host, planet, colony) {
   const persist = function () {
     if (ORION.save && ORION.save.autosave && ORION.game) ORION.save.autosave(ORION.game);
   };
-  /* Backward compat: il vecchio checkbox toggle non c'è più, ma rebind
-     code lato dx-panel può ancora cercarlo: no-op se assente. */
-  const oldToggle = host.querySelector('[data-action="gov-toggle"]');
-  if (oldToggle) {
-    oldToggle.addEventListener('change', function (e) {
-      if (!ORION.governor) return;
-      ORION.governor.setEnabled(colony, e.target.checked);
-      if (e.target.checked && ORION.tutorial) ORION.tutorial.fire('governor');
-      persist();
-      renderPlanetColoniaTab(host, planet, colony);
-    });
-  }
   /* Level dropdown (decisione #59). */
   const levelSel = host.querySelector('[data-action="gov-level"]');
   if (levelSel) {
@@ -2987,9 +2969,6 @@ function uiIcon(name, tone) {
   const cls = tone ? (' ui-icon--' + tone) : '';
   return '<span class="ui-icon' + cls + '" aria-hidden="true">' + ORION.icon(name) + '</span>';
 }
-function kU() { return dsUnit('Κ'); }      /* Ciclo di nutazione */
-function phU() { return dsUnit('Φ'); }     /* Fase di precessione */
-function omU() { return dsUnit('Ω'); }     /* Eone */
 
 function renderCantieriSection(colony, planet) {
   const hasHangar = !!(colony.structures && colony.structures['cantiere-navale']);
@@ -8541,18 +8520,7 @@ function renderDxPanel() {
     /* Triggera click del nuovo bottone (è già stato sostituito sopra,
        quindi questo è no-op se il flusso è completato — fallback). */
   });
-  /* Governor toggle/dropdowns (decisione #59 Tier 2): rebind diretto. */
-  content.querySelectorAll('[data-action="gov-toggle"]').forEach(function (chk) {
-    const nb = chk.cloneNode(true);
-    chk.parentNode.replaceChild(nb, chk);
-    nb.addEventListener('change', withDxScope(function () {
-      if (!ORION.governor) return;
-      ORION.governor.setEnabled(colony, nb.checked);
-      if (nb.checked && ORION.tutorial) ORION.tutorial.fire('governor');
-      if (ORION.save && ORION.save.autosave && ORION.game) ORION.save.autosave(ORION.game);
-      renderDxPanel();
-    }));
-  });
+  /* Governor dropdowns (decisione #59 Tier 2): rebind diretto. */
   content.querySelectorAll('[data-action="gov-level"]').forEach(function (sel) {
     const nb = sel.cloneNode(true);
     sel.parentNode.replaceChild(nb, sel);

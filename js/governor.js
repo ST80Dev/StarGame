@@ -146,20 +146,6 @@
     return false;
   }
 
-  /* Toggle / setEnabled legacy: "enabled=true" → level 'vigile' se off. */
-  function setEnabled(colony, value) {
-    const g = ensureState(colony);
-    g.enabled = !!value;
-    g.level = value ? (g.level && g.level !== 'off' ? g.level : 'vigile') : 'off';
-    g.queueEmptySince = null;
-    g.fallingStreak = { food: 0, water: 0 };
-    g.lastStock = { food: colony.stock.food, water: colony.stock.water };
-  }
-  function toggle(colony) {
-    const g = ensureState(colony);
-    setEnabled(colony, !g.enabled);
-    return g.enabled;
-  }
   function setLevel(colony, level) {
     if (LEVELS.indexOf(level) < 0) return false;
     const g = ensureState(colony);
@@ -458,8 +444,6 @@
     PRIORITY: PRIORITY,
     ensureState: ensureState,
     isAvailable: isAvailable,
-    setEnabled: setEnabled,
-    toggle: toggle,
     setLevel: setLevel,
     setVocation: setVocation,
     tick: tick,

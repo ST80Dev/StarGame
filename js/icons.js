@@ -18,7 +18,6 @@
 
    API:
      ORION.icon(name)                  ritorna la stringa SVG
-     ORION.icons.NAMES                 array dei nomi disponibili
    ===================================================================== */
 'use strict';
 
@@ -368,8 +367,6 @@
       '<line x1="17" y1="19" x2="21" y2="19"/>'
     )
   };
-
-  ICONS.NAMES = Object.keys(ICONS).filter(function (k) { return k !== 'NAMES'; });
 
   ORION.icons = ICONS;
   ORION.icon = function (name) {

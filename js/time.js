@@ -15,7 +15,6 @@
                                      mode 'compact'  → "1·87·6·47" (default)
                                      mode 'duration' → "2Κ·20Ι" (omette zeri di testa)
      - currentDS(game)             Data Stellare corrente del game (compatta)
-     - currentDSFull(game)         versione estesa con sigle greche
 
    Determinismo / idempotenza:
      - Nessun RNG dipendente da Math.random nel loop. Se servisse stocastica
@@ -251,11 +250,6 @@
        migrazione: il campo resta sul disco ma non viene letto. */
     return format(game.timeImpulsi || 0, 'compact');
   }
-  function currentDSFull(game) {
-    if (!game) return '—';
-    return format(game.timeImpulsi || 0, 'full');
-  }
-
   /* PR-H: versione HTML del formato compact con i 4 valori colorati
      per unità del Faro (Ω·Φ·Κ·Ι). Tinte coerenti con .ds-unit:
      Ω=viola · Φ=ambra · Κ=verde · Ι=ciano. Pensata per l'HUD DATA
@@ -2121,7 +2115,6 @@
     CLASS_BIAS: CLASS_BIAS,
     format: format,
     currentDS: currentDS,
-    currentDSFull: currentDSFull,
     currentDSHtml: currentDSHtml,
     splitFaro: splitFaro,
     I_PER_K: I_PER_K, I_PER_PHI: I_PER_PHI, I_PER_OMEGA: I_PER_OMEGA,

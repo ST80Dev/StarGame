@@ -10,6 +10,19 @@
 
 ---
 
+> **STATO: Fase 1 ESEGUITA** (commit su questo branch). Scostamenti rispetto al piano:
+> - `planet.startSettling` **TENUTO**: in fase di rimozione è emerso il commento esplicito
+>   "Lasciato come API pubblica per coerenza con future estensioni" (Insediamento sul secondo
+>   corpo colonizzato) → è scaffolding intenzionale, rientra nella regola "ciò che è costruito
+>   per sviluppi futuri resta".
+> - `governor.setEnabled` rimosso **in cascata**: i suoi unici call-site erano i due blocchi
+>   `gov-toggle` morti; senza di essi era a sua volta irraggiungibile (il percorso vivo è
+>   `setLevel`, decisione #59).
+> - Rimosso anche il blocco CSS `.gov-toggle` (classe mai generata, emersa nello scan finale).
+> Verifica: `node --check` su tutti i file toccati + smoke headless (35 moduli caricati in
+> ordine index.html, partita generata, build maturata, advance 200 Ι con 9 eventi,
+> `governor.setLevel` OK, serialize schema 21 + migrate OK, determinismo galassia PASS).
+
 ## A. Codice morto VERIFICATO — rimozione sicura (confidenza alta)
 
 Ogni voce: 0 usi esterni + 0 usi interni oltre a definizione/export. Verificato a mano.

@@ -542,20 +542,6 @@
     return { rates: out, upkeep: upkeep, used: slotsUsed };
   }
 
-  /* I "potenziali teorici" del pianeta a regime, indipendenti dalla
-     colonia: utili per la scheda di colonizzazione (cosa offre il
-     pianeta se sviluppato). Tassi/Impulso con miniera+pannello+impianto
-     +fattoria a livello 1, senza bonus pianeta base. */
-  function theoreticalOutput(planet) {
-    const pot = planet.potentials;
-    return {
-      met:   +(4 * (pot.met   / 60)).toFixed(2),
-      en:    +(4 * (pot.en    / 60)).toFixed(2),
-      food:  +(4 * (pot.food  / 60)).toFixed(2),
-      water: +(4 * (pot.water / 60)).toFixed(2)
-    };
-  }
-
   /* Verifica prerequisiti di una struttura sulla colonia.
      Decisione #45: accetta `game` (opzionale) per leggere il bonus slot
      della capitale di gruppo. Senza `game` (test headless / chiamanti
@@ -858,7 +844,6 @@
     colonizeHome: colonizeHome,
     startSettling: startSettling,
     structureOutput: structureOutput,
-    theoreticalOutput: theoreticalOutput,
     effectiveSlots: effectiveSlots,
     canBuild: canBuild,
     startBuild: startBuild,
