@@ -892,11 +892,29 @@
           '<li><strong>Opzioni finali</strong>: per esplorazione e rotta a tappe puoi decidere se rientrare alla base, ' +
             'se esplorare ogni tappa, e quanto sostare in orbita per nodo.</li>' +
         '</ol>' +
-        '<p>Senza consumo né upkeep, una flotta può <strong>vagare a lungo</strong> tra i sistemi favorevoli. ' +
-        'I rifugi presso popoli terzi (recupero/rifornimento) verranno con <strong>M10/M11/M16</strong>.</p>' +
+        '<p>Lontano da casa la flotta consuma <strong>viveri</strong> (vedi la scheda dedicata): ' +
+        'opera intorno al tuo territorio quasi gratis, ma una rotta lunga nel vuoto va pianificata coi rifornimenti. ' +
+        'I rifugi presso popoli terzi (recupero/rifornimento) si ampliano con <strong>M11/M16</strong>.</p>' +
         '<p><strong>Scorciatoia mappa:</strong> click su una flotta (il pallino colorato) → i sistemi raggiungibili si accendono → ' +
         'click sul sistema target per dare l\'ordine. Default <em>rotta</em>; <kbd>Shift</kbd>=<em>attacca</em>, ' +
         '<kbd>Alt</kbd>=<em>esplora</em>; <kbd>Esc</kbd> annulla. Coesiste col wizard per gli ordini composti.</p>'
+    },
+    {
+      id: 'fleet-supply',
+      tag: 'M08 · Viveri',
+      title: 'Viveri di flotta',
+      body:
+        '<p>Una flotta porta con sé i <strong>viveri</strong>: un serbatoio di <strong>autonomia</strong> ' +
+        '(~250 Ι) che cala <em>solo quando è lontana da un porto amico</em> e si <strong>ricarica al massimo</strong> ' +
+        'quando sosta o passa per una tua colonia (o un porto di un alleato).</p>' +
+        '<p>Il <em>gauge è in Impulsi</em> (autonomia ~uguale per ogni flotta), ma il <em>costo</em> in cibo/acqua ' +
+        'del rifornimento cresce con l\'<strong>equipaggio</strong>: uno scout costa briciole, una grande flotta da guerra ' +
+        'lontano da casa pesa davvero → conviene costruire <strong>basi avanzate</strong> e stringere <strong>alleanze</strong>.</p>' +
+        '<p><strong>Non si resta mai bloccati</strong> (recovery-friendly): a viveri bassi arriva un <em>avviso</em> ' +
+        '(con auto-pausa) per rifornire o rientrare; a zero la flotta entra in <strong>deriva</strong> — arranca verso ' +
+        'il porto più vicino, lenta e con usura, ma non si perde mai.</p>' +
+        '<p>Operare intorno al tuo territorio è di fatto gratis (ti rifornisci di colonia in colonia). ' +
+        'Le grandi traversate richiedono pianificazione: l\'<em>iperguida</em> (M13) le renderà più sostenibili.</p>'
     },
     {
       id: 'intra-system-orders',

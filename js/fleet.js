@@ -101,6 +101,17 @@
      in §6.2 dal pianeta (colCost.impulsi), passato come `foundationI`. */
   const COLONIZE_ORBIT_DURATION = 10;
 
+  /* Decisione #69 — Viveri di flotta (tether logistico morbido).
+     Serbatoio di "autonomia in Ι" che cala 1/Ι lontano da un porto amico e
+     si ricarica al cap quando vi si sosta. Caso peggiore: rientro forzato +
+     deriva (lenta + usura), MAI blocco/distruzione (recovery-friendly #22). */
+  const VIVERI_CAP = 250;          // autonomia bersaglio in Ι (confermata utente)
+  const VIVERI_RATE_FOOD = 0.04;   // food per equipaggio per Ι di autonomia
+  const VIVERI_RATE_WATER = 0.03;  // acqua per equipaggio per Ι di autonomia
+  const VIVERI_WARN = 60;          // soglia avviso (~25% del cap)
+  const VIVERI_DRIFT_WEAR = 2;     // usura/Ι sulle navi in deriva (viveri a 0)
+  const VIVERI_DRIFT_SLOW = 2;     // moltiplicatore durata leg in deriva
+
   function getClass(kind) {
     return CLASSES[kind] || null;
   }
@@ -362,7 +373,10 @@
       etaImpulsi: 0,
       /* M09 (decisione #49): formazione di combattimento — determina la
          soglia di ritirata (aggressive 0% · balanced 30% · defensive 50%). */
-      formation: 'balanced'
+      formation: 'balanced',
+      /* Decisione #69: viveri di flotta. Nuova flotta provvista al porto
+         d'origine (parte al cap). */
+      viveri: VIVERI_CAP
     };
     game.fleets.push(fleet);
     return { ok: true, fleet: fleet };
@@ -611,6 +625,9 @@
     if (fleet.crew.length < crewReq) {
       return { ok: false, reason: 'Equipaggio insufficiente: ' + fleet.crew.length + ' / ' + crewReq + ' richiesti' };
     }
+    /* Decisione #69: carico viveri alla partenza se la flotta è a un porto
+       amico (tua colonia → addebito stock; porto alleato → gratis). */
+    if (fleetAtFriendlyPort(game, fleet)) loadViveriAtPort(game, fleet);
 
     if (type === 'move' || type === 'explore') {
       const to = order.toSysId;
@@ -905,6 +922,9 @@
     if (ORION.commander && ORION.commander.fleetSpeedMul) {
       t = Math.max(1, Math.round(t * ORION.commander.fleetSpeedMul(fleet)));
     }
+    /* Decisione #69: in deriva (viveri esauriti) la flotta arranca — i leg
+       successivi durano di più (razionamento). */
+    if (fleet._drift && (fleet.viveri || 0) <= 0) t = Math.max(1, t * VIVERI_DRIFT_SLOW);
     return t;
   }
 
@@ -988,11 +1008,162 @@
   }
 
   /* ------------------------------------------------------------------
+     Decisione #69 — Viveri di flotta. Il GAUGE è in Ι (autonomia
+     ~costante); il COSTO in food/acqua del rifornimento scala con
+     l'equipaggio (più bocche = più viveri in assoluto). Zero RNG →
+     determinismo (#5). Lazy-init (nessun bump di schema): le flotte dei
+     save vecchi partono al cap al primo tick.
+     ------------------------------------------------------------------ */
+  function viveriOf(fleet) {
+    if (!fleet) return 0;
+    if (fleet.viveri == null) fleet.viveri = VIVERI_CAP;
+    return fleet.viveri;
+  }
+  function viveriCap() { return VIVERI_CAP; }
+  function viveriStatus(fleet) {
+    const v = viveriOf(fleet);
+    if (v <= 0) return 'crit';
+    if (v <= VIVERI_WARN) return 'low';
+    return 'ok';
+  }
+  /* Colonia (tua, operativa) nel sistema indicato — per addebito stock. */
+  function ownColonyAt(game, sysId) {
+    const cols = game.colonies || {};
+    for (const k in cols) {
+      const c = cols[k];
+      if (c && c.colonized && c.systemId === sysId) return c;
+    }
+    return null;
+  }
+  /* La flotta è a un porto amico? (tua colonia O colonia di AI alleata #51). */
+  function fleetAtFriendlyPort(game, fleet) {
+    if (!fleet || !fleet.location) return false;
+    const sys = fleet.location.systemId;
+    if (sys == null) return false;
+    if (ownColonyAt(game, sys)) return true;
+    if (ORION.ai && ORION.ai.civForSystem) {
+      const civ = ORION.ai.civForSystem(game, sys);
+      if (civ && civ.relation === 'alliance') return true;
+    }
+    return false;
+  }
+  /* Rifornisce al cap. A una tua colonia addebita food/acqua dallo stock
+     (parziale se a corto, recovery-friendly); porto alleato = gratis. Costo
+     di 1 Ι di autonomia = equipaggio × (RATE_FOOD + RATE_WATER). */
+  function loadViveriAtPort(game, fleet) {
+    const cur = viveriOf(fleet);
+    if (cur >= VIVERI_CAP) return 0;
+    const crew = Math.max(1, fleetCrewRequired(fleet));
+    const colony = ownColonyAt(game, fleet.location.systemId);
+    let fillI = VIVERI_CAP - cur;
+    if (colony && colony.stock) {
+      const cf = crew * VIVERI_RATE_FOOD, cw = crew * VIVERI_RATE_WATER;
+      const haveF = colony.stock.food || 0, haveW = colony.stock.water || 0;
+      let frac = 1;
+      if (cf * fillI > haveF && cf > 0) frac = Math.min(frac, haveF / (cf * fillI));
+      if (cw * fillI > haveW && cw > 0) frac = Math.min(frac, haveW / (cw * fillI));
+      if (frac < 1) fillI = Math.floor(fillI * frac);
+      if (fillI <= 0) return 0;
+      colony.stock.food = Math.max(0, haveF - cf * fillI);
+      colony.stock.water = Math.max(0, haveW - cw * fillI);
+    }
+    fleet.viveri = cur + fillI;
+    return fillI;
+  }
+  /* Colonia più vicina (origine se viva, altrimenti BFS minima) — meta del
+     rientro forzato in deriva. null in esilio (nessuna colonia → la flotta
+     resta in deriva sul posto, mai un fail-state). */
+  function nearestOwnColony(game, fleet) {
+    const own = game.colonies && game.colonies[fleet.ownerColonyKey];
+    if (own && own.colonized) return own;
+    const cols = game.colonies || {};
+    let best = null, bestHops = Infinity;
+    for (const k in cols) {
+      const c = cols[k];
+      if (!c || !c.colonized) continue;
+      const p = computePath(game.galaxy, fleet.location.systemId, c.systemId);
+      if (p && (p.length - 1) < bestHops) { bestHops = p.length - 1; best = c; }
+    }
+    return best;
+  }
+  function maybeForceReturn(game, fleet) {
+    if (!fleet.orders || fleet.orders.type === 'return') return;
+    const home = nearestOwnColony(game, fleet);
+    if (!home || home.systemId === fleet.location.systemId) return;
+    const path = computePath(game.galaxy, fleet.location.systemId, home.systemId);
+    if (!path) return;
+    fleet.orders = { type: 'return', _forcedSupply: true };
+    fleet.route = path;
+    fleet.routeIdx = 0;
+    fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
+  }
+  /* processViveri — un Impulso del serbatoio. Chiamato in cima a tick(),
+     così anche le flotte idle lontane consumano (l'equipaggio mangia). */
+  function processViveri(game, fleet, events) {
+    if (!fleet || !fleet.location) return;
+    if (fleet.viveri == null) fleet.viveri = VIVERI_CAP;
+    if (fleetAtFriendlyPort(game, fleet)) {
+      if (fleet.viveri < VIVERI_CAP) loadViveriAtPort(game, fleet);
+      fleet._supplyWarned = false;
+      if (fleet._drift) {
+        fleet._drift = false;
+        events.push({ kind: 'fleet-resupplied', fleetId: fleet.id, fleetName: fleet.name,
+          systemId: fleet.location.systemId, impulso: game.timeImpulsi });
+      }
+      return;
+    }
+    if (fleet.viveri > 0) {
+      fleet.viveri -= 1;
+      if (fleet.viveri <= VIVERI_WARN && !fleet._supplyWarned) {
+        fleet._supplyWarned = true;
+        events.push({ kind: 'fleet-supply-low', fleetId: fleet.id, fleetName: fleet.name,
+          systemId: fleet.location.systemId, viveri: fleet.viveri, impulso: game.timeImpulsi });
+      }
+    }
+    if (fleet.viveri <= 0) {
+      if (!fleet._drift) {
+        fleet._drift = true;
+        events.push({ kind: 'fleet-supply-critical', fleetId: fleet.id, fleetName: fleet.name,
+          systemId: fleet.location.systemId, impulso: game.timeImpulsi });
+      }
+      if (fleet.location.status === 'in-transit' && Array.isArray(fleet.ships)) {
+        for (let i = 0; i < fleet.ships.length; i++) {
+          fleet.ships[i].wear = Math.min(100, (fleet.ships[i].wear || 0) + VIVERI_DRIFT_WEAR);
+        }
+      } else {
+        /* Non in transito (orbiting/idle): rientro forzato al porto più
+           vicino (riserva di rientro garantita #69). */
+        maybeForceReturn(game, fleet);
+      }
+    }
+  }
+  /* Stima Ι di una rotta (per gli avvisi UI all'ordine). */
+  function routeImpulsi(galaxy, fleet, path) {
+    if (!Array.isArray(path) || path.length < 2) return 0;
+    const sp = fleetMinSpeed(fleet);
+    let t = 0;
+    for (let i = 1; i < path.length; i++) t += tempoLeg(galaxy, path[i - 1], path[i], sp);
+    return t;
+  }
+  /* Δ Impulsi al prossimo evento viveri (per nextEventImpulsi in time.js). */
+  function viveriNextEventDelta(game, fleet) {
+    if (!fleet || !fleet.location) return 0;
+    if (fleetAtFriendlyPort(game, fleet)) return 0;
+    const v = viveriOf(fleet);
+    if (v > VIVERI_WARN) return v - VIVERI_WARN;
+    if (v > 0) return v;
+    return 0;
+  }
+
+  /* ------------------------------------------------------------------
      tick — 1 Impulso. Decrementa etaImpulsi se in transito; alla fine
      del leg avanza al prossimo sistema e gestisce arrivo/return/patrol.
      ------------------------------------------------------------------ */
   function tick(game, fleet, events) {
     if (!fleet || !fleet.orders) return;
+    /* Decisione #69: viveri PRIMA di tutto (anche le flotte idle lontane
+       consumano; il rifornimento ai porti amici resetta i flag). */
+    processViveri(game, fleet, events);
     if (fleet.orders.type === 'idle') return;
 
     /* Decisione #60: incident roll una sola volta all'avvio dell'explore
@@ -1599,6 +1770,14 @@
     /* Decisione #66 estensione: API trasporto coloni. */
     fleetPopCargoCap: fleetPopCargoCap,
     embarkPop: embarkPop,
-    disembarkPop: disembarkPop
+    disembarkPop: disembarkPop,
+    /* Decisione #69: viveri di flotta (tether logistico). */
+    viveriCap: viveriCap,
+    viveriOf: viveriOf,
+    viveriStatus: viveriStatus,
+    fleetAtFriendlyPort: fleetAtFriendlyPort,
+    loadViveriAtPort: loadViveriAtPort,
+    routeImpulsi: routeImpulsi,
+    viveriNextEventDelta: viveriNextEventDelta
   };
 })(typeof window !== 'undefined' ? window : this);

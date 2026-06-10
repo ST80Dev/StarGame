@@ -4202,6 +4202,8 @@ function renderFleetView(stage) {
         ? '<div class="fleet-item__pop"><span class="ui-icon ui-icon--amber" aria-hidden="true">◉</span> ' +
             'Coloni a bordo: <strong>' + popOnboard + '</strong> / ' + popCap + ' livell' + (popCap === 1 ? 'o' : 'i') + '</div>'
         : '';
+      /* Decisione #69: gauge viveri (autonomia logistica). */
+      const viveriHtml = fleetViveriHtml(f);
       return '<li class="fleet-item" data-fleet-id="' + escapeHtml(f.id) + '">' +
         '<div class="fleet-item__head">' +
           '<span class="fleet-item__name"><strong>' + escapeHtml(f.name) + '</strong> ' +
@@ -4216,6 +4218,7 @@ function renderFleetView(stage) {
           ' · <span class="cantieri-row__base">equipaggio ' + (f.crew ? f.crew.length : 0) + ' / ' +
           (ORION.fleet ? ORION.fleet.fleetCrewRequired(f) : 0) + '</span></div>' +
         popHtml +
+        viveriHtml +
         vetHtml +
         cmdHtml +
         '<div class="fleet-item__actions">' +
@@ -4396,6 +4399,27 @@ function fleetVeterancyHtml(fleet) {
       escapeHtml(cls.name) + nm + ' · ' + lbl + '</span>';
   }).join('');
   return '<div class="fleet-item__vets">' + chips + '</div>';
+}
+
+/* Decisione #69: gauge viveri di flotta. Autonomia in Ι (0..cap) con stato
+   ok/low/crit colorato. La flotta a un porto amico è sempre rifornita. */
+function fleetViveriHtml(fleet) {
+  const F = ORION.fleet;
+  if (!F || !F.viveriOf || !fleet || !fleet.ships || !fleet.ships.length) return '';
+  const cap = F.viveriCap ? F.viveriCap() : 250;
+  const v = Math.max(0, Math.round(F.viveriOf(fleet)));
+  const st = F.viveriStatus ? F.viveriStatus(fleet) : 'ok';
+  const atPort = (ORION.game && F.fleetAtFriendlyPort) ? F.fleetAtFriendlyPort(ORION.game, fleet) : false;
+  const pct = Math.max(0, Math.min(100, Math.round(v / cap * 100)));
+  const drift = fleet._drift ? ' · <strong>deriva</strong>' : '';
+  const label = atPort
+    ? 'rifornita al porto'
+    : (v + ' / ' + cap + ' Ι' + drift);
+  return '<div class="fleet-viveri fleet-viveri--' + st + '" title="Viveri: autonomia della flotta lontano da un porto amico (#69)">' +
+    '<span class="fleet-viveri__ico ui-icon ui-icon--green" aria-hidden="true">◇</span> ' +
+    '<span class="fleet-viveri__lbl">Viveri ' + label + '</span>' +
+    '<span class="fleet-viveri__bar"><span class="fleet-viveri__fill" style="width:' + pct + '%"></span></span>' +
+    '</div>';
 }
 
 function cycleFleetFormation(fleetId, stage) {
@@ -6438,6 +6462,9 @@ const DEFAULT_AUTOPAUSE = {
      non sorpresa. Hop intermedi mai. */
   'fleet-arrived': true, 'fleet-route-complete': true, 'fleet-discovery': true,
   'fleet-launched': false, 'fleet-leg-hop': false,
+  /* Decisione #69: viveri. L'avviso e l'esaurimento auto-pausano (finestra
+     per reagire); il rifornimento no (è una buona notizia di routine). */
+  'fleet-supply-low': true, 'fleet-supply-critical': true, 'fleet-resupplied': false,
   /* Decisione intra-sistema: minaccia sopra una flotta in garrison.
      Default ON — l'utente decide il da farsi (Ingaggia/Ritira/Resta). */
   'garrison-threat-detected': true,
@@ -6819,6 +6846,9 @@ function showEventOverlay(events) {
     'fleet-route-complete': 'Flotta: rotta completata',
     'fleet-discovery': 'Flotta: sistema esplorato',
     'fleet-launched': 'Flotta: salto iperspaziale',
+    'fleet-supply-low': 'Flotta: viveri in esaurimento',
+    'fleet-supply-critical': 'Flotta: viveri esauriti',
+    'fleet-resupplied': 'Flotta rifornita',
     'fleet-leg-hop': 'Flotta: hop intermedio',
     'fleet-waypoint-reached': 'Flotta: tappa raggiunta',
     'garrison-threat-detected': 'Garrison: minaccia rilevata',
@@ -7409,6 +7439,22 @@ function chronicleEvent(ev) {
     const stag = ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName) + '</strong> intercettata in rotta presso <strong>' +
       (sys ? sys.name : '—') + '</strong>' + stag + ': avvistamento ostile, scontro imminente.', 'system');
+  } else if (ev.kind === 'fleet-supply-low') {
+    const sys = ORION.game.galaxy.systems[ev.systemId];
+    const stag = ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName) + '</strong>: viveri in esaurimento (' +
+      Math.max(0, Math.round(ev.viveri || 0)) + ' ' + iU() + ' di autonomia) presso <strong>' +
+      (sys ? sys.name : '—') + '</strong>' + stag + '. Rifornisci a un porto amico o fai rotta verso casa.', 'system');
+    if (ORION.tutorial) ORION.tutorial.fire('fleet-supply');
+  } else if (ev.kind === 'fleet-supply-critical') {
+    const sys = ORION.game.galaxy.systems[ev.systemId];
+    const stag = ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName) + '</strong>: <strong>viveri esauriti</strong> presso <strong>' +
+      (sys ? sys.name : '—') + '</strong>' + stag + '. Razionamento: la flotta arranca verso il porto più vicino (lenta + usura).', 'system');
+  } else if (ev.kind === 'fleet-resupplied') {
+    const sys = ORION.game.galaxy.systems[ev.systemId];
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName) + '</strong> rifornita presso <strong>' +
+      (sys ? sys.name : '—') + '</strong>: viveri al massimo, deriva rientrata.', 'system');
   } else if (ev.kind === 'empire-fallen') {
     if (ev.hard) {
       pushChronicle(ds + ' — <strong>La tua civiltà è caduta.</strong> Senza più colonie, l\'impero si dissolve negli annali galattici.', 'system');
