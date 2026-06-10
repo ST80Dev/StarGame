@@ -910,9 +910,14 @@
         '<p>Il <em>gauge è in Impulsi</em> (autonomia ~uguale per ogni flotta), ma il <em>costo</em> in cibo/acqua ' +
         'del rifornimento cresce con l\'<strong>equipaggio</strong>: uno scout costa briciole, una grande flotta da guerra ' +
         'lontano da casa pesa davvero → conviene costruire <strong>basi avanzate</strong> e stringere <strong>alleanze</strong>.</p>' +
+        '<p><strong>Anche in orbita si consuma</strong> (l\'equipaggio mangia comunque): restare in orbita attinge allo ' +
+        'stesso serbatoio dove l\'ha lasciato il viaggio. Orbitare una <em>tua</em> colonia o un alleato è <strong>gratis</strong> ' +
+        '(rifornimento continuo); orbitare un sistema straniero o vuoto consuma il residuo → una <strong>guarnigione avanzata</strong> ' +
+        'senza base o alleanza vicina non è sostenibile a lungo.</p>' +
         '<p><strong>Non si resta mai bloccati</strong> (recovery-friendly): a viveri bassi arriva un <em>avviso</em> ' +
-        '(con auto-pausa) per rifornire o rientrare; a zero la flotta entra in <strong>deriva</strong> — arranca verso ' +
-        'il porto più vicino, lenta e con usura, ma non si perde mai.</p>' +
+        '(con auto-pausa) per rifornire o rientrare; a zero la flotta entra in <strong>deriva</strong> — l\'ordine passa ' +
+        'automaticamente a <em>Rientro al porto più vicino</em> (lenta + usura). Se non intervieni rientra da sola; ' +
+        'se le dai un altro ordine durante la pausa, lo sovrascrivi. Non si perde mai.</p>' +
         '<p>Operare intorno al tuo territorio è di fatto gratis (ti rifornisci di colonia in colonia). ' +
         'Le grandi traversate richiedono pianificazione: l\'<em>iperguida</em> (M13) le renderà più sostenibili.</p>'
     },

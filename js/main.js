@@ -7450,7 +7450,8 @@ function chronicleEvent(ev) {
     const sys = ORION.game.galaxy.systems[ev.systemId];
     const stag = ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName) + '</strong>: <strong>viveri esauriti</strong> presso <strong>' +
-      (sys ? sys.name : '—') + '</strong>' + stag + '. Razionamento: la flotta arranca verso il porto più vicino (lenta + usura).', 'system');
+      (sys ? sys.name : '—') + '</strong>' + stag + '. Razionamento: ho impostato <strong>Rientro al porto più vicino</strong> (lenta + usura). ' +
+      'Dai un altro ordine per cambiare, oppure lasciala rientrare.', 'system');
   } else if (ev.kind === 'fleet-resupplied') {
     const sys = ORION.game.galaxy.systems[ev.systemId];
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName) + '</strong> rifornita presso <strong>' +
