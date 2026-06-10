@@ -1036,6 +1036,7 @@
 
     /* Se la rotta non è finita, prepara il prossimo leg. */
     if (fleet.routeIdx + 1 < fleet.route.length) {
+      _autoRevealAt(arrivedAt);
       events.push({
         kind: 'fleet-leg-hop',
         fleetId: fleet.id, fleetName: fleet.name,
@@ -1096,7 +1097,27 @@
       return;
     }
 
+    /* Decisione di sessione (post-feedback bug "sistema esplorato resta in
+       nebbia"): se la flotta arriva FISICAMENTE in un sistema, lo conosce.
+       Rivelazione coerente per qualsiasi ordine (move/attack/garrison/
+       move-route/patrol/patrol-loop/return): una flotta in orbita di un
+       sistema l'ha esplorato, indipendentemente dall'intento dell'ordine.
+       Idempotente (revealSystem ritorna false se era già EXPLORED). */
+    function _autoRevealAt(sysId) {
+      if (!ORION.galaxy || !ORION.galaxy.revealSystem) return;
+      const wasUnknown = ORION.galaxy.revealSystem(game.galaxy, sysId, game.state);
+      if (wasUnknown) {
+        events.push({
+          kind: 'fleet-discovery',
+          fleetId: fleet.id, fleetName: fleet.name,
+          systemId: sysId,
+          impulso: game.timeImpulsi
+        });
+      }
+    }
+
     if (order.type === 'move' || order.type === 'attack') {
+      _autoRevealAt(arrivedAt);
       /* L'attacco mantiene `fleet.attackTarget` (+ opzionale
          `fleet.attackBodyKey`): all'arrivo la flotta orbita e
          processSkirmishes ingaggia il bersaglio al tick successivo. */
@@ -1122,6 +1143,7 @@
        osservazione vicino al pianeta target. L'ordine RESTA attivo (non
        torna a idle): processGarrisonThreats vigila a ogni tick. */
     if (order.type === 'garrison') {
+      _autoRevealAt(arrivedAt);
       fleet.location.status = 'orbiting';
       fleet.location.bodyKey = order.bodyKey || null;
       fleet.etaImpulsi = 0;
@@ -1138,18 +1160,9 @@
     }
 
     if (order.type === 'explore') {
-      /* Rivela il sistema (idempotente, decisione #5 — delta puro). */
-      if (ORION.galaxy && ORION.galaxy.revealSystem) {
-        const revealed = ORION.galaxy.revealSystem(game.galaxy, arrivedAt, game.state);
-        if (revealed) {
-          events.push({
-            kind: 'fleet-discovery',
-            fleetId: fleet.id, fleetName: fleet.name,
-            systemId: arrivedAt,
-            impulso: game.timeImpulsi
-          });
-        }
-      }
+      /* Rivela il sistema (idempotente, decisione #5 — delta puro).
+         _autoRevealAt gestisce sia il reveal che l'evento fleet-discovery. */
+      _autoRevealAt(arrivedAt);
       events.push({
         kind: 'fleet-arrived',
         fleetId: fleet.id, fleetName: fleet.name,
@@ -1192,6 +1205,7 @@
     }
 
     if (order.type === 'return') {
+      _autoRevealAt(arrivedAt);
       const colony = game.colonies && game.colonies[fleet.ownerColonyKey];
       const docked = !!(colony && colony.systemId === arrivedAt);
       if (docked) {
@@ -1277,6 +1291,7 @@
     }
 
     if (order.type === 'patrol') {
+      _autoRevealAt(arrivedAt);
       events.push({
         kind: 'fleet-route-complete',
         fleetId: fleet.id, fleetName: fleet.name,
@@ -1307,6 +1322,10 @@
        tappa corrente (wpIdx) è appena terminata. */
     if (order.type === 'move-route') {
       const wpReached = order.waypoints[order.wpIdx];
+      /* Auto-reveal: la flotta è LÌ, conosce il sistema. Vale sempre,
+         indipendentemente da `exploreEach` (che ora è ridondante ma
+         lasciato come flag opzionale per UX). */
+      _autoRevealAt(wpReached);
       events.push({
         kind: 'fleet-waypoint-reached',
         fleetId: fleet.id, fleetName: fleet.name,
@@ -1314,17 +1333,6 @@
         wpIdx: order.wpIdx, wpTotal: order.waypoints.length,
         impulso: game.timeImpulsi
       });
-      if (order.exploreEach && ORION.galaxy && ORION.galaxy.revealSystem) {
-        const revealed = ORION.galaxy.revealSystem(game.galaxy, wpReached, game.state);
-        if (revealed) {
-          events.push({
-            kind: 'fleet-discovery',
-            fleetId: fleet.id, fleetName: fleet.name,
-            systemId: wpReached,
-            impulso: game.timeImpulsi
-          });
-        }
-      }
       /* Imposta orbita + dwell della tappa raggiunta. */
       fleet.location.status = 'orbiting';
       fleet.etaImpulsi = 0;
@@ -1340,6 +1348,7 @@
     /* Fase B (decisione #46): pattuglia su N sistemi in loop. */
     if (order.type === 'patrol-loop') {
       const sysReached = order.loop[order.loopIdx];
+      _autoRevealAt(sysReached);
       events.push({
         kind: 'fleet-waypoint-reached',
         fleetId: fleet.id, fleetName: fleet.name,
