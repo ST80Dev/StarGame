@@ -4707,7 +4707,6 @@ select.main-menu__input { cursor: pointer; }
 
 /* Overlays creazione/ordini — riusa il pattern di expedition-pick-overlay. */
 .fleet-create-overlay,
-.fleet-orders-overlay,
 .fleet-wizard {
   position: fixed;
   inset: 0;
@@ -4721,10 +4720,8 @@ select.main-menu__input { cursor: pointer; }
   padding: 24px;
 }
 .fleet-create-overlay[hidden],
-.fleet-orders-overlay[hidden],
 .fleet-wizard[hidden] { display: none; }
-.fleet-create-overlay__panel,
-.fleet-orders-overlay__panel {
+.fleet-create-overlay__panel {
   background: rgb(var(--c-surface-rgb) / 0.95);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 6px;
@@ -4735,16 +4732,14 @@ select.main-menu__input { cursor: pointer; }
   overflow-y: auto;
   color: var(--c-text, #e9ecf6);
 }
-.fleet-create-overlay__head,
-.fleet-orders-overlay__head {
+.fleet-create-overlay__head {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
   margin-bottom: 10px;
 }
-.fleet-create-overlay__head h2,
-.fleet-orders-overlay__head h2 {
+.fleet-create-overlay__head h2 {
   margin: 0;
   font-family: var(--font-display, sans-serif);
   font-size: 1.2em;
@@ -4765,8 +4760,7 @@ select.main-menu__input { cursor: pointer; }
   padding: 4px 6px;
   font-family: inherit;
 }
-.fleet-create-overlay__actions,
-.fleet-order-block {
+.fleet-create-overlay__actions {
   display: flex;
   gap: 6px;
   align-items: center;
@@ -4774,95 +4768,11 @@ select.main-menu__input { cursor: pointer; }
   flex-wrap: wrap;
 }
 .fleet-create-overlay__actions { justify-content: flex-end; }
-.fleet-order-block h3 {
-  margin: 0;
-  flex: 0 0 100%;
-  font-size: 0.95em;
-  letter-spacing: 0.04em;
-  font-family: var(--font-display, sans-serif);
-}
-.fleet-order-block select {
-  flex: 1;
-  min-width: 140px;
-  background: rgb(var(--c-surface-rgb) / 0.85);
-  color: var(--c-text, #e9ecf6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-  padding: 3px 6px;
-  font-family: inherit;
-}
-/* Fase B: overlay rotta a tappe e pattuglia ciclica. */
-.fleet-order-block--route { border-left: 2px solid var(--c-cyan, #2fe6e0); padding-left: 8px; }
-.fleet-order-block--route h3 { color: var(--c-cyan, #2fe6e0); }
-.fleet-order-flag {
-  font-size: 0.85em;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  margin-right: 8px;
-  color: var(--c-muted, #8a93b8);
-  cursor: pointer;
-}
-.fleet-order-flag input { margin: 0; }
-.fleet-route-list {
-  list-style: none;
-  margin: 4px 0;
-  padding: 0;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  max-height: 180px;
-  overflow-y: auto;
-}
-.fleet-route-empty {
-  font-size: 0.82em;
-  color: var(--c-muted, #8a93b8);
-  font-style: italic;
-  padding: 4px 6px;
-}
-.fleet-route-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 6px;
-  background: rgba(47, 230, 224, 0.05);
-  border-radius: 3px;
-  font-size: 0.88em;
-}
-.fleet-route-item__n {
-  flex: 0 0 auto;
-  color: var(--c-cyan, #2fe6e0);
-  font-family: var(--font-display, sans-serif);
-  font-weight: 600;
-  min-width: 18px;
-}
-.fleet-route-item__name { flex: 1; }
-.fleet-route-item__dwell {
-  flex: 0 0 auto;
-  color: var(--c-muted, #8a93b8);
-  font-size: 0.85em;
-}
-.fleet-route-add {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  flex-wrap: wrap;
-}
-.fleet-route-add input[type="number"] {
-  width: 56px;
-  background: rgb(var(--c-surface-rgb) / 0.85);
-  color: var(--c-text, #e9ecf6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-  padding: 3px 6px;
-}
 
 /* =====================================================================
    FLEET WIZARD — Ordini guidati a 3 step (post-feedback utente)
    ===================================================================== */
-/* .fleet-wizard è gestito sopra insieme a .fleet-create-overlay / .fleet-orders-overlay */
+/* .fleet-wizard è gestito sopra insieme a .fleet-create-overlay */
 .fleet-wizard__panel {
   background: rgb(var(--c-surface-rgb) / 0.96);
   border: 1px solid rgba(255, 255, 255, 0.14);

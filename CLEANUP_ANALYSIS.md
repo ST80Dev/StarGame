@@ -40,6 +40,14 @@
 > - Verifica: sintassi OK su tutti i file; smoke headless con motore **identico alla baseline**
 >   (stesso replay: DS 0·1·8·0, 9 eventi, stock 480) + assert dedicati su util/format PASS.
 
+> **STATO: Fase 3 punto 1 ESEGUITO** (conferma utente "Toglilo"): rimosso
+> `_legacyFleetOrdersOverlay` (244 righe in main.js) + ~115 righe di CSS usate solo da lui
+> (`.fleet-orders-overlay*`, le metà orfane dei selettori condivisi, `.fleet-order-block*`,
+> `.fleet-order-flag`, `.fleet-route-list/empty/item*/add`). `openFleetOrdersOverlay`
+> resta come thin wrapper → Fleet Wizard (firma invariata per i call site). `.fleet-field`
+> tenuto (usato dall'overlay Crea flotta). Smoke headless: motore identico alla baseline.
+> **Punto 2 (`applyAttackPenalty`)**: in attesa di decisione utente.
+
 ## A. Codice morto VERIFICATO — rimozione sicura (confidenza alta)
 
 Ogni voce: 0 usi esterni + 0 usi interni oltre a definizione/export. Verificato a mano.
