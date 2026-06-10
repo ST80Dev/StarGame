@@ -6113,6 +6113,24 @@ select.main-menu__input { cursor: pointer; }
   background: rgba(240, 216, 160, 0.14); border: 1px solid rgba(240, 216, 160, 0.4);
   color: #f0d8a0; font-size: 0.7rem; font-weight: 600;
 }
+/* Decisione #69: gauge viveri di flotta (autonomia logistica). */
+.fleet-viveri {
+  margin: 4px 0 2px; font-size: 0.74rem;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  color: var(--c-text-faint, #98a3c8);
+}
+.fleet-viveri__lbl { white-space: nowrap; }
+.fleet-viveri__bar {
+  flex: 1 1 60px; min-width: 60px; height: 5px; border-radius: 3px;
+  background: rgba(var(--c-surface-rgb, 34 46 86) / 0.7);
+  overflow: hidden;
+}
+.fleet-viveri__fill { display: block; height: 100%; border-radius: 3px; transition: width 0.2s; }
+.fleet-viveri--ok   .fleet-viveri__fill { background: #9fd0a8; }
+.fleet-viveri--low  { color: #f0d8a0; }
+.fleet-viveri--low  .fleet-viveri__fill { background: #f0d670; }
+.fleet-viveri--crit { color: #f2a3a0; }
+.fleet-viveri--crit .fleet-viveri__fill { background: #e06b66; }
 /* P1: chip Diaspora compatto nel deck colonia (riga Popolazione). */
 .deck-pop__diaspora {
   display: inline-block; margin-left: 8px; padding: 1px 6px; border-radius: 4px;

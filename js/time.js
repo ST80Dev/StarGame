@@ -2064,6 +2064,13 @@
           const d = f.orders.phaseLeft || 0;
           if (d > 0 && d < best) best = d;
         }
+        /* Decisione #69: prossima soglia viveri (avviso/critico) per le
+           flotte lontane da un porto amico → "Prossimo evento" si ferma
+           prima del rientro forzato. */
+        if (root.ORION.fleet && root.ORION.fleet.viveriNextEventDelta) {
+          const dv = root.ORION.fleet.viveriNextEventDelta(game, f);
+          if (dv > 0 && dv < best) best = dv;
+        }
       }
     }
     /* Decisione #45: transizioni capitale in corso. */

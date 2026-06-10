@@ -140,13 +140,20 @@
     }
     return n;
   }
-  /* Navi totali "afferenti" alla colonia: docked + in coda + in spedizione.
-     Le in spedizione hanno lasciato il porto ma occupano una matricola
-     della colonia → tornando dovranno trovare posto (#41). */
+  /* Navi totali "afferenti" alla colonia: docked + in coda (+ spedizioni
+     legacy). EMENDA #41 (decisione #69): le navi DISPIEGATE in flotta
+     liberano l'attracco e lasciano i libri della colonia natale — sono già
+     fuori dal counter `colony.ships` (rimosse da assignShips) e fuori da
+     game.expeditions (migrazione #60). Quindi l'attracco conta solo le navi
+     A CASA (a terra + in costruzione): costruisci e dispieghi liberamente,
+     senza ritrovarti la nave "sul conto" della colonia che l'ha costruita.
+     `flying` resta come residuo delle spedizioni legacy M07 (0 dopo #60),
+     mantenuto per retro-compat. Il limite "quanta flotta posso permettermi"
+     vive ora nel sostentamento (viveri #69 + equipaggi + usura). */
   function totalShipsBound(game, colony, colonyKey) {
     const docked = availableShips(colony);                 // contatore a terra
     const queued = activeShipBuilds(colony);               // in costruzione (occupano cantiere ma non porto)
-    const flying = shipsOnExpedition(game, colonyKey);     // in viaggio
+    const flying = shipsOnExpedition(game, colonyKey);     // spedizioni legacy (0 post-#60)
     return { docked: docked, queued: queued, flying: flying, total: docked + queued + flying };
   }
 
