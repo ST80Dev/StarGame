@@ -37,12 +37,14 @@
 
 | Ruolo | Token | Valore | Uso |
 |---|---|---|---|
-| **Superficie** | `--c-surface-rgb` | `41 55 98` (navy) | pannelli, card, sheet, schede colonia. Si usa come `rgb(var(--c-surface-rgb) / .xx)` — l'**alpha vive per-uso**, l'RGB è unico. `--c-panel`/`--c-panel-solid` derivano da qui. |
-| **Superficie viola** | `--c-surface-violet-rgb` | `52 40 86` | superfici a tinta viola (commander, blocchi viola). |
-| **Fondo profondo** | `--c-bg-deep-rgb` | `28 37 76` | viewport (dietro la mappa) e Dashboard Impero. |
+| **Superficie** | `--c-surface-rgb` | `33 44 82` (navy, default *medio-scuro*) | pannelli, card, sheet, schede colonia. Si usa come `rgb(var(--c-surface-rgb) / .xx)` — l'**alpha vive per-uso**, l'RGB è unico. `--c-panel`/`--c-panel-solid` derivano da qui. |
+| **Superficie viola** | `--c-surface-violet-rgb` | `42 32 70` | superfici a tinta viola (commander, blocchi viola). |
+| **Fondo profondo** | `--c-bg-deep-rgb` | `21 28 60` | viewport (dietro la mappa) e Dashboard Impero. |
 | **Fondi pagina** | `--c-void` · `--c-space` · `--c-deep` | `#101a3a` · `#16224c` · `#1e2a5a` | body, starfield, gradienti profondi. |
 
 > **Regola**: per le superfici NON scrivere `rgba(...)` con terne hardcoded. Usa `rgb(var(--c-surface-rgb) / α)`. Per alzare/abbassare la luminosità di TUTTE le schede insieme si tocca **un solo numero** (`--c-surface-rgb`). Restano scuri di proposito solo gli scrim/dimmer dei modali e i `rgba(0,0,0,…)` di profondità (contrasto).
+>
+> **Luminosità regolabile dal giocatore (decisione #67):** i valori `:root` qui sopra sono il **default** (livello *medio-scuro*). Le **Preferenze** (ingranaggio in HUD) offrono 4 livelli — *Scuro · Medio-scuro · Medio · Chiaro* — che sovrascrivono `--c-surface-rgb`/`--c-surface-violet-rgb`/`--c-bg-deep-rgb` a runtime (`applySurfaceLevel`, `SURFACE_LEVELS` in `main.js`). Preferenza di dispositivo/ambiente in `localStorage['orion.prefs']`, **mai nel save**.
 
 ### Mapping concetto → colore (canone)
 
@@ -332,3 +334,4 @@ Modifiche a UI_GUIDE.md vanno discusse con l'utente PRIMA di applicarle (come pe
 - **2026-06-07** — Luminosità sfondi (feedback utente: ambiente troppo tetro, nero/blu-scurissimo). Token di fondo alzati **dal nero verso un navy scuro** (senza virare al blu pieno): `--c-void` `#04060f→#0a0e1e`, `--c-space` `#070b1c→#0e1430`, `--c-deep` `#0c1230→#151d42`, `--c-panel` `rgba(14,20,44,.86)→rgba(26,34,64,.90)`, `--c-panel-solid` `#101630→#1a2342`. Testo tenue `--c-text-faint` `#7d88b3→#98a3c8` per contrasto. **Mobile ≤760px**: `html { font-size: 18px }` per far salire tutti i testi minuti in `rem` (0.58–0.78rem) a misura leggibile (la geometria è in px → il layout non si deforma) + interlinea 1.45 nelle sheet + etichette bottom-nav 0.66rem.
 - **2026-06-07** — Identità del popolo (decisione #65). Nuovo banner `.lp-empire` (accento ambra) in testa alla Plancia d'Impero → editor in-game (overlay riusa `.save-modal`). Step menu "Dai un nome al tuo popolo" + classi form `.main-menu__select`/`.main-menu__seedrow`/`.main-menu__empire-preview`. Prefisso = pool archetipi AI (#34), nome proprio default dalla colonia natale. Le card di salvataggio mostrano "Popolo: <nome>" come reminder principale.
 - **2026-06-07** — Plancia di Colonia su telefono (decisione #65 follow-up): il deck sopra la sfera diventa **solo colpo d'occhio** (le azioni si fanno nella schermata Colonia). ≤760px: risorse e chip-classi popolazione in **griglia fluida** (`repeat(auto-fit, minmax(72/76px,1fr))`) che si stringe fino a misure minime; strutture **read-only** (nascosti "→ Vai a costruzione" e i "+Espandi"); **cronaca collassabile** (header cliccabile con icona, `data-deck-action="toggle-cron"`, default chiusa su mobile, stato volatile `ORION.deckCronOpen`).
+- **2026-06-07** — Luminosità superfici regolabile (decisione #67). Su richiesta utente, default riportato verso lo **scuro** (livello *medio-scuro*: `--c-surface-rgb` 41,55,98 → **33,44,82**; bg-deep 28,37,76 → **21,28,60**) e, grazie al knob unico, **esposta nelle Preferenze** (ingranaggio in HUD, già presente): 4 livelli *Scuro · Medio-scuro · Medio · Chiaro* applicati a runtime (`applySurfaceLevel`/`SURFACE_LEVELS` in `main.js`), live + persistiti in `localStorage['orion.prefs']` (mai nel save). Stili `.prefs-row--levels`/`.prefs-levels`/`.prefs-level`.

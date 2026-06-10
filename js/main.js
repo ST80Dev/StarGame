@@ -6487,9 +6487,31 @@ function bodyDotColor(b) {
    --------------------------------------------------------------------- */
 const PREFS_LS_KEY = 'orion.prefs';
 const DEFAULT_PREFS = {
-  confirmActions: true   // chiede conferma su build/demolisci/colonizza/...
+  confirmActions: true,   // chiede conferma su build/demolisci/colonizza/...
+  surfaceLevel: 'medio-scuro'  // luminosità superfici (regolabile per ambiente)
 };
 ORION.prefs = Object.assign({}, DEFAULT_PREFS);
+
+/* Livelli di luminosità delle superfici (decisione #67). Un solo knob
+   (--c-surface-rgb, vedi UI_GUIDE §1) declinato in 4 gradazioni navy che
+   restano nel tema. Il giocatore le regola in base alla luce attorno a sé;
+   preferenza di dispositivo, persistita in localStorage['orion.prefs'],
+   NON nel save. */
+const SURFACE_LEVELS = {
+  'scuro':       { label: 'Scuro',       surface: '24 31 58',  violet: '32 24 54',  deep: '15 20 44' },
+  'medio-scuro': { label: 'Medio-scuro', surface: '33 44 82',  violet: '42 32 70',  deep: '21 28 60' },
+  'medio':       { label: 'Medio',       surface: '41 55 98',  violet: '52 40 86',  deep: '28 37 76' },
+  'chiaro':      { label: 'Chiaro',      surface: '52 68 120', violet: '64 50 104', deep: '36 47 94' }
+};
+const SURFACE_ORDER = ['scuro', 'medio-scuro', 'medio', 'chiaro'];
+
+function applySurfaceLevel(id) {
+  const lvl = SURFACE_LEVELS[id] || SURFACE_LEVELS['medio-scuro'];
+  const r = document.documentElement;
+  r.style.setProperty('--c-surface-rgb', lvl.surface);
+  r.style.setProperty('--c-surface-violet-rgb', lvl.violet);
+  r.style.setProperty('--c-bg-deep-rgb', lvl.deep);
+}
 
 function loadPrefs() {
   try {
@@ -6497,6 +6519,8 @@ function loadPrefs() {
     if (raw) ORION.prefs = Object.assign({}, DEFAULT_PREFS, JSON.parse(raw));
     else ORION.prefs = Object.assign({}, DEFAULT_PREFS);
   } catch (_) { ORION.prefs = Object.assign({}, DEFAULT_PREFS); }
+  if (!SURFACE_LEVELS[ORION.prefs.surfaceLevel]) ORION.prefs.surfaceLevel = 'medio-scuro';
+  applySurfaceLevel(ORION.prefs.surfaceLevel);
 }
 function savePrefs() {
   try { localStorage.setItem(PREFS_LS_KEY, JSON.stringify(ORION.prefs)); }
@@ -6598,6 +6622,18 @@ function openPrefsModal() {
           'commercio. Alcune azioni con effetti pesanti (dichiara guerra, evacua colonia) ' +
           'chiedono comunque conferma anche se questa opzione è disattiva.</span>' +
         '</label>' +
+        '<div class="prefs-row prefs-row--levels">' +
+          '<span class="prefs-row__label">Luminosità interfaccia</span>' +
+          '<div class="prefs-levels" role="group" aria-label="Luminosità superfici">' +
+            SURFACE_ORDER.map(function (id) {
+              return '<button type="button" class="prefs-level' +
+                (id === ORION.prefs.surfaceLevel ? ' is-active' : '') +
+                '" data-surface-level="' + id + '">' + escapeHtml(SURFACE_LEVELS[id].label) + '</button>';
+            }).join('') +
+          '</div>' +
+          '<span class="prefs-row__hint">Regola lo sfondo di schede e pannelli in base alla luce attorno a te ' +
+          '(più scuro al buio, più chiaro in ambienti luminosi). Non influisce sulla partita.</span>' +
+        '</div>' +
       '</div>' +
     '</div>';
   host.hidden = false;
@@ -6606,6 +6642,18 @@ function openPrefsModal() {
   host.querySelector('input[data-pref="confirmActions"]').addEventListener('change', function (e) {
     ORION.prefs.confirmActions = !!e.target.checked;
     savePrefs();
+  });
+  /* Luminosità superfici: applica subito (live) + persisti + aggiorna lo stato attivo. */
+  host.querySelectorAll('[data-surface-level]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const id = b.dataset.surfaceLevel;
+      ORION.prefs.surfaceLevel = id;
+      applySurfaceLevel(id);
+      savePrefs();
+      host.querySelectorAll('[data-surface-level]').forEach(function (x) {
+        x.classList.toggle('is-active', x.dataset.surfaceLevel === id);
+      });
+    });
   });
   host.querySelector('[data-action="prefs-close"]').addEventListener('click', closePrefsModal);
   host.addEventListener('click', function (e) {
