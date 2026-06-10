@@ -3646,13 +3646,13 @@ function renderPlanetRotteTab(host, planet, colony) {
    è solo un'unità di calcolo. Mostriamo invece quante valute distinte ha. */
 function marketLauncherSub() {
   const g = ORION.game;
-  if (!g) return 'M12';
+  if (!g) return 'commercio';
   const routes = (ORION.trade && ORION.trade.routesUsed(g)) || 0;
   const held = (ORION.treasury && ORION.treasury.heldCurrencies(g)) || [];
   const parts = [];
   if (routes > 0) parts.push(routes + ' rotte');
   if (held.length > 0) parts.push(held.length + (held.length === 1 ? ' valuta' : ' valute'));
-  return parts.length ? parts.join(' · ') : 'M12';
+  return parts.length ? parts.join(' · ') : 'nessuna rotta';
 }
 
 const TRADE_BANK_RES = ['met', 'en', 'food', 'water'];
