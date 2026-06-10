@@ -23,6 +23,23 @@
 > ordine index.html, partita generata, build maturata, advance 200 Ι con 9 eventi,
 > `governor.setLevel` OK, serialize schema 21 + migrate OK, determinismo galassia PASS).
 
+> **STATO: Fase 2 ESEGUITA** (commit su questo branch). Note di esecuzione:
+> - Nuovo `js/utils.js` (`ORION.util` + `ORION.format`), caricato dopo `rng.js` in index.html.
+>   Consolidati: `clamp` ×5, `lerp` ×3, `smoothstep`, `escapeHtml` ×3, `fmtNum`/`fmtRate`
+>   (colony-deck), `fmtStock`/`fmtNet` (main.js) — tutti come alias/deleghe, zero logica nuova.
+> - `formatPeople` (planet.js) **NON spostata**: i suoi riferimenti esterni sono solo commenti —
+>   il display "persone" è stato abbandonato (decisione #66) ma il commento in main.js la
+>   documenta come tenuta per backward compat → resta dov'è.
+> - `smooth(t)` di planet-view **tenuta locale**: firma diversa da `smoothstep(e0,e1,x)` e vive
+>   nel hot path del bake della sfera (nessun wrapper per non aggiungere overhead).
+> - `hashStr` (planet-overlay) rinominata **`hashRng`** (E.3).
+> - Naming colonia (E.4): closure duplicata rimossa, `colonyName_` → `systemNameFromKey(g, key)`.
+>   **Bug latente fixato**: `openCommanderPicker` (main.js:4443) chiamava `colonyName(...)`
+>   che era una closure di `renderFleetView` — fuori scope → ReferenceError al primo
+>   picker ★ Comandante con figure in panchina. Il consolidamento lo risolve.
+> - Verifica: sintassi OK su tutti i file; smoke headless con motore **identico alla baseline**
+>   (stesso replay: DS 0·1·8·0, 9 eventi, stock 480) + assert dedicati su util/format PASS.
+
 ## A. Codice morto VERIFICATO — rimozione sicura (confidenza alta)
 
 Ogni voce: 0 usi esterni + 0 usi interni oltre a definizione/export. Verificato a mano.

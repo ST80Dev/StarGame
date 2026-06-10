@@ -75,7 +75,7 @@
     return Math.max(0, Math.min(1, (s.danger || 0) / 100));
   }
 
-  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+  const clamp = root.ORION.util.clamp;
 
   /* xp medio di una lista di equipaggi */
   function averageXp(crews) {

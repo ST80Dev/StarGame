@@ -215,7 +215,7 @@
     return keys[0];
   }
 
-  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+  const clamp = root.ORION.util.clamp;
 
   /* ==================================================================
      GENERAZIONE (immutabile, deterministica dal seed del corpo)

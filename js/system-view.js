@@ -26,8 +26,8 @@
   const BODY_TYPES = root.ORION.system.BODY_TYPES;
   const GAS_VARIANTS = root.ORION.system.GAS_VARIANTS;
 
-  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
-  function lerp(a, b, t) { return a + (b - a) * t; }
+  const clamp = root.ORION.util.clamp;
+  const lerp = root.ORION.util.lerp;
 
   function hexA(hex, a) {
     const n = parseInt(hex.slice(1), 16);

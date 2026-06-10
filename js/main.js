@@ -4157,14 +4157,6 @@ function renderFleetView(stage) {
     }
     return o.type;
   }
-  function colonyName(key) {
-    const parts = (key || '').split(':');
-    if (parts.length < 2) return '—';
-    const sid = Number(parts[0]);
-    const sys = g.galaxy.systems[sid];
-    return sys ? sys.name : ('Sistema ' + sid);
-  }
-
   /* Colonie che possono creare una flotta: colonizzate + con Hangar lvl ≥ 1. */
   const eligibleColonies = [];
   Object.keys(g.colonies).forEach(function (k) {
@@ -4220,7 +4212,7 @@ function renderFleetView(stage) {
       return '<li class="fleet-item" data-fleet-id="' + escapeHtml(f.id) + '">' +
         '<div class="fleet-item__head">' +
           '<span class="fleet-item__name"><strong>' + escapeHtml(f.name) + '</strong> ' +
-            '<span class="cantieri-row__base">(da ' + escapeHtml(colonyName(f.ownerColonyKey)) + ')</span></span>' +
+            '<span class="cantieri-row__base">(da ' + escapeHtml(systemNameFromKey(g, f.ownerColonyKey)) + ')</span></span>' +
           '<span class="fleet-status fleet-status--' + statusCls + '">' + status + '</span>' +
         '</div>' +
         '<div class="fleet-item__row">' +
@@ -4440,7 +4432,7 @@ function openCommanderPicker(fleetId, stage) {
       '<span class="cmd-pick__name">' + starHtml + ' ' + escapeHtml(c.rank + ' ' + c.name) + '</span>' +
       '<span class="cmd-pick__meta">' + escapeHtml(c.specializationLabel || c.specialization) +
         ' · ' + escapeHtml(ORION.commander.bonusLabel(c)) + ' · ' + escapeHtml(c.traitLabel || '') +
-        ' · da ' + escapeHtml(colonyName(a.colonyKey)) + '</span>' +
+        ' · da ' + escapeHtml(systemNameFromKey(g, a.colonyKey)) + '</span>' +
     '</button>';
   }).join('') || '<p class="cmd-pick__empty">Nessun Comandante in panchina.</p>';
   const curHtml = cur
@@ -5308,7 +5300,7 @@ function openFleetCreateOverlay(eligibleColonies) {
     const r = ORION.fleet.createFleet(g, colKey, name);
     if (!r.ok) { showToast(r.reason); return; }
     pushChronicle(ORION.time.currentDS(g) + ' — Nuova flotta <strong>' + escapeHtml(r.fleet.name) +
-      '</strong> formata su ' + escapeHtml(colonyName_(g, colKey)) + '.', 'planet');
+      '</strong> formata su ' + escapeHtml(systemNameFromKey(g, colKey)) + '.', 'planet');
     persistGame(g);
     closeFleetOverlay();
     const stage = document.querySelector('[data-view-stage]');
@@ -5316,7 +5308,7 @@ function openFleetCreateOverlay(eligibleColonies) {
   });
 }
 
-function colonyName_(g, key) {
+function systemNameFromKey(g, key) {
   const parts = (key || '').split(':');
   if (parts.length < 2) return '—';
   const sid = Number(parts[0]);
@@ -5384,7 +5376,7 @@ function openFleetManageOverlay(fleetId) {
     } else {
       popRows = popOpsKeys.map(function (ck) {
         const c = g.colonies[ck];
-        const cname = colonyName_(g, ck);
+        const cname = systemNameFromKey(g, ck);
         const cpop = (c.pop && c.pop.total) || 0;
         const ccap = (c.pop && c.pop.cap) || 0;
         const canEmbark = cpop > 1 && popOnboard < popCap;
@@ -5420,7 +5412,7 @@ function openFleetManageOverlay(fleetId) {
       '</header>' +
       '<p class="panel__note">La flotta deve essere all\'attracco della colonia origine per assegnare/restituire navi. ' +
         'Stato attuale: <strong>' + (fleet.location.status === 'docked' && fleet.location.systemId === colony.systemId
-          ? 'attraccata su ' + colonyName_(g, fleet.ownerColonyKey)
+          ? 'attraccata su ' + systemNameFromKey(g, fleet.ownerColonyKey)
           : 'fuori dalla base') + '</strong>.</p>' +
       '<table class="fleet-manage-table">' +
         '<thead><tr><th>Classe</th><th>A terra</th><th>In flotta</th><th>Azione</th></tr></thead>' +
@@ -5476,7 +5468,7 @@ function openFleetManageOverlay(fleetId) {
       const ck = b.dataset.colony;
       const r = ORION.fleet.embarkPop(g, fleet, ck, 1);
       if (!r.ok) { showToast(r.reason); return; }
-      const cname = colonyName_(g, ck);
+      const cname = systemNameFromKey(g, ck);
       pushChronicle(ORION.time.currentDS(g) + ' — <strong>' + escapeHtml(fleet.name) +
         '</strong>: 1 livello di pionieri imbarcato da <strong>' + escapeHtml(cname) +
         '</strong> · Bonus Diaspora ×2 attivo per 60 Ι.', 'planet');
@@ -5490,7 +5482,7 @@ function openFleetManageOverlay(fleetId) {
       const ck = b.dataset.colony;
       const r = ORION.fleet.disembarkPop(g, fleet, ck, 1);
       if (!r.ok) { showToast(r.reason); return; }
-      const cname = colonyName_(g, ck);
+      const cname = systemNameFromKey(g, ck);
       pushChronicle(ORION.time.currentDS(g) + ' — <strong>' + escapeHtml(fleet.name) +
         '</strong>: 1 livello di pionieri sbarcato a <strong>' + escapeHtml(cname) +
         '</strong>.', 'planet');
@@ -6388,7 +6380,7 @@ function potentialBars(planet) {
 }
 
 function rateGrid(rates, upkeep, colony) {
-  function fmtNet(v) { return (v >= 0 ? '+' : '−') + (Math.round(Math.abs(v) * 100) / 100); }
+  const fmtNet = ORION.format.rate;
   function fmtAbs(v) { return Math.round(Math.abs(v) * 100) / 100; }
   /* Decisione #45: il consumo pro-capite della popolazione drena cibo/acqua
      dallo stock (time.js processProduction). Lo mostriamo esplicitamente nel
@@ -7887,13 +7879,7 @@ function colonyWorstScarcity(c) {
 }
 
 /* Formatta un numero di scorte in forma compatta (k). */
-function fmtStock(v) {
-  if (v == null || !isFinite(v)) return '—';
-  const av = Math.abs(v);
-  if (av >= 1e6) return (v / 1e6).toFixed(1) + 'M';
-  if (av >= 1000) return (v / 1000).toFixed(1) + 'k';
-  return Math.round(v).toString();
-}
+function fmtStock(v) { return ORION.format.stock(v); }
 
 /* Costruisce i dati delle card per la Dashboard Impero (controller → view). */
 function buildEmpireState() {
@@ -9888,11 +9874,7 @@ function enterGame() {
   updateMobileNav();
 }
 
-function escapeHtml(s) {
-  return String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
+function escapeHtml(s) { return ORION.util.escapeHtml(s); }
 
 /* Toast non invasivo (decisione #24 / §21: "salva prima di azioni
    irreversibili" — feedback discreto, niente popup). */
