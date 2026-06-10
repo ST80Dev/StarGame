@@ -62,7 +62,7 @@
       desc: 'Pannelli ad alta efficienza per catturare l\'irradianza stellare.',
       cost: { met: 35, en: 5 }, time: 9,
       upkeep: {},
-      rates: { en: 8 },   // decisione #48 (rebalance energia): 6 → 8 (+33% a tutti i livelli)
+      rates: { en: 6 },   // decisione #70: 8 → 6 (ritocco lieve). #48 l'aveva alzato a 8 per coprire un deficit con flotta+esplorazione; i tagli di upkeep #48 (lab/ospedale/accademia/hangar) restano, quindi 6 non riapre quel deficit sui mondi medi ma rende l'energia una decisione vera sui mondi poveri (pot.en basso).
       slots: 1, maxLevel: 5,
       bodyTypes: HABITABLE.concat(['gassoso'])
     },
