@@ -90,7 +90,6 @@
     for (let i = 0; i < FACTIONS.length; i++) if (FACTIONS[i].id === id) return FACTIONS[i];
     return null;
   }
-  function isFaction(civ) { return !!(civ && civ.faction); }
 
   /* Spawn iniziale delle 4 Costanti, idempotente. Richiede galaxy +
      ORION.ai. Chiamato da ORION.ai.ensure(game) durante boot/load. */
@@ -199,7 +198,6 @@
   ORION.factions = {
     FACTIONS: FACTIONS,
     byId: byId,
-    isFaction: isFaction,
     ensureFactions: ensureFactions
   };
 })(typeof window !== 'undefined' ? window : this);

@@ -77,25 +77,10 @@
     'terraformatori': 'Terraf.'
   };
 
-  function escapeHtml(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
+  const escapeHtml = root.ORION.util.escapeHtml;
 
-  function fmtNum(v) {
-    if (v == null || !isFinite(v)) return '—';
-    const av = Math.abs(v);
-    if (av >= 1000) return (v / 1000).toFixed(1) + 'k';
-    if (av >= 100) return Math.round(v).toString();
-    return (Math.round(v * 10) / 10).toString();
-  }
-  function fmtRate(v) {
-    if (v == null || !isFinite(v) || v === 0) return '0';
-    const sign = v > 0 ? '+' : '−';
-    const av = Math.abs(v);
-    return sign + (av >= 10 ? av.toFixed(0) : av.toFixed(1));
-  }
+  const fmtNum = root.ORION.format.compact;
+  const fmtRate = root.ORION.format.rateShort;
 
   class ColonyDeck {
     constructor() {

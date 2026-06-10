@@ -32,7 +32,7 @@
   /* RNG hash deterministico (mulberry32 mini, no dipendenza da rng.js
      per restare indipendente — basta una funzione pseudo-casuale stabile
      per posizione marker su superficie). */
-  function hashStr(s) {
+  function hashRng(s) {
     let h = 1779033703 ^ s.length;
     for (let i = 0; i < s.length; i++) {
       h = Math.imul(h ^ s.charCodeAt(i), 3432918353);
@@ -75,7 +75,7 @@
      stanno sul "lato giorno" più spesso. Sparse abbastanza da non
      accavallarsi a parità di seed. */
   function spherePosFor(seed, idx) {
-    const rng = hashStr(seed + ':struct:' + idx);
+    const rng = hashRng(seed + ':struct:' + idx);
     const theta = rng() * Math.PI * 2;
     const phi   = (rng() - 0.5) * 0.9; // ~±26° dall'equatore
     return { theta: theta, phi: phi };

@@ -15,7 +15,6 @@
                                      mode 'compact'  → "1·87·6·47" (default)
                                      mode 'duration' → "2Κ·20Ι" (omette zeri di testa)
      - currentDS(game)             Data Stellare corrente del game (compatta)
-     - currentDSFull(game)         versione estesa con sigle greche
 
    Determinismo / idempotenza:
      - Nessun RNG dipendente da Math.random nel loop. Se servisse stocastica
@@ -251,11 +250,6 @@
        migrazione: il campo resta sul disco ma non viene letto. */
     return format(game.timeImpulsi || 0, 'compact');
   }
-  function currentDSFull(game) {
-    if (!game) return '—';
-    return format(game.timeImpulsi || 0, 'full');
-  }
-
   /* PR-H: versione HTML del formato compact con i 4 valori colorati
      per unità del Faro (Ω·Φ·Κ·Ι). Tinte coerenti con .ds-unit:
      Ω=viola · Φ=ambra · Κ=verde · Ι=ciano. Pensata per l'HUD DATA
@@ -1230,6 +1224,15 @@
         /* Aggressione contro una civiltà non già ostile: la relazione si
            deteriora (la diplomazia piena è M11). */
         if (civAttacked && !civHostile) civ.disposition = Math.max(-100, civ.disposition - 25);
+        /* Coesione #54: attaccare un membro di un sistema coeso indispone
+           anche gli ALTRI proprietari (solidarietà locale, −15 ciascuno). */
+        if (civAttacked && root.ORION.cohesion && root.ORION.cohesion.applyAttackPenalty) {
+          const nSolid = root.ORION.cohesion.applyAttackPenalty(game, sysId, civ.id);
+          if (nSolid > 0) {
+            events.push({ kind: 'cohesion-attack-backlash', sysId: sysId,
+              attackedName: civ.name, count: nSolid, impulso: game.timeImpulsi });
+          }
+        }
       }
       if (!enemy) {
         if (fleet.attackTarget === sysId) { fleet.attackTarget = null; fleet.attackBodyKey = null; }
@@ -2121,7 +2124,6 @@
     CLASS_BIAS: CLASS_BIAS,
     format: format,
     currentDS: currentDS,
-    currentDSFull: currentDSFull,
     currentDSHtml: currentDSHtml,
     splitFaro: splitFaro,
     I_PER_K: I_PER_K, I_PER_PHI: I_PER_PHI, I_PER_OMEGA: I_PER_OMEGA,

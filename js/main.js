@@ -914,12 +914,6 @@ function hostilityNoun(planet) {
    • Niente "wow 4X" da 10 Mld, ma chiarezza totale (X/Y livelli + barra).
    • Bilanciamento intatto (curva interna invariata per produzione/scarsità). */
 
-/* Etichetta livello compatta "X / Y" — usata in chip, barre, badge. */
-function popLevelLabel(colony, planet) {
-  const units = (colony && colony.pop && colony.pop.total) || 0;
-  const cap = (colony && colony.pop && colony.pop.cap) || (planet && planet.popCap) || 0;
-  return units + ' / ' + cap;
-}
 /* Solo cap per uso isolato (es. "tetto del pianeta"). */
 function popMaxLabel(planet) {
   const cap = (planet && planet.popCap) || 0;
@@ -2165,18 +2159,6 @@ function bindGovernorHandlers(host, planet, colony) {
   const persist = function () {
     if (ORION.save && ORION.save.autosave && ORION.game) ORION.save.autosave(ORION.game);
   };
-  /* Backward compat: il vecchio checkbox toggle non c'è più, ma rebind
-     code lato dx-panel può ancora cercarlo: no-op se assente. */
-  const oldToggle = host.querySelector('[data-action="gov-toggle"]');
-  if (oldToggle) {
-    oldToggle.addEventListener('change', function (e) {
-      if (!ORION.governor) return;
-      ORION.governor.setEnabled(colony, e.target.checked);
-      if (e.target.checked && ORION.tutorial) ORION.tutorial.fire('governor');
-      persist();
-      renderPlanetColoniaTab(host, planet, colony);
-    });
-  }
   /* Level dropdown (decisione #59). */
   const levelSel = host.querySelector('[data-action="gov-level"]');
   if (levelSel) {
@@ -2980,9 +2962,6 @@ function uiIcon(name, tone) {
   const cls = tone ? (' ui-icon--' + tone) : '';
   return '<span class="ui-icon' + cls + '" aria-hidden="true">' + ORION.icon(name) + '</span>';
 }
-function kU() { return dsUnit('Κ'); }      /* Ciclo di nutazione */
-function phU() { return dsUnit('Φ'); }     /* Fase di precessione */
-function omU() { return dsUnit('Ω'); }     /* Eone */
 
 function renderCantieriSection(colony, planet) {
   const hasHangar = !!(colony.structures && colony.structures['cantiere-navale']);
@@ -4171,14 +4150,6 @@ function renderFleetView(stage) {
     }
     return o.type;
   }
-  function colonyName(key) {
-    const parts = (key || '').split(':');
-    if (parts.length < 2) return '—';
-    const sid = Number(parts[0]);
-    const sys = g.galaxy.systems[sid];
-    return sys ? sys.name : ('Sistema ' + sid);
-  }
-
   /* Colonie che possono creare una flotta: colonizzate + con Hangar lvl ≥ 1. */
   const eligibleColonies = [];
   Object.keys(g.colonies).forEach(function (k) {
@@ -4234,7 +4205,7 @@ function renderFleetView(stage) {
       return '<li class="fleet-item" data-fleet-id="' + escapeHtml(f.id) + '">' +
         '<div class="fleet-item__head">' +
           '<span class="fleet-item__name"><strong>' + escapeHtml(f.name) + '</strong> ' +
-            '<span class="cantieri-row__base">(da ' + escapeHtml(colonyName(f.ownerColonyKey)) + ')</span></span>' +
+            '<span class="cantieri-row__base">(da ' + escapeHtml(systemNameFromKey(g, f.ownerColonyKey)) + ')</span></span>' +
           '<span class="fleet-status fleet-status--' + statusCls + '">' + status + '</span>' +
         '</div>' +
         '<div class="fleet-item__row">' +
@@ -4454,7 +4425,7 @@ function openCommanderPicker(fleetId, stage) {
       '<span class="cmd-pick__name">' + starHtml + ' ' + escapeHtml(c.rank + ' ' + c.name) + '</span>' +
       '<span class="cmd-pick__meta">' + escapeHtml(c.specializationLabel || c.specialization) +
         ' · ' + escapeHtml(ORION.commander.bonusLabel(c)) + ' · ' + escapeHtml(c.traitLabel || '') +
-        ' · da ' + escapeHtml(colonyName(a.colonyKey)) + '</span>' +
+        ' · da ' + escapeHtml(systemNameFromKey(g, a.colonyKey)) + '</span>' +
     '</button>';
   }).join('') || '<p class="cmd-pick__empty">Nessun Comandante in panchina.</p>';
   const curHtml = cur
@@ -5322,7 +5293,7 @@ function openFleetCreateOverlay(eligibleColonies) {
     const r = ORION.fleet.createFleet(g, colKey, name);
     if (!r.ok) { showToast(r.reason); return; }
     pushChronicle(ORION.time.currentDS(g) + ' — Nuova flotta <strong>' + escapeHtml(r.fleet.name) +
-      '</strong> formata su ' + escapeHtml(colonyName_(g, colKey)) + '.', 'planet');
+      '</strong> formata su ' + escapeHtml(systemNameFromKey(g, colKey)) + '.', 'planet');
     persistGame(g);
     closeFleetOverlay();
     const stage = document.querySelector('[data-view-stage]');
@@ -5330,7 +5301,7 @@ function openFleetCreateOverlay(eligibleColonies) {
   });
 }
 
-function colonyName_(g, key) {
+function systemNameFromKey(g, key) {
   const parts = (key || '').split(':');
   if (parts.length < 2) return '—';
   const sid = Number(parts[0]);
@@ -5398,7 +5369,7 @@ function openFleetManageOverlay(fleetId) {
     } else {
       popRows = popOpsKeys.map(function (ck) {
         const c = g.colonies[ck];
-        const cname = colonyName_(g, ck);
+        const cname = systemNameFromKey(g, ck);
         const cpop = (c.pop && c.pop.total) || 0;
         const ccap = (c.pop && c.pop.cap) || 0;
         const canEmbark = cpop > 1 && popOnboard < popCap;
@@ -5434,7 +5405,7 @@ function openFleetManageOverlay(fleetId) {
       '</header>' +
       '<p class="panel__note">La flotta deve essere all\'attracco della colonia origine per assegnare/restituire navi. ' +
         'Stato attuale: <strong>' + (fleet.location.status === 'docked' && fleet.location.systemId === colony.systemId
-          ? 'attraccata su ' + colonyName_(g, fleet.ownerColonyKey)
+          ? 'attraccata su ' + systemNameFromKey(g, fleet.ownerColonyKey)
           : 'fuori dalla base') + '</strong>.</p>' +
       '<table class="fleet-manage-table">' +
         '<thead><tr><th>Classe</th><th>A terra</th><th>In flotta</th><th>Azione</th></tr></thead>' +
@@ -5490,7 +5461,7 @@ function openFleetManageOverlay(fleetId) {
       const ck = b.dataset.colony;
       const r = ORION.fleet.embarkPop(g, fleet, ck, 1);
       if (!r.ok) { showToast(r.reason); return; }
-      const cname = colonyName_(g, ck);
+      const cname = systemNameFromKey(g, ck);
       pushChronicle(ORION.time.currentDS(g) + ' — <strong>' + escapeHtml(fleet.name) +
         '</strong>: 1 livello di pionieri imbarcato da <strong>' + escapeHtml(cname) +
         '</strong> · Bonus Diaspora ×2 attivo per 60 Ι.', 'planet');
@@ -5504,7 +5475,7 @@ function openFleetManageOverlay(fleetId) {
       const ck = b.dataset.colony;
       const r = ORION.fleet.disembarkPop(g, fleet, ck, 1);
       if (!r.ok) { showToast(r.reason); return; }
-      const cname = colonyName_(g, ck);
+      const cname = systemNameFromKey(g, ck);
       pushChronicle(ORION.time.currentDS(g) + ' — <strong>' + escapeHtml(fleet.name) +
         '</strong>: 1 livello di pionieri sbarcato a <strong>' + escapeHtml(cname) +
         '</strong>.', 'planet');
@@ -5966,255 +5937,11 @@ function openFleetWizard(fleetId) {
   render();
 }
 
-/* Vecchio overlay "muro di 7 sezioni" — sostituito dal wizard. La firma
-   resta uguale così tutti i call site (renderFleetView e #61 picker)
-   continuano a funzionare senza modifiche. Flag dev:
-     window.ORION._useLegacyOrdersOverlay = true   → riapre il vecchio. */
+/* Ordini flotta: la firma resta per i call site storici (renderFleetView,
+   #61 picker) e delega al Fleet Wizard. Il vecchio overlay "muro di 7
+   sezioni" è stato rimosso (pulizia #68 Fase 3).  */
 function openFleetOrdersOverlay(fleetId) {
-  if (ORION._useLegacyOrdersOverlay) return _legacyFleetOrdersOverlay(fleetId);
   return openFleetWizard(fleetId);
-}
-
-/* DEPRECATED — corpo del vecchio overlay conservato dietro flag per
-   debug/regressione (`ORION._useLegacyOrdersOverlay=true` in console). */
-function _legacyFleetOrdersOverlay(fleetId) {
-  const g = ORION.game;
-  const fleet = findFleet(fleetId);
-  if (!fleet) return;
-  /* M08 Fase B: tutorial — ordini e rotte composte alla prima apertura. */
-  if (ORION.tutorial) ORION.tutorial.fire('fleet-orders');
-  const host = ensureFleetOverlayHost('fleet-orders-overlay');
-
-  /* Sistemi raggiungibili (nebbia di guerra rispettata: mostriamo tutti
-     i sistemi con almeno una rotta dalla posizione corrente; per
-     `explore` quelli non ancora EXPLORED). */
-  const DISCOVERY = ORION.galaxy.DISCOVERY;
-  const allReachable = [];
-  for (let i = 0; i < g.galaxy.systems.length; i++) {
-    if (i === fleet.location.systemId) continue;
-    if (ORION.fleet.computePath(g.galaxy, fleet.location.systemId, i)) {
-      allReachable.push(i);
-    }
-  }
-  function sysOptionLabel(id) {
-    const s = g.galaxy.systems[id];
-    const disc = g.state.discovery[id];
-    const tag = (disc >= DISCOVERY.EXPLORED) ? 'esplorato' : (disc >= DISCOVERY.DETECTED) ? 'rilevato' : 'ignoto';
-    return s.name + ' · ' + tag;
-  }
-  const optsMove = allReachable.map(function (id) {
-    return '<option value="' + id + '">' + escapeHtml(sysOptionLabel(id)) + '</option>';
-  }).join('');
-  const optsExplore = allReachable
-    .filter(function (id) { return g.state.discovery[id] < DISCOVERY.EXPLORED; })
-    .map(function (id) {
-      return '<option value="' + id + '">' + escapeHtml(sysOptionLabel(id)) + '</option>';
-    }).join('');
-
-  host.innerHTML =
-    '<div class="fleet-orders-overlay__panel" role="document">' +
-      '<header class="fleet-orders-overlay__head">' +
-        '<h2>Ordini · ' + escapeHtml(fleet.name) + '</h2>' +
-        '<button class="btn btn--mini btn--icon-only" data-action="fleet-overlay-close" type="button" aria-label="Chiudi">' +
-          '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
-        '</button>' +
-      '</header>' +
-      '<p class="panel__note">Posizione: <strong>' + escapeHtml(g.galaxy.systems[fleet.location.systemId].name) + '</strong>. ' +
-        'Equipaggio: ' + fleet.crew.length + ' / ' + ORION.fleet.fleetCrewRequired(fleet) + ' richiesti. ' +
-        'Velocità minima: ' + ORION.fleet.fleetMinSpeed(fleet).toFixed(2) + '.</p>' +
-      '<section class="fleet-order-block">' +
-        '<h3>Rotta verso (move)</h3>' +
-        '<select data-bind="fleet-order-move">' + optsMove + '</select>' +
-        '<button class="btn btn--mini" data-action="fleet-order-move" type="button">Imposta</button>' +
-      '</section>' +
-      '<section class="fleet-order-block">' +
-        '<h3>Esplora (explore)</h3>' +
-        '<select data-bind="fleet-order-explore">' + (optsExplore || '<option value="" disabled>Nessun sistema inesplorato</option>') + '</select>' +
-        '<button class="btn btn--mini" data-action="fleet-order-explore" type="button"' +
-          (optsExplore ? '' : ' disabled') + '>Imposta</button>' +
-      '</section>' +
-      '<section class="fleet-order-block">' +
-        '<h3>Pattuglia A ↔ B (patrol)</h3>' +
-        '<select data-bind="fleet-order-pat-a">' + optsMove + '</select>' +
-        '<select data-bind="fleet-order-pat-b">' + optsMove + '</select>' +
-        '<button class="btn btn--mini" data-action="fleet-order-patrol" type="button">Imposta</button>' +
-      '</section>' +
-      /* Fase B (decisione #46): rotta multi-tappa e pattuglia su N sistemi.
-         Il giocatore costruisce la lista delle tappe (gancio per "vagare"
-         tra sistemi favorevoli; AI/rifugi neutrali verranno con M10-M11). */
-      '<section class="fleet-order-block fleet-order-block--route">' +
-        '<h3>Rotta a tappe (move-route)</h3>' +
-        '<p class="panel__note">Catena di sistemi. Per ogni tappa puoi impostare una sosta orbitale in Ι. ' +
-          '<label class="fleet-order-flag"><input type="checkbox" data-bind="fleet-route-explore"> Esplora ogni tappa</label> ' +
-          '<label class="fleet-order-flag"><input type="checkbox" data-bind="fleet-route-return"> Rientra alla base alla fine</label></p>' +
-        '<ul class="fleet-route-list" data-bind="fleet-route-list"></ul>' +
-        '<div class="fleet-route-add">' +
-          '<select data-bind="fleet-route-pick">' + optsMove + '</select>' +
-          '<input type="number" data-bind="fleet-route-dwell" min="0" max="200" step="1" value="0" title="Sosta orbitale in Ι"> Ι' +
-          '<button class="btn btn--mini" data-action="fleet-route-add" type="button">+ Aggiungi tappa</button>' +
-        '</div>' +
-        '<button class="btn btn--mini" data-action="fleet-order-route" type="button">Imposta rotta</button>' +
-      '</section>' +
-      '<section class="fleet-order-block fleet-order-block--route">' +
-        '<h3>Pattuglia su N sistemi (patrol-loop)</h3>' +
-        '<p class="panel__note">Loop circolare su 2+ sistemi. La pattuglia riparte automaticamente.</p>' +
-        '<ul class="fleet-route-list" data-bind="fleet-loop-list"></ul>' +
-        '<div class="fleet-route-add">' +
-          '<select data-bind="fleet-loop-pick">' + optsMove + '</select>' +
-          '<input type="number" data-bind="fleet-loop-dwell" min="0" max="200" step="1" value="0" title="Sosta orbitale in Ι"> Ι' +
-          '<button class="btn btn--mini" data-action="fleet-loop-add" type="button">+ Aggiungi nodo</button>' +
-        '</div>' +
-        '<button class="btn btn--mini" data-action="fleet-order-patrol-loop" type="button">Imposta pattuglia</button>' +
-      '</section>' +
-      '<section class="fleet-order-block">' +
-        '<h3>Rientro alla base (return)</h3>' +
-        '<button class="btn btn--mini" data-action="fleet-order-return" type="button">Imposta</button>' +
-      '</section>' +
-      '<section class="fleet-order-block">' +
-        '<h3>Idle</h3>' +
-        '<button class="btn btn--mini" data-action="fleet-order-idle" type="button">Imposta</button>' +
-      '</section>' +
-    '</div>';
-  host.hidden = false;
-  host.addEventListener('click', function (e) {
-    if (e.target === host || e.target.matches('[data-action="fleet-overlay-close"]')) closeFleetOverlay();
-  });
-
-  function dispatch(order) {
-    const r = ORION.fleet.setOrder(g, fleet, order);
-    if (!r.ok) { showToast(r.reason); return; }
-    /* M10 Fase B (decisione #52 §13.6): se la rotta tocca sistemi coesi,
-       paga −1 disposizione/proprietario (cap −3 globale per atto di
-       pianificazione). Warning narrativo in cronaca. */
-    if (ORION.cohesion && ORION.cohesion.applyTravelPenalty && order.type !== 'idle' && order.type !== 'return') {
-      const sysIds = collectOrderSystems(g, fleet, order);
-      const pen = ORION.cohesion.applyTravelPenalty(g, sysIds);
-      if (pen.applied < 0) {
-        showToast('Rotta attraverso ' + pen.affectedSys.length + ' sistema coeso — disposizione ' + pen.applied + '/proprietari');
-      }
-    }
-    if (order.type !== 'idle') {
-      let label;
-      if (order.type === 'move-route') {
-        const tappe = order.waypoints.map(function (id) { return g.galaxy.systems[id].name; }).join(' → ');
-        label = 'rotta a tappe: ' + tappe + (order.returnHome ? ' → rientro' : '');
-      } else if (order.type === 'patrol-loop') {
-        const nodi = order.loop.map(function (id) { return g.galaxy.systems[id].name; }).join(' ↻ ');
-        label = 'pattuglia ciclica: ' + nodi;
-      } else {
-        const target = (order.type === 'patrol') ? order.sysA :
-                       (order.type === 'return') ? (g.colonies[fleet.ownerColonyKey] || {}).systemId :
-                       order.toSysId;
-        label = 'ordine "' + order.type + '" verso ' + g.galaxy.systems[target].name;
-      }
-      pushChronicle(ORION.time.currentDS(g) + ' — <strong>' + escapeHtml(fleet.name) + '</strong>: ' + escapeHtml(label) + '.', 'explore');
-    }
-    persistGame(g);
-    closeFleetOverlay();
-    const stage = document.querySelector('[data-view-stage]');
-    if (stage) renderFleetView(stage);
-  }
-  host.querySelector('[data-action="fleet-order-move"]').addEventListener('click', function () {
-    const sel = host.querySelector('[data-bind="fleet-order-move"]');
-    if (!sel || !sel.value) { showToast('Nessun sistema selezionato'); return; }
-    dispatch({ type: 'move', toSysId: Number(sel.value) });
-  });
-  const expBtn = host.querySelector('[data-action="fleet-order-explore"]');
-  if (expBtn) expBtn.addEventListener('click', function () {
-    const sel = host.querySelector('[data-bind="fleet-order-explore"]');
-    if (!sel || !sel.value) { showToast('Nessun sistema selezionato'); return; }
-    dispatch({ type: 'explore', toSysId: Number(sel.value) });
-  });
-  host.querySelector('[data-action="fleet-order-patrol"]').addEventListener('click', function () {
-    const a = host.querySelector('[data-bind="fleet-order-pat-a"]');
-    const b = host.querySelector('[data-bind="fleet-order-pat-b"]');
-    if (!a || !a.value || !b || !b.value) { showToast('Seleziona A e B'); return; }
-    if (a.value === b.value) { showToast('A e B devono essere diversi'); return; }
-    dispatch({ type: 'patrol', sysA: Number(a.value), sysB: Number(b.value) });
-  });
-  /* Fase B: stato locale dei costruttori rotta/loop (vive solo finché
-     l'overlay è aperto — non serve persistere). Il rendering è delegato
-     a una funzione che si chiama ad ogni mutazione. */
-  const route = { wps: [], dwell: [] };
-  const loop  = { wps: [], dwell: [] };
-
-  function sysShort(id) {
-    const s = g.galaxy.systems[id];
-    return s ? s.name : ('#' + id);
-  }
-  function renderWpList(targetSel, store, removeAction) {
-    const ul = host.querySelector(targetSel);
-    if (!ul) return;
-    if (store.wps.length === 0) {
-      ul.innerHTML = '<li class="fleet-route-empty">Nessuna tappa.</li>';
-      return;
-    }
-    ul.innerHTML = store.wps.map(function (sid, i) {
-      return '<li class="fleet-route-item">' +
-        '<span class="fleet-route-item__n">' + (i + 1) + '.</span>' +
-        '<span class="fleet-route-item__name">' + escapeHtml(sysShort(sid)) + '</span>' +
-        '<span class="fleet-route-item__dwell">' + (store.dwell[i] || 0) + ' Ι</span>' +
-        '<button class="btn btn--mini btn--icon-only" data-action="' + removeAction + '" data-idx="' + i + '" type="button" title="Rimuovi tappa" aria-label="Rimuovi">' + uiIcon('close', 'pink') + '</button>' +
-      '</li>';
-    }).join('');
-    ul.querySelectorAll('[data-action="' + removeAction + '"]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        const idx = Number(b.dataset.idx);
-        store.wps.splice(idx, 1);
-        store.dwell.splice(idx, 1);
-        renderWpList(targetSel, store, removeAction);
-      });
-    });
-  }
-  renderWpList('[data-bind="fleet-route-list"]', route, 'fleet-route-rm');
-  renderWpList('[data-bind="fleet-loop-list"]', loop, 'fleet-loop-rm');
-
-  const routeAddBtn = host.querySelector('[data-action="fleet-route-add"]');
-  if (routeAddBtn) routeAddBtn.addEventListener('click', function () {
-    const pick = host.querySelector('[data-bind="fleet-route-pick"]');
-    const dw = host.querySelector('[data-bind="fleet-route-dwell"]');
-    if (!pick || !pick.value) { showToast('Seleziona un sistema'); return; }
-    route.wps.push(Number(pick.value));
-    route.dwell.push(Math.max(0, parseInt(dw.value || '0', 10) || 0));
-    renderWpList('[data-bind="fleet-route-list"]', route, 'fleet-route-rm');
-  });
-  const loopAddBtn = host.querySelector('[data-action="fleet-loop-add"]');
-  if (loopAddBtn) loopAddBtn.addEventListener('click', function () {
-    const pick = host.querySelector('[data-bind="fleet-loop-pick"]');
-    const dw = host.querySelector('[data-bind="fleet-loop-dwell"]');
-    if (!pick || !pick.value) { showToast('Seleziona un sistema'); return; }
-    loop.wps.push(Number(pick.value));
-    loop.dwell.push(Math.max(0, parseInt(dw.value || '0', 10) || 0));
-    renderWpList('[data-bind="fleet-loop-list"]', loop, 'fleet-loop-rm');
-  });
-
-  host.querySelector('[data-action="fleet-order-route"]').addEventListener('click', function () {
-    if (!route.wps.length) { showToast('Aggiungi almeno una tappa'); return; }
-    const expFlag = host.querySelector('[data-bind="fleet-route-explore"]');
-    const retFlag = host.querySelector('[data-bind="fleet-route-return"]');
-    dispatch({
-      type: 'move-route',
-      waypoints: route.wps.slice(),
-      dwell: route.dwell.slice(),
-      exploreEach: !!(expFlag && expFlag.checked),
-      returnHome:  !!(retFlag && retFlag.checked)
-    });
-  });
-  host.querySelector('[data-action="fleet-order-patrol-loop"]').addEventListener('click', function () {
-    if (loop.wps.length < 2) { showToast('Servono almeno 2 nodi per la pattuglia'); return; }
-    dispatch({
-      type: 'patrol-loop',
-      loop: loop.wps.slice(),
-      dwell: loop.dwell.slice()
-    });
-  });
-
-  host.querySelector('[data-action="fleet-order-return"]').addEventListener('click', function () {
-    dispatch({ type: 'return' });
-  });
-  host.querySelector('[data-action="fleet-order-idle"]').addEventListener('click', function () {
-    dispatch({ type: 'idle' });
-  });
 }
 
 /* --- Tab Popolazione --- */
@@ -6402,7 +6129,7 @@ function potentialBars(planet) {
 }
 
 function rateGrid(rates, upkeep, colony) {
-  function fmtNet(v) { return (v >= 0 ? '+' : '−') + (Math.round(Math.abs(v) * 100) / 100); }
+  const fmtNet = ORION.format.rate;
   function fmtAbs(v) { return Math.round(Math.abs(v) * 100) / 100; }
   /* Decisione #45: il consumo pro-capite della popolazione drena cibo/acqua
      dallo stock (time.js processProduction). Lo mostriamo esplicitamente nel
@@ -6782,6 +6509,7 @@ const DEFAULT_AUTOPAUSE = {
      OFF di default. Le federazioni emergenti, invece, sono eventi geopolitici
      forti (nuova entità composita o sua rottura) → ON. */
   'system-cohesion-formed': false,
+  'cohesion-attack-backlash': false,
   'system-cohesion-broken': false,
   'federation-formed': true,
   'federation-broken': true,
@@ -7136,6 +6864,7 @@ function showEventOverlay(events) {
     'system-occupied': 'Sistema occupato',
     'system-released': 'Occupazione abbandonata',
     'system-cohesion-formed': 'Sistema coeso (consorzio formato)',
+    'cohesion-attack-backlash': 'Sistema coeso: solidarietà contro il tuo attacco',
     'system-cohesion-broken': 'Sistema coeso: dissolto',
     'federation-formed': 'Federazione emergente',
     'federation-broken': 'Federazione dissolta',
@@ -7550,6 +7279,12 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — Occupazione di <strong>' + escapeHtml(sys ? sys.name : '—') + '</strong>' + stag +
       ' <strong>abbandonata</strong>.', 'civ');
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+  } else if (ev.kind === 'cohesion-attack-backlash') {
+    /* Coesione #54 (cablata in pulizia #68 Fase 3): solidarietà locale. */
+    const stag = ev.sysId != null && ev.sysId >= 0 ? systemTagHtml(ev.sysId) : '';
+    pushChronicle(ds + ' — <strong>Solidarietà locale</strong>' + stag + ': il tuo attacco a <strong>' +
+      escapeHtml(ev.attackedName || '—') + '</strong> indigna ' + ev.count +
+      (ev.count === 1 ? ' civiltà vicina' : ' civiltà vicine') + ' del sistema coeso (−15 disposizione).', 'civ');
   } else if (ev.kind === 'system-cohesion-formed') {
     /* M10 Fase B (decisione #52 §13.6): consorzio locale che emerge. */
     const stag = ev.sysId != null && ev.sysId >= 0 ? systemTagHtml(ev.sysId) : '';
@@ -7901,13 +7636,7 @@ function colonyWorstScarcity(c) {
 }
 
 /* Formatta un numero di scorte in forma compatta (k). */
-function fmtStock(v) {
-  if (v == null || !isFinite(v)) return '—';
-  const av = Math.abs(v);
-  if (av >= 1e6) return (v / 1e6).toFixed(1) + 'M';
-  if (av >= 1000) return (v / 1000).toFixed(1) + 'k';
-  return Math.round(v).toString();
-}
+function fmtStock(v) { return ORION.format.stock(v); }
 
 /* Costruisce i dati delle card per la Dashboard Impero (controller → view). */
 function buildEmpireState() {
@@ -8534,18 +8263,7 @@ function renderDxPanel() {
     /* Triggera click del nuovo bottone (è già stato sostituito sopra,
        quindi questo è no-op se il flusso è completato — fallback). */
   });
-  /* Governor toggle/dropdowns (decisione #59 Tier 2): rebind diretto. */
-  content.querySelectorAll('[data-action="gov-toggle"]').forEach(function (chk) {
-    const nb = chk.cloneNode(true);
-    chk.parentNode.replaceChild(nb, chk);
-    nb.addEventListener('change', withDxScope(function () {
-      if (!ORION.governor) return;
-      ORION.governor.setEnabled(colony, nb.checked);
-      if (nb.checked && ORION.tutorial) ORION.tutorial.fire('governor');
-      if (ORION.save && ORION.save.autosave && ORION.game) ORION.save.autosave(ORION.game);
-      renderDxPanel();
-    }));
-  });
+  /* Governor dropdowns (decisione #59 Tier 2): rebind diretto. */
   content.querySelectorAll('[data-action="gov-level"]').forEach(function (sel) {
     const nb = sel.cloneNode(true);
     sel.parentNode.replaceChild(nb, sel);
@@ -9887,11 +9605,7 @@ function enterGame() {
   updateMobileNav();
 }
 
-function escapeHtml(s) {
-  return String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
+function escapeHtml(s) { return ORION.util.escapeHtml(s); }
 
 /* Toast non invasivo (decisione #24 / §21: "salva prima di azioni
    irreversibili" — feedback discreto, niente popup). */

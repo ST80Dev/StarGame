@@ -35,12 +35,9 @@
 (function (root) {
   const DISCOVERY = root.ORION.galaxy.DISCOVERY;
 
-  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
-  function lerp(a, b, t) { return a + (b - a) * t; }
-  function smoothstep(e0, e1, x) {
-    const t = clamp((x - e0) / (e1 - e0), 0, 1);
-    return t * t * (3 - 2 * t);
-  }
+  const clamp = root.ORION.util.clamp;
+  const lerp = root.ORION.util.lerp;
+  const smoothstep = root.ORION.util.smoothstep;
   function shortestAngle(from, to) {
     // restituisce un target equivalente a `to` ma più vicino a `from`
     let d = ((to - from + Math.PI) % (Math.PI * 2)) - Math.PI;

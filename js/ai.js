@@ -332,18 +332,6 @@
     return before - civ.planets.length;
   }
 
-  /* Mappa sysId → civId (dalle civs vive). */
-  function ownerMap(game) {
-    const map = {};
-    const civs = game.civs || [];
-    for (let i = 0; i < civs.length; i++) {
-      const c = civs[i];
-      if (!c || !c.alive) continue;
-      const sys = c.systems || derivedSystems(c);
-      for (let j = 0; j < sys.length; j++) map[sys[j]] = c.id;
-    }
-    return map;
-  }
   function civForSystem(game, sysId) {
     const civs = game.civs || [];
     for (let i = 0; i < civs.length; i++) {
@@ -1472,18 +1460,6 @@
        diretto → contatto formale + interazione che conta per "Conosciuta". */
     markContact(game, civ, null, 'battle');
   }
-  function relationStatus(game, civ) {
-    const now = game.timeImpulsi || 0;
-    if ((civ.truceUntil || 0) > now) return { id: 'truce', label: 'Tregua' };
-    const inc = (game.incursions || []).some(function (i) { return i.kind === 'ai' && i.civId === civ.id; });
-    const bat = (game.battles || []).some(function (b) { return b.attackerKind === 'ai' && b.attackerCiv === civ.id && b.status === 'active'; });
-    if (inc || bat) return { id: 'war', label: 'In guerra' };
-    const d = civ.disposition || 0;
-    if (d <= -40) return { id: 'hostile', label: 'Ostile' };
-    if (d >= 40) return { id: 'friendly', label: 'Amichevole' };
-    if (d >= 15) return { id: 'cordial', label: 'Cordiale' };
-    return { id: 'neutral', label: 'Neutrale' };
-  }
   function forceEstimate(game, civ) {
     return Math.max(1, Math.round((civ.power || 0) / 25));
   }
@@ -1532,7 +1508,6 @@
     parsePlanetKey: parsePlanetKey,
     migrateLegacyCiv: migrateLegacyCiv,
     /* Lookups */
-    ownerMap: ownerMap,
     civForSystem: civForSystem,
     civForPlanet: civForPlanet,
     pirateThreat: pirateThreat,
@@ -1556,7 +1531,6 @@
     materialize: materialize,
     demobilize: demobilize,
     recordBattle: recordBattle,
-    relationStatus: relationStatus,
     forceEstimate: forceEstimate,
     dispositionReason: dispositionReason,
     knownNests: knownNests,

@@ -294,7 +294,6 @@ button { font-family: inherit; }
   border-bottom: 1px solid var(--c-border);
   background: linear-gradient(180deg, rgba(47, 230, 224, 0.05), transparent);
 }
-.panel__header--inline { border-bottom: none; padding-bottom: 4px; background: none; }
 .panel__title {
   font-family: var(--font-display);
   font-size: 0.82rem;
@@ -320,7 +319,6 @@ button { font-family: inherit; }
 .panel__note-icon--info { color: #80c8e6; }
 
 /* --- Lista di navigazione --- */
-.nav-list { display: flex; flex-direction: column; gap: 4px; }
 .nav-item {
   display: flex;
   align-items: center;
@@ -349,20 +347,6 @@ button { font-family: inherit; }
   box-shadow: inset 2px 0 0 var(--c-accent);
 }
 .nav-item.is-active .nav-item__glyph { color: var(--c-accent); text-shadow: var(--glow-accent); }
-
-/* --- Consiglio della Civiltà --- */
-.council { display: flex; flex-direction: column; gap: 8px; }
-.council__member {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 10px;
-  background: rgb(var(--c-surface-rgb) / 0.5);
-  border: 1px solid var(--c-border-soft);
-  border-radius: var(--radius-sm);
-}
-.council__role { font-size: 0.82rem; color: var(--c-text); }
-.council__status { font-size: 0.7rem; color: var(--c-text-faint); font-style: italic; }
 
 /* =====================================================================
    Viewport centrale (Canvas mappa in M02+)
@@ -411,42 +395,6 @@ button { font-family: inherit; }
 .galaxy-holder { position: absolute; inset: 0; }
 .galaxy-canvas { display: block; width: 100%; height: 100%; cursor: grab; }
 .galaxy-canvas:active { cursor: grabbing; }
-
-/* Mini-chip seed (decisione #25 polish): badge cliccabile per copiare
-   il seed negli appunti. Sostituisce l'overlay informativo precedente —
-   conteggi sistemi/gruppi e pulsante "Galassia" sono ridondanti con la
-   breadcrumb e i conteggi vivono già nei pannelli e nel save. */
-.seed-chip {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 6px 10px;
-  background: rgb(var(--c-surface-rgb) / 0.72);
-  border: 1px solid var(--c-border-soft);
-  border-radius: 999px;
-  backdrop-filter: blur(4px);
-  cursor: pointer;
-  pointer-events: auto;
-  z-index: 2;
-  transition: border-color 120ms ease, background 120ms ease;
-}
-.seed-chip:hover { border-color: var(--c-accent); background: rgb(var(--c-surface-rgb) / 0.85); }
-.seed-chip:focus-visible { outline: 1px solid var(--c-accent); outline-offset: 2px; }
-.seed-chip__label {
-  font-family: var(--font-display);
-  font-size: 0.58rem;
-  letter-spacing: 0.18em;
-  color: var(--c-text-faint);
-}
-.seed-chip__value {
-  font-family: var(--font-data);
-  font-size: 0.78rem;
-  color: var(--c-accent);
-  letter-spacing: 0.06em;
-}
 
 .btn--mini {
   font-family: var(--font-data);
@@ -1461,27 +1409,6 @@ button { font-family: inherit; }
   border-radius: var(--radius);
   box-shadow: var(--shadow-panel), inset 0 1px 0 var(--c-panel-hilite);
   backdrop-filter: blur(6px);
-}
-.time-control__title {
-  font-family: var(--font-display);
-  font-size: 0.74rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--c-accent);
-  text-align: center;
-  text-shadow: 0 0 8px rgba(47, 230, 224, 0.25);
-}
-.time-steps {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-}
-.time-control__unit {
-  margin: 2px 0 0;
-  font-size: 0.66rem;
-  text-align: center;
-  color: var(--c-text-faint);
-  letter-spacing: 0.04em;
 }
 .time-control__unit strong { color: var(--c-accent); font-weight: 600; }
 
@@ -3294,15 +3221,6 @@ select.main-menu__input { cursor: pointer; }
   font-size: 0.85em;
   opacity: 0.75;
 }
-.gov-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.85em;
-  cursor: pointer;
-  user-select: none;
-}
-.gov-toggle input { cursor: pointer; }
 .gov-log {
   list-style: none;
   margin: 0;
@@ -4789,7 +4707,6 @@ select.main-menu__input { cursor: pointer; }
 
 /* Overlays creazione/ordini — riusa il pattern di expedition-pick-overlay. */
 .fleet-create-overlay,
-.fleet-orders-overlay,
 .fleet-wizard {
   position: fixed;
   inset: 0;
@@ -4803,10 +4720,8 @@ select.main-menu__input { cursor: pointer; }
   padding: 24px;
 }
 .fleet-create-overlay[hidden],
-.fleet-orders-overlay[hidden],
 .fleet-wizard[hidden] { display: none; }
-.fleet-create-overlay__panel,
-.fleet-orders-overlay__panel {
+.fleet-create-overlay__panel {
   background: rgb(var(--c-surface-rgb) / 0.95);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 6px;
@@ -4817,16 +4732,14 @@ select.main-menu__input { cursor: pointer; }
   overflow-y: auto;
   color: var(--c-text, #e9ecf6);
 }
-.fleet-create-overlay__head,
-.fleet-orders-overlay__head {
+.fleet-create-overlay__head {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
   margin-bottom: 10px;
 }
-.fleet-create-overlay__head h2,
-.fleet-orders-overlay__head h2 {
+.fleet-create-overlay__head h2 {
   margin: 0;
   font-family: var(--font-display, sans-serif);
   font-size: 1.2em;
@@ -4847,8 +4760,7 @@ select.main-menu__input { cursor: pointer; }
   padding: 4px 6px;
   font-family: inherit;
 }
-.fleet-create-overlay__actions,
-.fleet-order-block {
+.fleet-create-overlay__actions {
   display: flex;
   gap: 6px;
   align-items: center;
@@ -4856,95 +4768,11 @@ select.main-menu__input { cursor: pointer; }
   flex-wrap: wrap;
 }
 .fleet-create-overlay__actions { justify-content: flex-end; }
-.fleet-order-block h3 {
-  margin: 0;
-  flex: 0 0 100%;
-  font-size: 0.95em;
-  letter-spacing: 0.04em;
-  font-family: var(--font-display, sans-serif);
-}
-.fleet-order-block select {
-  flex: 1;
-  min-width: 140px;
-  background: rgb(var(--c-surface-rgb) / 0.85);
-  color: var(--c-text, #e9ecf6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-  padding: 3px 6px;
-  font-family: inherit;
-}
-/* Fase B: overlay rotta a tappe e pattuglia ciclica. */
-.fleet-order-block--route { border-left: 2px solid var(--c-cyan, #2fe6e0); padding-left: 8px; }
-.fleet-order-block--route h3 { color: var(--c-cyan, #2fe6e0); }
-.fleet-order-flag {
-  font-size: 0.85em;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  margin-right: 8px;
-  color: var(--c-muted, #8a93b8);
-  cursor: pointer;
-}
-.fleet-order-flag input { margin: 0; }
-.fleet-route-list {
-  list-style: none;
-  margin: 4px 0;
-  padding: 0;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  max-height: 180px;
-  overflow-y: auto;
-}
-.fleet-route-empty {
-  font-size: 0.82em;
-  color: var(--c-muted, #8a93b8);
-  font-style: italic;
-  padding: 4px 6px;
-}
-.fleet-route-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 6px;
-  background: rgba(47, 230, 224, 0.05);
-  border-radius: 3px;
-  font-size: 0.88em;
-}
-.fleet-route-item__n {
-  flex: 0 0 auto;
-  color: var(--c-cyan, #2fe6e0);
-  font-family: var(--font-display, sans-serif);
-  font-weight: 600;
-  min-width: 18px;
-}
-.fleet-route-item__name { flex: 1; }
-.fleet-route-item__dwell {
-  flex: 0 0 auto;
-  color: var(--c-muted, #8a93b8);
-  font-size: 0.85em;
-}
-.fleet-route-add {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  flex-wrap: wrap;
-}
-.fleet-route-add input[type="number"] {
-  width: 56px;
-  background: rgb(var(--c-surface-rgb) / 0.85);
-  color: var(--c-text, #e9ecf6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-  padding: 3px 6px;
-}
 
 /* =====================================================================
    FLEET WIZARD — Ordini guidati a 3 step (post-feedback utente)
    ===================================================================== */
-/* .fleet-wizard è gestito sopra insieme a .fleet-create-overlay / .fleet-orders-overlay */
+/* .fleet-wizard è gestito sopra insieme a .fleet-create-overlay */
 .fleet-wizard__panel {
   background: rgb(var(--c-surface-rgb) / 0.96);
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -6326,17 +6154,6 @@ select.main-menu__input { cursor: pointer; }
 /* =====================================================================
    M10 Fase C (decisione #47) — Intel dossier combat-aware
    ===================================================================== */
-.civ-rel {
-  font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em;
-  padding: 2px 7px; border-radius: 4px; flex: 0 0 auto; margin-left: auto;
-}
-.civ-rel--war      { background: rgba(224, 85, 110, 0.22); color: #ff9aa9; border: 1px solid rgba(224,85,110,0.55); }
-.civ-rel--hostile  { background: rgba(224, 85, 110, 0.12); color: #f08296; border: 1px solid rgba(224,85,110,0.35); }
-.civ-rel--truce    { background: rgba(240, 166, 74, 0.14); color: #f0c070; border: 1px solid rgba(240,166,74,0.40); }
-.civ-rel--neutral  { background: rgba(160, 168, 190, 0.12); color: #c0c8da; border: 1px solid rgba(160,168,190,0.30); }
-.civ-rel--cordial  { background: rgba(63, 202, 160, 0.12); color: #6fe0b8; border: 1px solid rgba(63,202,160,0.32); }
-.civ-rel--friendly { background: rgba(63, 202, 160, 0.20); color: #7fe8c4; border: 1px solid rgba(63,202,160,0.5); }
-
 .civ-lastbattle { font-size: 0.80rem; }
 .civ-lastbattle--win  span:last-child { color: #6fe0b8; }
 .civ-lastbattle--loss span:last-child { color: #f08296; }

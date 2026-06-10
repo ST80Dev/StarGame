@@ -304,7 +304,6 @@
   for (let i = 0; i < STRUCTURES.length; i++) BY_ID[STRUCTURES[i].id] = STRUCTURES[i];
 
   function get(id) { return BY_ID[id] || null; }
-  function byCategory(cat) { return STRUCTURES.filter(function (s) { return s.cat === cat; }); }
   function buildableOn(bodyType) {
     return STRUCTURES.filter(function (s) {
       const types = s.bodyTypes || HABITABLE;
@@ -325,9 +324,6 @@
     const L = Math.max(1, level || 1);
     return L + GAIN * L * (L - 1) / 2;
   }
-  /* Compat: vecchio nome usato altrove → ora resa cumulata dei moduli. */
-  function levelScale(level) { return moduleSum(level); }
-
   /* Footprint slot di una struttura a un dato livello = slot-base × livello. */
   function slotFootprint(def, level) {
     return (def && def.slots ? def.slots : 1) * Math.max(1, level || 1);
@@ -354,9 +350,7 @@
     STRUCTURES: STRUCTURES,
     GAIN: GAIN,
     get: get,
-    byCategory: byCategory,
     buildableOn: buildableOn,
-    levelScale: levelScale,
     moduleSum: moduleSum,
     slotFootprint: slotFootprint,
     stepCost: stepCost,
