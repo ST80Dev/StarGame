@@ -109,6 +109,10 @@
       colonies: game.colonies,
       mode: game.mode,
       victoryTracks: game.victoryTracks,
+      /* Focus di vittoria narrativo e mutabile (decisione #23 esteso).
+         Stringa lazy (id pista) o null = sandbox puro. Additivo, nessun
+         bump di schema: i save vecchi caricano con focus = null. */
+      victoryFocus: (typeof game.victoryFocus === 'string') ? game.victoryFocus : null,
       eventSchedule: game.eventSchedule || [],
       chronicle: capChronicle(game.chronicle),
       /* M06.5 (decisione #27): scelta colonia originaria, salvata

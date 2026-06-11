@@ -412,6 +412,7 @@ function newGame(seed, opts) {
     ORION.game.homePlanetKey = saved.homePlanetKey || ORION.game.homePlanetKey;
     if (saved.mode) ORION.game.mode = saved.mode;
     if (saved.victoryTracks) ORION.game.victoryTracks = saved.victoryTracks;
+    if (typeof saved.victoryFocus === 'string') ORION.game.victoryFocus = saved.victoryFocus;
     if (saved.eventSchedule) ORION.game.eventSchedule = saved.eventSchedule;
     if (Array.isArray(saved.expeditions)) ORION.game.expeditions = saved.expeditions.slice();
     if (Array.isArray(saved.fleets)) ORION.game.fleets = saved.fleets.slice();
@@ -746,6 +747,17 @@ function renderView(stage, view) {
     if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
     if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
     renderMarketView(stage);
+    return;
+  }
+
+  // Dashboard "Destino" (decisione #23 esteso): visuale riepilogativa delle
+  // 7 piste di vittoria con soglie provvisorie + focus narrativo opzionale.
+  if (view === 'destiny') {
+    if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; } if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
+    if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
+    if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
+    if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
+    renderDestinyView(stage);
     return;
   }
 
@@ -3919,6 +3931,82 @@ function doCreateRoute(srcKey, dstKey, resource, mercId) {
 /* =====================================================================
    M12 Fase A1 — Vista MERCATO (riepilogo d'impero, decisione #53 §15.2)
    ===================================================================== */
+/* Dashboard "Destino" — visuale riepilogativa delle 7 piste di vittoria
+   (decisione #23 esteso). Soglie PROVVISORIE da victory.js (M20/GDD §16 le
+   calibreranno). Le piste girano tutte in parallelo: vince chi chiude per
+   prima. Il "focus" è solo enfasi narrativa, mutabile e senza lock. */
+function renderDestinyView(stage) {
+  if (!stage) return;
+  const g = ORION.game;
+  const V = ORION.victory;
+  if (!g || !V || !V.progress) return;
+
+  const rows = V.progress(g);
+  const focus = V.getFocus ? V.getFocus(g) : null;
+  const fmt = (ORION.format && ORION.format.compact)
+    ? ORION.format.compact
+    : function (n) { return String(Math.round(n)); };
+
+  const cardsHtml = rows.map(function (r) {
+    const pct = Math.max(0, Math.min(100, Math.round(r.score * 100)));
+    const isFocus = (r.track === focus);
+    const won = r.won;
+    const icon = (ORION.icon && ORION.icon(r.icon)) || '';
+    const barCls = won ? 'is-won' : (isFocus ? 'is-focus' : '');
+    const focusBtn = isFocus
+      ? '<button class="btn btn--mini" data-action="destiny-focus" data-track="" type="button">Togli focus</button>'
+      : '<button class="btn btn--mini btn--enter" data-action="destiny-focus" data-track="' + r.track + '" type="button">Punta a questo</button>';
+    return '<li class="destiny-card' + (isFocus ? ' is-focus' : '') + (won ? ' is-won' : '') + '">' +
+      '<div class="destiny-card__head">' +
+        '<span class="destiny-card__icon ui-icon" aria-hidden="true">' + icon + '</span>' +
+        '<span class="destiny-card__title">' + escapeHtml(r.label) +
+          (isFocus ? ' <span class="destiny-card__flag">focus</span>' : '') + '</span>' +
+        '<span class="destiny-card__pct">' + pct + '%</span>' +
+      '</div>' +
+      '<div class="destiny-bar"><span class="destiny-bar__fill ' + barCls + '" style="width:' + pct + '%"></span></div>' +
+      '<div class="destiny-card__metric">' + escapeHtml(r.metric) + ': <strong>' +
+        fmt(r.cur) + '</strong> / ' + fmt(r.goal) + '</div>' +
+      '<p class="destiny-card__hint">' + escapeHtml(r.hint) + '</p>' +
+      '<div class="destiny-card__foot">' + focusBtn + '</div>' +
+    '</li>';
+  }).join('');
+
+  const focusLabel = focus ? (V.TRACK_LABELS[focus] || focus) : null;
+  const bannerHtml = focus
+    ? '<div class="destiny-banner is-set">Ambizione dichiarata: <strong>' + escapeHtml(focusLabel) + '</strong>' +
+        ' <button class="btn btn--mini" data-action="destiny-focus" data-track="" type="button">Annulla</button></div>'
+    : '<div class="destiny-banner">Nessuna ambizione dichiarata — esplora, e decidi a cosa puntare strada facendo.</div>';
+
+  stage.innerHTML =
+    '<div class="fleet-view destiny-view">' +
+      '<header class="fleet-view__head">' +
+        '<h2 class="fleet-view__title">Destino <span class="fleet-view__sub">7 vie alla vittoria</span></h2>' +
+      '</header>' +
+      bannerHtml +
+      '<p class="panel__note">Tutte le vie corrono in parallelo: vince chi chiude per prima una qualsiasi soglia. ' +
+        'Dichiarare un <em>focus</em> non blocca nulla — è solo l’ambizione del tuo popolo, e puoi cambiarla quando vuoi. ' +
+        '<em>Soglie provvisorie</em> (in calibrazione).</p>' +
+      '<ul class="destiny-grid">' + cardsHtml + '</ul>' +
+    '</div>';
+
+  stage.querySelectorAll('[data-action="destiny-focus"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const track = b.dataset.track || null;
+      const prev = V.getFocus(g);
+      if (track === prev) return;
+      V.setFocus(g, track);
+      if (track) {
+        pushChronicle('Il tuo popolo vede in te <strong>' + escapeHtml(V.TRACK_LABELS[track] || track) + '</strong>.', 'system');
+      } else if (prev) {
+        pushChronicle('Il tuo popolo ricalibra le proprie ambizioni.', 'system');
+      }
+      persistGame(g);
+      renderDestinyView(stage);
+      renderLeftPanel();
+    });
+  });
+}
+
 function renderMarketView(stage) {
   if (!stage) return;
   const g = ORION.game;
@@ -8030,7 +8118,14 @@ function renderLeftPanel() {
   function launcherIcon(name) {
     return (ORION.icon && ORION.icon(name)) || '';
   }
+  const vFocus = (ORION.victory && ORION.victory.getFocus) ? ORION.victory.getFocus(g) : null;
+  const vFocusSub = vFocus ? (ORION.victory.TRACK_LABELS[vFocus] || vFocus) : 'nessun focus';
   const launcherHtml =
+    '<button class="lp-launcher__btn lp-launcher__btn--destiny' + (currentView === 'destiny' ? ' is-active' : '') + '" data-view="destiny" type="button">' +
+      '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('trophy') + '</span>' +
+      '<span>Destino</span>' +
+      '<span class="lp-launcher__sub">' + escapeHtml(vFocusSub) + '</span>' +
+    '</button>' +
     '<button class="lp-launcher__btn' + (currentView === 'fleet' ? ' is-active' : '') + '" data-view="fleet" type="button">' +
       '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('fleet') + '</span>' +
       '<span>Flotte</span>' +
