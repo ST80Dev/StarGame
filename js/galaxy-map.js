@@ -427,9 +427,15 @@
         if (!fromS || !toS) return null;
         const ORN = root.ORION;
         const minSpd = (ORN && ORN.fleet && ORN.fleet.fleetMinSpeed) ? ORN.fleet.fleetMinSpeed(f) : 1;
-        const total = (ORN && ORN.fleet && ORN.fleet.tempoLeg)
-                    ? ORN.fleet.tempoLeg(g, fromId, toId, minSpd) : 60;
+        /* Stessa logica di _drawFleets: usa fleet.legTotal se disponibile,
+           altrimenti fallback con safety net per save vecchi (decisione di
+           sessione fix interpolazione marker). */
+        let total = (typeof f.legTotal === 'number' && f.legTotal > 0)
+                  ? f.legTotal
+                  : ((ORN && ORN.fleet && ORN.fleet.tempoLeg)
+                    ? ORN.fleet.tempoLeg(g, fromId, toId, minSpd) : 60);
         const remain = Math.max(0, f.etaImpulsi || 0);
+        if (remain > total) total = remain;
         const t = total > 0 ? clamp(1 - remain / total, 0, 1) : 1;
         const wx = fromS.x + (toS.x - fromS.x) * t;
         const wy = fromS.y + (toS.y - fromS.y) * t;
@@ -1612,14 +1618,27 @@
             const toS   = g.systems[toId];
             if (!fromS || !toS) continue;
             /* Interpolazione lineare tra i due sistemi sulla base del progresso
-               del leg corrente. Il tempo totale del leg lo deriviamo dalla
-               velocità della flotta (stessa formula tempoLeg). */
+               del leg corrente. Il tempo totale del leg viene dal campo
+               `fleet.legTotal` (storato da `startNextLeg`), che include i
+               modificatori applicati (#43 Comandante Navigatore, #69 deriva
+               viveri, incidenti delay #60). Fallback a `tempoLeg` puro per
+               i save vecchi senza legTotal: in quel caso può esserci un
+               leggero mismatch se la flotta ha modificatori in vigore, ma
+               il marker comunque non resta "stuck" perché clamp evita
+               progress negativo. */
             const minSpd = (root.ORION.fleet && root.ORION.fleet.fleetMinSpeed)
                          ? root.ORION.fleet.fleetMinSpeed(f) : 1;
-            const total = (root.ORION.fleet && root.ORION.fleet.tempoLeg)
+            let total = (typeof f.legTotal === 'number' && f.legTotal > 0)
+                      ? f.legTotal
+                      : ((root.ORION.fleet && root.ORION.fleet.tempoLeg)
                         ? root.ORION.fleet.tempoLeg(g, fromId, toId, minSpd)
-                        : 60;
+                        : 60);
             const remain = Math.max(0, f.etaImpulsi || 0);
+            /* Safety net per save vecchi: se per qualunque ragione
+               `remain > total` (es. modificatori applicati ma legTotal
+               non ancora persistito), allarga `total` a `remain` così il
+               progress parte da 0 e cresce, invece di rimanere clampato. */
+            if (remain > total) total = remain;
             const t = total > 0 ? clamp(1 - remain / total, 0, 1) : 1;
             const wx = fromS.x + (toS.x - fromS.x) * t;
             const wy = fromS.y + (toS.y - fromS.y) * t;

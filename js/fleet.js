@@ -912,6 +912,7 @@
   function startNextLeg(galaxy, fleet) {
     if (!Array.isArray(fleet.route) || fleet.route.length === 0) {
       fleet.location.status = 'orbiting';
+      fleet.legTotal = 0;
       return 0;
     }
     const from = fleet.location.systemId;
@@ -920,6 +921,7 @@
     const nextIdx = fleet.routeIdx + 1;
     if (nextIdx >= fleet.route.length) {
       fleet.location.status = 'orbiting';
+      fleet.legTotal = 0;
       return 0;
     }
     const toSys = fleet.route[nextIdx];
@@ -932,6 +934,13 @@
     /* Decisione #69: in deriva (viveri esauriti) la flotta arranca — i leg
        successivi durano di più (razionamento). */
     if (fleet._drift && (fleet.viveri || 0) <= 0) t = Math.max(1, t * VIVERI_DRIFT_SLOW);
+    /* Fix bug renderer (decisione di sessione): stora il `legTotal`
+       effettivo (post-modificatori comandante/deriva/incidenti) così il
+       renderer in `_drawFleets` può interpolare correttamente la posizione
+       della flotta lungo il leg. Senza, il renderer ricomputa solo
+       `tempoLeg` puro → `eta > total` se ci sono modificatori → progress
+       negativo → marker stuck al source. */
+    fleet.legTotal = t;
     return t;
   }
 
@@ -984,6 +993,9 @@
     if (r < 0.50) {
       const extra = 10 + Math.floor(rng.float() * 11);
       fleet.etaImpulsi = (fleet.etaImpulsi || 0) + extra;
+      /* Fix bug renderer: mantieni `legTotal` coerente con l'eta esteso
+         dall'incidente, così l'interpolazione del marker resta corretta. */
+      if (fleet.legTotal != null) fleet.legTotal = (fleet.legTotal || 0) + extra;
       events.push({ kind: 'fleet-incident', fleetId: fleet.id, fleetName: fleet.name,
         incident: { kind: 'delay', amount: extra }, impulso: game.timeImpulsi });
       return;
