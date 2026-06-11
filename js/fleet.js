@@ -1404,11 +1404,10 @@
         const shipLost = !!(ship && ship.wear >= 100);
         /* xp +1 al crew (sempre, anche con incidente non critico). */
         if (crew) crew.xp = (crew.xp || 0) + 1;
-        /* Rinominazione id crew con counter persistente (allineato a expedition).
-           Usa ORION.time.nextCrewId se disponibile (counter persistito). */
-        const T = ORION.time;
-        const newCrewId = (T && T.nextCrewId) ? T.nextCrewId(game) : crew.id;
-        const newCrew = { id: newCrewId, xp: crew.xp };
+        /* Identità STABILE: il crew conserva il proprio id (e quindi il
+           callsign) per tutta la vita — niente più rinomina al rientro, che
+           faceva "saltare" il codice dello stesso equipaggio (fix naming). */
+        const newCrew = { id: crew.id, xp: crew.xp };
         /* Restituisci crew alla colonia. */
         if (!colony.crews) colony.crews = { explorer: [] };
         if (!Array.isArray(colony.crews.explorer)) colony.crews.explorer = [];
