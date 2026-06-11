@@ -1687,12 +1687,24 @@
           }
         }
       }
+      /* Servizio (decisione utente 2026-06-11): rotta lunga (≥3 tappe)
+         conclusa → l'equipaggio matura. Anti-farm: le rotte brevi (1-2
+         tappe) non danno xp. */
+      if (order.waypoints && order.waypoints.length >= 3) {
+        awardCrewXp(game, fleet, 1, events);
+      }
       finishCompound(game, fleet, events, 'route-complete');
       return;
     }
 
     if (order.type === 'patrol-loop') {
       order.loopIdx = (order.loopIdx + 1) % order.loop.length;
+      /* Servizio: giro completo di pattuglia su ≥3 sistemi → +1 xp.
+         Anti-farm: il ping-pong a 2 sistemi non matura; un giro a 3+
+         sistemi costa ≥120 Ι, quindi la crescita è lenta (servizio). */
+      if (order.loopIdx === 0 && order.loop.length >= 3) {
+        awardCrewXp(game, fleet, 1, events);
+      }
       const next = order.loop[order.loopIdx];
       const path = computePath(game.galaxy, fleet.location.systemId, next);
       if (path && path.length > 1) {
@@ -1724,6 +1736,34 @@
       reason: reason,
       impulso: game.timeImpulsi
     });
+  }
+
+  /* Servizio vario (decisione utente 2026-06-11, emenda #39/#43): un
+     equipaggio assegnato a una flotta matura xp anche da combattimenti
+     vinti e missioni di flotta concluse, non solo esplorando. Al grado
+     massimo (xp 10) emerge un Comandante (in panchina sulla colonia
+     d'origine) e il crew si riforma (commander.promote resetta a 0).
+     Deterministico (#5), recovery-friendly (#22): se la colonia d'origine
+     non esiste più, l'xp resta sul crew e la promozione avverrà al rientro. */
+  function awardCrewXp(game, fleet, amount, events) {
+    if (!fleet || !Array.isArray(fleet.crew) || !(amount > 0)) return;
+    const C = root.ORION && root.ORION.commander;
+    const colony = game.colonies && game.colonies[fleet.ownerColonyKey];
+    for (let i = 0; i < fleet.crew.length; i++) {
+      const cr = fleet.crew[i];
+      if (!cr) continue;
+      cr.xp = (cr.xp || 0) + amount;
+      if (C && C.isPromotable && C.isPromotable(cr.xp) && colony) {
+        const cmd = C.promote(game, colony, cr, cr.xp, fleet.ownerColonyKey);
+        if (cmd && events) {
+          events.push({
+            kind: 'commander-promoted', commander: cmd,
+            colony: colony, fromCrewId: cr.id,
+            impulso: game.timeImpulsi
+          });
+        }
+      }
+    }
   }
 
   /* Stub upkeep — Fase A non applica costi di mantenimento. Lo
@@ -1771,6 +1811,7 @@
     dissolveFleet: dissolveFleet,
     setOrder: setOrder,
     tick: tick,
+    awardCrewXp: awardCrewXp,
     fleetUpkeep: fleetUpkeep,
     ensureColonyShipKinds: ensureColonyShipKinds,
     FORMATIONS: FORMATIONS,

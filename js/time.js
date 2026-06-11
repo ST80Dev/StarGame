@@ -1253,6 +1253,11 @@
       // Applica esito alla flotta del giocatore (perdite permanenti, +xp)
       const fleetOutcome = C.applyOutcomeToFleet(game, fleet, A);
       const playerWon = (report.winner === 'A');
+      /* Servizio (decisione utente 2026-06-11): scaramuccia vinta → +1 xp
+         all'equipaggio aderente alla flotta sopravvissuta. */
+      if (playerWon && root.ORION.fleet && root.ORION.fleet.awardCrewXp) {
+        root.ORION.fleet.awardCrewXp(game, fleet, 1, events);
+      }
       // Decisione #66: refund 50% se la coloniale è stata persa nel scontro.
       if (hadColonial) {
         const stillColonial = fleet.ships && fleet.ships.some(function (s) { return s.kind === 'coloniale'; });
@@ -1490,7 +1495,7 @@
         }
         events.push({ kind: 'siege-end', battleId: battle.id, outcome: 'repelled',
           colonyKey: colonyKey, systemId: battle.systemId, impulso: game.timeImpulsi });
-        grantSiegeVeterancy(game, present);
+        grantSiegeVeterancy(game, present, events);
         continue;
       }
       if (defWiped) {
@@ -1509,7 +1514,7 @@
           }
           events.push({ kind: 'siege-end', battleId: battle.id, outcome: 'repelled',
             colonyKey: colonyKey, systemId: battle.systemId, impulso: game.timeImpulsi });
-          grantSiegeVeterancy(game, present);
+          grantSiegeVeterancy(game, present, events);
         } else {
           const oc = applySiegeWin(game, battle, colony, colonyKey, events);
           events.push({ kind: 'siege-end', battleId: battle.id, outcome: oc,
@@ -1522,10 +1527,17 @@
     game.battles = still;
   }
 
-  function grantSiegeVeterancy(game, fleets) {
+  function grantSiegeVeterancy(game, fleets, events) {
     const C = root.ORION.combat;
     if (!C) return;
-    for (let i = 0; i < fleets.length; i++) C.grantVeterancy(game, fleets[i]);
+    for (let i = 0; i < fleets.length; i++) {
+      C.grantVeterancy(game, fleets[i]);
+      /* Servizio (decisione utente 2026-06-11): assedio respinto → +1 xp
+         all'equipaggio delle flotte che hanno difeso la colonia. */
+      if (root.ORION.fleet && root.ORION.fleet.awardCrewXp) {
+        root.ORION.fleet.awardCrewXp(game, fleets[i], 1, events);
+      }
+    }
   }
 
   /* Saccheggio di una colonia (bounded, recovery-friendly #22/#49): ruba una
@@ -1610,6 +1622,10 @@
     report.kind = 'raider'; report.systemId = inc.targetSysId; report.enemyKind = 'pirate';
     const outcome = C.applyOutcomeToFleet(game, fleet, B);
     const playerWon = (report.winner === 'B');
+    /* Servizio (decisione utente 2026-06-11): raider respinto → +1 xp crew. */
+    if (playerWon && root.ORION.fleet && root.ORION.fleet.awardCrewXp) {
+      root.ORION.fleet.awardCrewXp(game, fleet, 1, events);
+    }
     if (outcome.lost > 0) warRegisterLoss(game, outcome.lost * CFG.WAR_MORALE_PER_SHIP, outcome.lost * CFG.WAR_PRESSURE_PER_LOSS);
     if (playerWon) warRegisterWin(game);
     else warRegisterLoss(game, CFG.WAR_MORALE_PER_DEFEAT, CFG.WAR_PRESSURE_PER_LOSS);
