@@ -787,14 +787,20 @@
 
   function startCrewBuild(colony, planet) {
     ensureAssets(colony);
-    if (!hasStructLevel(colony, 'accademia-militare', 1)) {
+    /* Decisione utente 2026-06-11: cap di addestramenti contemporanei dal
+       livello d'Accademia. Se ORION.expedition è caricato deleghiamo a
+       canBuildCrew; altrimenti fallback al solo controllo di esistenza. */
+    const E = root.ORION && root.ORION.expedition;
+    if (E && E.canBuildCrew) {
+      const check = E.canBuildCrew(colony);
+      if (!check.ok) return check;
+    } else if (!hasStructLevel(colony, 'accademia-militare', 1)) {
       return { ok: false, reason: 'Accademia militare non costruita' };
     }
     const cost = expCfg('CREW_COST', { food: 12, water: 6 });
     let time = expCfg('CREW_TIME', 12);
     /* Decisione #41: i tecnici accelerano anche l'addestramento equipaggi
-       (analogia: logistica/ingegneria di supporto). */
-    const E = root.ORION && root.ORION.expedition;
+       (analogia: logistica/ingegneria di supporto). Riusa `E` sopra. */
     if (E && E.applyTechSpeed) time = E.applyTechSpeed(time, colony);
     if (!canPay(colony, cost)) return { ok: false, reason: 'Risorse insufficienti' };
     pay(colony, cost);

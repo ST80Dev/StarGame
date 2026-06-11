@@ -527,10 +527,13 @@
     {
       id: 'struct:accademia-militare', tag: 'Strutture · ⚔', title: 'Accademia militare',
       body:
-        '<p>Forma quadri militari, ufficiali e veterani (figure speciali). Oggi nessun effetto visibile. ' +
-        'Uso moderato (2 en + 1 food/I).</p>' +
-        '<p><strong>Sinergia futura:</strong> con l\'<em>Hangar di costruzione</em> alimenta una colonia a vocazione militare. ' +
-        'In partite a vocazione <em>Tiranno</em> sarà struttura-chiave.</p>'
+        '<p>Forma gli <strong>equipaggi esploratori</strong> (e in futuro quadri/figure speciali). ' +
+        'Uso moderato (1 en + 1 food/I).</p>' +
+        '<p><strong>Addestramenti in parallelo:</strong> il <em>livello</em> dell\'Accademia limita quanti equipaggi ' +
+        'puoi formare contemporaneamente — <strong>1 al lvl 1, fino a 5 al lvl 5</strong>. Se è satura, potenziala ' +
+        '(come i cantieri dell\'Hangar per le navi).</p>' +
+        '<p><strong>Sinergia:</strong> con l\'<em>Hangar di costruzione</em> alimenta una colonia a vocazione militare/esplorativa. ' +
+        'Gli equipaggi accumulano xp e al grado massimo ne emerge un <em>Comandante</em>.</p>'
     },
     {
       id: 'struct:batteria-difesa', tag: 'Strutture · ⊕', title: 'Batteria di difesa',

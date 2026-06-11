@@ -3103,13 +3103,22 @@ function renderCantieriSection(colony, planet) {
        della colonia al lancio), li recuperiamo per mostrarli nel roster. */
     const away = expeditionsForColony(colony);
     const totalCrews = crews.length + away.length;
+    /* Decisione utente 2026-06-11: cap addestramenti dal livello d'Accademia. */
+    const academyLvl = (colony.structures['accademia-militare'].level) || 1;
+    const trainSlots = E2.academyTrainSlots ? E2.academyTrainSlots(colony) : queue.length;
+    const activeCrew = E2.activeCrewBuilds ? E2.activeCrewBuilds(colony) : queue.length;
+    const crewCapFull = activeCrew >= trainSlots;
+    const trainCls = crewCapFull ? ' is-full' : '';
     html += '<div class="cantieri-row">' +
       '<div class="cantieri-row__head">' +
         '<span class="cantieri-row__glyph ui-icon ui-icon--pink" aria-hidden="true">' + ((ORION.icon && ORION.icon('forces')) || '⚔') + '</span>' +
-        '<span class="cantieri-row__name">Accademia militare</span>' +
+        '<span class="cantieri-row__name">Accademia militare <span class="cantieri-row__base">lvl ' + academyLvl + '</span></span>' +
         '<span class="cantieri-row__counter">Equipaggi: <strong>' + totalCrews + '</strong>' +
           (totalCrews ? ' <span class="xp-chip" title="Esperienza media (a riposo)">xp ' + avg + '</span>' : '') +
         '</span>' +
+      '</div>' +
+      '<div class="cantieri-row__caps">' +
+        '<span class="cantieri-cap' + trainCls + '" title="Equipaggi in addestramento contemporaneo, abilitati dal livello dell\'Accademia">Addestramenti <strong>' + activeCrew + ' / ' + trainSlots + '</strong></span>' +
       '</div>';
     /* Roster per-equipaggio: a riposo (assegnabili) + in missione. */
     if (totalCrews) {
@@ -3152,7 +3161,10 @@ function renderCantieriSection(colony, planet) {
     });
     html += '<div class="cantieri-row__build">' +
       '<span class="cantieri-row__cost">' + costStr(crewCost) + ' · ' + effCrewTime + ' ' + iU() + (techBonus2 > 0 ? ' <span class="cantieri-row__base">(' + crewTime + ' base)</span>' : '') + '</span>' +
-      '<button class="btn btn--mini" data-build-crew type="button"' + (payOk ? '' : ' disabled') + '>+ Equipaggio esploratore</button>' +
+      '<button class="btn btn--mini" data-build-crew type="button"' +
+        ((payOk && !crewCapFull) ? '' : ' disabled') +
+        (crewCapFull ? ' title="Accademia satura (' + activeCrew + '/' + trainSlots + ') — potenzia l\'Accademia per addestrare più equipaggi in parallelo"' : '') +
+        '>+ Equipaggio esploratore</button>' +
     '</div></div>';
   }
 

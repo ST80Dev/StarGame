@@ -157,8 +157,13 @@
       cost: { met: 60, en: 30, food: 10 }, time: 22,
       upkeep: { en: 1, food: 1 },   // decisione #48: 2 → 1
       rates: {},
-      slots: 1, maxLevel: 2,
+      slots: 1, maxLevel: 5,
       bodyTypes: HABITABLE,
+      /* Decisione utente 2026-06-11: l'Accademia limita gli equipaggi in
+         ADDESTRAMENTO CONTEMPORANEO in base al suo livello (specchio dei
+         cantieri Hangar #41, ma legato all'Accademia). trainingSlots[L-1]
+         = equipaggi formabili in parallelo a quel livello. */
+      trainingSlots: [1, 2, 3, 4, 5],
       hooks: ['characters']       // gancio M14
     },
     /* Decisione #49 (M09 Fase A): difese planetarie. Occupano gli slot

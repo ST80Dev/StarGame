@@ -131,6 +131,39 @@
     return (colony && colony.assets && Array.isArray(colony.assets.shipQueue))
       ? colony.assets.shipQueue.length : 0;
   }
+  /* ------------------------------------------------------------------
+     Capacità Accademia (decisione utente 2026-06-11)
+     L'Accademia limita gli equipaggi in ADDESTRAMENTO CONTEMPORANEO in
+     base al suo livello (specchio dei cantieri Hangar #41). I valori
+     vivono in structures.js → accademia-militare.trainingSlots.
+     ------------------------------------------------------------------ */
+  function academyCapTable() {
+    const S = root.ORION && root.ORION.structures;
+    const def = S && S.get('accademia-militare');
+    const ts = def && def.trainingSlots;
+    if (Array.isArray(ts)) return ts;
+    return [1, 2, 3, 4, 5]; // fallback per test headless senza catalogo
+  }
+  function academyTrainSlots(colony) {
+    const ent = colony && colony.structures && colony.structures['accademia-militare'];
+    if (!ent) return 0;
+    return _capForLevel(academyCapTable(), ent.level || 1);
+  }
+  function activeCrewBuilds(colony) {
+    return (colony && colony.assets && Array.isArray(colony.assets.crewQueue))
+      ? colony.assets.crewQueue.length : 0;
+  }
+  /* Si può accodare un nuovo equipaggio? Gate sul livello d'Accademia
+     (recovery-friendly #22: motivo umano, niente fail-state). */
+  function canBuildCrew(colony) {
+    const slots = academyTrainSlots(colony);
+    if (slots <= 0) return { ok: false, reason: 'Accademia militare non costruita' };
+    const active = activeCrewBuilds(colony);
+    if (active >= slots) {
+      return { ok: false, reason: 'Accademia satura: ' + active + '/' + slots + ' addestramenti in corso (potenzia l\'Accademia)' };
+    }
+    return { ok: true };
+  }
   function shipsOnExpedition(game, originColonyKey) {
     if (!game || !Array.isArray(game.expeditions)) return 0;
     let n = 0;
@@ -610,6 +643,9 @@
     hangarBuildSlots: hangarBuildSlots,
     hangarDockCapacity: hangarDockCapacity,
     activeShipBuilds: activeShipBuilds,
+    academyTrainSlots: academyTrainSlots,
+    activeCrewBuilds: activeCrewBuilds,
+    canBuildCrew: canBuildCrew,
     shipsOnExpedition: shipsOnExpedition,
     totalShipsBound: totalShipsBound,
     canBuildShip: canBuildShip,
