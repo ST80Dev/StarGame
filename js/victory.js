@@ -218,6 +218,103 @@
     return out;
   }
 
+  /* ==================================================================
+     PROGRESS — descrittori ricchi per la dashboard "Destino" (UI).
+     ==================================================================
+     check() vive nel loop e scrive solo gli score; progress() è chiamato
+     dalla UI a ogni render e ritorna, per ciascuna pista, i numeri
+     leggibili (corrente / soglia) + una nota su "cosa conta".
+
+     SOGLIE PROVVISORIE: gli stessi placeholder di check() (M20 / GDD §16
+     le calibreranno con dati reali). Qui sono centralizzate così UI e loop
+     non divergono. */
+  const TARGET = {
+    economy: 100000,   // riserve met+en aggregate
+    tech: 10000,       // researchAccum d'impero
+    alignment: ALIGNMENT_TRACK_THRESHOLD,
+    colonizationFrac: 0.6 // frazione dei sistemi da colonizzare
+  };
+
+  const TRACK_META = {
+    exploration:     { icon: 'galaxy',     metric: 'Sistemi esplorati',  hint: 'Invia flotte esploratrici verso i sistemi rilevati per diradare la nebbia di guerra.' },
+    colonization:    { icon: 'planet',     metric: 'Mondi colonizzati',  hint: 'Vara navi coloniali e fonda nuove colonie sui mondi liberi.' },
+    economy:         { icon: 'market',     metric: 'Riserve metalli+energia', hint: 'Specializza i mondi-fabbrica e apri rotte commerciali per accumulare scorte.' },
+    tech:            { icon: 'research',   metric: 'Ricerca d’impero', hint: 'Costruisci laboratori e osservatori per accumulare ricerca (M13).' },
+    reputationLight: { icon: 'diplomacy',  metric: 'Atti di luce',       hint: 'Libera sistemi dai tiranni, onora i trattati, aiuta gli alleati.' },
+    reputationDark:  { icon: 'fleet',      metric: 'Atti d’ombra',  hint: 'Aggredisci, saccheggia, sottometti: la galassia ti temerà.' },
+    survival:        { icon: 'settings',   metric: 'Crisi superata',     hint: 'Resisti alla grande crisi (M17): la pista si attiva quando arriva.' }
+  };
+
+  /* Calcola i valori grezzi (corrente/soglia) di ogni pista per la UI. */
+  function progress(game) {
+    if (!game) return [];
+    check(game); // aggiorna game.victoryTracks (cheap; nessun RNG)
+    const t = game.victoryTracks || defaultTracks();
+
+    // ri-deriva i numeri grezzi (gli stessi di check) per il display
+    let total = 1, explored = 0;
+    if (game.galaxy && game.state && game.state.discovery) {
+      total = Math.max(1, game.galaxy.count || game.galaxy.systems.length);
+      const DISCOVERY = root.ORION.galaxy && root.ORION.galaxy.DISCOVERY;
+      const EXPLORED = DISCOVERY ? DISCOVERY.EXPLORED : 2;
+      for (let i = 0; i < game.state.discovery.length; i++) {
+        if (game.state.discovery[i] >= EXPLORED) explored++;
+      }
+    }
+    let colonized = 0, stockSum = 0, researchSum = 0;
+    if (game.colonies) {
+      Object.keys(game.colonies).forEach(function (k) {
+        const c = game.colonies[k]; if (!c) return;
+        if (c.colonized) colonized++;
+        if (c.stock) stockSum += (c.stock.met || 0) + (c.stock.en || 0);
+        researchSum += c.researchAccum || 0;
+      });
+    }
+    const deeds = game.alignmentDeeds || { light: 0, dark: 0 };
+    const colTarget = Math.max(1, Math.ceil(total * TARGET.colonizationFrac));
+
+    const cur = {
+      exploration:     { cur: explored,                goal: total },
+      colonization:    { cur: colonized,               goal: colTarget },
+      economy:         { cur: Math.round(stockSum),    goal: TARGET.economy },
+      tech:            { cur: Math.round(researchSum), goal: TARGET.tech },
+      reputationLight: { cur: deeds.light || 0,        goal: TARGET.alignment },
+      reputationDark:  { cur: deeds.dark || 0,         goal: TARGET.alignment },
+      survival:        { cur: 0,                        goal: 1 }
+    };
+
+    return TRACKS.map(function (track) {
+      const m = TRACK_META[track] || {};
+      const c = cur[track] || { cur: 0, goal: 1 };
+      const score = Math.min(1, t[track] || 0);
+      return {
+        track: track,
+        label: TRACK_LABELS[track],
+        metric: m.metric || '',
+        icon: m.icon || 'settings',
+        hint: m.hint || '',
+        cur: c.cur,
+        goal: c.goal,
+        score: score,
+        won: score >= 1
+      };
+    });
+  }
+
+  /* Focus narrativo opzionale e mutabile (decisione #23 esteso): NON locka
+     nessuna pista e NON ha effetti meccanici — solo enfasi UI/cronaca. Vive
+     come stringa lazy in game.victoryFocus (null = sandbox puro). */
+  function getFocus(game) {
+    return (game && typeof game.victoryFocus === 'string') ? game.victoryFocus : null;
+  }
+  function setFocus(game, track) {
+    if (!game) return null;
+    if (track == null) { game.victoryFocus = null; return null; }
+    if (TRACKS.indexOf(track) < 0) return getFocus(game);
+    game.victoryFocus = track;
+    return track;
+  }
+
   /* Migra un payload salvato v1 → v2 aggiungendo i campi mancanti. */
   function migrate(saved) {
     if (!saved) return saved;
@@ -243,6 +340,10 @@
     applyAlignment: applyAlignment,
     ensureEventSchedule: ensureEventSchedule,
     check: check,
+    progress: progress,
+    getFocus: getFocus,
+    setFocus: setFocus,
+    TRACK_META: TRACK_META,
     migrate: migrate
   };
 })(typeof window !== 'undefined' ? window : this);
