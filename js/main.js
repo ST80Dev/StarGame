@@ -405,6 +405,9 @@ function newGame(seed, opts) {
   const saved = opts.payload || null;
   if (saved && saved.seed === seed) {
     ORION.game.timeImpulsi = saved.timeImpulsi || 0;
+    /* Counter ID persistiti (equipaggi, ...). Riconciliati comunque al load
+       da migrateLegacyCrewIds per i save vecchi privi del campo. */
+    if (saved.idSeq && typeof saved.idSeq === 'object') ORION.game.idSeq = Object.assign({}, saved.idSeq);
     ORION.game.colonies = saved.colonies || ORION.game.colonies;
     ORION.game.homePlanetKey = saved.homePlanetKey || ORION.game.homePlanetKey;
     if (saved.mode) ORION.game.mode = saved.mode;
@@ -1691,9 +1694,10 @@ function renderPlanetPanel(title, content) {
         const alertCls = (alert && !isActive) ? ' has-alert has-alert--' + alert : '';
         const titleFull = meta.full + (alert ? ' · ' + alertTitle(t, colony, alert) : '');
         const iconHtml = '<span class="planet-tab__icon ui-icon planet-tab__icon--' + meta.tone + '" aria-hidden="true">' + iconSvg + '</span>';
-        const inner = isActive
-          ? iconHtml + '<span class="planet-tab__label">' + meta.label + '</span>'
-          : iconHtml;
+        /* Solo icone: l'etichetta della tab attiva faceva sforare la barra a
+           destra (scrollbar) man mano che le sezioni aumentano. Il nome pieno
+           resta nel tooltip `title` (hover) e in aria-label (accessibilità). */
+        const inner = iconHtml;
         return '<button class="planet-tab' + (isActive ? ' is-active' : '') + alertCls + '" data-tab="' + t + '" type="button"' +
           ' title="' + titleFull + '" aria-label="' + titleFull + '"' +
           (disabled ? ' disabled' : '') + '>' + inner + '</button>';
@@ -2890,6 +2894,9 @@ function renderPlanetForzeTab(host, planet, colony) {
   host.querySelectorAll('[data-cancel-ship]').forEach(function (btn) {
     btn.addEventListener('click', function () { tryCancelShip(Number(btn.dataset.cancelShip)); });
   });
+  host.querySelectorAll('[data-cancel-merc]').forEach(function (btn) {
+    btn.addEventListener('click', function () { tryCancelMerc(Number(btn.dataset.cancelMerc)); });
+  });
   host.querySelectorAll('[data-cancel-crew]').forEach(function (btn) {
     btn.addEventListener('click', function () { tryCancelCrew(Number(btn.dataset.cancelCrew)); });
   });
@@ -2913,10 +2920,44 @@ function renderPlanetForzeTab(host, planet, colony) {
    time.nextCrewId) → "Equipaggio 7". Formato legacy: `crew-<imp>-<n>`
    → estrae l'ultimo gruppo numerico (migrato a lazy da
    migrateLegacyCrewIds). Fallback: id grezzo. */
+/* Callsign FONETICO stabile e univoco per equipaggio (scelta utente: callsign
+   fonetico a tema, sapore SW-flavor senza marchi — decisione #34). Pool ampio
+   di 80 parole evocative (predatori · armi · fenomeni · corpi celesti · reparti
+   militari) + numero 1..199 → 15.920 callsign distinti: margine abbondante per
+   la longevità del gioco e per il ricambio (gli equipaggi muoiono in
+   combattimento). Il seq univoco (dall'id `crew-<seq>`) è mappato con una
+   permutazione moltiplicativa → BIJEZIONE: seq diversi danno callsign diversi
+   ("non già assegnato"), e consecutivi risultano sparsi. Deterministico
+   (replay-safe #5, niente Math.random). Es. "Falco-7", "Spettro-142". Nasce
+   con l'equipaggio e non cambia mai (niente rinomina al rientro). */
+const CREW_WORDS = [
+  'Falco', 'Corvo', 'Lupo', 'Vipera', 'Aquila', 'Pantera', 'Lince', 'Sciacallo',
+  'Grifone', 'Drago', 'Scorpione', 'Cobra', 'Lama', 'Lancia', 'Falce', 'Pugnale',
+  'Asta', 'Maglio', 'Dardo', 'Saetta', 'Artiglio', 'Zanna', 'Spettro', 'Eco',
+  'Ombra', 'Alba', 'Eclissi', 'Aurora', 'Tempesta', 'Fulmine', 'Cenere', 'Brace',
+  'Miraggio', 'Vortice', 'Abisso', 'Zenit', 'Nadir', 'Cometa', 'Meteora', 'Pulsar',
+  'Quasar', 'Nova', 'Orione', 'Nebulosa', 'Sentinella', 'Vettore', 'Ronda', 'Guardiano',
+  'Vedetta', 'Avanguardia', 'Rapace', 'Bagliore', 'Crepuscolo', 'Astore', 'Procione',
+  'Ariete', 'Bisonte', 'Chimera', 'Fenice', 'Idra',
+  'Razzo', 'Spada', 'Scudo', 'Sciame', 'Lampo', 'Tuono', 'Stella', 'Astro',
+  'Baluardo', 'Vessillo', 'Stendardo', 'Alabarda', 'Balestra', 'Falange', 'Legione',
+  'Centurione', 'Sciabola', 'Calabrone', 'Mantide', 'Sparviero'
+];
+function crewCallsign(seq) {
+  const W = CREW_WORDS.length;                  // 80 parole
+  const N = 199;                                // numeri 1..199
+  const M = W * N;                              // 15.920 combinazioni
+  const s = ((((seq | 0) * 99991) % M) + M) % M; // 99991 coprimo con M → bijezione
+  const w = Math.floor(s / N);
+  const num = (s % N) + 1;
+  return CREW_WORDS[w] + '-' + num;
+}
 function crewShortLabel(id) {
   if (!id) return 'Equipaggio';
+  /* `crew-<seq>` → callsign stabile dal seq. Eventuali ID legacy
+     `crew-<imp>-<n>` vengono migrati a `crew-<seq>` in enterGame. */
   const m = /-(\d+)$/.exec(String(id));
-  return m ? ('Equipaggio ' + m[1]) : String(id);
+  return m ? crewCallsign(Number(m[1])) : String(id);
 }
 
 /* Helper HTML per le sigle del Calendario del Faro (decisione #30).
@@ -3031,16 +3072,20 @@ function renderCantieriSection(colony, planet) {
     let sShips = 0;
     classes.forEach(function (cls) { sShips += (colony.ships && colony.ships[cls.id]) || 0; });
     const queue = colony.assets.shipQueue || [];
+    const mercQueue = (colony.assets && colony.assets.mercantileQueue) || [];
     const payOk = canPay(shipCost);
     /* Decisione #41: cantieri (build paralleli) + attracchi (porto a terra). */
     const E = ORION.expedition || {};
     const buildSlots = E.hangarBuildSlots ? E.hangarBuildSlots(colony) : 1;
     const docks = E.hangarDockCapacity ? E.hangarDockCapacity(colony) : 1;
     const active = E.activeShipBuilds ? E.activeShipBuilds(colony) : queue.length;
+    /* Cantieri occupati = scafi + mercantili in coda (#56). Gli attracchi
+       (docks) restano solo per gli scafi: i mercantili non occupano il porto. */
+    const cantieriUse = E.activeCantieriUse ? E.activeCantieriUse(colony) : (active + mercQueue.length);
     const flying = E.shipsOnExpedition ? E.shipsOnExpedition(ORION.game, ORION.openPlanetKey) : 0;
     const bound = sShips + active + flying;
     const techBonus = E.techSpeedBonus ? E.techSpeedBonus(colony) : 0;
-    const cantieriCls = active >= buildSlots ? ' cantieri-cap--full' : '';
+    const cantieriCls = cantieriUse >= buildSlots ? ' cantieri-cap--full' : '';
     const portCls = bound >= docks ? ' cantieri-cap--full' : '';
     const techHtml = techBonus > 0
       ? ' <span class="cantieri-tech-chip" title="Bonus tecnici: ' + (E.techCountOf ? E.techCountOf(colony) : 0) + ' tecnici → −' + Math.round(techBonus * 100) + '% tempo costruzione">' + uiIcon('settings', 'soft') + ' −' + Math.round(techBonus * 100) + '%</span>'
@@ -3081,7 +3126,7 @@ function renderCantieriSection(colony, planet) {
         '<span class="cantieri-row__counter">Scafi: <strong>' + sShips + '</strong> ' + counterHtml + '</span>' +
       '</div>' +
       '<div class="cantieri-row__caps">' +
-        '<span class="cantieri-cap' + cantieriCls + '" title="Build paralleli abilitati dal livello dell\'Hangar">Cantieri <strong>' + active + ' / ' + buildSlots + '</strong></span>' +
+        '<span class="cantieri-cap' + cantieriCls + '" title="Build paralleli abilitati dal livello dell\'Hangar (scafi + mercantili)">Cantieri <strong>' + cantieriUse + ' / ' + buildSlots + '</strong></span>' +
         '<span class="cantieri-cap' + portCls + '" title="Posti d\'attracco a terra · in spedizione: ' + flying + '">Attracchi <strong>' + bound + ' / ' + docks + '</strong></span>' +
         techHtml +
       '</div>';
@@ -3098,6 +3143,24 @@ function renderCantieriSection(colony, planet) {
           '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
         '</div>' +
         '<button class="btn btn--mini btn--icon-only struct-item__cancel" data-cancel-ship="' + idx + '" type="button" title="Annulla (rimborso 50%)" aria-label="Annulla">' + uiIcon('close', 'pink') + '</button>' +
+      '</div>';
+    });
+    /* Mercantili in costruzione (#56): condividono i cantieri dell'Hangar ma
+       si avviano dalla tab Rotte. Mostrarli qui evita la dissonanza "vario un
+       mercantile e non lo vedo nell'Hangar". */
+    const TR = ORION.trade;
+    mercQueue.forEach(function (q, idx) {
+      const t = (TR && TR.getTier) ? (TR.getTier(q.tier) || {}) : {};
+      const total = q.totalTime || q.duration || 1;
+      const remain = Math.max(0, q.duration | 0);
+      const pct = Math.round(((total - remain) / total) * 100);
+      html += '<div class="struct-item is-queue">' +
+        '<span class="struct-item__glyph">' + (t.glyph || '◈') + '</span>' +
+        '<div class="struct-item__main">' +
+          '<div class="struct-item__name">' + escapeHtml(t.name || ('Mercantile tier ' + q.tier)) + ' <span class="struct-item__cat">mercantile · ' + remain + ' / ' + total + '</span> ' + iU() + '</div>' +
+          '<div class="progress-bar progress-bar--mini"><div class="progress-bar__fill" style="width:' + pct + '%"></div></div>' +
+        '</div>' +
+        '<button class="btn btn--mini btn--icon-only struct-item__cancel" data-cancel-merc="' + idx + '" type="button" title="Annulla (rimborso 50%)" aria-label="Annulla">' + uiIcon('close', 'pink') + '</button>' +
       '</div>';
     });
 
@@ -3237,6 +3300,16 @@ function tryBuildCrew() {
 function tryCancelShip(idx) {
   const colony = ORION.game.colonies[ORION.openPlanetKey];
   ORION.planet.cancelShipBuild(colony, idx);
+  persistGame(ORION.game);
+  updateGlobalResourceHud();
+  updatePlanetUI();
+}
+function tryCancelMerc(idx) {
+  if (!ORION.trade) return;
+  const colony = ORION.game.colonies[ORION.openPlanetKey];
+  if (!colony) return;
+  const r = ORION.trade.cancelMercantileBuild(colony, idx);
+  if (!r.ok) { showToast(r.reason || 'Annullamento rifiutato'); return; }
   persistGame(ORION.game);
   updateGlobalResourceHud();
   updatePlanetUI();
@@ -8284,6 +8357,7 @@ function renderDxPanel() {
   rebind('[data-demolish]', function (b) { tryDemolish(b.dataset.demolish); });
   rebind('[data-action="colonize"]', function () { tryColonize(planet); });
   rebind('[data-cancel-ship]', function (b) { tryCancelShip(Number(b.dataset.cancelShip)); });
+  rebind('[data-cancel-merc]', function (b) { tryCancelMerc(Number(b.dataset.cancelMerc)); });
   rebind('[data-cancel-crew]', function (b) { tryCancelCrew(Number(b.dataset.cancelCrew)); });
   /* I bottoni reali della tab Forze emettono `data-build-ship`/`data-build-crew`
      (non `data-action="..."`): senza i selettori giusti la rebind non li
@@ -9605,6 +9679,26 @@ function migrateLegacyCrewIds(game) {
   if (!game || !game.colonies) return;
   const T = ORION.time;
   const LEGACY = /^crew-\d+-\d+$/;
+  const SEQ = /^crew-(\d+)$/;
+  game.idSeq = game.idSeq || {};
+  /* 1ª passata: riconcilia il counter col massimo seq già presente (colonie
+     + flotte). Necessario per i save senza idSeq persistito, così i nuovi
+     equipaggi NON ricollidono con quelli esistenti (es. crew-3 già in giro). */
+  let maxSeq = game.idSeq.crew | 0;
+  function scanSeq(list) {
+    if (!Array.isArray(list)) return;
+    list.forEach(function (c) {
+      const m = c && typeof c.id === 'string' && SEQ.exec(c.id);
+      if (m) maxSeq = Math.max(maxSeq, Number(m[1]));
+    });
+  }
+  Object.keys(game.colonies).forEach(function (k) {
+    const col = game.colonies[k];
+    scanSeq(col && col.crews && col.crews.explorer);
+  });
+  if (Array.isArray(game.fleets)) game.fleets.forEach(function (f) { scanSeq(f && f.crew); });
+  game.idSeq.crew = maxSeq;
+  /* 2ª passata: rinomina gli ID col formato legacy `crew-<imp>-<n>`. */
   Object.keys(game.colonies).forEach(function (k) {
     const col = game.colonies[k];
     const list = col && col.crews && col.crews.explorer;
@@ -9612,7 +9706,7 @@ function migrateLegacyCrewIds(game) {
     list.forEach(function (c) {
       if (c && typeof c.id === 'string' && LEGACY.test(c.id)) {
         c.id = T && T.nextCrewId ? T.nextCrewId(game)
-                                 : ('crew-' + ((game.idSeq = game.idSeq || {}).crew = (game.idSeq.crew | 0) + 1));
+                                 : ('crew-' + (game.idSeq.crew = (game.idSeq.crew | 0) + 1));
       }
     });
   });

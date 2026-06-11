@@ -100,6 +100,12 @@
       startEpochOrbita: game.startEpochOrbita,
       timeImpulsi: game.timeImpulsi || 0,
       homePlanetKey: game.homePlanetKey,
+      /* Counter monotòni per gli ID (equipaggi, ecc.): vivono in game.idSeq.
+         Vanno persistiti, altrimenti dopo un load ripartono da 1 e i nuovi
+         equipaggi ricollidono/rinumerano (fix naming equipaggi). Additivo,
+         lazy: i save vecchi senza idSeq vengono riconciliati al load
+         (enterGame → migrateLegacyCrewIds scansiona gli ID esistenti). */
+      idSeq: (game.idSeq && typeof game.idSeq === 'object') ? game.idSeq : {},
       colonies: game.colonies,
       mode: game.mode,
       victoryTracks: game.victoryTracks,

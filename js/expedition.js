@@ -131,6 +131,19 @@
     return (colony && colony.assets && Array.isArray(colony.assets.shipQueue))
       ? colony.assets.shipQueue.length : 0;
   }
+  /* Cantieri occupati = scafi in coda + mercantili in coda (decisione #41 +
+     #56). I mercantili condividono i cantieri di costruzione con gli scafi
+     (ma NON gli attracchi: vivono in colony.mercantili, fuori da colony.ships).
+     canBuildShip/canBuildMercantile devono contarli ENTRAMBI contro i cantieri,
+     altrimenti varare un mercantile e uno scafo nello stesso Hangar lvl 1
+     (1 cantiere) sfora il limite in modo asimmetrico. */
+  function activeMercBuilds(colony) {
+    return (colony && colony.assets && Array.isArray(colony.assets.mercantileQueue))
+      ? colony.assets.mercantileQueue.length : 0;
+  }
+  function activeCantieriUse(colony) {
+    return activeShipBuilds(colony) + activeMercBuilds(colony);
+  }
   function shipsOnExpedition(game, originColonyKey) {
     if (!game || !Array.isArray(game.expeditions)) return 0;
     let n = 0;
@@ -187,7 +200,7 @@
     const ent = colony.structures && colony.structures['cantiere-navale'];
     if (!ent) return { ok: false, reason: 'Hangar di costruzione non costruito' };
     const slots = hangarBuildSlots(colony);
-    const active = activeShipBuilds(colony);
+    const active = activeCantieriUse(colony);
     if (active >= slots) {
       return { ok: false, reason: 'Cantieri saturi (' + active + '/' + slots + '). Espandi l\'Hangar o attendi.' };
     }
@@ -603,6 +616,8 @@
     dangerNorm: dangerNorm,
     /* M07 estensione (decisione #41) — capacità Hangar */
     hangarBuildSlots: hangarBuildSlots,
+    activeMercBuilds: activeMercBuilds,
+    activeCantieriUse: activeCantieriUse,
     hangarDockCapacity: hangarDockCapacity,
     activeShipBuilds: activeShipBuilds,
     shipsOnExpedition: shipsOnExpedition,
