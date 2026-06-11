@@ -2921,13 +2921,15 @@ function renderPlanetForzeTab(host, planet, colony) {
    → estrae l'ultimo gruppo numerico (migrato a lazy da
    migrateLegacyCrewIds). Fallback: id grezzo. */
 /* Callsign FONETICO stabile e univoco per equipaggio (scelta utente: callsign
-   fonetico a tema, sapore SW-flavor senza marchi — decisione #34). Pool di 60
-   parole evocative (predatori · armi · fenomeni · corpi celesti · militari) +
-   numero 1..99 → 5.940 callsign distinti. Il seq univoco (dall'id `crew-<seq>`)
-   è mappato con una permutazione moltiplicativa → BIJEZIONE: seq diversi danno
-   callsign diversi ("non già assegnato"), e consecutivi risultano sparsi.
-   Deterministico (replay-safe #5, niente Math.random). Es. "Falco-7",
-   "Spettro-42". Nasce con l'equipaggio e non cambia mai. */
+   fonetico a tema, sapore SW-flavor senza marchi — decisione #34). Pool ampio
+   di 80 parole evocative (predatori · armi · fenomeni · corpi celesti · reparti
+   militari) + numero 1..199 → 15.920 callsign distinti: margine abbondante per
+   la longevità del gioco e per il ricambio (gli equipaggi muoiono in
+   combattimento). Il seq univoco (dall'id `crew-<seq>`) è mappato con una
+   permutazione moltiplicativa → BIJEZIONE: seq diversi danno callsign diversi
+   ("non già assegnato"), e consecutivi risultano sparsi. Deterministico
+   (replay-safe #5, niente Math.random). Es. "Falco-7", "Spettro-142". Nasce
+   con l'equipaggio e non cambia mai (niente rinomina al rientro). */
 const CREW_WORDS = [
   'Falco', 'Corvo', 'Lupo', 'Vipera', 'Aquila', 'Pantera', 'Lince', 'Sciacallo',
   'Grifone', 'Drago', 'Scorpione', 'Cobra', 'Lama', 'Lancia', 'Falce', 'Pugnale',
@@ -2936,12 +2938,15 @@ const CREW_WORDS = [
   'Miraggio', 'Vortice', 'Abisso', 'Zenit', 'Nadir', 'Cometa', 'Meteora', 'Pulsar',
   'Quasar', 'Nova', 'Orione', 'Nebulosa', 'Sentinella', 'Vettore', 'Ronda', 'Guardiano',
   'Vedetta', 'Avanguardia', 'Rapace', 'Bagliore', 'Crepuscolo', 'Astore', 'Procione',
-  'Ariete', 'Bisonte', 'Chimera', 'Fenice', 'Idra'
+  'Ariete', 'Bisonte', 'Chimera', 'Fenice', 'Idra',
+  'Razzo', 'Spada', 'Scudo', 'Sciame', 'Lampo', 'Tuono', 'Stella', 'Astro',
+  'Baluardo', 'Vessillo', 'Stendardo', 'Alabarda', 'Balestra', 'Falange', 'Legione',
+  'Centurione', 'Sciabola', 'Calabrone', 'Mantide', 'Sparviero'
 ];
 function crewCallsign(seq) {
-  const W = CREW_WORDS.length;                  // 60 parole
-  const N = 99;                                 // numeri 1..99
-  const M = W * N;                              // 5.940 combinazioni
+  const W = CREW_WORDS.length;                  // 80 parole
+  const N = 199;                                // numeri 1..199
+  const M = W * N;                              // 15.920 combinazioni
   const s = ((((seq | 0) * 99991) % M) + M) % M; // 99991 coprimo con M → bijezione
   const w = Math.floor(s / N);
   const num = (s % N) + 1;
