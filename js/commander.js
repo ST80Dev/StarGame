@@ -2,8 +2,10 @@
    commander.js — Figure Comandante (decisione #43, gancio M14)
 
    Promozione equipaggio M07 → Comandante nominato.
-   Trigger: al rientro di una spedizione un equipaggio raggiunge xp ≥ 5
-   (soglia 'asso' già esistente in expedition.enrichmentForXp, dec. #39).
+   Trigger: al rientro di una spedizione un equipaggio raggiunge il grado
+   massimo 'Leggende' (xp ≥ 10, decisione utente 2026-06-11; coerente con
+   expedition.enrichmentForXp). L'esperienza dello staff veterano "esce"
+   col Comandante e viene aggregata nella figura.
    Effetto (scelta utente):
      - nasce una figura Comandante che eredita la xp del crew
      - l'equipaggio NON viene consumato (sono più persone): la sua xp è
@@ -18,9 +20,12 @@
    Determinismo (decisione #5): RNG derivato da
    `seed:commander:<crewId>` — replay identico.
 
-   Persistenza: `colony.commanders[]` come delta serializzabile,
-   lazy-init come `colony.governor` (decisione #40). Save vecchi
-   caricano con array vuoto al primo tick → NESSUN bump di schema.
+   Persistenza (decisione utente 2026-06-11): i Comandanti sono figure
+   A LIVELLO IMPERO, NON legate a una colonia. Pool idle in
+   `game.commanders[]`; quelli al comando vivono su `fleet.commander`
+   (single source of truth). `originColonyKey` resta come provenienza
+   narrativa. Save schema 22 (migrazione v21→v22 sposta i vecchi
+   `colony.commanders[]` nel pool d'Impero).
 
    Lessico SW-flavor (decisione #34): rank "Comandante" come carica
    iniziale (M08/M15 estenderanno a Capitano/Ammiraglio); nomi propri
@@ -29,9 +34,10 @@
 (function (root) {
   'use strict';
 
-  /* Soglia di promozione: xp ≥ 5 = 'asso' (coerente con
-     expedition.enrichmentForXp). Cambiare qui se M14 vorrà alzarla. */
-  var PROMOTION_THRESHOLD = 5;
+  /* Soglia di promozione: xp ≥ 10 = grado 'Leggende', il massimo della
+     scala equipaggio (coerente con expedition.enrichmentForXp).
+     Cambiare qui se M14 vorrà alzarla. */
+  var PROMOTION_THRESHOLD = 10;
 
   /* Pool nomi propri — neutri / sci-fi, evitando marchi (#34).
      ~40 voci, brevi, mix maschili/femminili/ambigui. */
@@ -99,15 +105,18 @@
     };
   }
 
-  /* Promozione vera e propria: chiamata da expedition.tick() al
-     rientro, DOPO il push del crew nell'array. Riceve l'oggetto
-     crew appena pushato (per resettarne la xp) e lo xp ereditato.
+  /* Promozione vera e propria: chiamata al rientro/servizio di un
+     equipaggio. Riceve l'oggetto crew (per resettarne la xp) e lo xp
+     ereditato. Il Comandante è una figura A LIVELLO IMPERO (decisione
+     utente 2026-06-11): vive in `game.commanders[]`, NON appartiene a una
+     colonia. `originColonyKey` resta come etichetta narrativa "emerso su".
+     Emerge SEMPRE (anche da una flotta in esilio, senza colonie).
      Ritorna la figura creata (o null se mancano dati). */
-  function promote(game, colony, crewEntry, inheritedXp, originColonyKey) {
-    if (!game || !colony || !crewEntry) return null;
-    if (!Array.isArray(colony.commanders)) colony.commanders = [];
+  function promote(game, crewEntry, inheritedXp, originColonyKey) {
+    if (!game || !crewEntry) return null;
+    if (!Array.isArray(game.commanders)) game.commanders = [];
     var cmd = make(game, crewEntry.id, inheritedXp, originColonyKey);
-    colony.commanders.push(cmd);
+    game.commanders.push(cmd);
     /* Reset xp del crew: l'entità non si brucia, l'equipaggio si
        riforma sotto il vuoto lasciato dall'ufficiale promosso
        (scelta utente). */
@@ -121,16 +130,25 @@
     return (newXp | 0) >= PROMOTION_THRESHOLD;
   }
 
-  /* Helper UI: ritorna i Comandanti di una colonia (lazy-safe). */
-  function listOf(colony) {
-    return (colony && Array.isArray(colony.commanders)) ? colony.commanders : [];
+  /* Pool idle a livello Impero (in panchina, non assegnati a flotte). */
+  function list(game) {
+    return (game && Array.isArray(game.commanders)) ? game.commanders : [];
   }
 
-  /* Lazy-init non strettamente necessario (gli array vivono solo
-     se ci sono Comandanti), ma esposto per simmetria con governor. */
-  function ensure(colony) {
-    if (!colony) return;
-    if (!Array.isArray(colony.commanders)) colony.commanders = [];
+  /* Tutti i Comandanti dell'Impero: pool idle (game.commanders) +
+     assegnati (su fleet.commander). Per le UI di roster. */
+  function allOf(game) {
+    var out = list(game).slice();
+    ((game && game.fleets) || []).forEach(function (f) {
+      if (f && f.commander) out.push(f.commander);
+    });
+    return out;
+  }
+
+  /* Lazy-init del pool d'Impero. */
+  function ensure(game) {
+    if (!game) return;
+    if (!Array.isArray(game.commanders)) game.commanders = [];
   }
 
   /* ---------------------------------------------------------------
@@ -138,21 +156,16 @@
      `combat.js` legge già `fleet.commander.specialization` per il
      +10% Tattico; `fleet.js` legge il bonus Navigatore sul viaggio.
      Modello a "spostamento" (single source of truth): un Comandante
-     vive O sulla panchina di una colonia (colony.commanders) O su una
-     flotta (fleet.commander), mai duplicato → round-trip JSON pulito,
-     nessun bump di schema (additivo a game.fleets / game.colonies).
+     vive O nel pool d'Impero (game.commanders) O su una flotta
+     (fleet.commander), mai duplicato → round-trip JSON pulito.
      --------------------------------------------------------------- */
 
-  /* Tutti i Comandanti assegnabili (idle, in panchina) di ogni colonia. */
+  /* Tutti i Comandanti assegnabili (idle, nel pool d'Impero). La chiave
+     `colonyKey` resta come provenienza narrativa (dove è emerso). */
   function assignableOf(game) {
-    var out = [];
-    var cols = (game && game.colonies) || {};
-    Object.keys(cols).forEach(function (k) {
-      listOf(cols[k]).forEach(function (cmd) {
-        if (cmd.status !== 'assigned') out.push({ colonyKey: k, commander: cmd });
-      });
-    });
-    return out;
+    return list(game)
+      .filter(function (cmd) { return cmd.status !== 'assigned'; })
+      .map(function (cmd) { return { colonyKey: cmd.originColonyKey || null, commander: cmd }; });
   }
 
   /* Assegna un Comandante idle (per id) alla flotta. Se la flotta ne ha
@@ -160,41 +173,31 @@
   function assignToFleet(game, fleet, commanderId) {
     if (!game || !fleet) return { ok: false, reason: 'Dati mancanti' };
     if (fleet.commander && fleet.commander.id === commanderId) return { ok: true, commander: fleet.commander };
-    var cols = game.colonies || {};
-    var found = null, fromKey = null, idx = -1;
-    Object.keys(cols).forEach(function (k) {
-      var arr = listOf(cols[k]);
-      for (var i = 0; i < arr.length; i++) {
-        if (arr[i].id === commanderId && arr[i].status !== 'assigned') { found = arr[i]; fromKey = k; idx = i; }
-      }
-    });
-    if (!found) return { ok: false, reason: 'Comandante non disponibile' };
+    var pool = list(game);
+    var idx = -1;
+    for (var i = 0; i < pool.length; i++) {
+      if (pool[i].id === commanderId && pool[i].status !== 'assigned') { idx = i; break; }
+    }
+    if (idx < 0) return { ok: false, reason: 'Comandante non disponibile' };
+    var found = pool[idx];
     if (fleet.commander) releaseFromFleet(game, fleet);   // libera il precedente
-    cols[fromKey].commanders.splice(idx, 1);              // esce dalla panchina
+    pool.splice(idx, 1);                                  // esce dal pool d'Impero
     found.status = 'assigned';
     found.assignedFleetId = fleet.id;
-    found.benchColonyKey = found.originColonyKey || fromKey;   // dove tornerà
     fleet.commander = found;
     return { ok: true, commander: found };
   }
 
-  /* Rilascia il Comandante di una flotta, rimettendolo in panchina su una
-     colonia (origine se esiste, altrimenti owner flotta, altrimenti prima
-     colonia). Se nessuna colonia esiste (esilio), lo lascia sulla flotta
-     per non perderlo. Ritorna il Comandante (o null). */
+  /* Rilascia il Comandante di una flotta, rimettendolo nel pool d'Impero.
+     Sempre possibile (il pool esiste a prescindere dalle colonie → niente
+     più verruca dell'esilio). `opts` mantenuta per compat, ignorata. */
   function releaseFromFleet(game, fleet, opts) {
     if (!fleet || !fleet.commander) return null;
     var cmd = fleet.commander;
-    var cols = (game && game.colonies) || {};
-    var destKey = (opts && opts.toColonyKey) || cmd.benchColonyKey || cmd.originColonyKey || fleet.ownerColonyKey;
-    if (!destKey || !cols[destKey]) {
-      destKey = Object.keys(cols).filter(function (k) { return cols[k] && cols[k].colonized; })[0] || Object.keys(cols)[0] || null;
-    }
-    if (!destKey || !cols[destKey]) return null;   // nessuna colonia → resta sulla flotta
+    ensure(game);
     cmd.status = 'idle';
     delete cmd.assignedFleetId;
-    ensure(cols[destKey]);
-    cols[destKey].commanders.push(cmd);
+    game.commanders.push(cmd);
     fleet.commander = null;
     return cmd;
   }
@@ -225,7 +228,8 @@
     make: make,
     promote: promote,
     isPromotable: isPromotable,
-    listOf: listOf,
+    list: list,
+    allOf: allOf,
     ensure: ensure,
     assignableOf: assignableOf,
     assignToFleet: assignToFleet,

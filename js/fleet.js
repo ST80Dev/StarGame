@@ -37,27 +37,27 @@
     explorer: {
       id: 'explorer', name: 'Scafo esploratore', glyph: '✦',
       cost: { met: 25, en: 12 }, time: 10,
-      hp: 20, fp: 0, speed: 1.1, crew: 1, hangarLvl: 1
+      hp: 20, fp: 0, speed: 1.1, crew: 1, hangarLvl: 1, maintMet: 0.05
     },
     caccia: {
       id: 'caccia', name: 'Caccia stellare', glyph: '∢',
       cost: { met: 20, en: 8 }, time: 8,
-      hp: 30, fp: 5, speed: 1.2, crew: 1, hangarLvl: 1
+      hp: 30, fp: 5, speed: 1.2, crew: 1, hangarLvl: 1, maintMet: 0.1
     },
     intercettore: {
       id: 'intercettore', name: 'Intercettore', glyph: '➤',
       cost: { met: 35, en: 15 }, time: 14,
-      hp: 45, fp: 8, speed: 1.4, crew: 2, hangarLvl: 2
+      hp: 45, fp: 8, speed: 1.4, crew: 2, hangarLvl: 2, maintMet: 0.15
     },
     corvetta: {
       id: 'corvetta', name: 'Corvetta', glyph: '◅',
       cost: { met: 60, en: 25, food: 5 }, time: 22,
-      hp: 80, fp: 12, speed: 1.0, crew: 4, hangarLvl: 2
+      hp: 80, fp: 12, speed: 1.0, crew: 4, hangarLvl: 2, maintMet: 0.25
     },
     fregata: {
       id: 'fregata', name: 'Fregata', glyph: '◣',
       cost: { met: 120, en: 50, food: 10 }, time: 40,
-      hp: 160, fp: 25, speed: 0.85, crew: 8, hangarLvl: 3
+      hp: 160, fp: 25, speed: 0.85, crew: 8, hangarLvl: 3, maintMet: 0.5
     },
     /* Decisione #66: nave coloniale "Pioniere". Multi-uso (non consumata
        all'arrivo), riusabile, riparabile come ogni nave. fp 0 (civile) →
@@ -67,7 +67,7 @@
     coloniale: {
       id: 'coloniale', name: 'Pioniere coloniale', glyph: '◉',
       cost: { met: 80, en: 40, food: 10, water: 10 }, time: 25,
-      hp: 70, fp: 0, speed: 0.8, crew: 4, hangarLvl: 1,
+      hp: 70, fp: 0, speed: 0.8, crew: 4, hangarLvl: 1, maintMet: 0.1,
       /* Decisione #66 estensione (sessione 2026-06-09): la nave coloniale
          trasporta livelli demografici. popCargo=2 = "seme demografico" che
          alimenta la fondazione o il rinforzo di una colonia esistente. */
@@ -106,8 +106,15 @@
      si ricarica al cap quando vi si sosta. Caso peggiore: rientro forzato +
      deriva (lenta + usura), MAI blocco/distruzione (recovery-friendly #22). */
   const VIVERI_CAP = 250;          // autonomia bersaglio in Ι (confermata utente)
-  const VIVERI_RATE_FOOD = 0.04;   // food per equipaggio per Ι di autonomia
-  const VIVERI_RATE_WATER = 0.03;  // acqua per equipaggio per Ι di autonomia
+  /* Decisione utente 2026-06-11: la riserva di viaggio è a 4 risorse, con
+     quantità tarate perché far partire/rifornire una flotta pesi davvero sul
+     bilancio della colonia (cibo/acqua sostentamento equipaggio; metalli
+     riparazioni; energia sistemi, in quota minore). Per Ι di autonomia,
+     per equipaggio. Pieno (250 Ι) per 8 equip ≈ 140/100/80/50. */
+  const VIVERI_RATE_FOOD = 0.07;   // food per equipaggio per Ι di autonomia
+  const VIVERI_RATE_WATER = 0.05;  // acqua per equipaggio per Ι di autonomia
+  const VIVERI_RATE_MET = 0.04;    // metalli per equipaggio per Ι (riparazioni)
+  const VIVERI_RATE_EN = 0.025;    // energia per equipaggio per Ι (sistemi, la più piccola)
   const VIVERI_WARN = 60;          // soglia avviso (~25% del cap)
   const VIVERI_DRIFT_WEAR = 2;     // usura/Ι sulle navi in deriva (viveri a 0)
   const VIVERI_DRIFT_SLOW = 2;     // moltiplicatore durata leg in deriva
@@ -1057,15 +1064,23 @@
     const colony = ownColonyAt(game, fleet.location.systemId);
     let fillI = VIVERI_CAP - cur;
     if (colony && colony.stock) {
-      const cf = crew * VIVERI_RATE_FOOD, cw = crew * VIVERI_RATE_WATER;
-      const haveF = colony.stock.food || 0, haveW = colony.stock.water || 0;
+      /* Riserva a 4 risorse: per ogni Ι di autonomia attinge cibo/acqua
+         (sostentamento) + metalli/energia (riparazioni/sistemi, quota
+         minore) dallo stock della colonia. La frazione caricabile è
+         limitata dalla risorsa più scarsa (recovery-friendly: carica
+         parziale, autonomia ridotta, mai un blocco). */
+      const rate = { food: VIVERI_RATE_FOOD, water: VIVERI_RATE_WATER, met: VIVERI_RATE_MET, en: VIVERI_RATE_EN };
       let frac = 1;
-      if (cf * fillI > haveF && cf > 0) frac = Math.min(frac, haveF / (cf * fillI));
-      if (cw * fillI > haveW && cw > 0) frac = Math.min(frac, haveW / (cw * fillI));
+      Object.keys(rate).forEach(function (k) {
+        const per = crew * rate[k];
+        const have = colony.stock[k] || 0;
+        if (per * fillI > have && per > 0) frac = Math.min(frac, have / (per * fillI));
+      });
       if (frac < 1) fillI = Math.floor(fillI * frac);
       if (fillI <= 0) return 0;
-      colony.stock.food = Math.max(0, haveF - cf * fillI);
-      colony.stock.water = Math.max(0, haveW - cw * fillI);
+      Object.keys(rate).forEach(function (k) {
+        colony.stock[k] = Math.max(0, (colony.stock[k] || 0) - crew * rate[k] * fillI);
+      });
     }
     fleet.viveri = cur + fillI;
     return fillI;
@@ -1426,7 +1441,7 @@
         /* Promozione Comandante (#43): se xp >= 5, spawn figura nominata. */
         const C = ORION.commander;
         if (C && C.isPromotable && C.isPromotable(newCrew.xp)) {
-          const promotedCmd = C.promote(game, colony, newCrew, newCrew.xp, fleet.ownerColonyKey);
+          const promotedCmd = C.promote(game, newCrew, newCrew.xp, fleet.ownerColonyKey);
           if (promotedCmd) {
             events.push({
               kind: 'commander-promoted',
@@ -1686,12 +1701,24 @@
           }
         }
       }
+      /* Servizio (decisione utente 2026-06-11): rotta lunga (≥3 tappe)
+         conclusa → l'equipaggio matura. Anti-farm: le rotte brevi (1-2
+         tappe) non danno xp. */
+      if (order.waypoints && order.waypoints.length >= 3) {
+        awardCrewXp(game, fleet, 1, events);
+      }
       finishCompound(game, fleet, events, 'route-complete');
       return;
     }
 
     if (order.type === 'patrol-loop') {
       order.loopIdx = (order.loopIdx + 1) % order.loop.length;
+      /* Servizio: giro completo di pattuglia su ≥3 sistemi → +1 xp.
+         Anti-farm: il ping-pong a 2 sistemi non matura; un giro a 3+
+         sistemi costa ≥120 Ι, quindi la crescita è lenta (servizio). */
+      if (order.loopIdx === 0 && order.loop.length >= 3) {
+        awardCrewXp(game, fleet, 1, events);
+      }
       const next = order.loop[order.loopIdx];
       const path = computePath(game.galaxy, fleet.location.systemId, next);
       if (path && path.length > 1) {
@@ -1725,10 +1752,85 @@
     });
   }
 
-  /* Stub upkeep — Fase A non applica costi di mantenimento. Lo
-     introdurrà M13 (tech logistica) o un polish dedicato. */
+  /* Servizio vario (decisione utente 2026-06-11, emenda #39/#43): un
+     equipaggio assegnato a una flotta matura xp anche da combattimenti
+     vinti e missioni di flotta concluse, non solo esplorando. Al grado
+     massimo (xp 10) emerge un Comandante (in panchina sulla colonia
+     d'origine) e il crew si riforma (commander.promote resetta a 0).
+     Deterministico (#5), recovery-friendly (#22): se la colonia d'origine
+     non esiste più, l'xp resta sul crew e la promozione avverrà al rientro. */
+  function awardCrewXp(game, fleet, amount, events) {
+    if (!fleet || !Array.isArray(fleet.crew) || !(amount > 0)) return;
+    const C = root.ORION && root.ORION.commander;
+    const colony = game.colonies && game.colonies[fleet.ownerColonyKey];
+    for (let i = 0; i < fleet.crew.length; i++) {
+      const cr = fleet.crew[i];
+      if (!cr) continue;
+      cr.xp = (cr.xp || 0) + amount;
+      /* Comandante a livello Impero (decisione utente 2026-06-11): la
+         promozione avviene SEMPRE al grado massimo, anche se la flotta è
+         lontano da casa / in esilio (niente colonia richiesta). */
+      if (C && C.isPromotable && C.isPromotable(cr.xp)) {
+        const cmd = C.promote(game, cr, cr.xp, fleet.ownerColonyKey);
+        if (cmd && events) {
+          events.push({
+            kind: 'commander-promoted', commander: cmd,
+            colony: colony, fromCrewId: cr.id,
+            impulso: game.timeImpulsi
+          });
+        }
+      }
+    }
+  }
+
+  /* Stub upkeep — Fase A non applica costi di mantenimento alle flotte
+     DISPIEGATE (loro pagano viveri #69 + usura). Lo estenderà M13. */
   function fleetUpkeep(_fleet) {
     return {};
+  }
+
+  /* Manutenzione navi PARCHEGGIATE (decisione utente 2026-06-11): occupare
+     un attracco = riparazione/mantenimento → consuma metalli/Ι. Le navi
+     DISPIEGATE in flotta NON pagano qui (hanno viveri + usura). Somma
+     colony.ships[kind] × CLASSES[kind].maintMet. Recovery-friendly: è solo
+     un drain sui metalli (se vanno a 0 → scarsità, mai perdita navi).
+     GANCIO M16 (porto stellare orbitale): quando le stazioni aggiungeranno
+     un parcheggio orbitale alla colonia, anche quelle navi pagheranno la
+     manutenzione qui — basterà sommare il counter orbitale (es.
+     colony.orbitalDock) con gli stessi maintMet. */
+  function dockedMaintenance(colony) {
+    if (!colony || !colony.ships) return 0;
+    let met = 0;
+    Object.keys(colony.ships).forEach(function (kind) {
+      const n = colony.ships[kind] | 0;
+      const cls = CLASSES[kind];
+      if (n > 0 && cls && cls.maintMet) met += n * cls.maintMet;
+    });
+    /* M16: + somma navi nel porto orbitale (colony.orbitalDock) quando esisterà. */
+    return met;
+  }
+
+  /* Manutenzione TOTALE al porto di una colonia (decisione utente 2026-06-11):
+     navi di riserva (colony.ships) + navi delle FLOTTE ferme a questo porto
+     (docked/orbiting nel sistema della colonia → sono in servizio/riparazione
+     qui). Le flotte IN VIAGGIO non rientrano (pagano la riserva di viaggio a
+     4 risorse). Chiude il loophole "parcheggia la riserva in una flotta ferma
+     per evitare la manutenzione". */
+  function portMaintenance(game, colony) {
+    let met = dockedMaintenance(colony);
+    const sys = colony && colony.systemId;
+    if (game && Array.isArray(game.fleets) && sys != null) {
+      game.fleets.forEach(function (f) {
+        if (!f || !f.location || f.location.systemId !== sys) return;
+        const st = f.location.status;
+        if (st !== 'docked' && st !== 'orbiting') return;   // in-transit = in viaggio
+        (f.ships || []).forEach(function (s) {
+          const cls = CLASSES[s.kind];
+          if (cls && cls.maintMet) met += cls.maintMet;
+        });
+      });
+    }
+    return met;
   }
 
   /* M09 (decisione #49): imposta la formazione di combattimento. */
@@ -1770,7 +1872,10 @@
     dissolveFleet: dissolveFleet,
     setOrder: setOrder,
     tick: tick,
+    awardCrewXp: awardCrewXp,
     fleetUpkeep: fleetUpkeep,
+    dockedMaintenance: dockedMaintenance,
+    portMaintenance: portMaintenance,
     ensureColonyShipKinds: ensureColonyShipKinds,
     FORMATIONS: FORMATIONS,
     setFormation: setFormation,

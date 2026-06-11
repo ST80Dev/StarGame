@@ -90,7 +90,7 @@
       id: 'fonderia', name: 'Fonderia', cat: 'produttiva', glyph: '🜂',
       desc: 'Raffina i metalli grezzi: aumenta la resa delle miniere del 40% per livello.',
       cost: { met: 70, en: 25 }, time: 16,
-      upkeep: { en: 3 },
+      upkeep: { en: 3, met: 1 },   // +met: manutenzione macchinari (2026-06-11)
       rates: {},   // moltiplicatore, non produzione diretta
       modifiers: { 'miniera.rates.met': 0.40 },
       slots: 1, maxLevel: 3,
@@ -101,7 +101,7 @@
       id: 'raffineria', name: 'Raffineria energetica', cat: 'produttiva', glyph: '⚛',
       desc: 'Sintetizza vettori energetici di alta qualità da risorse locali.',
       cost: { met: 65, en: 20 }, time: 16,
-      upkeep: { water: 2 },
+      upkeep: { water: 2, met: 1 },   // +met manutenzione (2026-06-11)
       rates: { en: 2 },
       modifiers: { 'centrale-solare.rates.en': 0.40 },
       slots: 1, maxLevel: 3,
@@ -114,7 +114,7 @@
       id: 'laboratorio', name: 'Laboratorio', cat: 'ricerca', glyph: '⌬',
       desc: 'Contribuisce alla ricerca distribuita della civiltà.',
       cost: { met: 60, en: 20 }, time: 14,
-      upkeep: { en: 1 },   // decisione #48: 2 → 1 (alleggerito budget energia)
+      upkeep: { en: 1, met: 1 },   // +met manutenzione (2026-06-11); #48: 2→1 en
       rates: { research: 3 },
       slots: 1, maxLevel: 4,
       bodyTypes: HABITABLE,
@@ -157,8 +157,13 @@
       cost: { met: 60, en: 30, food: 10 }, time: 22,
       upkeep: { en: 1, food: 1 },   // decisione #48: 2 → 1
       rates: {},
-      slots: 1, maxLevel: 2,
+      slots: 1, maxLevel: 5,
       bodyTypes: HABITABLE,
+      /* Decisione utente 2026-06-11: l'Accademia limita gli equipaggi in
+         ADDESTRAMENTO CONTEMPORANEO in base al suo livello (specchio dei
+         cantieri Hangar #41, ma legato all'Accademia). trainingSlots[L-1]
+         = equipaggi formabili in parallelo a quel livello. */
+      trainingSlots: [1, 2, 3, 4, 5],
       hooks: ['characters']       // gancio M14
     },
     /* Decisione #49 (M09 Fase A): difese planetarie. Occupano gli slot
@@ -172,7 +177,7 @@
       id: 'batteria-difesa', name: 'Batteria di difesa', cat: 'militare', glyph: '⊕',
       desc: 'Torrette orbitali e cannoni planetari. Difende il sistema della colonia in battaglia. Cresce coi livelli (più moduli = più fuoco e corazza).',
       cost: { met: 70, en: 25 }, time: 18,
-      upkeep: { en: 2 },
+      upkeep: { en: 2, met: 1 },   // +met manutenzione (2026-06-11)
       rates: {},
       slots: 1, maxLevel: 5,
       bodyTypes: HABITABLE.concat(ORBITAL),
@@ -184,7 +189,7 @@
       id: 'scudo-planetario', name: 'Scudo planetario', cat: 'militare', glyph: '◈',
       desc: 'Schermo deflettore ad alta energia: aggiunge corazza pura alla difesa del sistema. Richiede tecnologia degli scudi (M13).',
       cost: { met: 140, en: 90, water: 20 }, time: 40,
-      upkeep: { en: 6 },
+      upkeep: { en: 6, met: 1 },   // +met manutenzione (2026-06-11)
       rates: {},
       slots: 2, maxLevel: 2,
       bodyTypes: HABITABLE,
@@ -259,7 +264,7 @@
       id: 'impianto-esotico', name: 'Impianto esotico', cat: 'avanzata', glyph: '✦',
       desc: 'Sfrutta risorse avanzate per moltiplicatori globali. Richiede una risorsa rara identificata sul pianeta.',
       cost: { met: 120, en: 60, water: 10 }, time: 40,
-      upkeep: { en: 5 },
+      upkeep: { en: 5, met: 1 },   // +met manutenzione (2026-06-11)
       rates: { exotic: 1 },
       slots: 2, maxLevel: 2,
       bodyTypes: HABITABLE.concat(ORBITAL),
@@ -272,7 +277,7 @@
       id: 'centro-ingegneria-planetaria', name: 'Centro di ingegneria planetaria', cat: 'avanzata', glyph: '⛭',
       desc: 'Bonifica territoriale: recupera terreno edificabile dalle aree marginali del pianeta. Espande la capacità di costruzione (slot).',
       cost: { met: 180, en: 80, water: 30 }, time: 50,
-      upkeep: { en: 4 },
+      upkeep: { en: 4, met: 2 },   // +met manutenzione (2026-06-11)
       rates: {},
       slots: 2, maxLevel: 1,
       bodyTypes: HABITABLE.concat(ORBITAL),
@@ -289,7 +294,7 @@
       id: 'terraformatori', name: 'Terraformatori', cat: 'avanzata', glyph: '✦',
       desc: 'Trasforma il pianeta su scala continentale: nuovi biomi, nuovi spazi insediabili. Solo su corpi abitabili o industriali.',
       cost: { met: 320, en: 180, water: 60, food: 20 }, time: 90,
-      upkeep: { en: 8, water: 2 },
+      upkeep: { en: 8, water: 2, met: 2 },   // +met manutenzione (2026-06-11)
       rates: {},
       slots: 3, maxLevel: 1,
       bodyTypes: ['terrestre', 'oceanico', 'forestale', 'desertico', 'vulcanico', 'ghiacciato'],

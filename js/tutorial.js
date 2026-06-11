@@ -527,10 +527,13 @@
     {
       id: 'struct:accademia-militare', tag: 'Strutture · ⚔', title: 'Accademia militare',
       body:
-        '<p>Forma quadri militari, ufficiali e veterani (figure speciali). Oggi nessun effetto visibile. ' +
-        'Uso moderato (2 en + 1 food/I).</p>' +
-        '<p><strong>Sinergia futura:</strong> con l\'<em>Hangar di costruzione</em> alimenta una colonia a vocazione militare. ' +
-        'In partite a vocazione <em>Tiranno</em> sarà struttura-chiave.</p>'
+        '<p>Forma gli <strong>equipaggi esploratori</strong> (e in futuro quadri/figure speciali). ' +
+        'Uso moderato (1 en + 1 food/I).</p>' +
+        '<p><strong>Addestramenti in parallelo:</strong> il <em>livello</em> dell\'Accademia limita quanti equipaggi ' +
+        'puoi formare contemporaneamente — <strong>1 al lvl 1, fino a 5 al lvl 5</strong>. Se è satura, potenziala ' +
+        '(come i cantieri dell\'Hangar per le navi).</p>' +
+        '<p><strong>Sinergia:</strong> con l\'<em>Hangar di costruzione</em> alimenta una colonia a vocazione militare/esplorativa. ' +
+        'Gli equipaggi accumulano xp e al grado massimo ne emerge un <em>Comandante</em>.</p>'
     },
     {
       id: 'struct:batteria-difesa', tag: 'Strutture · ⊕', title: 'Batteria di difesa',
@@ -753,7 +756,7 @@
     {
       id: 'commander-promoted', tag: 'Forze · ★', title: 'Un Comandante emerge dall\'equipaggio',
       body:
-        '<p>Quando un equipaggio raggiunge <strong>xp 5</strong> (rango <em>asso</em>), dal gruppo emerge ' +
+        '<p>Quando un equipaggio raggiunge il <strong>grado massimo</strong> (xp 10, equipaggio <em>Leggende</em>), dal gruppo emerge ' +
         'naturalmente un <strong>Comandante nominato</strong>: una figura militare con <strong>nome proprio</strong>, ' +
         '<strong>tratto di personalità</strong> e <strong>specializzazione</strong>.</p>' +
         '<p>Il Comandante eredita l\'esperienza che il crew aveva accumulato. L\'equipaggio <strong>non viene perso</strong> ' +
@@ -907,9 +910,14 @@
         '<p>Una flotta porta con sé i <strong>viveri</strong>: un serbatoio di <strong>autonomia</strong> ' +
         '(~250 Ι) che cala <em>solo quando è lontana da un porto amico</em> e si <strong>ricarica al massimo</strong> ' +
         'quando sosta o passa per una tua colonia (o un porto di un alleato).</p>' +
-        '<p>Il <em>gauge è in Impulsi</em> (autonomia ~uguale per ogni flotta), ma il <em>costo</em> in cibo/acqua ' +
-        'del rifornimento cresce con l\'<strong>equipaggio</strong>: uno scout costa briciole, una grande flotta da guerra ' +
-        'lontano da casa pesa davvero → conviene costruire <strong>basi avanzate</strong> e stringere <strong>alleanze</strong>.</p>' +
+        '<p>La riserva è a <strong>4 risorse</strong>: <em>cibo</em> e <em>acqua</em> (sostentamento dell\'equipaggio) più ' +
+        '<em>metalli</em> (riparazioni in viaggio) ed <em>energia</em> (sistemi), questi ultimi in quota minore. ' +
+        'Il <em>gauge è in Impulsi</em> (autonomia ~uguale per ogni flotta), ma il <em>costo</em> del rifornimento cresce con ' +
+        'l\'<strong>equipaggio</strong>: uno scout costa briciole, una grande flotta da guerra lontano da casa pesa davvero ' +
+        '(attinge metalli ed energia oltre ai viveri) → conviene costruire <strong>basi avanzate</strong> e stringere <strong>alleanze</strong>.</p>' +
+        '<p><strong>Navi a casa vs in viaggio:</strong> le navi <em>parcheggiate</em> all\'Hangar consumano <strong>metalli</strong> ' +
+        'per manutenzione/riparazione (occupare un attracco non è gratis); quelle <em>dispiegate</em> in flotta portano via la ' +
+        'riserva a 4 risorse. Tenere una grande flotta ferma a casa, o in giro, è in entrambi i casi un impegno sui metalli.</p>' +
         '<p><strong>Anche in orbita si consuma</strong> (l\'equipaggio mangia comunque): restare in orbita attinge allo ' +
         'stesso serbatoio dove l\'ha lasciato il viaggio. Orbitare una <em>tua</em> colonia o un alleato è <strong>gratis</strong> ' +
         '(rifornimento continuo); orbitare un sistema straniero o vuoto consuma il residuo → una <strong>guarnigione avanzata</strong> ' +

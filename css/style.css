@@ -2848,6 +2848,7 @@ select.main-menu__input { cursor: pointer; }
 .crew-roster__rank--t1 { background: rgba(90, 170, 220, 0.18); color: #a8d4ee; }
 .crew-roster__rank--t2 { background: rgba(120, 200, 140, 0.18); color: #aee6c0; }
 .crew-roster__rank--t3 { background: rgba(230, 190, 90, 0.20); color: #f0d8a0; }
+.crew-roster__rank--t4 { background: rgba(240, 140, 80, 0.26); color: #ffcaa0; }
 .crew-roster__id {
   color: var(--c-text, #d8def0);
   font-family: var(--font-mono, monospace);
