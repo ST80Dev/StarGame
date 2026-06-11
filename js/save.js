@@ -100,9 +100,19 @@
       startEpochOrbita: game.startEpochOrbita,
       timeImpulsi: game.timeImpulsi || 0,
       homePlanetKey: game.homePlanetKey,
+      /* Counter monotòni per gli ID (equipaggi, ecc.): vivono in game.idSeq.
+         Vanno persistiti, altrimenti dopo un load ripartono da 1 e i nuovi
+         equipaggi ricollidono/rinumerano (fix naming equipaggi). Additivo,
+         lazy: i save vecchi senza idSeq vengono riconciliati al load
+         (enterGame → migrateLegacyCrewIds scansiona gli ID esistenti). */
+      idSeq: (game.idSeq && typeof game.idSeq === 'object') ? game.idSeq : {},
       colonies: game.colonies,
       mode: game.mode,
       victoryTracks: game.victoryTracks,
+      /* Focus di vittoria narrativo e mutabile (decisione #23 esteso).
+         Stringa lazy (id pista) o null = sandbox puro. Additivo, nessun
+         bump di schema: i save vecchi caricano con focus = null. */
+      victoryFocus: (typeof game.victoryFocus === 'string') ? game.victoryFocus : null,
       eventSchedule: game.eventSchedule || [],
       chronicle: capChronicle(game.chronicle),
       /* M06.5 (decisione #27): scelta colonia originaria, salvata
