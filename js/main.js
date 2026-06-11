@@ -6231,16 +6231,20 @@ function rateGrid(rates, upkeep, colony) {
   /* Decisione #45: il consumo pro-capite della popolazione drena cibo/acqua
      dallo stock (time.js processProduction). Lo mostriamo esplicitamente nel
      riepilogo perché in passato l'utente vedeva "+4 /I" senza capire perché
-     lo stock scendeva. Solo in fase operational (Insediamento è bloccato). */
-  const CFG = ORION.time && ORION.time.CFG;
-  const popTotal = (colony && colony.pop && colony.pop.total) || 0;
-  const opPhase = !colony || colony.phase !== 'settling';
-  const popFood  = (opPhase && CFG && popTotal > 0) ? popTotal * CFG.POP_FOOD_PER_UNIT  : 0;
-  const popWater = (opPhase && CFG && popTotal > 0) ? popTotal * CFG.POP_WATER_PER_UNIT : 0;
+     lo stock scendeva. Solo in fase operational (Insediamento è bloccato).
+
+     I tassi mostrati sono la PRODUZIONE REALE: `productionFactors` applica gli
+     stessi moltiplicatori del tick (Insediamento ×0.5, scarsità, rifiuti,
+     morale di guerra) ai tassi grezzi di structureOutput. Prima la tab
+     mostrava i tassi teorici → durante l'Insediamento "+5.98 prod" mentre la
+     realtà era 5.98×0.5 ≈ 2.99 (e netto ≈ 0 con upkeep 3). */
+  const pf = (ORION.time && ORION.time.productionFactors)
+    ? ORION.time.productionFactors(ORION.game, colony)
+    : { prodMul: 1, popFood: 0, popWater: 0 };
   const items = [];
   ['met', 'en', 'food', 'water'].forEach(function (k) {
-    const r = rates[k] || 0; const u = upkeep[k] || 0;
-    const popDrain = k === 'food' ? popFood : k === 'water' ? popWater : 0;
+    const r = (rates[k] || 0) * pf.prodMul; const u = upkeep[k] || 0;
+    const popDrain = k === 'food' ? pf.popFood : k === 'water' ? pf.popWater : 0;
     const net = r - u - popDrain;
     if (!(r || u || popDrain)) return;
     let aux = '+' + fmtAbs(r) + ' prod / −' + fmtAbs(u) + ' uso';
@@ -7807,17 +7811,17 @@ function buildEmpireState() {
     const morale = ORION.time.colonyMorale ? ORION.time.colonyMorale(g, c) : 1;
     const moraleState = morale >= 0.9 ? 'ok' : morale >= 0.65 ? 'low' : 'crit';
 
-    /* Scorte totali + saldo netto/Ι (incluso drenaggio pop come nel deck). */
+    /* Scorte totali + saldo netto/Ι REALE (incluso drenaggio pop + malus
+       temporanei come nel deck e nella tab Risorse — productionFactors). */
     const out = ORION.planet.structureOutput(c, planet, g);
-    const popTotal = (c.pop && c.pop.total) || 0;
-    const opPhase = c.phase !== 'settling';
-    const popFood = (opPhase && CFG && popTotal > 0) ? popTotal * CFG.POP_FOOD_PER_UNIT : 0;
-    const popWater = (opPhase && CFG && popTotal > 0) ? popTotal * CFG.POP_WATER_PER_UNIT : 0;
+    const pf = (ORION.time && ORION.time.productionFactors)
+      ? ORION.time.productionFactors(g, c)
+      : { prodMul: 1, popFood: 0, popWater: 0 };
     let stockTotal = 0, stockNet = 0;
     ['met', 'en', 'food', 'water'].forEach(function (rk) {
       stockTotal += (c.stock[rk] || 0);
-      const drain = rk === 'food' ? popFood : rk === 'water' ? popWater : 0;
-      stockNet += (out.rates[rk] || 0) - (out.upkeep[rk] || 0) - drain;
+      const drain = rk === 'food' ? pf.popFood : rk === 'water' ? pf.popWater : 0;
+      stockNet += (out.rates[rk] || 0) * pf.prodMul - (out.upkeep[rk] || 0) - drain;
     });
 
     const tel = (ORION._empireTel && ORION._empireTel[k]) || { pop: [], morale: [], stock: [] };

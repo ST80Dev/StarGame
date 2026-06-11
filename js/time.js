@@ -2126,6 +2126,38 @@
     return Object.keys(game.occupations).length;
   }
 
+  /* DISPLAY — single source of truth dei moltiplicatori applicati a OGNI
+     Impulso in processProduction. La UI (tab Risorse, deck colonia, dashboard
+     impero) deve mostrare la PRODUZIONE REALE in qualunque condizione, inclusi
+     i malus temporanei: Insediamento (×0.5), scarsità §7.4, rifiuti §48,
+     morale di guerra §49. Prima questi pannelli mostravano i tassi teorici
+     "nudi" → l'utente vedeva "+2.98 energia" durante l'Insediamento mentre la
+     realtà era ≈0 (la metà della produzione meno l'upkeep pieno).
+
+     PURO read-only: legge `colony._scar`/`colony.waste`/`game.warState` senza
+     forzarne la creazione (come colonyMorale), così chiamarlo dalla UI non
+     muta lo stato e non rompe il determinismo del replay.
+
+     `prodMul` va applicato AI SOLI TASSI (rates). Upkeep e drenaggio pop NON
+     sono scalati — coerente con processProduction (`n = r*mul - u - pop`). */
+  function productionFactors(game, colony) {
+    if (!colony) {
+      return { prodMul: 1, settling: 1, scarcity: 1, waste: 1, war: 1, popFood: 0, popWater: 0 };
+    }
+    const sc = colony._scar ? scarcityMalus(colony._scar) : 1;
+    const wa = wasteMalus(colony.waste);
+    const wr = warMalus(game);
+    const st = (colony.phase === 'settling') ? 0.5 : 1.0;
+    const op = colony.phase !== 'settling';
+    const pop = (colony.pop && colony.pop.total) || 0;
+    return {
+      prodMul: sc * wa * wr * st,
+      settling: st, scarcity: sc, waste: wa, war: wr,
+      popFood:  op ? pop * CFG.POP_FOOD_PER_UNIT  : 0,
+      popWater: op ? pop * CFG.POP_WATER_PER_UNIT : 0
+    };
+  }
+
   ORION.time = {
     CFG: CFG,
     CLASS_BIAS: CLASS_BIAS,
@@ -2142,6 +2174,7 @@
     nextCrewId: nextCrewId,
     targetClassWeights: targetClassWeights,
     colonyMorale: colonyMorale,
+    productionFactors: productionFactors,
     ensureScarcity: ensureScarcity,
     /* Decisione #48 — gestione rifiuti (Fase 0) */
     ensureWaste: ensureWaste,
