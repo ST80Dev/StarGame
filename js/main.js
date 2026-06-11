@@ -334,6 +334,9 @@ function newGame(seed, opts) {
     expeditions: [],
     /* M08 Fase A (decisione #42): flotte mobili. */
     fleets: [],
+    /* Comandanti a livello Impero (decisione utente 2026-06-11): pool idle.
+       Quelli assegnati vivono su fleet.commander. */
+    commanders: [],
     /* Decisione #45: mapping centrale gruppo→capitale (lazy initFromHome
        dopo colonizeHomePlanet). */
     capitals: {},
@@ -412,6 +415,7 @@ function newGame(seed, opts) {
     if (saved.eventSchedule) ORION.game.eventSchedule = saved.eventSchedule;
     if (Array.isArray(saved.expeditions)) ORION.game.expeditions = saved.expeditions.slice();
     if (Array.isArray(saved.fleets)) ORION.game.fleets = saved.fleets.slice();
+    if (Array.isArray(saved.commanders)) ORION.game.commanders = saved.commanders.slice();
     if (Array.isArray(saved.chronicle)) ORION.game.chronicle = saved.chronicle.slice();
     /* Decisione #45: ripristina mapping capitali; se vuoto, initFromHome
        sotto auto-popola con la home (retro-compat schema 6). */
@@ -2966,12 +2970,10 @@ function uiIcon(name, tone) {
 function renderCantieriSection(colony, planet) {
   const hasHangar = !!(colony.structures && colony.structures['cantiere-navale']);
   const hasAcademy = !!(colony.structures && colony.structures['accademia-militare']);
-  /* Decisione #43: i Comandanti nascono dagli equipaggi M07 ma vivono
-     anche se Accademia/Hangar venissero demoliti — mostriamo la sezione
-     comunque per non perdere figure storiche. */
-  const commanders = (ORION.commander && ORION.commander.listOf(colony)) || [];
-  const hasCommanders = commanders.length > 0;
-  if (!hasHangar && !hasAcademy && !hasCommanders) return '';
+  /* Decisione utente 2026-06-11: i Comandanti sono figure a livello Impero
+     (game.commanders) e vivono nella vista Flotta (buildCommanderRoster),
+     non più nella scheda colonia. */
+  if (!hasHangar && !hasAcademy) return '';
   const E = (ORION.expedition && ORION.expedition.CFG) || {};
   const shipCost = E.SHIP_COST || { met: 25, en: 12 };
   const shipTime = E.SHIP_TIME || 10;
@@ -2992,36 +2994,6 @@ function renderCantieriSection(colony, planet) {
 
   let html = '<div class="cantieri-section">' +
     '<p class="sysinfo__sub">Cantieri & Squadre <span class="cantieri-section__hint">(esplorazione)</span></p>';
-
-  /* Decisione #43: Comandanti nominati emersi dagli equipaggi veterani.
-     Per ora "in panchina" (status:'idle') — M08 li aggancerà alle navi. */
-  if (hasCommanders) {
-    html += '<div class="cantieri-row commander-row">' +
-      '<div class="cantieri-row__head">' +
-        '<span class="cantieri-row__glyph ui-icon ui-icon--amber" aria-hidden="true">' + ((ORION.icon && ORION.icon('star')) || '★') + '</span>' +
-        '<span class="cantieri-row__name">Comandanti</span>' +
-        '<span class="cantieri-row__counter">In organico: <strong>' + commanders.length + '</strong></span>' +
-      '</div>' +
-      '<ul class="commander-roster">';
-    commanders.forEach(function (c) {
-      const statusLabel = c.status === 'idle'
-        ? 'in panchina'
-        : escapeHtml(c.status || '—');
-      html += '<li class="commander-roster__item">' +
-        '<span class="commander-roster__rank">' + escapeHtml(c.rank || 'Comandante') + '</span>' +
-        '<span class="commander-roster__name">' + escapeHtml(c.name || '—') + '</span>' +
-        '<span class="commander-roster__spec" title="' + escapeHtml((ORION.commander.SPEC_POOL.find(function (s) { return s.id === c.specialization; }) || {}).hint || '') + '">' +
-          escapeHtml(c.specializationLabel || c.specialization || '—') +
-        '</span>' +
-        '<span class="commander-roster__trait" title="Tratto">' + escapeHtml(c.traitLabel || c.trait || '—') + '</span>' +
-        '<span class="xp-chip" title="Esperienza ereditata dall\'equipaggio">xp ' + (c.xp | 0) + '</span>' +
-        '<span class="commander-roster__status commander-roster__status--' + escapeHtml(c.status || 'idle') + '">' + statusLabel + '</span>' +
-      '</li>';
-    });
-    html += '</ul>' +
-      '<p class="commander-row__hint">Le navi evolute (corvette, fregate, incrociatori) potranno essere comandate da queste figure — disponibili con il modulo Flotta.</p>' +
-    '</div>';
-  }
 
   if (hasHangar) {
     /* M08 Fase A (decisione #42): counter di TUTTE le classi navi note. */
@@ -4243,6 +4215,7 @@ function renderFleetView(stage) {
           (canCreate ? '' : ' disabled title="Serve una colonia con Hangar di costruzione"') + '>+ Crea flotta</button>' +
       '</header>' +
       buildWarSection(g) +
+      buildCommanderRoster(g) +
       '<p class="panel__note">Le flotte si compongono dalle navi a terra e dagli equipaggi della colonia origine. ' +
         'La <strong>formazione</strong> determina la soglia di ritirata in battaglia. Le navi che sopravvivono ' +
         'salgono di grado (Verde→Veterana→Elite→Leggendaria) e diventano più forti.</p>' +
@@ -4291,6 +4264,41 @@ function renderFleetView(stage) {
       renderFleetView(stage);
     });
   });
+}
+
+/* Roster "Comandanti dell'Impero" (decisione utente 2026-06-11): i
+   Comandanti sono figure A LIVELLO IMPERO, non legate a una colonia.
+   Elenca il pool idle (game.commanders) + quelli al comando di una flotta.
+   La provenienza ("emerso su X") resta come etichetta narrativa. */
+function buildCommanderRoster(g) {
+  if (!ORION.commander || !ORION.commander.allOf) return '';
+  const all = ORION.commander.allOf(g);
+  if (!all.length) return '';
+  const starHtml = uiIcon('star', 'amber');
+  const rows = all.map(function (c) {
+    const fleet = c.assignedFleetId ? findFleet(c.assignedFleetId) : null;
+    const statusHtml = (c.status === 'assigned')
+      ? 'al comando di <strong>' + escapeHtml(fleet ? fleet.name : '—') + '</strong>'
+      : 'in panchina';
+    const origin = c.originColonyKey ? (' · emerso su ' + escapeHtml(systemNameFromKey(g, c.originColonyKey))) : '';
+    return '<li class="commander-roster__item">' +
+      '<span class="commander-roster__rank">' + escapeHtml(c.rank || 'Comandante') + '</span>' +
+      '<span class="commander-roster__name">' + escapeHtml(c.name || '—') + '</span>' +
+      '<span class="commander-roster__spec">' + escapeHtml(c.specializationLabel || c.specialization || '—') + '</span>' +
+      '<span class="commander-roster__trait" title="Tratto">' + escapeHtml(c.traitLabel || c.trait || '—') + '</span>' +
+      '<span class="xp-chip" title="Esperienza ereditata dall\'equipaggio">xp ' + (c.xp | 0) + '</span>' +
+      '<span class="commander-roster__status commander-roster__status--' + escapeHtml(c.status || 'idle') + '">' + statusHtml + origin + '</span>' +
+    '</li>';
+  }).join('');
+  return '<div class="cantieri-row commander-row">' +
+    '<div class="cantieri-row__head">' +
+      '<span class="cantieri-row__glyph ui-icon ui-icon--amber" aria-hidden="true">' + starHtml + '</span>' +
+      '<span class="cantieri-row__name">Comandanti dell\'Impero</span>' +
+      '<span class="cantieri-row__counter">In organico: <strong>' + all.length + '</strong></span>' +
+    '</div>' +
+    '<ul class="commander-roster">' + rows + '</ul>' +
+    '<p class="commander-row__hint">Figure d\'Impero, non legate a una colonia: assegnale a una flotta col pulsante <strong>★ Comandante</strong>. Bonus per specializzazione (Tattico/Navigatore/Logista).</p>' +
+  '</div>';
 }
 
 /* =====================================================================
@@ -4445,11 +4453,12 @@ function openCommanderPicker(fleetId, stage) {
   const starHtml = uiIcon('star', 'amber');
   const rows = avail.map(function (a) {
     const c = a.commander;
+    const origin = a.colonyKey ? (' · da ' + escapeHtml(systemNameFromKey(g, a.colonyKey))) : '';
     return '<button class="cmd-pick__row" data-cmd="' + escapeHtml(c.id) + '" type="button">' +
       '<span class="cmd-pick__name">' + starHtml + ' ' + escapeHtml(c.rank + ' ' + c.name) + '</span>' +
       '<span class="cmd-pick__meta">' + escapeHtml(c.specializationLabel || c.specialization) +
         ' · ' + escapeHtml(ORION.commander.bonusLabel(c)) + ' · ' + escapeHtml(c.traitLabel || '') +
-        ' · da ' + escapeHtml(systemNameFromKey(g, a.colonyKey)) + '</span>' +
+        origin + '</span>' +
     '</button>';
   }).join('') || '<p class="cmd-pick__empty">Nessun Comandante in panchina.</p>';
   const curHtml = cur

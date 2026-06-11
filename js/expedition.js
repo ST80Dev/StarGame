@@ -525,7 +525,7 @@
           var promotedCmd = null;
           var C = root.ORION && root.ORION.commander;
           if (C && C.isPromotable(newCrew.xp)) {
-            promotedCmd = C.promote(game, colony, newCrew, newCrew.xp, exp.originColonyKey);
+            promotedCmd = C.promote(game, newCrew, newCrew.xp, exp.originColonyKey);
             if (promotedCmd) {
               events.push({
                 kind: 'commander-promoted',

@@ -1427,7 +1427,7 @@
         /* Promozione Comandante (#43): se xp >= 5, spawn figura nominata. */
         const C = ORION.commander;
         if (C && C.isPromotable && C.isPromotable(newCrew.xp)) {
-          const promotedCmd = C.promote(game, colony, newCrew, newCrew.xp, fleet.ownerColonyKey);
+          const promotedCmd = C.promote(game, newCrew, newCrew.xp, fleet.ownerColonyKey);
           if (promotedCmd) {
             events.push({
               kind: 'commander-promoted',
@@ -1753,8 +1753,11 @@
       const cr = fleet.crew[i];
       if (!cr) continue;
       cr.xp = (cr.xp || 0) + amount;
-      if (C && C.isPromotable && C.isPromotable(cr.xp) && colony) {
-        const cmd = C.promote(game, colony, cr, cr.xp, fleet.ownerColonyKey);
+      /* Comandante a livello Impero (decisione utente 2026-06-11): la
+         promozione avviene SEMPRE al grado massimo, anche se la flotta è
+         lontano da casa / in esilio (niente colonia richiesta). */
+      if (C && C.isPromotable && C.isPromotable(cr.xp)) {
+        const cmd = C.promote(game, cr, cr.xp, fleet.ownerColonyKey);
         if (cmd && events) {
           events.push({
             kind: 'commander-promoted', commander: cmd,

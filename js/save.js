@@ -55,7 +55,7 @@
      DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
      nuovo gioco la preserva e una recovery best-effort prova a dedurla
      da colonie/flotte/spedizioni/cronaca. */
-  const SCHEMA_VERSION = 21;
+  const SCHEMA_VERSION = 22;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -181,7 +181,12 @@
          nelle card di salvataggio + mood di partita. */
       empire: (game.empire && game.empire.proper)
         ? { prefix: game.empire.prefix || 'repubblica', proper: String(game.empire.proper) }
-        : null
+        : null,
+      /* Schema 22 (decisione utente 2026-06-11): Comandanti a livello Impero.
+         Il pool idle vive in game.commanders[]; quelli assegnati vivono su
+         fleet.commander (auto-serializzati in game.fleets). La migrazione
+         v21→v22 sposta i vecchi colony.commanders[] qui. */
+      commanders: Array.isArray(game.commanders) ? game.commanders : []
     };
   }
 
@@ -524,6 +529,25 @@
         });
       }
       payload.schema = 21;
+    }
+    /* v21 → v22 (decisione utente 2026-06-11): Comandanti a livello Impero.
+       Sposta i vecchi colony.commanders[] nel pool centrale game.commanders[].
+       Quelli assegnati a una flotta vivono già su fleet.commander (intatti).
+       Idempotente: se commanders esiste già, lo preserva. */
+    if ((payload.schema || 21) < 22) {
+      if (!Array.isArray(payload.commanders)) payload.commanders = [];
+      if (payload.colonies && typeof payload.colonies === 'object') {
+        Object.keys(payload.colonies).forEach(function (k) {
+          const c = payload.colonies[k];
+          if (c && Array.isArray(c.commanders)) {
+            c.commanders.forEach(function (cmd) {
+              if (cmd && cmd.status !== 'assigned') payload.commanders.push(cmd);
+            });
+            delete c.commanders;
+          }
+        });
+      }
+      payload.schema = 22;
     }
     return payload;
   }
