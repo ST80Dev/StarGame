@@ -2,8 +2,10 @@
    commander.js — Figure Comandante (decisione #43, gancio M14)
 
    Promozione equipaggio M07 → Comandante nominato.
-   Trigger: al rientro di una spedizione un equipaggio raggiunge xp ≥ 5
-   (soglia 'asso' già esistente in expedition.enrichmentForXp, dec. #39).
+   Trigger: al rientro di una spedizione un equipaggio raggiunge il grado
+   massimo 'Leggende' (xp ≥ 10, decisione utente 2026-06-11; coerente con
+   expedition.enrichmentForXp). L'esperienza dello staff veterano "esce"
+   col Comandante e viene aggregata nella figura.
    Effetto (scelta utente):
      - nasce una figura Comandante che eredita la xp del crew
      - l'equipaggio NON viene consumato (sono più persone): la sua xp è
@@ -29,9 +31,10 @@
 (function (root) {
   'use strict';
 
-  /* Soglia di promozione: xp ≥ 5 = 'asso' (coerente con
-     expedition.enrichmentForXp). Cambiare qui se M14 vorrà alzarla. */
-  var PROMOTION_THRESHOLD = 5;
+  /* Soglia di promozione: xp ≥ 10 = grado 'Leggende', il massimo della
+     scala equipaggio (coerente con expedition.enrichmentForXp).
+     Cambiare qui se M14 vorrà alzarla. */
+  var PROMOTION_THRESHOLD = 10;
 
   /* Pool nomi propri — neutri / sci-fi, evitando marchi (#34).
      ~40 voci, brevi, mix maschili/femminili/ambigui. */

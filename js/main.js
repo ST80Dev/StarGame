@@ -7096,7 +7096,7 @@ function chronicleEvent(ev) {
     /* Decisione #43: la promozione di una figura Comandante è il
        "punto di nascita" dei soggetti militari nominati (gancio M14). */
     const c = ev.commander;
-    pushChronicle(ds + ' — <strong>' + escapeHtml(c.rank) + ' ' + escapeHtml(c.name) + '</strong> emerge dall\'equipaggio veterano su ' + pname + ptag + ' · specializzazione <em>' + escapeHtml(c.specializationLabel) + '</em> · tratto <em>' + escapeHtml(c.traitLabel) + '</em>.', 'figure');
+    pushChronicle(ds + ' — <strong>' + escapeHtml(c.rank) + ' ' + escapeHtml(c.name) + '</strong> emerge dall\'equipaggio leggendario su ' + pname + ptag + ' · specializzazione <em>' + escapeHtml(c.specializationLabel) + '</em> · tratto <em>' + escapeHtml(c.traitLabel) + '</em>.', 'figure');
     if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('commander-promoted');
   } else if (ev.kind === 'expedition-arrived') {
     const sys = ORION.game.galaxy.systems[ev.systemId];
@@ -7215,7 +7215,7 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — <strong>Governatore di ' + pname + ptag + '</strong>: scorte di <strong>' + RES[ev.res] + '</strong> in calo costante — carenza imminente se non si interviene.', 'system');
     if (ORION.tutorial) ORION.tutorial.fire('governor');
   } else if (ev.kind === 'gov-veterans-idle') {
-    pushChronicle(ds + ' — <strong>Governatore di ' + pname + ptag + '</strong>: ' + (ev.count || 1) + ' equipaggio/i veterano/i disponibile/i, nessuna spedizione in corso.', 'explore');
+    pushChronicle(ds + ' — <strong>Governatore di ' + pname + ptag + '</strong>: ' + (ev.count || 1) + ' equipaggio/i con esperienza disponibile/i, nessuna spedizione in corso.', 'explore');
     if (ORION.tutorial) ORION.tutorial.fire('governor');
   } else if (ev.kind === 'gov-build-started') {
     const SDEF = ORION.structures && ORION.structures.get(ev.structId);

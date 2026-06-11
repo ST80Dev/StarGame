@@ -753,7 +753,7 @@
     {
       id: 'commander-promoted', tag: 'Forze · ★', title: 'Un Comandante emerge dall\'equipaggio',
       body:
-        '<p>Quando un equipaggio raggiunge <strong>xp 5</strong> (rango <em>asso</em>), dal gruppo emerge ' +
+        '<p>Quando un equipaggio raggiunge il <strong>grado massimo</strong> (xp 10, equipaggio <em>Leggende</em>), dal gruppo emerge ' +
         'naturalmente un <strong>Comandante nominato</strong>: una figura militare con <strong>nome proprio</strong>, ' +
         '<strong>tratto di personalità</strong> e <strong>specializzazione</strong>.</p>' +
         '<p>Il Comandante eredita l\'esperienza che il crew aveva accumulato. L\'equipaggio <strong>non viene perso</strong> ' +

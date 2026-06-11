@@ -210,11 +210,16 @@
   }
 
   function enrichmentForXp(xp) {
-    /* Etichetta veterano: 0 = recluta, 1-2 = veterano, 3-4 = esperto, 5+ asso */
-    if (!xp || xp <= 0) return { label: 'recluta', tier: 0 };
-    if (xp <= 2) return { label: 'veterano', tier: 1 };
-    if (xp <= 4) return { label: 'esperto', tier: 2 };
-    return { label: 'asso', tier: 3 };
+    /* Gradi dell'EQUIPAGGIO (collettivo, decisione utente 2026-06-11):
+       0 = Reclute · 1-2 = Operativi · 3-5 = Esperti · 6-9 = Veterani ·
+       10+ = Leggende. Al grado massimo (Leggende, xp ≥ 10) emerge un
+       Comandante e l'equipaggio si riforma (vedi commander.PROMOTION_THRESHOLD). */
+    var x = xp | 0;
+    if (x <= 0) return { label: 'Reclute', tier: 0 };
+    if (x <= 2) return { label: 'Operativi', tier: 1 };
+    if (x <= 5) return { label: 'Esperti', tier: 2 };
+    if (x <= 9) return { label: 'Veterani', tier: 3 };
+    return { label: 'Leggende', tier: 4 };
   }
 
   /* Calcola durata viaggio (base, prima delle riduzioni xp). */
@@ -512,8 +517,8 @@
             xp: (exp.crewXp || 0) + 1
           };
           colony.crews.explorer.push(newCrew);
-          /* Decisione #43: se l'equipaggio raggiunge la soglia 'asso'
-             (xp ≥ 5), un Comandante emerge dal gruppo. La figura eredita
+          /* Decisione #43: se l'equipaggio raggiunge il grado massimo
+             'Leggende' (xp ≥ 10), un Comandante emerge dal gruppo. La figura eredita
              la xp, l'equipaggio resta nel roster ma con xp resettata a 0
              (scelta utente: i crew sono "più persone", il capitano si
              stacca, il gruppo si riforma sotto il vuoto lasciato). */
