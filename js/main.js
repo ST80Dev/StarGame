@@ -2920,23 +2920,32 @@ function renderPlanetForzeTab(host, planet, colony) {
    time.nextCrewId) → "Equipaggio 7". Formato legacy: `crew-<imp>-<n>`
    → estrae l'ultimo gruppo numerico (migrato a lazy da
    migrateLegacyCrewIds). Fallback: id grezzo. */
-/* Callsign alfanumerico STABILE e univoco per equipaggio (scelta utente:
-   codice alfanumerico, capienza ben oltre 1000). Mappa il numero di serie
-   progressivo (univoco, dall'id `crew-<seq>`) in un codice a 4 simboli con
-   una permutazione moltiplicativa → BIJEZIONE: due seq diversi non danno mai
-   lo stesso codice ("non già assegnato"). Deterministico (replay-safe #5,
-   niente Math.random). Spazio = 26·26·36·36 = 876.096 codici. Esempi:
-   "KX-7Q", "BM-3D". Il codice nasce con l'equipaggio e non cambia mai. */
-const CREW_CS_L = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';          // 26 lettere
-const CREW_CS_A = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'; // 36 alfanumerici
+/* Callsign FONETICO stabile e univoco per equipaggio (scelta utente: callsign
+   fonetico a tema, sapore SW-flavor senza marchi — decisione #34). Pool di 60
+   parole evocative (predatori · armi · fenomeni · corpi celesti · militari) +
+   numero 1..99 → 5.940 callsign distinti. Il seq univoco (dall'id `crew-<seq>`)
+   è mappato con una permutazione moltiplicativa → BIJEZIONE: seq diversi danno
+   callsign diversi ("non già assegnato"), e consecutivi risultano sparsi.
+   Deterministico (replay-safe #5, niente Math.random). Es. "Falco-7",
+   "Spettro-42". Nasce con l'equipaggio e non cambia mai. */
+const CREW_WORDS = [
+  'Falco', 'Corvo', 'Lupo', 'Vipera', 'Aquila', 'Pantera', 'Lince', 'Sciacallo',
+  'Grifone', 'Drago', 'Scorpione', 'Cobra', 'Lama', 'Lancia', 'Falce', 'Pugnale',
+  'Asta', 'Maglio', 'Dardo', 'Saetta', 'Artiglio', 'Zanna', 'Spettro', 'Eco',
+  'Ombra', 'Alba', 'Eclissi', 'Aurora', 'Tempesta', 'Fulmine', 'Cenere', 'Brace',
+  'Miraggio', 'Vortice', 'Abisso', 'Zenit', 'Nadir', 'Cometa', 'Meteora', 'Pulsar',
+  'Quasar', 'Nova', 'Orione', 'Nebulosa', 'Sentinella', 'Vettore', 'Ronda', 'Guardiano',
+  'Vedetta', 'Avanguardia', 'Rapace', 'Bagliore', 'Crepuscolo', 'Astore', 'Procione',
+  'Ariete', 'Bisonte', 'Chimera', 'Fenice', 'Idra'
+];
 function crewCallsign(seq) {
-  const M = 26 * 26 * 36 * 36;                  // 876.096
-  let n = ((((seq | 0) * 99991) % M) + M) % M;  // 99991 primo, coprimo con M
-  const d3 = n % 36; n = (n - d3) / 36;
-  const d2 = n % 36; n = (n - d2) / 36;
-  const d1 = n % 26; n = (n - d1) / 26;
-  const d0 = n % 26;
-  return CREW_CS_L[d0] + CREW_CS_L[d1] + '-' + CREW_CS_A[d2] + CREW_CS_A[d3];
+  const W = CREW_WORDS.length;                  // 60 parole
+  const N = 99;                                 // numeri 1..99
+  const M = W * N;                              // 5.940 combinazioni
+  const s = ((((seq | 0) * 99991) % M) + M) % M; // 99991 coprimo con M → bijezione
+  const w = Math.floor(s / N);
+  const num = (s % N) + 1;
+  return CREW_WORDS[w] + '-' + num;
 }
 function crewShortLabel(id) {
   if (!id) return 'Equipaggio';
