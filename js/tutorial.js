@@ -910,9 +910,14 @@
         '<p>Una flotta porta con sé i <strong>viveri</strong>: un serbatoio di <strong>autonomia</strong> ' +
         '(~250 Ι) che cala <em>solo quando è lontana da un porto amico</em> e si <strong>ricarica al massimo</strong> ' +
         'quando sosta o passa per una tua colonia (o un porto di un alleato).</p>' +
-        '<p>Il <em>gauge è in Impulsi</em> (autonomia ~uguale per ogni flotta), ma il <em>costo</em> in cibo/acqua ' +
-        'del rifornimento cresce con l\'<strong>equipaggio</strong>: uno scout costa briciole, una grande flotta da guerra ' +
-        'lontano da casa pesa davvero → conviene costruire <strong>basi avanzate</strong> e stringere <strong>alleanze</strong>.</p>' +
+        '<p>La riserva è a <strong>4 risorse</strong>: <em>cibo</em> e <em>acqua</em> (sostentamento dell\'equipaggio) più ' +
+        '<em>metalli</em> (riparazioni in viaggio) ed <em>energia</em> (sistemi), questi ultimi in quota minore. ' +
+        'Il <em>gauge è in Impulsi</em> (autonomia ~uguale per ogni flotta), ma il <em>costo</em> del rifornimento cresce con ' +
+        'l\'<strong>equipaggio</strong>: uno scout costa briciole, una grande flotta da guerra lontano da casa pesa davvero ' +
+        '(attinge metalli ed energia oltre ai viveri) → conviene costruire <strong>basi avanzate</strong> e stringere <strong>alleanze</strong>.</p>' +
+        '<p><strong>Navi a casa vs in viaggio:</strong> le navi <em>parcheggiate</em> all\'Hangar consumano <strong>metalli</strong> ' +
+        'per manutenzione/riparazione (occupare un attracco non è gratis); quelle <em>dispiegate</em> in flotta portano via la ' +
+        'riserva a 4 risorse. Tenere una grande flotta ferma a casa, o in giro, è in entrambi i casi un impegno sui metalli.</p>' +
         '<p><strong>Anche in orbita si consuma</strong> (l\'equipaggio mangia comunque): restare in orbita attinge allo ' +
         'stesso serbatoio dove l\'ha lasciato il viaggio. Orbitare una <em>tua</em> colonia o un alleato è <strong>gratis</strong> ' +
         '(rifornimento continuo); orbitare un sistema straniero o vuoto consuma il residuo → una <strong>guarnigione avanzata</strong> ' +

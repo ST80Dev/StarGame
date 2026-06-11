@@ -616,11 +616,17 @@
        autosufficienti, decisione #27). */
     const popFoodDemand  = (colony.phase !== 'settling') ? (pop.total || 0) * CFG.POP_FOOD_PER_UNIT  : 0;
     const popWaterDemand = (colony.phase !== 'settling') ? (pop.total || 0) * CFG.POP_WATER_PER_UNIT : 0;
+    /* Decisione utente 2026-06-11: manutenzione navi PARCHEGGIATE all'Hangar
+       (riparazione/mantenimento) → drain metalli sulla colonia. Le navi
+       dispiegate non pagano qui (riserva di viaggio a 4 risorse, viveri). */
+    const F = root.ORION && root.ORION.fleet;
+    const shipMetMaint = (F && F.portMaintenance) ? F.portMaintenance(game, colony) : 0;
     const net = {};
     ['met', 'en', 'food', 'water'].forEach(function (k) {
       const r = (out.rates[k] || 0) * malus * wMalus * warM * settling;
       const u = out.upkeep[k] || 0;
       let n = r - u;
+      if (k === 'met')   n -= shipMetMaint;
       if (k === 'food')  n -= popFoodDemand;
       if (k === 'water') n -= popWaterDemand;
       net[k] = n;

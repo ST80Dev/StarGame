@@ -3055,6 +3055,9 @@ function renderCantieriSection(colony, planet) {
       '<div class="cantieri-row__caps">' +
         '<span class="cantieri-cap' + cantieriCls + '" title="Build paralleli abilitati dal livello dell\'Hangar">Cantieri <strong>' + active + ' / ' + buildSlots + '</strong></span>' +
         '<span class="cantieri-cap' + portCls + '" title="Posti d\'attracco a terra · in spedizione: ' + flying + '">Attracchi <strong>' + bound + ' / ' + docks + '</strong></span>' +
+        ((F.portMaintenance && F.portMaintenance(ORION.game, colony) > 0)
+          ? '<span class="cantieri-cap" title="Manutenzione/riparazione delle navi al porto: riserva + flotte ferme qui (occupare un attracco consuma metalli). Le flotte in viaggio pagano la riserva di viaggio.">Manutenzione <strong>−' + F.portMaintenance(ORION.game, colony).toFixed(2) + ' ' + resIcon('met') + '/' + iU() + '</strong></span>'
+          : '') +
         techHtml +
       '</div>';
     queue.forEach(function (q, idx) {
