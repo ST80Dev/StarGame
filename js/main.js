@@ -339,7 +339,7 @@ function newGame(seed, opts) {
     /* M08 Fase A (decisione #42): flotte mobili. */
     fleets: [],
     /* Comandanti a livello Impero (decisione utente 2026-06-11): pool idle.
-       Quelli assegnati vivono su fleet.commander. */
+       Quelli assegnati vivono su fleet.officers[] (M15 multi-slot). */
     commanders: [],
     /* M14 Fase B1 (decisione #77): figure di colonia (pool idle d'Impero).
        Quelle assegnate vivono su colony.figure. */
@@ -3214,6 +3214,37 @@ function uiIcon(name, tone) {
   return '<span class="ui-icon' + cls + '" aria-hidden="true">' + ORION.icon(name) + '</span>';
 }
 
+/* M15 — motivo (breve) per cui una nave capitale NON è costruibile su questa
+   colonia: manca il Bacino orbitale al livello richiesto, oppure la Nave
+   Ammiraglia esiste già (unica per civiltà). Ritorna '' se nessun blocco
+   specifico capitale. Rispecchia i gate di planet.startShipBuild. */
+function capitalBuildBlock(colony, cls) {
+  if (!cls) return '';
+  if (cls.requiresStruct) {
+    const rs = cls.requiresStruct;
+    const ent = colony.structures && colony.structures[rs.id];
+    if (!ent || (ent.level || 0) < (rs.level || 1)) {
+      const sdef = ORION.structures && ORION.structures.get(rs.id);
+      return (sdef ? sdef.name : rs.id) + ' lvl ' + (rs.level || 1);
+    }
+  }
+  if (cls.unique && ORION.game) {
+    let n = 0;
+    const cols = ORION.game.colonies || {};
+    Object.keys(cols).forEach(function (ck) {
+      const c = cols[ck];
+      if (c && c.ships) n += (c.ships[cls.id] || 0);
+      const q = c && c.assets && c.assets.shipQueue;
+      if (Array.isArray(q)) for (let i = 0; i < q.length; i++) if (q[i].kind === cls.id) n++;
+    });
+    (ORION.game.fleets || []).forEach(function (f) {
+      (f.ships || []).forEach(function (s) { if (s.kind === cls.id) n++; });
+    });
+    if (n >= 1) return 'già esistente (unica)';
+  }
+  return '';
+}
+
 function renderCantieriSection(colony, planet) {
   const hasHangar = !!(colony.structures && colony.structures['cantiere-navale']);
   const hasAcademy = !!(colony.structures && colony.structures['accademia-militare']);
@@ -3261,7 +3292,9 @@ function renderCantieriSection(colony, planet) {
        (docks) restano solo per gli scafi: i mercantili non occupano il porto. */
     const cantieriUse = E.activeCantieriUse ? E.activeCantieriUse(colony) : (active + mercQueue.length);
     const flying = E.shipsOnExpedition ? E.shipsOnExpedition(ORION.game, ORION.openPlanetKey) : 0;
-    const bound = sShips + active + flying;
+    /* M15: attracchi PESATI (le capitali contano più di 1). Usa il conteggio
+       del motore così il display combacia col gate canBuildShip. */
+    const bound = E.totalShipsBound ? E.totalShipsBound(ORION.game, colony, ORION.openPlanetKey).total : (sShips + active + flying);
     const techBonus = E.techSpeedBonus ? E.techSpeedBonus(colony) : 0;
     const cantieriCls = cantieriUse >= buildSlots ? ' cantieri-cap--full' : '';
     const portCls = bound >= docks ? ' cantieri-cap--full' : '';
@@ -3283,9 +3316,12 @@ function renderCantieriSection(colony, planet) {
     const pickedCls = (F.getClass && F.getClass(pickedKind)) || { cost: shipCost, time: shipTime, hangarLvl: 1, name: 'Scafo esploratore' };
     const effShipTime = E.applyTechSpeed ? E.applyTechSpeed(pickedCls.time, colony) : pickedCls.time;
     const payOkShip = canPay(pickedCls.cost);
-    const check = E.canBuildShip ? E.canBuildShip(ORION.game, colony, ORION.openPlanetKey) : { ok: true };
-    const buildEnabled = payOkShip && check.ok;
-    const blockReason = !check.ok ? check.reason : (!payOkShip ? 'Risorse insufficienti' : '');
+    const check = E.canBuildShip ? E.canBuildShip(ORION.game, colony, ORION.openPlanetKey, pickedKind) : { ok: true };
+    /* M15 — gate aggiuntivo per le navi capitali: Bacino orbitale + unicità
+       Nave Ammiraglia (rispecchia startShipBuild). */
+    const capBlock = capitalBuildBlock(colony, pickedCls);
+    const buildEnabled = payOkShip && check.ok && !capBlock;
+    const blockReason = capBlock || (!check.ok ? check.reason : (!payOkShip ? 'Risorse insufficienti' : ''));
 
     /* Counter per-classe (riepilogo compatto). */
     const counterParts = classes.map(function (cls) {
@@ -3346,12 +3382,16 @@ function renderCantieriSection(colony, planet) {
     });
 
     /* Dropdown classi: opzioni disabilitate se l'Hangar non è di livello
-       adeguato (M08 Fase A, decisione #42). */
+       adeguato (M08 Fase A, decisione #42) o se manca il Bacino orbitale /
+       la Nave Ammiraglia esiste già (M15). */
     const options = classes.map(function (cls) {
       const lockedByHangar = (cls.hangarLvl || 1) > hangarLvl;
-      const label = cls.glyph + ' ' + cls.name + (lockedByHangar ? ' — Hangar lvl ' + cls.hangarLvl : '');
+      const capReason = capitalBuildBlock(colony, cls);
+      let label = cls.glyph + ' ' + cls.name;
+      if (lockedByHangar) label += ' — Hangar lvl ' + cls.hangarLvl;
+      else if (capReason) label += ' — ' + capReason;
       const sel = (cls.id === pickedKind) ? ' selected' : '';
-      const dis = lockedByHangar ? ' disabled' : '';
+      const dis = (lockedByHangar || capReason) ? ' disabled' : '';
       return '<option value="' + cls.id + '"' + sel + dis + '>' + escapeHtml(label) + '</option>';
     }).join('');
 
@@ -4663,19 +4703,19 @@ function renderFleetView(stage) {
       const vetHtml = fleetVeterancyHtml(f);
       const FORM_LABEL = { aggressive: 'Aggressiva', balanced: 'Bilanciata', defensive: 'Difensiva' };
       const formation = (f.formation) || 'balanced';
-      /* M09 (#43/#49): Comandante assegnato → bonus di specializzazione. */
-      const cmd = f.commander;
-      /* PR-E: ★ → SVG star ambra per il Comandante (Figura nominata
-         emergente dagli equipaggi veterani, decisione #43). */
+      /* M09 (#43/#49) → M15: figure di flotta (più d'una sulle navi capitali).
+         Una riga per figura assegnata + indicazione slot disponibili. */
       const starHtml = uiIcon('star', 'amber');
-      const cmdHtml = cmd
-        ? '<div class="fleet-item__cmd">' + starHtml + ' <strong>' + escapeHtml((cmd.rank || '') + ' ' + cmd.name) + '</strong> · ' +
-            escapeHtml(cmdRoleLabel(cmd)) +
-            ' <span class="fleet-item__cmdbonus">' + escapeHtml(ORION.commander ? ORION.commander.bonusLabel(cmd) : '') + '</span></div>'
+      const officers = (ORION.commander && ORION.commander.officersOf) ? ORION.commander.officersOf(f) : (f.commander ? [f.commander] : []);
+      const slots = (ORION.fleet && ORION.fleet.fleetOfficerSlots) ? ORION.fleet.fleetOfficerSlots(f) : 1;
+      const cmdHtml = officers.length
+        ? officers.map(function (o) {
+            return '<div class="fleet-item__cmd">' + starHtml + ' <strong>' + escapeHtml((o.rank || '') + ' ' + o.name) + '</strong> · ' +
+              escapeHtml(cmdRoleLabel(o)) +
+              ' <span class="fleet-item__cmdbonus">' + escapeHtml(ORION.commander ? ORION.commander.bonusLabel(o) : '') + '</span></div>';
+          }).join('')
         : '';
-      const cmdBtnLabel = cmd
-        ? (starHtml + ' ' + escapeHtml(cmd.name))
-        : (starHtml + ' Comandante');
+      const cmdBtnLabel = starHtml + ' Ufficiali ' + officers.length + '/' + slots;
       /* Decisione #66 estensione (P0): mostra coloni a bordo se la flotta
          ha capienza demografica (≥1 nave coloniale). */
       const popCap = ORION.fleet && ORION.fleet.fleetPopCargoCap ? ORION.fleet.fleetPopCargoCap(f) : 0;
@@ -4815,7 +4855,7 @@ function buildCommanderRoster(g) {
       '<span class="cantieri-row__counter">In organico: <strong>' + all.length + '</strong></span>' +
     '</div>' +
     '<ul class="commander-roster">' + rows + '</ul>' +
-    '<p class="commander-row__hint">Figure di flotta emerse dal servizio (§12.4): <strong>Comandante</strong> (fuoco) · <strong>Ingegnere di Flotta</strong> (viaggio/scafo) · <strong>Stratega</strong> (imboscate). Il rango cresce in battaglia. Assegnale a una flotta col pulsante <strong>★ Comandante</strong>.</p>' +
+    '<p class="commander-row__hint">Figure di flotta emerse dal servizio (§12.4): <strong>Comandante</strong> (fuoco) · <strong>Ingegnere di Flotta</strong> (viaggio/scafo) · <strong>Stratega</strong> (imboscate). Il rango cresce in battaglia. Le navi capitali (M15) ospitano più ufficiali — assegnale col pulsante <strong>★ Ufficiali</strong>.</p>' +
   '</div>';
 }
 
@@ -4966,33 +5006,44 @@ function openCommanderPicker(fleetId, stage) {
   const fleet = findFleet(fleetId);
   if (!fleet || !ORION.commander) return;
   const avail = ORION.commander.assignableOf(g);
-  const cur = fleet.commander;
-  if (!avail.length && !cur) { showToast('Nessuna figura disponibile — emergono dagli equipaggi al grado massimo (xp 10)'); return; }
+  const officers = ORION.commander.officersOf(fleet);
+  const slots = (ORION.fleet && ORION.fleet.fleetOfficerSlots) ? ORION.fleet.fleetOfficerSlots(fleet) : 1;
+  if (!avail.length && !officers.length) { showToast('Nessuna figura disponibile — emergono dagli equipaggi al grado massimo (xp 10)'); return; }
   const starHtml = uiIcon('star', 'amber');
+  const full = officers.length >= slots;
+  /* Ruoli già a bordo: per disabilitare i duplicati (max un bonus per ruolo). */
+  const rolesAboard = officers.map(function (o) { return o.role; });
   const rows = avail.map(function (a) {
     const c = a.commander;
     const origin = a.colonyKey ? (' · da ' + escapeHtml(systemNameFromKey(g, a.colonyKey))) : '';
-    return '<button class="cmd-pick__row" data-cmd="' + escapeHtml(c.id) + '" type="button">' +
+    const dupRole = rolesAboard.indexOf(c.role) >= 0;
+    const disabled = full || dupRole;
+    const note = full ? ' — posti pieni' : (dupRole ? ' — ruolo già presente' : '');
+    return '<button class="cmd-pick__row" data-cmd="' + escapeHtml(c.id) + '" type="button"' + (disabled ? ' disabled' : '') + '>' +
       '<span class="cmd-pick__name">' + starHtml + ' ' + escapeHtml((c.rank || '') + ' ' + c.name) + '</span>' +
       '<span class="cmd-pick__meta">' + escapeHtml(cmdRoleLabel(c)) +
         ' · ' + escapeHtml(ORION.commander.bonusLabel(c)) + ' · ' + escapeHtml(c.traitLabel || '') +
-        origin + '</span>' +
+        origin + escapeHtml(note) + '</span>' +
     '</button>';
   }).join('') || '<p class="cmd-pick__empty">Nessuna figura in panchina.</p>';
-  const curHtml = cur
-    ? '<div class="cmd-pick__current">Assegnato: <strong>' + starHtml + ' ' + escapeHtml((cur.rank || '') + ' ' + cur.name) + '</strong> · ' +
-        escapeHtml(cmdRoleLabel(cur)) +
-        ' <button class="btn btn--mini btn--with-icon btn--danger" data-cmd-release type="button">' +
-        uiIcon('close', 'pink') + ' Rimuovi</button></div>'
-    : '';
+  const curHtml = officers.length
+    ? '<div class="cmd-pick__current">A bordo (' + officers.length + '/' + slots + '):' +
+        officers.map(function (o) {
+          return '<div class="cmd-pick__assigned"><strong>' + starHtml + ' ' + escapeHtml((o.rank || '') + ' ' + o.name) + '</strong> · ' +
+            escapeHtml(cmdRoleLabel(o)) +
+            ' <button class="btn btn--mini btn--with-icon btn--danger" data-cmd-release="' + escapeHtml(o.id) + '" type="button">' +
+            uiIcon('close', 'pink') + ' Rimuovi</button></div>';
+        }).join('') +
+      '</div>'
+    : '<div class="cmd-pick__current">Nessun ufficiale a bordo. Posti: ' + slots + ' (dalla nave capitale più grande).</div>';
   const html =
     '<div class="attack-overlay" data-cmd-overlay>' +
       '<div class="attack-overlay__panel">' +
-        '<header class="attack-overlay__head"><h3>' + starHtml + ' Comandante di ' + escapeHtml(fleet.name) + '</h3>' +
+        '<header class="attack-overlay__head"><h3>' + starHtml + ' Ufficiali di ' + escapeHtml(fleet.name) + '</h3>' +
           '<button class="attack-overlay__x btn--icon-only" data-cmd-close type="button" aria-label="Chiudi">' +
             uiIcon('close') + '</button></header>' +
         curHtml +
-        '<p class="attack-overlay__sub">Ruoli §12.4: <strong>Comandante</strong> +fuoco · <strong>Ingegnere di Flotta</strong> −viaggio/viveri, +scafo · <strong>Stratega</strong> imboscata. Il rango cresce in battaglia.</p>' +
+        '<p class="attack-overlay__sub">Ruoli §12.4: <strong>Comandante</strong> +fuoco · <strong>Ingegnere di Flotta</strong> −viaggio/viveri, +scafo · <strong>Stratega</strong> imboscata. Posti ufficiale dalla nave capitale (Incrociatore 2 · Dreadnought/Ammiraglia 3). Max un bonus per ruolo. Il rango cresce in battaglia.</p>' +
         '<div class="cmd-pick__list">' + rows + '</div>' +
       '</div>' +
     '</div>';
@@ -5003,20 +5054,21 @@ function openCommanderPicker(fleetId, stage) {
   function close() { if (node.parentNode) node.parentNode.removeChild(node); }
   node.querySelector('[data-cmd-close]').addEventListener('click', close);
   node.addEventListener('click', function (e) { if (e.target === node) close(); });
-  const rel = node.querySelector('[data-cmd-release]');
-  if (rel) rel.addEventListener('click', function () {
-    ORION.commander.releaseFromFleet(g, fleet);
-    pushChronicle(ORION.time.currentDS(g) + ' — Comandante sollevato dal comando di <strong>' + escapeHtml(fleet.name) + '</strong>.', 'figure');
-    persistGame(g); close(); renderFleetView(stage);
+  node.querySelectorAll('[data-cmd-release]').forEach(function (rel) {
+    rel.addEventListener('click', function () {
+      ORION.commander.releaseFromFleet(g, fleet, rel.dataset.cmdRelease);
+      pushChronicle(ORION.time.currentDS(g) + ' — Ufficiale sollevato dal comando di <strong>' + escapeHtml(fleet.name) + '</strong>.', 'figure');
+      persistGame(g); close(); openCommanderPicker(fleetId, stage); renderFleetView(stage);
+    });
   });
   node.querySelectorAll('[data-cmd]').forEach(function (b) {
     b.addEventListener('click', function () {
       const r = ORION.commander.assignToFleet(g, fleet, b.dataset.cmd);
       if (!r.ok) { showToast(r.reason || 'Assegnazione fallita'); return; }
       pushChronicle(ORION.time.currentDS(g) + ' — <strong>★ ' + escapeHtml(r.commander.rank + ' ' + r.commander.name) +
-        '</strong> assume il comando di <strong>' + escapeHtml(fleet.name) + '</strong> (' +
+        '</strong> assume un ruolo su <strong>' + escapeHtml(fleet.name) + '</strong> (' +
         escapeHtml(ORION.commander.bonusLabel(r.commander)) + ').', 'figure');
-      persistGame(g); close(); renderFleetView(stage);
+      persistGame(g); close(); openCommanderPicker(fleetId, stage); renderFleetView(stage);
     });
   });
 }
@@ -6998,6 +7050,9 @@ const DEFAULT_AUTOPAUSE = {
      non sorpresa. Hop intermedi mai. */
   'fleet-arrived': true, 'fleet-route-complete': true, 'fleet-discovery': true,
   'fleet-launched': false, 'fleet-leg-hop': false,
+  /* M15 — varo di una nave capitale: evento notevole (auto-pausa ON). Le
+     navi piccole restano silenziose (ship-built non listata = OFF). */
+  'capital-built': true,
   /* Decisione #69: viveri. L'avviso e l'esaurimento auto-pausano (finestra
      per reagire); il rifornimento no (è una buona notizia di routine). */
   'fleet-supply-low': true, 'fleet-supply-critical': true, 'fleet-resupplied': false,
@@ -7393,6 +7448,7 @@ function showEventOverlay(events) {
     'fleet-route-complete': 'Flotta: rotta completata',
     'fleet-discovery': 'Flotta: sistema esplorato',
     'fleet-launched': 'Flotta: salto iperspaziale',
+    'capital-built': 'Nave capitale varata',
     'fleet-supply-low': 'Flotta: viveri in esaurimento',
     'fleet-supply-critical': 'Flotta: viveri esauriti',
     'fleet-resupplied': 'Flotta rifornita',
@@ -7612,6 +7668,13 @@ function chronicleEvent(ev) {
     const sk = ev.shipKind || 'explorer';
     const scls = (ORION.fleet && ORION.fleet.getClass(sk)) || { name: 'scafo esploratore' };
     pushChronicle(ds + ' — Nuova <strong>' + scls.name + '</strong> pronta al varo su ' + pname + ptag + '.', 'planet');
+  } else if (ev.kind === 'capital-built') {
+    /* M15: varo di una nave capitale — evento notevole (auto-pausa ON). */
+    const sk = ev.shipKind || 'incrociatore';
+    const scls = (ORION.fleet && ORION.fleet.getClass(sk)) || { name: 'nave capitale' };
+    const isAdm = sk === 'ammiraglia';
+    pushChronicle(ds + ' — ' + (isAdm ? '★ ' : '') + 'La <strong>' + escapeHtml(scls.name) + '</strong> esce dai bacini di ' + pname + ptag + (isAdm ? ' — la nave ammiraglia della civiltà.' : '.'), 'planet');
+    if (ORION.tutorial) ORION.tutorial.fire('capital-ships');
   } else if (ev.kind === 'crew-formed') {
     pushChronicle(ds + ' — Nuovo <strong>equipaggio esploratore</strong> brevettato dall\'Accademia di ' + pname + ptag + '.', 'planet');
   } else if (ev.kind === 'mercantile-built') {

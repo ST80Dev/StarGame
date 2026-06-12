@@ -760,21 +760,30 @@
     });
   }
 
+  /* M15 — conta le navi di una classe già possedute dal giocatore
+     (a terra + in coda + in flotta). Usato per l'unicità della Nave
+     Ammiraglia (GDD §12.1: una sola per civiltà). */
+  function countPlayerShipsOfKind(game, kind) {
+    let n = 0;
+    const cols = (game && game.colonies) || {};
+    Object.keys(cols).forEach(function (ck) {
+      const c = cols[ck];
+      if (c && c.ships) n += (c.ships[kind] || 0);
+      const q = c && c.assets && c.assets.shipQueue;
+      if (Array.isArray(q)) for (let i = 0; i < q.length; i++) if (q[i].kind === kind) n++;
+    });
+    const fleets = (game && game.fleets) || [];
+    for (let i = 0; i < fleets.length; i++) {
+      const ships = fleets[i].ships || [];
+      for (let j = 0; j < ships.length; j++) if (ships[j].kind === kind) n++;
+    }
+    return n;
+  }
+
   function startShipBuild(colony, planet, game, colonyKey, kind) {
     ensureAssets(colony);
-    /* Decisione #41: check di capacità hangar (cantieri + attracchi).
-       Se ORION.expedition è caricato, deleghiamo a canBuildShip; altrimenti
-       fallback al solo controllo di esistenza hangar (test headless). */
-    const E = root.ORION && root.ORION.expedition;
-    if (E && E.canBuildShip) {
-      const check = E.canBuildShip(game, colony, colonyKey);
-      if (!check.ok) return check;
-    } else if (!hasStructLevel(colony, 'cantiere-navale', 1)) {
-      return { ok: false, reason: 'Hangar di costruzione non costruito' };
-    }
     /* M08 Fase A (decisione #42): la classe nave viene dal catalogo
-       ORION.fleet.CLASSES. Costo/tempo/livello-hangar dipendono dalla
-       classe scelta. Default 'explorer' per retro-compat con i chiamanti
+       ORION.fleet.CLASSES. Default 'explorer' per retro-compat coi chiamanti
        M07 (che non passavano `kind`). */
     kind = kind || 'explorer';
     const F = root.ORION && root.ORION.fleet;
@@ -790,8 +799,30 @@
       time = expCfg('SHIP_TIME', 10);
       reqLvl = 1;
     }
+    /* Decisione #41/#42 + M15: capacità hangar/bacino (cantieri + attracchi
+       pesati dalla classe). Deleghiamo a canBuildShip passando la classe. */
+    const E = root.ORION && root.ORION.expedition;
+    if (E && E.canBuildShip) {
+      const check = E.canBuildShip(game, colony, colonyKey, kind);
+      if (!check.ok) return check;
+    } else if (!hasStructLevel(colony, 'cantiere-navale', 1)) {
+      return { ok: false, reason: 'Hangar di costruzione non costruito' };
+    }
     if (!hasStructLevel(colony, 'cantiere-navale', reqLvl)) {
       return { ok: false, reason: 'Hangar di costruzione lvl ' + reqLvl + ' richiesto per ' + (cls ? cls.name : kind) };
+    }
+    /* M15 — Dreadnought/Ammiraglia richiedono il Bacino orbitale (#41). */
+    if (cls && cls.requiresStruct) {
+      const rs = cls.requiresStruct;
+      if (!hasStructLevel(colony, rs.id, rs.level || 1)) {
+        const sdef = root.ORION && root.ORION.structures && root.ORION.structures.get(rs.id);
+        const sname = sdef ? sdef.name : rs.id;
+        return { ok: false, reason: sname + ' lvl ' + (rs.level || 1) + ' richiesto per ' + cls.name };
+      }
+    }
+    /* M15 — Nave Ammiraglia unica per civiltà (GDD §12.1). */
+    if (cls && cls.unique && game && countPlayerShipsOfKind(game, kind) >= 1) {
+      return { ok: false, reason: cls.name + ': ne esiste già una (unica per civiltà)' };
     }
     if (E && E.applyTechSpeed) time = E.applyTechSpeed(time, colony);
     if (!canPay(colony, cost)) return { ok: false, reason: 'Risorse insufficienti' };

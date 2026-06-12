@@ -554,6 +554,16 @@
         '<p>Richiede la <strong>tecnologia degli scudi</strong> (M13): per ora è un gancio, sbloccabile con l\'albero tech.</p>'
     },
     {
+      id: 'struct:bacino-orbitale', tag: 'Strutture · ⊠', title: 'Bacino orbitale',
+      body:
+        '<p>Cantiere pesante per le <strong>navi capitali</strong> (M15): l\'Hangar planetario basta per l\'Incrociatore, ma ' +
+        'Dreadnought e Nave Ammiraglia richiedono questa infrastruttura. <strong>lvl 1 → Dreadnought · lvl 2 → Ammiraglia</strong>.</p>' +
+        '<p>Aggiunge <strong>cantieri</strong> (slip per build capitali) e <strong>attracchi di grossa stazza</strong>, sommati ' +
+        'a quelli dell\'Hangar — servono perché le capitali pesano molto sul porto.</p>' +
+        '<p>Richiede un <strong>Hangar di costruzione già evoluto (lvl 3)</strong>. È grande e costoso (4 slot/livello): ' +
+        'è un investimento da civiltà militare matura. M16 porterà la variante orbitale su stazione, di stazza maggiore.</p>'
+    },
+    {
       id: 'struct:centro-abitativo', tag: 'Strutture · ⌂', title: 'Centro abitativo',
       body:
         '<p>Aumenta la <strong>capacità di popolazione (popCap)</strong> di +2 per livello e dà <strong>+0.05 morale</strong> ' +
@@ -901,9 +911,30 @@
           '<li><strong>➤ Intercettore</strong> — hp 45, fp 8, spd 1.4 · classe più veloce, eccellente in inseguimento.</li>' +
           '<li><strong>◅ Corvetta</strong> — hp 80, fp 12, spd 1.0 · scorta multiruolo, equilibrata.</li>' +
           '<li><strong>◣ Fregata</strong> — hp 160, fp 25, spd 0.85 · linea di battaglia, lenta ma cara da abbattere.</li>' +
+          '<li><strong>◆ Incrociatore</strong> — hp 300, fp 45, spd 0.8 · capitale media (Hangar lvl 4).</li>' +
+          '<li><strong>⬢ Dreadnought</strong> — hp 650, fp 95, spd 0.65 · capitale pesante (Bacino orbitale).</li>' +
+          '<li><strong>❖ Nave Ammiraglia</strong> — hp 1000, fp 140, spd 0.7 · unica per civiltà, +fuoco/scafo a tutta la flotta.</li>' +
           '<li><strong>◉ Pioniere coloniale</strong> — hp 70, fp 0, spd 0.8 · trasporto colonizzatore (vedi lezione dedicata).</li>' +
         '</ul>' +
-        '<p>Le grandi navi (incrociatore/dreadnought/ammiraglia) arriveranno con M15 + Bacino orbitale (M16).</p>'
+        '<p>Le grandi navi sono rare e costose (vedi lezione <em>Grandi navi</em>): averne è un traguardo, non la norma.</p>'
+    },
+    {
+      id: 'capital-ships',
+      tag: 'M15 · Grandi navi',
+      title: 'Grandi navi: Incrociatore, Dreadnought, Ammiraglia',
+      body:
+        '<p>Le navi capitali ribaltano una battaglia ma sono <strong>rare e costose</strong> (GDD §12.1). Tre classi:</p>' +
+        '<ul>' +
+          '<li><strong>◆ Incrociatore</strong> — capitale media. Si costruisce all\'<strong>Hangar lvl 4</strong>, nessuna struttura extra.</li>' +
+          '<li><strong>⬢ Dreadnought</strong> — capitale pesante. Richiede il <strong>Bacino orbitale ⊠ lvl 1</strong>. Build ~200 Ι.</li>' +
+          '<li><strong>❖ Nave Ammiraglia</strong> — <strong>una sola per civiltà</strong>. Richiede il <strong>Bacino orbitale lvl 2</strong>. Dà +15% fuoco e +10% scafo a <em>tutta</em> la flotta in cui naviga.</li>' +
+        '</ul>' +
+        '<p><strong>Figure (M14):</strong> più la nave è grande, più <strong>ufficiali</strong> può ospitare la flotta — ' +
+        'nessuna capitale 1 · Incrociatore 2 · Dreadnought/Ammiraglia 3. Max un bonus per ruolo (Comandante +fuoco, ' +
+        'Ingegnere −viaggio/viveri +scafo, Stratega imboscata). Assegnali col pulsante <strong>★ Ufficiali</strong>.</p>' +
+        '<p><strong>Attracchi:</strong> le capitali pesano molto sul porto (un Dreadnought come 6 navi). Il Bacino orbitale ' +
+        'aggiunge cantieri e attracchi di grossa stazza, sommati all\'Hangar.</p>' +
+        '<p>Le perdite di una capitale sono pesanti: tienile scortate e usa la formazione difensiva sulle flotte che le contengono.</p>'
     },
     {
       id: 'colonial-ship',

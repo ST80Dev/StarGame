@@ -55,7 +55,7 @@
      DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
      nuovo gioco la preserva e una recovery best-effort prova a dedurla
      da colonie/flotte/spedizioni/cronaca. */
-  const SCHEMA_VERSION = 26;
+  const SCHEMA_VERSION = 27;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -627,6 +627,26 @@
     if ((payload.schema || 25) < 26) {
       if (payload.council === undefined) payload.council = null;
       payload.schema = 26;
+    }
+
+    /* v26 → v27 (M15 — grandi navi): le figure di flotta passano dallo slot
+       singolo `fleet.commander` (M14) alla lista multi-slot `fleet.officers[]`
+       (le navi capitali ne ospitano più d'una). Conversione lazy: il vecchio
+       comandante diventa officers[0]. I nuovi counter ship (incrociatore/
+       dreadnought/ammiraglia) sono lazy-init da ensureColonyShipKinds al load
+       (CLASS_ORDER li include). ORION.commander.migrateAll(game) al load
+       completa eventuali residui. */
+    if ((payload.schema || 26) < 27) {
+      if (Array.isArray(payload.fleets)) {
+        payload.fleets.forEach(function (f) {
+          if (!f) return;
+          if (!Array.isArray(f.officers)) {
+            f.officers = f.commander ? [f.commander] : [];
+          }
+          if (f.commander) f.commander = null;
+        });
+      }
+      payload.schema = 27;
     }
     return payload;
   }
