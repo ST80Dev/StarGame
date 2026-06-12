@@ -53,20 +53,24 @@ ORION.dxTab = 'colonia';
 ORION.chronicleCollapsed = true;
 /* Stato delle sezioni della Plancia d'Impero (id → bool collassato).
    Accordion: una sola sezione aperta per volta (default: Roster). */
-ORION.lpSectionCollapsed = { roster: false, nav: true, launcher: true };
+ORION.lpSectionCollapsed = { roster: false, nav: true, launcher: true, council: true };
+
+/* Sezioni dell'accordion Plancia d'Impero (la cronaca è gestita a parte).
+   Tenuta come unica fonte così aggiungere una sezione non rompe il toggle
+   (bug #78: 'council' mancava qui → non si riapriva più). */
+const LP_ACCORDION_SECTIONS = ['roster', 'nav', 'launcher', 'council'];
 
 /* Accordion Plancia d'Impero: apre SOLO `openId`, collassa le altre
    (chronicle inclusa). `openId === null` → tutte chiuse. */
 function lpAccordionOpen(openId) {
-  ['roster', 'nav', 'launcher'].forEach(function (k) {
+  LP_ACCORDION_SECTIONS.forEach(function (k) {
     ORION.lpSectionCollapsed[k] = (k !== openId);
   });
   ORION.chronicleCollapsed = (openId !== 'chronicle');
 }
 /* Normalizza a una sola sezione aperta (per save vecchi con più aperte). */
 function normalizeLpAccordion() {
-  const order = ['roster', 'nav', 'launcher'];
-  let openId = order.find(function (k) { return !ORION.lpSectionCollapsed[k]; }) || null;
+  let openId = LP_ACCORDION_SECTIONS.find(function (k) { return !ORION.lpSectionCollapsed[k]; }) || null;
   if (openId == null && !ORION.chronicleCollapsed) openId = 'chronicle';
   lpAccordionOpen(openId || 'roster');
 }
