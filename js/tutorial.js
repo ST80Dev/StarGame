@@ -202,9 +202,9 @@
         '<p>La crescita si ferma in <strong>plateau</strong> quando produzione = consumo. Più fattorie/impianti idrici alzano ' +
         'il tetto sostenibile, oppure (futuro) rifornimenti via rotte commerciali.</p>' +
         '<p><strong>Bonus Diaspora ⚡</strong> — quando imbarchi coloni su una nave Pioniere (vedi <em>Pioniere coloniale</em>), ' +
-        'la colonia di partenza riceve <strong>×2 crescita pop per 60 <span class="ds-unit">Ι</span></strong>: i livelli ceduti ' +
-        'vengono recuperati rapidamente, le infrastrutture restano. È la leva pensata per <em>seminare</em> nuove colonie senza ' +
-        'svuotare la sorgente.</p>'
+        'la colonia di partenza riceve <strong>×1.5 crescita pop per 60 <span class="ds-unit">Ι</span></strong>: una parte dei ' +
+        'livelli ceduti viene recuperata, ma SENTI la perdita (il recupero copre il 20-30% del livello in quel periodo). ' +
+        'È una <em>leva strategica</em>, non un free-pass: imbarcare costa anche provviste extra (cibo+acqua per il viaggio).</p>'
     },
     {
       id: 'waste',
@@ -861,10 +861,14 @@
         'ingegneri, agricoltori, leader civili che bootstrappano la nuova colonia. Una colonia nata con 2 livelli (invece di 1) ' +
         'comincia subito a produrre meglio e ha più margine di crescita.</p>' +
         '<p>Nel selettore "Colonizza", uno <strong>slider</strong> ti fa scegliere quanti livelli imbarcare (0-2). La sorgente ' +
-        'mantiene sempre almeno 1 livello (non puoi svuotarla del tutto).</p>' +
-        '<p><strong>Bonus Diaspora:</strong> la colonia di partenza riceve <strong>×2 crescita demografica per 60 Ι</strong> ' +
-        'dopo l\'imbarco. La popolazione cala visibilmente a partenza, ma le infrastrutture restano e i livelli persi vengono ' +
-        'recuperati rapidamente (la migrazione interna riempie i vuoti).</p>' +
+        'mantiene sempre almeno 1 livello (non puoi svuotarla del tutto). Se avevi già imbarcato coloni via <em>Gestisci navi/eq.</em> ' +
+        '(per esempio per un trasferimento colony-to-colony) il picker li RISPETTA: lo slider è solo per l\'imbarco AGGIUNTIVO.</p>' +
+        '<p><strong>Costo coloni — provviste viaggio:</strong> ogni livello di pop a bordo richiede <strong>+30 cibo + 15 acqua</strong> ' +
+        '(consumati al setOrder dalla colonia origine). Razionale: i pionieri mangiano per settimane di viaggio iperspaziale + ' +
+        'bootstrap dell\'avamposto. Imbarcare 2 livelli costa quindi 60 cibo + 30 acqua extra rispetto a una colonizzazione "cold".</p>' +
+        '<p><strong>Bonus Diaspora:</strong> la colonia di partenza riceve <strong>×1.5 crescita demografica per 60 Ι</strong> ' +
+        'dopo l\'imbarco. Compensa parzialmente la perdita (~20-30% del livello in 60 Ι): SENTI la cessione, ma non sei punito. ' +
+        'È una leva strategica vera, non una scorciatoia gratuita.</p>' +
         '<p>La colonizzazione avviene in <strong>3 fasi indipendenti</strong>:</p>' +
         '<ul>' +
           '<li><strong>Travel</strong> — viaggio iperspaziale, dipende solo dalla <em>distanza</em> (intra-sistema: skip). M13 iperguida lo ridurrà ×3/×8/×20.</li>' +

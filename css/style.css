@@ -6096,6 +6096,25 @@ select.main-menu__input { cursor: pointer; }
 .colonize-pick__pop label { display: inline-flex; align-items: center; gap: 6px; }
 .colonize-pick__pop input[type="range"] { flex: 1; min-width: 120px; accent-color: var(--c-accent, #60c4de); }
 .colonize-pick__pop strong { color: var(--c-accent, #60c4de); }
+/* Fix (C) sessione 2026-06-09: chip "Già a bordo" + "Totale alla colonia"
+   per il picker che ora rispetta i coloni preesistenti sulla flotta. */
+.colonize-pick__already {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 1px 8px; border-radius: 4px;
+  background: rgba(240, 216, 160, 0.12); border: 1px solid rgba(240, 216, 160, 0.35);
+  color: #f0d8a0; font-weight: 500;
+}
+.colonize-pick__total {
+  font-size: 0.74rem; color: var(--c-text-faint);
+  flex-basis: 100%;
+}
+/* Fix (B): costo extra coloni (provviste viaggio) mostrato sotto lo slider. */
+.colonize-pick__colonist-cost { flex-basis: 100%; min-height: 1.1em; }
+.colonize-pick__colonist-note {
+  font-size: 0.72rem; color: var(--c-text-faint);
+  font-style: italic;
+}
+.colonize-pick__colonist-note strong { color: var(--c-text); font-weight: 600; }
 
 /* M09 — Comandante assegnato alla flotta (#43/#49) */
 .fleet-item__cmd {

@@ -534,13 +534,19 @@
       /* mantieni accum se sensato (frazione del livello corrente); il motore
          lo userà al prossimo tick di crescita. */
     }
-    /* Avvia/rinnova il Bonus Diaspora sulla sorgente (recovery-friendly):
-       60 Ι di crescita pop ×2. Vive in colony.diaspora { until, multiplier }. */
+    /* Avvia/rinnova il Bonus Diaspora sulla sorgente (recovery-friendly).
+       Bilanciamento sessione 2026-06-09 (fix A): ridotto da ×2.0 / 60 Ι a
+       ×1.5 / 60 Ι. La crescita +100% compensava troppo la perdita di livelli
+       (~50-80% del livello perso in 60 Ι su una colonia ben dotata, rendendo
+       l'imbarco quasi "gratis"). A +50% il recupero si ferma intorno al
+       20-30% nello stesso periodo: il giocatore SENTE la perdita ma non è
+       punito (recovery-friendly #22). Combinato col fix B (provviste viaggio
+       per livello imbarcato) rende l'imbarco una scelta strategica vera. */
     const nowI = game.timeImpulsi || 0;
     colony.diaspora = {
       startedAt: nowI,
       until: nowI + 60,
-      multiplier: 2.0
+      multiplier: 1.5
     };
     return { ok: true, popOnboard: fleet.popOnboard };
   }
