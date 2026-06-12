@@ -1952,6 +1952,18 @@
     if (root.ORION.council && root.ORION.council.tick) {
       root.ORION.council.tick(game, events);
     }
+    /* M14 Fase B3 (decisione #79): Luminari emergono dall'output di ricerca
+       + ricambio automatico delle figure operative (congedo a fine mandato,
+       solo notifica). Ambiente, nessuna azione forzata. */
+    if (root.ORION.council && root.ORION.council.maybeEmergeLuminary) {
+      root.ORION.council.maybeEmergeLuminary(game, events);
+    }
+    if (root.ORION.commander && root.ORION.commander.retireOld) {
+      root.ORION.commander.retireOld(game, events);
+    }
+    if (root.ORION.colonyFigure && root.ORION.colonyFigure.retireOld) {
+      root.ORION.colonyFigure.retireOld(game, events);
+    }
     /* M10 Fase A (decisione #47): civiltà AI in background. Simulazione
        AGGREGATA a cadenza interna (ogni AI_EVERY_I Impulsi, dopo il warm-up):
        espansione, guerre AI-vs-AI, nascita/morte (roster vivo), ICG §5.4,

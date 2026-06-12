@@ -2998,6 +2998,10 @@ select.main-menu__input { cursor: pointer; }
 .lp-council__head { font-size: 0.8em; color: var(--c-text, #d8def0); display: flex; align-items: center; gap: 5px; }
 .lp-council__glyph { color: #f0d8a0; }
 .lp-council__level { margin-left: auto; font-size: 0.92em; padding: 1px 4px; background: rgba(var(--c-surface-rgb, 34 46 86) / 0.9); color: var(--c-text, #d8def0); border: 1px solid rgba(140, 150, 190, 0.4); border-radius: 5px; }
+.lp-council__sub { display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 0.72em; }
+.lp-council__fig { color: #f0d8a0; }
+.lp-council__interim { color: var(--c-muted, #98a3c8); opacity: 0.8; }
+.lp-council__elev { margin-left: auto; padding: 1px 7px; font-size: 0.95em; }
 .lp-council__advice { font-size: 0.76em; color: var(--c-muted, #98a3c8); margin-top: 3px; }
 .lp-council__idle { opacity: 0.6; }
 .lp-council__proposal { margin-top: 4px; font-size: 0.78em; }

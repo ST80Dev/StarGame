@@ -257,6 +257,37 @@
     return parts.join(' · ');
   }
 
+  /* Ricambio automatico (decisione #79): le figure di colonia hanno un
+     mandato lungo; superato, vanno in congedo da sole (notifica). La
+     pipeline (adminXp) genera i successori. */
+  var CF_TENURE_BASE = 8000, CF_TENURE_SPREAD = 4000;
+  function cfHash(s) {
+    var h = 2166136261; s = '' + s;
+    for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h * 16777619) >>> 0; }
+    return h >>> 0;
+  }
+  function cfTenure(id) { return CF_TENURE_BASE + (cfHash(id) % (CF_TENURE_SPREAD + 1)); }
+  function retireOld(game, events) {
+    if (!game) return;
+    ensure(game);
+    var now = game.timeImpulsi || 0;
+    function expired(f) { return (now - (f.bornAt || 0)) >= cfTenure(f.id); }
+    function notify(f) {
+      if (events) events.push({ kind: 'figure-retired', scope: 'colony', name: (f.rank || '') + ' ' + f.name, roleLabel: roleLabel(f), impulso: now });
+    }
+    /* assegnate (su colony.figure) */
+    var cols = game.colonies || {};
+    Object.keys(cols).forEach(function (k) {
+      var f = cols[k] && cols[k].figure;
+      if (f && expired(f)) { cols[k].figure = null; notify(f); }
+    });
+    /* idle nel pool */
+    var pool = list(game);
+    for (var j = pool.length - 1; j >= 0; j--) {
+      if (expired(pool[j])) { var fig = pool.splice(j, 1)[0]; notify(fig); }
+    }
+  }
+
   root.ORION = root.ORION || {};
   root.ORION.colonyFigure = {
     ADMIN_THRESHOLD: ADMIN_THRESHOLD,
@@ -282,6 +313,7 @@
     governanceBonus: governanceBonus,
     assemblyMul: assemblyMul,
     hasGovernatore: hasGovernatore,
-    bonusLabel: bonusLabel
+    bonusLabel: bonusLabel,
+    retireOld: retireOld
   };
 }(typeof window !== 'undefined' ? window : this));

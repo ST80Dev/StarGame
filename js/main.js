@@ -443,6 +443,8 @@ function newGame(seed, opts) {
     /* M14 Fase B2 (#78): Consiglio della Civiltà. Save pre-26 → ensure lo
        genera dal seed; altrimenti ripristina lo stato salvato. */
     if (saved.council && typeof saved.council === 'object') ORION.game.council = saved.council;
+    /* M14 Fase B3 (#79): pool Luminari. */
+    if (Array.isArray(saved.luminari)) ORION.game.luminari = saved.luminari.slice();
     if (ORION.council && ORION.council.ensure) ORION.council.ensure(ORION.game);
     /* M13 Fase A (decisione #57): ricerca tecnologica. Save pre-23 → null;
        ORION.research.ensure() sotto completa lo stato vuoto. */
@@ -2361,6 +2363,54 @@ function councilActionDesc(action) {
     ' da <strong>' + escapeHtml(systemNameFromKey(g, action.src)) + '</strong> a <strong>' + escapeHtml(systemNameFromKey(g, action.dst)) + '</strong>';
   if (action.type === 'research') return 'l\'avvio della ricerca <strong>«' + escapeHtml(action.techName || '') + '»</strong>';
   return action.type;
+}
+
+/* M14 Fase B3 (#79): picker di elevazione di una figura al seggio del Consiglio.
+   Elevare RITIRA la figura dal servizio operativo (scelta con peso). */
+function openCouncilElevatePicker(role) {
+  const g = ORION.game, C = ORION.council;
+  if (!C) return;
+  const elig = C.eligibleFor(g, role);
+  if (!elig.length) { showToast('Nessuna figura idonea per questo seggio'); return; }
+  const roleLabel = (C.ROLES[role] && C.ROLES[role].label) || 'Consigliere';
+  const source = (C.ROLES[role] && C.ROLES[role].source) || '';
+  const rows = elig.map(function (e) {
+    return '<button class="cmd-pick__row" data-elev="' + escapeHtml(e.id) + '" data-colkey="' + escapeHtml(e.colonyKey || '') + '" data-kind="' + escapeHtml(e.kind) + '" type="button">' +
+      '<span class="cmd-pick__name">★ ' + escapeHtml(e.name) + '</span>' +
+      '<span class="cmd-pick__meta">' + escapeHtml(e.descr || '') + '</span>' +
+    '</button>';
+  }).join('');
+  const adv = C.advisorByRole(g, role);
+  const cur = C.hasFigure(adv)
+    ? '<p class="attack-overlay__sub">Seggio attuale: <strong>' + escapeHtml(C.seatName(adv)) + '</strong> (' + escapeHtml(C.seatSource(adv)) + '). Elevarne un\'altra congeda quella in carica.</p>'
+    : '';
+  const html =
+    '<div class="attack-overlay" data-elev-overlay>' +
+      '<div class="attack-overlay__panel">' +
+        '<header class="attack-overlay__head"><h3>★ Eleva al ' + escapeHtml(roleLabel) + '</h3>' +
+          '<button class="attack-overlay__x btn--icon-only" data-elev-close type="button" aria-label="Chiudi">' +
+            ((ORION.icon && ORION.icon('close')) || '✕') + '</button></header>' +
+        '<p class="attack-overlay__sub">Fonte: <strong>' + escapeHtml(source) + '</strong>. Elevare <strong>ritira la figura dal servizio operativo</strong> (sblocca il livello Autonomo + dimezza l\'attesa).</p>' +
+        cur +
+        '<div class="cmd-pick__list">' + rows + '</div>' +
+      '</div>' +
+    '</div>';
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  const node = wrap.firstChild;
+  document.body.appendChild(node);
+  function close() { if (node.parentNode) node.parentNode.removeChild(node); }
+  node.querySelector('[data-elev-close]').addEventListener('click', close);
+  node.addEventListener('click', function (e) { if (e.target === node) close(); });
+  node.querySelectorAll('[data-elev]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const r = C.elevate(g, role, b.dataset.kind, b.dataset.elev, b.dataset.colkey || null);
+      if (!r.ok) { showToast(r.reason || 'Elevazione fallita'); return; }
+      pushChronicle(ORION.time.currentDS(g) + ' — <strong>' + escapeHtml(r.figure.name) + '</strong> (' + escapeHtml(r.figure.originLabel) + ') si ritira nel <strong>' + escapeHtml(roleLabel) + '</strong>.', 'figure');
+      if (ORION.save && ORION.save.autosave) ORION.save.autosave(g);
+      close(); renderLeftPanel();
+    });
+  });
 }
 
 /* Picker di assegnazione: elenca le figure di colonia idle nel pool d'Impero. */
@@ -7045,6 +7095,10 @@ const DEFAULT_AUTOPAUSE = {
   /* M14 Fase B2 (#78): Consiglio della Civiltà. Consigli OFF (non allarmi);
      la proposta da approvare ferma il tempo (ON); l'azione autonoma OFF. */
   'council-advice': false, 'council-proposal': true, 'council-acted': false,
+  /* M14 Fase B3 (#79): costituzione notevole (ON); luminare/successione/
+     congedo sono atmosferici (OFF). */
+  'council-constituted': true, 'luminary-emerged': false,
+  'council-succession': false, 'figure-retired': false,
   /* M08 Fase A (decisione #42): arrivo flotta + rotta completata + scoperta
      fortuita auto-pausano (esiti notevoli). Il launch è azione utente,
      non sorpresa. Hop intermedi mai. */
@@ -7444,6 +7498,10 @@ function showEventOverlay(events) {
     'council-advice': 'Consiglio della Civiltà',
     'council-proposal': 'Consiglio: decisione da approvare',
     'council-acted': 'Consiglio: azione autonoma',
+    'council-constituted': 'Consiglio costituito',
+    'luminary-emerged': 'Nuovo Luminare',
+    'council-succession': 'Consiglio: avvicendamento',
+    'figure-retired': 'Figura in congedo',
     'fleet-arrived': 'Flotta arrivata',
     'fleet-route-complete': 'Flotta: rotta completata',
     'fleet-discovery': 'Flotta: sistema esplorato',
@@ -7738,6 +7796,18 @@ function chronicleEvent(ev) {
   } else if (ev.kind === 'council-acted') {
     /* Autonomo: il consigliere ha agito da solo entro i suoi limiti. */
     pushChronicle(ds + ' — <strong>' + escapeHtml(councilWho(ev.role)) + '</strong> (autonomo) ha messo in atto ' + councilActionDesc(ev.action) + '.', 'council');
+  } else if (ev.kind === 'council-constituted') {
+    /* M14 Fase B3 (#79): il Consiglio si costituisce quando la civiltà cresce. */
+    pushChronicle(ds + ' — Il <strong>Consiglio della Civiltà</strong> si è costituito: tre consiglieri d\'Impero affiancano la tua guida (Plancia d\'Impero).', 'council');
+    if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('council');
+  } else if (ev.kind === 'luminary-emerged') {
+    pushChronicle(ds + ' — Un <strong>Luminare</strong>, <strong>' + escapeHtml(ev.figure.name) + '</strong>, emerge dai progressi della ricerca: elevabile al Consiglio Scientifico.', 'figure');
+  } else if (ev.kind === 'council-succession') {
+    const rl = (ORION.council && ORION.council.ROLES[ev.role]) ? ORION.council.ROLES[ev.role].label : 'Consigliere';
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.toName) + '</strong> subentra a <strong>' + escapeHtml(ev.fromFigure) + '</strong> come <strong>' + escapeHtml(rl) + '</strong>.', 'council');
+  } else if (ev.kind === 'figure-retired') {
+    const where = ev.scope === 'colony' ? 'amministrativo' : 'di flotta';
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.name) + '</strong> (' + escapeHtml(ev.roleLabel || where) + ') si congeda dopo un lungo servizio.', 'figure');
   } else if (ev.kind === 'expedition-arrived') {
     const sys = ORION.game.galaxy.systems[ev.systemId];
     const tag = ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
@@ -8685,19 +8755,27 @@ function renderLeftPanel() {
     '<span class="lp-empire__name">' + escapeHtml(emp ? formatEmpire(emp) : '—') + '</span>' +
     '<span class="lp-empire__edit" aria-hidden="true">✎</span>' +
   '</button>';
-  /* M14 Fase B2 (#78): Consiglio della Civiltà §9.4 — i 3 consiglieri con
-     livello di delega (consultivo/propositivo/autonomo), ultimo suggerimento
-     o proposta da approvare, e log delle decisioni. */
+  /* M14 Fase B2/B3 (#78/#79): Consiglio della Civiltà §9.4 — costituito a
+     soglia; ogni seggio istituzionale o con figura elevata; delega + proposte. */
   let councilBody = '';
   let councilProposals = 0;
-  if (ORION.council && ORION.council.list) {
+  if (ORION.council && ORION.council.list && ORION.council.isConstituted(g)) {
     const advs = ORION.council.list(g);
-    const LV = ORION.council.LEVELS, LVL = ORION.council.LEVEL_LABEL;
+    const LVL = ORION.council.LEVEL_LABEL;
     councilBody = '<ul class="lp-council">' + advs.map(function (a) {
       const gl = (ORION.council.ROLES[a.role] && ORION.council.ROLES[a.role].glyph) || '•';
+      const allowed = ORION.council.allowedLevels(a);
       const lvSel = '<select class="lp-council__level" data-council-level="' + a.role + '" title="Livello di delega">' +
-        LV.map(function (lv) { return '<option value="' + lv + '"' + (a.level === lv ? ' selected' : '') + '>' + LVL[lv] + '</option>'; }).join('') +
+        allowed.map(function (lv) { return '<option value="' + lv + '"' + (a.level === lv ? ' selected' : '') + '>' + LVL[lv] + '</option>'; }).join('') +
         '</select>';
+      const fig = ORION.council.hasFigure(a);
+      const src = fig
+        ? '<span class="lp-council__fig" title="Figura elevata (ritirata dal servizio)">★ ' + escapeHtml(ORION.council.seatSource(a)) + '</span>'
+        : '<span class="lp-council__interim" title="Consigliere istituzionale">istituzionale</span>';
+      const elig = ORION.council.eligibleFor(g, a.role);
+      const elevBtn = (elig.length)
+        ? '<button class="btn btn--mini lp-council__elev" data-council-elevate="' + a.role + '" type="button" title="Eleva una figura del dominio al seggio">↑ Eleva (' + elig.length + ')</button>'
+        : '';
       let mid;
       if (a.pending) {
         councilProposals++;
@@ -8717,7 +8795,8 @@ function renderLeftPanel() {
         : '';
       return '<li class="lp-council__item lp-council__item--' + a.role + '">' +
         '<div class="lp-council__head"><span class="lp-council__glyph">' + gl + '</span> ' +
-          '<strong>' + escapeHtml(a.name) + '</strong> · ' + escapeHtml(a.label) + lvSel + '</div>' +
+          '<strong>' + escapeHtml(ORION.council.seatName(a)) + '</strong> · ' + escapeHtml(a.label) + lvSel + '</div>' +
+        '<div class="lp-council__sub">' + src + elevBtn + '</div>' +
         mid + log +
       '</li>';
     }).join('') + '</ul>';
@@ -8786,6 +8865,9 @@ function renderLeftPanel() {
       persistGame(ORION.game);
       renderLeftPanel();
     });
+  });
+  host.querySelectorAll('[data-council-elevate]').forEach(function (b) {
+    b.addEventListener('click', function () { openCouncilElevatePicker(b.dataset.councilElevate); });
   });
   const chronHead = host.querySelector('[data-action="lp-toggle-chron"]');
   if (chronHead) chronHead.addEventListener('click', function () {

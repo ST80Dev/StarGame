@@ -801,16 +801,21 @@
     {
       id: 'council', tag: 'Impero · ⚖', title: 'Il Consiglio della Civiltà',
       body:
-        '<p>Tre consiglieri d\'Impero (nella <strong>Plancia d\'Impero</strong> a sinistra) vegliano sui rispettivi domini: ' +
-        '<strong>Militare</strong> (minacce, tregue), <strong>Economico</strong> (risorse, rotte), <strong>Scientifico</strong> (ricerca).</p>' +
+        '<p>Quando la tua civiltà cresce (≥3 colonie) si <strong>costituisce</strong> il Consiglio: tre consiglieri d\'Impero ' +
+        '(nella <strong>Plancia d\'Impero</strong> a sinistra) — <strong>Militare</strong> (minacce, tregue), <strong>Economico</strong> ' +
+        '(risorse, rotte), <strong>Scientifico</strong> (ricerca).</p>' +
         '<p>Per ciascuno scegli quanto <strong>delegare</strong> (come col Governatore):</p>' +
         '<ul>' +
-          '<li><strong>Consultivo</strong> — solo suggerimenti, non agisce.</li>' +
-          '<li><strong>Propositivo</strong> — fa il lavoro preliminare e ti porta una <strong>decisione finale</strong> (es. "Tregua pronta con X — approvi?"): tu clicchi <em>Approva</em> o <em>Rifiuta</em>.</li>' +
-          '<li><strong>Autonomo</strong> — <strong>agisce da solo</strong> entro limiti sicuri (mai dichiarare guerra né spendere a vuoto), così puoi concentrarti su altro.</li>' +
+          '<li><strong>Consultivo</strong> — solo suggerimenti.</li>' +
+          '<li><strong>Propositivo</strong> — ti porta una <strong>decisione finale</strong> (es. "Tregua pronta con X — approvi?").</li>' +
+          '<li><strong>Autonomo</strong> — <strong>agisce da solo</strong> entro limiti sicuri (richiede una figura elevata, vedi sotto).</li>' +
         '</ul>' +
-        '<p>Le decisioni prese restano nel log del consigliere. Puoi <strong>abbassare la delega</strong> in qualsiasi momento ' +
-        '(torna consultivo) — ritira anche eventuali proposte pendenti. Default: <strong>Consultivo</strong>.</p>'
+        '<p>I seggi partono <strong>istituzionali</strong> ma puoi <strong>elevare</strong> una figura del dominio per potenziarli ' +
+        '(sblocca l\'Autonomo + agisce più spesso): <strong>Comandante</strong> veterano → Militare · <strong>Mercantile</strong> ' +
+        'leggendario → Economico · <strong>Luminare</strong> (emerge dalla ricerca) → Scientifico. Elevare <strong>ritira</strong> ' +
+        'quella figura dal servizio operativo — scelta con peso.</p>' +
+        '<p><strong>Ricambio automatico</strong>: tutte le figure (consiglieri e operative) servono un mandato lungo e poi vanno ' +
+        'in congedo da sole — solo una notifica, mai un\'azione richiesta; i successori emergono dalla pipeline. Default delega: <strong>Consultivo</strong>.</p>'
     },
     /* Decisione #45 — espansione slot via bonifica + terraformazione. */
     {

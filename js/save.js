@@ -55,7 +55,7 @@
      DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
      nuovo gioco la preserva e una recovery best-effort prova a dedurla
      da colonie/flotte/spedizioni/cronaca. */
-  const SCHEMA_VERSION = 27;
+  const SCHEMA_VERSION = 28;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -218,7 +218,11 @@
          Identità dei 3 consiglieri + cooldown/ultimo consiglio. Piccolo, si
          persiste intero. ORION.council.ensure() al load completa eventuali
          campi mancanti (idempotente). */
-      council: (game.council && typeof game.council === 'object') ? game.council : null
+      council: (game.council && typeof game.council === 'object') ? game.council : null,
+      /* Schema 28 (M14 Fase B3, decisione #79): pool dei Luminari (figure
+         scientifiche da elevare al seggio). I seggi elevati + lo stato di
+         costituzione vivono in game.council (auto-serializzato). */
+      luminari: Array.isArray(game.luminari) ? game.luminari : []
     };
   }
 
@@ -647,6 +651,15 @@
         });
       }
       payload.schema = 27;
+    }
+
+    /* v27 → v28 (M14 Fase B3, decisione #79): Luminari + Consiglio costituito
+       a soglia + seggi elevabili. Save vecchi → pool luminari vuoto; i campi
+       nuovi del council (constituted/figure/termN/luminariBorn) sono lazy-init
+       da ORION.council.ensure() al load. */
+    if ((payload.schema || 27) < 28) {
+      if (!Array.isArray(payload.luminari)) payload.luminari = [];
+      payload.schema = 28;
     }
     return payload;
   }
