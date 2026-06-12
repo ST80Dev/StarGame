@@ -1942,6 +1942,13 @@
     if (root.ORION.governor && root.ORION.governor.tick) {
       root.ORION.governor.tick(game, events);
     }
+    /* M14 Fase B2 (decisione #78): Consiglio della Civiltà §9.4 — i 3
+       consiglieri (Militare/Economico/Scientifico) emettono suggerimenti
+       testuali periodici (non ogni Ι, self-rate-limited), letti sullo stato
+       già aggiornato del tick. Solo consigli (auto-pausa OFF). */
+    if (root.ORION.council && root.ORION.council.tick) {
+      root.ORION.council.tick(game, events);
+    }
     /* M10 Fase A (decisione #47): civiltà AI in background. Simulazione
        AGGREGATA a cadenza interna (ogni AI_EVERY_I Impulsi, dopo il warm-up):
        espansione, guerre AI-vs-AI, nascita/morte (roster vivo), ICG §5.4,

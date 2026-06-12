@@ -402,6 +402,8 @@ function newGame(seed, opts) {
   if (ORION.capital && ORION.capital.initFromHome) {
     ORION.capital.initFromHome(ORION.game);
   }
+  /* M14 Fase B2 (decisione #78): genera il Consiglio della Civiltà dal seed. */
+  if (ORION.council && ORION.council.ensure) ORION.council.ensure(ORION.game);
   /* M12 Fase A2 (decisione #56 §15.4): saldo iniziale nella valuta della
      regione d'origine (solo per partite nuove — se c'è un payload, il
      restore sotto sovrascrive le balances). */
@@ -434,6 +436,10 @@ function newGame(seed, opts) {
        su colony.figure). Save pre-25 → pool vuoto. */
     if (Array.isArray(saved.colonyFigures)) ORION.game.colonyFigures = saved.colonyFigures.slice();
     if (ORION.colonyFigure && ORION.colonyFigure.ensure) ORION.colonyFigure.ensure(ORION.game);
+    /* M14 Fase B2 (#78): Consiglio della Civiltà. Save pre-26 → ensure lo
+       genera dal seed; altrimenti ripristina lo stato salvato. */
+    if (saved.council && typeof saved.council === 'object') ORION.game.council = saved.council;
+    if (ORION.council && ORION.council.ensure) ORION.council.ensure(ORION.game);
     /* M13 Fase A (decisione #57): ricerca tecnologica. Save pre-23 → null;
        ORION.research.ensure() sotto completa lo stato vuoto. */
     if (saved.research && typeof saved.research === 'object') {
@@ -2311,6 +2317,48 @@ function bindColonyFigureHandlers(host, planet, colony) {
     openColonyFigurePicker(colKey, host, planet, colony);
   });
 }
+/* M14 Fase B2 (#78): testo dei suggerimenti del Consiglio della Civiltà. */
+const COUNCIL_RES_LABEL = { met: 'metalli', en: 'energia', food: 'cibo', water: 'acqua' };
+function councilAdviceParts(role, topic, ref, res) {
+  const g = ORION.game;
+  const adv = (ORION.council && g) ? ORION.council.advisorByRole(g, role) : null;
+  const who = adv ? (adv.label + ' ' + adv.name)
+    : ((ORION.council && ORION.council.ROLES[role]) ? ORION.council.ROLES[role].label : 'Consiglio');
+  const cn = ref ? systemNameFromKey(g, ref) : '';
+  const rl = res ? (COUNCIL_RES_LABEL[res] || res) : '';
+  let msg;
+  switch (topic) {
+    case 'incursion-inbound': msg = 'un\'incursione è in rotta' + (cn ? ' verso <strong>' + escapeHtml(cn) + '</strong>' : '') + '. Valuta rinforzi, richiamo flotte o evacuazione.'; break;
+    case 'pressure-high': msg = 'la pressione nemica è alta. Consolida sulla capitale o cerca tregue diplomatiche.'; break;
+    case 'colony-undefended': msg = '<strong>' + escapeHtml(cn) + '</strong> è priva di difese planetarie con il nemico vicino.'; break;
+    case 'scarcity-crit': msg = 'carestia critica di <strong>' + escapeHtml(rl) + '</strong> su <strong>' + escapeHtml(cn) + '</strong>: intervieni subito.'; break;
+    case 'scarcity-low': msg = 'scorte di <strong>' + escapeHtml(rl) + '</strong> in calo su <strong>' + escapeHtml(cn) + '</strong>.'; break;
+    case 'research-idle': msg = 'i laboratori producono ricerca ma nessun progetto è attivo. Scegli una tecnologia.'; break;
+    default: msg = 'segnala una situazione da valutare.';
+  }
+  return { who: who, msg: msg };
+}
+function councilAdviceHtml(ev) {
+  const p = councilAdviceParts(ev.role, ev.topic, ev.ref, ev.res);
+  return '<strong>' + escapeHtml(p.who) + '</strong>: ' + p.msg;
+}
+function councilWho(role) {
+  const g = ORION.game;
+  const adv = (ORION.council && g) ? ORION.council.advisorByRole(g, role) : null;
+  return adv ? (adv.label + ' ' + adv.name)
+    : ((ORION.council && ORION.council.ROLES[role]) ? ORION.council.ROLES[role].label : 'Consiglio');
+}
+/* Descrizione di un'azione preparata dal Consiglio (proposta o autonoma). */
+function councilActionDesc(action) {
+  const g = ORION.game;
+  if (!action) return '';
+  if (action.type === 'diplo') return 'una <strong>proposta di pace</strong> con <strong>' + escapeHtml(action.civName || '—') + '</strong>';
+  if (action.type === 'trade-route') return 'una <strong>rotta</strong> di ' + escapeHtml(COUNCIL_RES_LABEL[action.resource] || action.resource) +
+    ' da <strong>' + escapeHtml(systemNameFromKey(g, action.src)) + '</strong> a <strong>' + escapeHtml(systemNameFromKey(g, action.dst)) + '</strong>';
+  if (action.type === 'research') return 'l\'avvio della ricerca <strong>«' + escapeHtml(action.techName || '') + '»</strong>';
+  return action.type;
+}
+
 /* Picker di assegnazione: elenca le figure di colonia idle nel pool d'Impero. */
 function openColonyFigurePicker(colKey, host, planet, colony) {
   const g = ORION.game, CF = ORION.colonyFigure;
@@ -6938,6 +6986,9 @@ const DEFAULT_AUTOPAUSE = {
   'gov-build-started': false, 'gov-expand-started': false, 'gov-asset-started': false,
   /* M14 Fase B1 (#77): figure di colonia. Emergenza notevole (ON), rank OFF. */
   'colony-figure-emerged': true, 'colony-figure-ranked': false,
+  /* M14 Fase B2 (#78): Consiglio della Civiltà. Consigli OFF (non allarmi);
+     la proposta da approvare ferma il tempo (ON); l'azione autonoma OFF. */
+  'council-advice': false, 'council-proposal': true, 'council-acted': false,
   /* M08 Fase A (decisione #42): arrivo flotta + rotta completata + scoperta
      fortuita auto-pausano (esiti notevoli). Il launch è azione utente,
      non sorpresa. Hop intermedi mai. */
@@ -7331,6 +7382,9 @@ function showEventOverlay(events) {
     'gov-asset-started': 'Governatore: scafo di scorta avviato',
     'colony-figure-emerged': 'Nuova figura di colonia',
     'colony-figure-ranked': 'Figura di colonia promossa',
+    'council-advice': 'Consiglio della Civiltà',
+    'council-proposal': 'Consiglio: decisione da approvare',
+    'council-acted': 'Consiglio: azione autonoma',
     'fleet-arrived': 'Flotta arrivata',
     'fleet-route-complete': 'Flotta: rotta completata',
     'fleet-discovery': 'Flotta: sistema esplorato',
@@ -7606,6 +7660,17 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — <strong>' + escapeHtml(f.name) + '</strong> sale al rango di <strong>' + escapeHtml(ev.rank) + '</strong>.', 'figure');
   } else if (ev.kind === 'gov-asset-started') {
     pushChronicle(ds + ' — <strong>Governatore di sector di ' + pname + ptag + '</strong>: avviato uno scafo esploratore di scorta.', 'figure');
+  } else if (ev.kind === 'council-advice') {
+    /* M14 Fase B2 (#78): suggerimento del Consiglio della Civiltà §9.4. */
+    pushChronicle(ds + ' — ' + councilAdviceHtml(ev), 'council');
+    if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('council');
+  } else if (ev.kind === 'council-proposal') {
+    /* Propositivo: il consigliere ha preparato un'azione, decide il giocatore. */
+    pushChronicle(ds + ' — <strong>' + escapeHtml(councilWho(ev.role)) + '</strong> ha preparato ' + councilActionDesc(ev.action) + ': decidi nel <strong>Consiglio</strong> (Plancia d\'Impero).', 'council');
+    if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('council');
+  } else if (ev.kind === 'council-acted') {
+    /* Autonomo: il consigliere ha agito da solo entro i suoi limiti. */
+    pushChronicle(ds + ' — <strong>' + escapeHtml(councilWho(ev.role)) + '</strong> (autonomo) ha messo in atto ' + councilActionDesc(ev.action) + '.', 'council');
   } else if (ev.kind === 'expedition-arrived') {
     const sys = ORION.game.galaxy.systems[ev.systemId];
     const tag = ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
@@ -8553,11 +8618,50 @@ function renderLeftPanel() {
     '<span class="lp-empire__name">' + escapeHtml(emp ? formatEmpire(emp) : '—') + '</span>' +
     '<span class="lp-empire__edit" aria-hidden="true">✎</span>' +
   '</button>';
+  /* M14 Fase B2 (#78): Consiglio della Civiltà §9.4 — i 3 consiglieri con
+     livello di delega (consultivo/propositivo/autonomo), ultimo suggerimento
+     o proposta da approvare, e log delle decisioni. */
+  let councilBody = '';
+  let councilProposals = 0;
+  if (ORION.council && ORION.council.list) {
+    const advs = ORION.council.list(g);
+    const LV = ORION.council.LEVELS, LVL = ORION.council.LEVEL_LABEL;
+    councilBody = '<ul class="lp-council">' + advs.map(function (a) {
+      const gl = (ORION.council.ROLES[a.role] && ORION.council.ROLES[a.role].glyph) || '•';
+      const lvSel = '<select class="lp-council__level" data-council-level="' + a.role + '" title="Livello di delega">' +
+        LV.map(function (lv) { return '<option value="' + lv + '"' + (a.level === lv ? ' selected' : '') + '>' + LVL[lv] + '</option>'; }).join('') +
+        '</select>';
+      let mid;
+      if (a.pending) {
+        councilProposals++;
+        mid = '<div class="lp-council__proposal">' +
+          '<div class="lp-council__ptext">Pronto: ' + councilActionDesc(a.pending) + '</div>' +
+          '<div class="lp-council__pbtns">' +
+            '<button class="btn btn--mini" data-council-accept="' + a.role + '" type="button">Approva</button>' +
+            '<button class="btn btn--mini btn--danger" data-council-reject="' + a.role + '" type="button">Rifiuta</button>' +
+          '</div></div>';
+      } else if (a.lastAdvice) {
+        mid = '<div class="lp-council__advice">' + councilAdviceParts(a.role, a.lastAdvice.topic, a.lastAdvice.ref, a.lastAdvice.res).msg + '</div>';
+      } else {
+        mid = '<div class="lp-council__advice"><span class="lp-council__idle">Nessun rilievo recente.</span></div>';
+      }
+      const log = (a.decisions && a.decisions.length)
+        ? '<div class="lp-council__log">Ultime: ' + a.decisions.slice(0, 3).map(function (d) { return escapeHtml(d.label); }).join(' · ') + '</div>'
+        : '';
+      return '<li class="lp-council__item lp-council__item--' + a.role + '">' +
+        '<div class="lp-council__head"><span class="lp-council__glyph">' + gl + '</span> ' +
+          '<strong>' + escapeHtml(a.name) + '</strong> · ' + escapeHtml(a.label) + lvSel + '</div>' +
+        mid + log +
+      '</li>';
+    }).join('') + '</ul>';
+  }
+
   host.innerHTML =
     empHtml +
     sec('roster',   secTitle('roster', 'roster',     'Roster'),         rosterCount, rosterBody) +
     sec('nav',      secTitle('nav',    'galaxy',     'Navigazione'),    '',          '<nav class="lp-nav">' + navHtml + '</nav>') +
     sec('launcher', secTitle('launch', 'settings',   'Sale e moduli'),  '',          '<div class="lp-launcher">' + launcherHtml + '</div>') +
+    (councilBody ? sec('council', secTitle('council', 'star', 'Consiglio'), (councilProposals ? '!' + councilProposals : ''), councilBody) : '') +
     '<section class="lp-section lp-section--chron' + (chronCollapsed ? ' is-collapsed' : '') + '" data-section="chronicle">' +
       '<div class="lp-section__head" data-action="lp-toggle-chron">' +
         '<span class="lp-section__caret"></span>' +
@@ -8584,6 +8688,35 @@ function renderLeftPanel() {
       if (ORION.lpSectionCollapsed[id]) lpAccordionOpen(id);  // era chiusa → aprila sola
       else ORION.lpSectionCollapsed[id] = true;               // era aperta → chiudila
       saveUiPrefs();
+      renderLeftPanel();
+    });
+  });
+  /* M14 Fase B2 (#78): Consiglio — dropdown delega + Approva/Rifiuta proposta.
+     stopPropagation sulla select: è dentro la testata cliccabile della sezione. */
+  host.querySelectorAll('[data-council-level]').forEach(function (sel) {
+    sel.addEventListener('click', function (e) { e.stopPropagation(); });
+    sel.addEventListener('change', function (e) {
+      e.stopPropagation();
+      if (ORION.council) ORION.council.setLevel(ORION.game, sel.dataset.councilLevel, sel.value);
+      if (ORION.tutorial) ORION.tutorial.fire('council');
+      persistGame(ORION.game);
+      renderLeftPanel();
+    });
+  });
+  host.querySelectorAll('[data-council-accept]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const evs = [];
+      const r = ORION.council.acceptProposal(ORION.game, b.dataset.councilAccept, evs);
+      evs.forEach(function (ev) { chronicleEvent(ev); });
+      showToast(r && r.ok ? 'Decisione del Consiglio approvata' : ('Non riuscita: ' + ((r && r.reason) || '')));
+      persistGame(ORION.game);
+      renderLeftPanel();
+    });
+  });
+  host.querySelectorAll('[data-council-reject]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      ORION.council.rejectProposal(ORION.game, b.dataset.councilReject);
+      persistGame(ORION.game);
       renderLeftPanel();
     });
   });

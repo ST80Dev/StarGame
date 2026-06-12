@@ -2983,6 +2983,28 @@ select.main-menu__input { cursor: pointer; }
 .colfig-prog__bar { height: 100%; background: linear-gradient(90deg, #6a78b0, #f0d8a0); }
 .colfig-prog__label { font-size: 0.72em; margin: 2px 0 6px; }
 
+/* M14 Fase B2 (#78): Consiglio della Civiltà nella Plancia d'Impero. */
+.lp-section__glyph--council { color: #c8b6ff; }
+.lp-council { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.lp-council__item {
+  border-left: 3px solid #6a78b0;
+  padding: 5px 8px;
+  background: rgba(var(--c-surface-rgb, 34 46 86) / 0.5);
+  border-radius: 0 6px 6px 0;
+}
+.lp-council__item--militare { border-left-color: #e0556e; }
+.lp-council__item--economico { border-left-color: #9fd0a8; }
+.lp-council__item--scientifico { border-left-color: #c8b6ff; }
+.lp-council__head { font-size: 0.8em; color: var(--c-text, #d8def0); display: flex; align-items: center; gap: 5px; }
+.lp-council__glyph { color: #f0d8a0; }
+.lp-council__level { margin-left: auto; font-size: 0.92em; padding: 1px 4px; background: rgba(var(--c-surface-rgb, 34 46 86) / 0.9); color: var(--c-text, #d8def0); border: 1px solid rgba(140, 150, 190, 0.4); border-radius: 5px; }
+.lp-council__advice { font-size: 0.76em; color: var(--c-muted, #98a3c8); margin-top: 3px; }
+.lp-council__idle { opacity: 0.6; }
+.lp-council__proposal { margin-top: 4px; font-size: 0.78em; }
+.lp-council__ptext { color: #f0d8a0; margin-bottom: 4px; }
+.lp-council__pbtns { display: flex; gap: 6px; }
+.lp-council__log { font-size: 0.72em; color: var(--c-muted, #98a3c8); margin-top: 3px; opacity: 0.85; }
+
 /* Icone risorsa con colore tematico (helper resIcon(k) in main.js).
    Risolve l'incoerenza per cui ⛭/⚡/❖/≈ avevano colore solo nell'HUD top
    (tutto ciano) e nei contesti di costo/produzione/potenziali erano plain
