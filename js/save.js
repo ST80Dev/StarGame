@@ -55,7 +55,7 @@
      DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
      nuovo gioco la preserva e una recovery best-effort prova a dedurla
      da colonie/flotte/spedizioni/cronaca. */
-  const SCHEMA_VERSION = 25;
+  const SCHEMA_VERSION = 26;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -213,7 +213,12 @@
          idle vive in game.colonyFigures[]; quelle assegnate vivono su
          colony.figure (auto-serializzate in game.colonies). adminXp/figuresBorn
          sono campi lazy della colonia, anch'essi auto-serializzati. */
-      colonyFigures: Array.isArray(game.colonyFigures) ? game.colonyFigures : []
+      colonyFigures: Array.isArray(game.colonyFigures) ? game.colonyFigures : [],
+      /* Schema 26 (M14 Fase B2, decisione #78): Consiglio della Civiltà §9.4.
+         Identità dei 3 consiglieri + cooldown/ultimo consiglio. Piccolo, si
+         persiste intero. ORION.council.ensure() al load completa eventuali
+         campi mancanti (idempotente). */
+      council: (game.council && typeof game.council === 'object') ? game.council : null
     };
   }
 
@@ -614,6 +619,14 @@
     if ((payload.schema || 24) < 25) {
       if (!Array.isArray(payload.colonyFigures)) payload.colonyFigures = [];
       payload.schema = 25;
+    }
+
+    /* v25 → v26 (M14 Fase B2, decisione #78): Consiglio della Civiltà.
+       Save vecchi → null; ORION.council.ensure(game) al load genera i 3
+       consiglieri dal seed (deterministico). Nessuna conversione di dati. */
+    if ((payload.schema || 25) < 26) {
+      if (payload.council === undefined) payload.council = null;
+      payload.schema = 26;
     }
     return payload;
   }

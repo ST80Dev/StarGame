@@ -787,6 +787,21 @@
         '"Figura di colonia". Servendo salgono di rango (Funzionario → Prefetto → Console) e i bonus crescono. ' +
         'Puoi <strong>spostarle</strong> dove servono di più.</p>'
     },
+    /* M14 Fase B2 (#78) — Consiglio della Civiltà. */
+    {
+      id: 'council', tag: 'Impero · ⚖', title: 'Il Consiglio della Civiltà',
+      body:
+        '<p>Tre consiglieri d\'Impero (nella <strong>Plancia d\'Impero</strong> a sinistra) vegliano sui rispettivi domini: ' +
+        '<strong>Militare</strong> (minacce, tregue), <strong>Economico</strong> (risorse, rotte), <strong>Scientifico</strong> (ricerca).</p>' +
+        '<p>Per ciascuno scegli quanto <strong>delegare</strong> (come col Governatore):</p>' +
+        '<ul>' +
+          '<li><strong>Consultivo</strong> — solo suggerimenti, non agisce.</li>' +
+          '<li><strong>Propositivo</strong> — fa il lavoro preliminare e ti porta una <strong>decisione finale</strong> (es. "Tregua pronta con X — approvi?"): tu clicchi <em>Approva</em> o <em>Rifiuta</em>.</li>' +
+          '<li><strong>Autonomo</strong> — <strong>agisce da solo</strong> entro limiti sicuri (mai dichiarare guerra né spendere a vuoto), così puoi concentrarti su altro.</li>' +
+        '</ul>' +
+        '<p>Le decisioni prese restano nel log del consigliere. Puoi <strong>abbassare la delega</strong> in qualsiasi momento ' +
+        '(torna consultivo) — ritira anche eventuali proposte pendenti. Default: <strong>Consultivo</strong>.</p>'
+    },
     /* Decisione #45 — espansione slot via bonifica + terraformazione. */
     {
       id: 'terraforming', tag: 'Strutture · ⛭', title: 'Bonifica e Terraformazione',
