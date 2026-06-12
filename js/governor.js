@@ -305,7 +305,30 @@
     if (gov.level !== 'operativo-cauto' && gov.level !== 'operativo-attivo') return null;
     if ((colony.queue || []).length > 0) return null;
     if (!scarcityOk(colony)) return null;
-    if (gov.lastDecisionI != null && (T - gov.lastDecisionI) < TH.COOLDOWN_BUILD) return null;
+    /* M14 Fase B1 (#77): un Governatore di sector accorcia l'attesa fra le
+       deleghe (cooldownMul < 1, cresce col rango). */
+    const CF = root.ORION && root.ORION.colonyFigure;
+    const gb = (CF && CF.governanceBonus) ? CF.governanceBonus(colony) : { cooldownMul: 1, tier3: false };
+    const cd = TH.COOLDOWN_BUILD * (gb.cooldownMul || 1);
+    if (gov.lastDecisionI != null && (T - gov.lastDecisionI) < cd) return null;
+
+    /* M14 Fase B1 (#77) — Tier 3-light: con un Governatore di sector la
+       colonia mantiene autonomamente uno scafo esploratore di scorta. Se
+       ha un Hangar, 0 esploratori a terra e niente in coda cantieri → ne
+       accoda uno (recovery-friendly: rimpiazza un esploratore perso). */
+    if (gb.tier3 && colony.structures && colony.structures['cantiere-navale']) {
+      const ships = colony.ships || {};
+      const shipQ = (colony.assets && colony.assets.shipQueue) || [];
+      if ((ships.explorer | 0) === 0 && shipQ.length === 0 &&
+          root.ORION.planet && root.ORION.planet.startShipBuild) {
+        const r = root.ORION.planet.startShipBuild(colony, planet, game, colKey, 'explorer');
+        if (r && r.ok) {
+          pushDecision(gov, 'asset', 'explorer', 1, T);
+          fire(events, gov, colony, planet, 'gov-asset-started', T, { kind: 'explorer' });
+          return { kind: 'asset', what: 'explorer' };
+        }
+      }
+    }
 
     /* 1) Prova un BUILD nuovo (entrambi i livelli). */
     const newBuild = decideNextBuild(game, colony, planet, colKey);
@@ -350,7 +373,13 @@
       if (!colony || !colony.colonized || colony.phase === 'settling') continue;
       const gov = ensureState(colony);
 
-      if (!available || gov.level === 'off' || !gov.enabled) {
+      /* M14 Fase B1 (#77): un Governatore di sector assegnato sblocca le
+         deleghe su QUESTA colonia anche con <3 colonie (la figura sostituisce
+         la soglia). */
+      const CF = root.ORION && root.ORION.colonyFigure;
+      const colAvailable = available || (CF && CF.hasGovernatore(colony));
+
+      if (!colAvailable || gov.level === 'off' || !gov.enabled) {
         gov.lastStock = { food: colony.stock.food, water: colony.stock.water };
         gov.queueEmptySince = null;
         gov.fallingStreak = { food: 0, water: 0 };

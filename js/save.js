@@ -55,7 +55,7 @@
      DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
      nuovo gioco la preserva e una recovery best-effort prova a dedurla
      da colonie/flotte/spedizioni/cronaca. */
-  const SCHEMA_VERSION = 24;
+  const SCHEMA_VERSION = 25;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -208,7 +208,12 @@
         activeProject: game.research.activeProject || null,
         progress: game.research.progress || 0,
         activationPaid: game.research.activationPaid || null
-      } : null
+      } : null,
+      /* Schema 25 (M14 Fase B1, decisione #77): figure di colonia. Il pool
+         idle vive in game.colonyFigures[]; quelle assegnate vivono su
+         colony.figure (auto-serializzate in game.colonies). adminXp/figuresBorn
+         sono campi lazy della colonia, anch'essi auto-serializzati. */
+      colonyFigures: Array.isArray(game.colonyFigures) ? game.colonyFigures : []
     };
   }
 
@@ -601,6 +606,14 @@
       if (Array.isArray(payload.commanders)) payload.commanders.forEach(migFig);
       if (Array.isArray(payload.fleets)) payload.fleets.forEach(function (f) { if (f && f.commander) migFig(f.commander); });
       payload.schema = 24;
+    }
+
+    /* v24 → v25 (M14 Fase B1, decisione #77): figure di colonia. Save vecchi
+       → pool vuoto; le colonie maturano e fanno emergere figure giocando
+       (adminXp/figuresBorn lazy-init nel tick). Nessuna conversione di dati. */
+    if ((payload.schema || 24) < 25) {
+      if (!Array.isArray(payload.colonyFigures)) payload.colonyFigures = [];
+      payload.schema = 25;
     }
     return payload;
   }

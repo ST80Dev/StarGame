@@ -1891,6 +1891,13 @@
       /* M09 (decisione #49, §10.2): riparazione passiva delle strutture
          danneggiate in battaglia, sospesa mentre la colonia è sotto assedio. */
       processStructRepair(game, colony, keys[i]);
+      /* M14 Fase B1 (decisione #77): figure di colonia. La colonia operativa
+         matura amministrativamente → a soglia emerge una figura (Governatore
+         di sector / Ingegnere capo). La figura assegnata accumula xp servendo. */
+      if (root.ORION.colonyFigure) {
+        root.ORION.colonyFigure.maybeEmerge(game, colony, keys[i], events);
+        root.ORION.colonyFigure.serveTick(game, colony, events);
+      }
     }
     /* M07: spedizioni in volo (1 tick per ogni Impulso). */
     processExpeditions(game, events);
