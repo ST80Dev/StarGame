@@ -6740,3 +6740,11 @@ select.main-menu__input { cursor: pointer; }
 .res-chip--avail  { background: rgba(180,150,230,0.16); color: #cdb6ee; }
 .res-chip--lock   { background: rgba(255,255,255,0.05); color: var(--c-text-faint); }
 .res-gc { color: #f0d670; margin-right: 4px; }
+
+/* M13 Fase B — bonus passivi attivi nella vista Ricerca */
+.res-bonuses { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.res-bonus {
+  font-size: 0.68rem; padding: 2px 8px; border-radius: 10px;
+  background: rgba(180,150,230,0.14); color: #cdb6ee;
+  border: 1px solid rgba(180,150,230,0.25); white-space: nowrap;
+}

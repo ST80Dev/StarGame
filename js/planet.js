@@ -539,6 +539,15 @@
         upkeep[k] = (upkeep[k] || 0) + def.upkeep[k] * lvl;
       });
     }
+    /* M13 Fase B (decisione #57): tech estrazione = modificatore passivo
+       globale sulla produzione delle 4 risorse base (zero nuove strutture). */
+    const RM = root.ORION.research;
+    if (RM && RM.mods) {
+      const exMul = RM.mods(game).extractionMul;
+      if (exMul && exMul !== 1) {
+        ['met', 'en', 'food', 'water'].forEach(function (k) { if (out[k]) out[k] *= exMul; });
+      }
+    }
     return { rates: out, upkeep: upkeep, used: slotsUsed };
   }
 

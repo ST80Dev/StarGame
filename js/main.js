@@ -337,9 +337,10 @@ function newGame(seed, opts) {
     /* Comandanti a livello Impero (decisione utente 2026-06-11): pool idle.
        Quelli assegnati vivono su fleet.commander. */
     commanders: [],
-    /* M13 Fase A (decisione #57): ricerca tecnologica. catalogVersion 1 =
-       solo i 5 punti fermi (il pool/sorteggio è Fase B). */
-    research: { catalogVersion: 1, unlocked: [], activeProject: null, progress: 0, activationPaid: null },
+    /* M13 (decisione #57): ricerca tecnologica. catalogVersion = quella corrente
+       (Fase B → 2: 5 punti fermi + pool pescato per-seed). Le partite Fase A
+       restano a 1 (solo i 5) via legacy-snapshot. */
+    research: { catalogVersion: (ORION.research ? ORION.research.CATALOG_VERSION : 2), unlocked: [], activeProject: null, progress: 0, activationPaid: null },
     /* Decisione #45: mapping centrale gruppo→capitale (lazy initFromHome
        dopo colonizeHomePlanet). */
     capitals: {},
@@ -4040,6 +4041,28 @@ function renderResearchView(stage) {
   const total = Math.round(R.empireResearchTotal(g));
   const unlocked = g.research.unlocked.length;
 
+  /* ----- bonus passivi attivi (Fase B): rende visibili i modificatori ----- */
+  let bonusHtml = '';
+  if (R.mods) {
+    const m = R.mods(g);
+    const chips = [];
+    const pct = function (v) { return '+' + Math.round((v - 1) * 100) + '%'; };
+    if (m.extractionMul > 1) chips.push(pct(m.extractionMul) + ' estrazione');
+    if (m.buildSpeedMul > 1) chips.push(pct(m.buildSpeedMul) + ' costruzione');
+    if (m.researchMul > 1) chips.push(pct(m.researchMul) + ' ricerca');
+    if (m.fpMul > 1) chips.push(pct(m.fpMul) + ' fuoco navi');
+    if (m.hpMul > 1) chips.push(pct(m.hpMul) + ' corazza navi');
+    if (m.popGrowthMul > 1) chips.push(pct(m.popGrowthMul) + ' crescita pop');
+    if (m.cargoMul > 1) chips.push(pct(m.cargoMul) + ' cargo rotte');
+    if (m.hopBonus > 0) chips.push('+' + m.hopBonus + ' raggio rotte');
+    const hyper = R.hyperMul(g);
+    if (hyper < 1) chips.push('viaggi ×' + (Math.round(1 / hyper) === 3 ? '⅓' : ('1/' + Math.round(1 / hyper))));
+    if (chips.length) {
+      bonusHtml = '<p class="sysinfo__sub">Bonus passivi attivi</p><div class="res-bonuses">' +
+        chips.map(function (c) { return '<span class="res-bonus">' + escapeHtml(c) + '</span>'; }).join('') + '</div>';
+    }
+  }
+
   /* ----- progetto attivo ----- */
   let activeHtml;
   if (g.research.activeProject) {
@@ -4117,6 +4140,7 @@ function renderResearchView(stage) {
         '<div class="market-summary__cell"><span class="market-summary__val">' + total + '</span><span class="market-summary__lbl">Ricerca d\'impero</span></div>' +
         '<div class="market-summary__cell"><span class="market-summary__val">' + unlocked + ' / ' + cat.length + '</span><span class="market-summary__lbl">Tech sbloccate</span></div>' +
       '</div>' +
+      bonusHtml +
       '<p class="sysinfo__sub">Progetto attivo</p>' +
       activeHtml +
       treeHtml +
@@ -7580,12 +7604,19 @@ function chronicleEvent(ev) {
        sbloccato (struttura esistente o modificatore passivo). */
     const techBlurb = {
       iperguida: 'viaggi di flotta ×⅓ · sbloccato il Convoglio iperspaziale (Mercantile III)',
+      hyper2: 'viaggi di flotta ×⅛ (Iperguida II)',
+      hyper3: 'viaggi di flotta ×1/20 (Iperguida III)',
       scudi: 'sbloccato lo <strong>Scudo planetario</strong>',
       esotici: 'sbloccato l\'<strong>Impianto esotico</strong>',
       bonifica: 'sbloccato il <strong>Centro di ingegneria planetaria</strong> (più slot)',
       terraform: 'sbloccati i <strong>Terraformatori</strong> (forte espansione slot)'
     };
-    const blurb = techBlurb[ev.effect] || 'nuovo ramo tecnologico disponibile';
+    let blurb = techBlurb[ev.effect];
+    if (!blurb) {
+      /* Tech del pool (modificatore passivo): usa la sua descrizione. */
+      const def = ORION.research && ORION.research.get(ev.techId);
+      blurb = (def && def.desc) ? escapeHtml(def.desc) : 'nuovo ramo tecnologico disponibile';
+    }
     pushChronicle(ds + ' — <strong>Ricerca completata</strong>: <strong>' + escapeHtml(ev.name || ev.techId) + '</strong> · ' + blurb + '.', 'planet');
     if (ORION.tutorial) ORION.tutorial.fire('research-overview');
   } else if (ev.kind === 'civ-contact') {

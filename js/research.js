@@ -1,16 +1,17 @@
 /* =====================================================================
    ORION EMPIRES — research.js
-   Modulo M13 (Fase A): Tecnologia. Design: decisione #57, GDD §11.
+   Modulo M13: Tecnologia. Design: decisione #57, GDD §11.
 
    MODELLO "catalogo ampio + sorteggio per-partita" (decisione #57): la
    visione completa è un CATALOGO ampio (8 categorie §11.2) di cui ogni
-   partita pesca dal seed solo un sottoinsieme. In FASE A implementiamo SOLO
-   l'ossatura garantita — i **punti fermi**: le 5 tech che gatano ganci già
-   cablati nel codice, così le funzioni già scritte non restano mai morte.
-   Il **pool casuale** (sorteggio per-seed) + i suoi effetti — che per scelta
-   dell'utente saranno SOLO modificatori passivi su meccaniche esistenti, mai
-   nuove strutture/moduli da gestire — è scope di FASE B (bumperà catalogVersion
-   → legacy-snapshot per-partita, come systemAlgVersion #55).
+   partita pesca dal seed solo un sottoinsieme. I **punti fermi** (5 tech
+   garantite) gatano ganci già cablati nel codice; il **pool** (Fase B) è
+   pescato per-seed (~60%, `poolSet`) con effetti SOLO modificatori passivi
+   (`mod`) su meccaniche esistenti — vincolo utente: nessuna tech aggiunge
+   strutture/moduli da gestire. `catalogVersion` 1 = solo i 5 (partite Fase A);
+   2 = 5 + pool (legacy-snapshot per-partita, come systemAlgVersion #55).
+   Iperguida II/III estendono `hyperMul`. AI-tech-tier e tech catturabili
+   restano Fase B-2; conseguenze narrative §11.3 → M17.
 
    RICERCA (decisione #57 Q2): pool d'impero distribuito (i laboratori §10 su
    più pianeti contribuiscono insieme, §11.1), UN progetto attivo alla volta.
@@ -41,8 +42,11 @@
 (function (root) {
   const ORION = root.ORION = root.ORION || {};
 
-  const CATALOG_VERSION = 1;       // legacy-snapshot per partita (Fase B bumpa per il pool)
+  const CATALOG_VERSION = 2;       // Fase B: catalogo + pool. Le partite Fase A (catalogVersion 1) restano coi soli 5 (legacy-snapshot #55).
   const HYPER_T1_MUL = 1 / 3;      // iperguida T1: viaggio ×1/3 (decisione #32)
+  const HYPER_T2_MUL = 1 / 8;      // iperguida T2 (Fase B)
+  const HYPER_T3_MUL = 1 / 20;     // iperguida T3 (Fase B)
+  const POOL_DRAW = 0.6;           // ~60% del pool pescato per-seed (decisione #57)
 
   /* Le 8 categorie §11.2 (il catalogo pieno vive qui; Fase A usa 4 di esse). */
   const CATEGORIES = {
@@ -68,38 +72,142 @@
        effect      'iperguida'|'scudi'|'esotici'|'bonifica'|'terraform'
        desc        descrizione breve
      ------------------------------------------------------------------ */
+  /* PUNTI FERMI (guaranteed:true): sempre nel catalogo di ogni partita.
+     POOL (guaranteed:false): pescato per-seed (~60%) quando catalogVersion≥2.
+     Gli effetti del pool sono SOLO modificatori passivi (`mod`) su meccaniche
+     esistenti — vincolo utente: nessuna tech aggiunge strutture/moduli da
+     gestire. Canali mod (decisione #57 Fase B, set curato ~6-7):
+       extractionMul · buildSpeedMul · researchMul · fpMul · hpMul ·
+       popGrowthMul · cargoMul · hopBonus  (additivi su base 1, hopBonus intero).
+     Le Iperguida II/III non usano `mod`: estendono `hyperMul` (effect hyperN). */
   const CATALOG = [
+    /* ---- 5 PUNTI FERMI (garantiti) ---- */
     {
       id: 'iperguida', name: 'Iperguida I', cat: 'propulsione', cost: 150,
-      requires: [], effect: 'iperguida',
+      requires: [], effect: 'iperguida', guaranteed: true,
       desc: 'Salto iperspaziale di prima generazione: i tempi di viaggio inter-sistema delle flotte scendono a un terzo. Sblocca il Convoglio iperspaziale (Mercantile III).'
     },
     {
       id: 'scudi', name: 'Scudi deflettori', cat: 'scudi', cost: 180,
-      requires: [], effect: 'scudi',
+      requires: [], effect: 'scudi', guaranteed: true,
       desc: 'Campi di forza planetari: sblocca lo Scudo planetario (difesa §10.2). Non aggiunge gestione: è una struttura che potrai costruire dove serve.'
     },
     {
       id: 'esotici', name: 'Estrazione esotica', cat: 'estrazione', cost: 200,
-      requires: [], effect: 'esotici',
+      requires: [], effect: 'esotici', guaranteed: true,
       desc: 'Lavorazione dei materiali esotici §7.2: sblocca l\'Impianto esotico.'
     },
     {
       id: 'bonifica-territoriale', name: 'Bonifica territoriale', cat: 'costruzione', cost: 170,
-      requires: [], effect: 'bonifica',
+      requires: [], effect: 'bonifica', guaranteed: true,
       desc: 'Ingegneria del suolo: sblocca il Centro di ingegneria planetaria, che aumenta gli slot di costruzione.'
     },
     {
       id: 'terraformazione', name: 'Terraformazione', cat: 'costruzione', cost: 420,
-      requires: ['bonifica-territoriale'], hidden: true,
+      requires: ['bonifica-territoriale'], hidden: true, guaranteed: true,
       minResearch: 600, activationCost: { met: 400, en: 200 },
       effect: 'terraform', gameChanger: true,
       desc: 'Rimodellare un mondo: sblocca i Terraformatori (forte espansione degli slot sui mondi-giardino). Game-changer: richiede ricerca d\'impero avanzata e una spesa di risorse all\'avvio (pagata dalla capitale).'
+    },
+
+    /* ---- POOL (pescato per-seed, ~60%): solo modificatori passivi ---- */
+    /* Propulsione — Iperguida II/III (estendono hyperMul, non `mod`) */
+    {
+      id: 'iperguida-2', name: 'Iperguida II', cat: 'propulsione', cost: 320,
+      requires: ['iperguida'], effect: 'hyper2',
+      desc: 'Seconda generazione di iperguida: i viaggi di flotta scendono a un ottavo del tempo subluce.'
+    },
+    {
+      id: 'iperguida-3', name: 'Iperguida III', cat: 'propulsione', cost: 640,
+      requires: ['iperguida-2'], hidden: true, minResearch: 800, gameChanger: true, effect: 'hyper3',
+      desc: 'Iperguida di terza generazione: viaggi quasi istantanei su scala galattica (un ventesimo del tempo). Game-changer: richiede ricerca d\'impero avanzata.'
+    },
+    /* Armi — fpMul */
+    {
+      id: 'cannoni-massa', name: 'Cannoni a massa', cat: 'armi', cost: 220,
+      requires: [], mod: { fpMul: 0.10 },
+      desc: 'Acceleratori cinetici: +10% potenza di fuoco a tutte le tue navi in combattimento.'
+    },
+    {
+      id: 'lancio-siluri', name: 'Lanciasiluri pesanti', cat: 'armi', cost: 300,
+      requires: ['cannoni-massa'], mod: { fpMul: 0.15 },
+      desc: 'Ordigni a lungo raggio: +15% potenza di fuoco aggiuntiva.'
+    },
+    /* Scudi e armature — hpMul */
+    {
+      id: 'corazze-composite', name: 'Corazze composite', cat: 'scudi', cost: 220,
+      requires: [], mod: { hpMul: 0.12 },
+      desc: 'Leghe stratificate: +12% corazza (hp) alle tue navi.'
+    },
+    {
+      id: 'campi-deflettori', name: 'Campi deflettori avanzati', cat: 'scudi', cost: 320,
+      requires: ['scudi'], mod: { hpMul: 0.15 },
+      desc: 'Schermatura attiva di bordo: +15% resistenza (hp) alle tue navi.'
+    },
+    /* Estrazione — extractionMul */
+    {
+      id: 'trivelle-profonde', name: 'Trivelle profonde', cat: 'estrazione', cost: 200,
+      requires: [], mod: { extractionMul: 0.10 },
+      desc: '+10% alla produzione di risorse base di tutte le colonie.'
+    },
+    {
+      id: 'nano-estrattori', name: 'Nano-estrattori', cat: 'estrazione', cost: 300,
+      requires: ['trivelle-profonde'], mod: { extractionMul: 0.15 },
+      desc: '+15% aggiuntivo alla produzione di risorse base.'
+    },
+    /* Biologia — popGrowthMul */
+    {
+      id: 'agro-sintesi', name: 'Agro-sintesi', cat: 'biologia', cost: 200,
+      requires: [], mod: { popGrowthMul: 0.15 },
+      desc: '+15% alla velocità di crescita della popolazione.'
+    },
+    {
+      id: 'medicina-avanzata', name: 'Medicina avanzata', cat: 'biologia', cost: 280,
+      requires: [], mod: { popGrowthMul: 0.12 },
+      desc: '+12% aggiuntivo alla crescita della popolazione.'
+    },
+    /* Costruzione — buildSpeedMul */
+    {
+      id: 'architetture-modulari', name: 'Architetture modulari', cat: 'costruzione', cost: 210,
+      requires: [], mod: { buildSpeedMul: 0.15 },
+      desc: '+15% alla velocità di costruzione delle strutture.'
+    },
+    {
+      id: 'automazione-cantieri', name: 'Automazione dei cantieri', cat: 'costruzione', cost: 300,
+      requires: ['architetture-modulari'], mod: { buildSpeedMul: 0.20 },
+      desc: '+20% aggiuntivo alla velocità di costruzione.'
+    },
+    /* Informatica — researchMul */
+    {
+      id: 'reti-neurali', name: 'Reti neurali', cat: 'informatica', cost: 220,
+      requires: [], mod: { researchMul: 0.15 },
+      desc: '+15% alla velocità di ricerca (i laboratori rendono di più).'
+    },
+    {
+      id: 'calcolo-quantistico', name: 'Calcolo quantistico', cat: 'informatica', cost: 320,
+      requires: ['reti-neurali'], mod: { researchMul: 0.20 },
+      desc: '+20% aggiuntivo alla velocità di ricerca.'
+    },
+    /* Trasferimento — cargo / raggio rotte */
+    {
+      id: 'container-modulari', name: 'Container modulari', cat: 'trasferimento', cost: 200,
+      requires: [], mod: { cargoMul: 0.15 },
+      desc: '+15% capacità di carico dei mercantili sulle rotte commerciali.'
+    },
+    {
+      id: 'nav-commerciale', name: 'Navigazione commerciale iperspaziale', cat: 'trasferimento', cost: 280,
+      requires: ['iperguida'], mod: { hopBonus: 1 },
+      desc: '+1 salto al raggio massimo dei mercantili (rotte più lunghe).'
     }
   ];
 
   const BY_ID = {};
-  CATALOG.forEach(function (t) { BY_ID[t.id] = t; });
+  const POOL_IDS = [];
+  CATALOG.forEach(function (t) {
+    BY_ID[t.id] = t;
+    if (!t.guaranteed) POOL_IDS.push(t.id);
+  });
+  POOL_IDS.sort();   // ordine stabile per il sorteggio deterministico
 
   /* ------------------------------------------------------------------
      STATE — game.research = { catalogVersion, unlocked[], activeProject,
@@ -120,9 +228,80 @@
     return r;
   }
 
-  /* La tech `id` fa parte del catalogo di questa partita?
-     In Fase A: solo i 5 punti fermi (il pool/sorteggio è Fase B). */
-  function inGame(game, id) { return !!BY_ID[id]; }
+  /* ------------------------------------------------------------------
+     SORTEGGIO PER-SEED (Fase B, decisione #57). Le tech del POOL sono
+     "impossibili" in questa partita se non pescate. Il sottoinsieme è
+     DETERMINISTICO dal seed (`seed:tech-pool`) e stabile per tutta la
+     partita → ri-derivabile al load, niente da persistere oltre a
+     catalogVersion (legacy-snapshot #55). Le partite Fase A
+     (catalogVersion 1) non hanno pool: solo i 5 punti fermi.
+     Pruning a fixpoint: una tech del pool con un prereq di pool NON
+     pescato viene tolta (niente rami morti irraggiungibili).
+     ------------------------------------------------------------------ */
+  function poolSet(game) {
+    const r = game && game.research;
+    if (!r || (r.catalogVersion || 1) < 2) return {};   // Fase A: nessun pool
+    if (r._poolSet && r._poolSeed === game.seed) return r._poolSet;
+    const sel = {};
+    if (ORION.rng && ORION.rng.makeRng) {
+      const rng = ORION.rng.makeRng(String(game.seed) + ':tech-pool');
+      POOL_IDS.forEach(function (id) { if (rng.chance(POOL_DRAW)) sel[id] = true; });
+    } else {
+      POOL_IDS.forEach(function (id) { sel[id] = true; });
+    }
+    let changed = true;
+    while (changed) {
+      changed = false;
+      POOL_IDS.forEach(function (id) {
+        if (!sel[id]) return;
+        (BY_ID[id].requires || []).forEach(function (rq) {
+          const pt = BY_ID[rq];
+          if (pt && !pt.guaranteed && !sel[rq]) { delete sel[id]; changed = true; }
+        });
+      });
+    }
+    r._poolSet = sel;
+    r._poolSeed = game.seed;
+    return sel;
+  }
+
+  /* La tech `id` fa parte del catalogo di questa partita? Punti fermi:
+     sempre. Pool: solo se pescato per-seed (catalogVersion≥2). */
+  function inGame(game, id) {
+    const t = BY_ID[id];
+    if (!t) return false;
+    if (t.guaranteed) return true;
+    return !!poolSet(game)[id];
+  }
+
+  /* ------------------------------------------------------------------
+     MODIFICATORI PASSIVI (Fase B). Aggregati dalle tech sbloccate con
+     campo `mod`. Canali moltiplicativi (base 1 + Σ bonus) + hopBonus
+     additivo. Letti ai ganci esistenti (un solo punto per canale):
+       extractionMul → planet.structureOutput (produzione base)
+       buildSpeedMul → time.js (maturazione coda)
+       researchMul   → time.js / research (finanziamento progetto)
+       fpMul / hpMul → combat.js (forze del giocatore)
+       popGrowthMul  → time.js (crescita pop)
+       cargoMul / hopBonus → trade.js (mercantili)
+     Cache invalidata quando cresce `unlocked` (cresce solo, mai cala). */
+  function mods(game) {
+    const base = { extractionMul: 1, buildSpeedMul: 1, researchMul: 1, fpMul: 1, hpMul: 1, popGrowthMul: 1, cargoMul: 1, hopBonus: 0 };
+    const r = game && game.research;
+    if (!r || !Array.isArray(r.unlocked)) return base;
+    if (r._mods && r._modsLen === r.unlocked.length) return r._mods;
+    r.unlocked.forEach(function (id) {
+      const t = BY_ID[id];
+      if (!t || !t.mod) return;
+      Object.keys(t.mod).forEach(function (k) {
+        if (k === 'hopBonus') base.hopBonus += t.mod[k];
+        else base[k] = (base[k] || 1) + t.mod[k];
+      });
+    });
+    r._mods = base;
+    r._modsLen = r.unlocked.length;
+    return base;
+  }
 
   function isUnlocked(game, id) {
     return !!(game && game.research && game.research.unlocked.indexOf(id) >= 0);
@@ -324,7 +503,8 @@
       const out = ORION.planet.structureOutput(c, planet, game, k);
       sum += (out.rates.research || 0);
     });
-    return sum;
+    /* Fase B: la tech researchMul accelera anche l'ETA (coerente col funding). */
+    return sum * mods(game).researchMul;
   }
 
   /* ETA in Ι al completamento del progetto attivo (per nextEventImpulsi). */
@@ -343,10 +523,13 @@
   /* ------------------------------------------------------------------
      EFFETTO Fase A letto ai ganci esistenti.
      ------------------------------------------------------------------ */
-  /* Moltiplicatore tempo di viaggio (fleet.js → tempoLeg). Iperguida T1 = ×1/3.
-     I tier superiori (Iperguida II/III ×1/8, ×1/20, decisione #32) sono Fase B. */
+  /* Moltiplicatore tempo di viaggio (fleet.js → tempoLeg). Iperguida I/II/III
+     = ×1/3, ×1/8, ×1/20 (decisione #32). Vince il tier più alto sbloccato. */
   function hyperMul(game) {
-    if (game && game.research && isUnlocked(game, 'iperguida')) return HYPER_T1_MUL;
+    if (!game || !game.research) return 1;
+    if (isUnlocked(game, 'iperguida-3')) return HYPER_T3_MUL;
+    if (isUnlocked(game, 'iperguida-2')) return HYPER_T2_MUL;
+    if (isUnlocked(game, 'iperguida')) return HYPER_T1_MUL;
     return 1;
   }
 
@@ -369,6 +552,8 @@
     empireResearchRate: empireResearchRate,
     etaImpulsi: etaImpulsi,
     hyperMul: hyperMul,
+    mods: mods,
+    poolSet: poolSet,
     payerColonyKey: payerColonyKey,
     get: function (id) { return BY_ID[id] || null; }
   };
