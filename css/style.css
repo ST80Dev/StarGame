@@ -2958,6 +2958,31 @@ select.main-menu__input { cursor: pointer; }
 }
 .commander-roster__status--idle { color: #c8b6ff; }
 
+/* M14 Fase B1 (#77): sezione "Figura di colonia" nella tab Colonia. */
+.colfig-section { margin-top: 8px; }
+.colfig-card {
+  border: 1px solid rgba(var(--c-surface-rgb, 34 46 86) / 0.9);
+  border-left: 3px solid #f0d8a0;
+  border-radius: 8px;
+  padding: 7px 9px;
+  background: rgba(var(--c-surface-rgb, 34 46 86) / 0.5);
+}
+.colfig-card--governatore { border-left-color: #c8b6ff; }
+.colfig-card--ingegnere-capo { border-left-color: #f0d8a0; }
+.colfig-card__top { font-size: 0.92em; color: var(--c-text, #d8def0); }
+.colfig-role { color: #aee6c0; }
+.colfig-card__meta { font-size: 0.78em; color: var(--c-muted, #8a93b8); margin-top: 2px; }
+.colfig-trait { font-style: italic; color: #c8b6ff; }
+.colfig-race { font-style: italic; }
+.colfig-card__bonus { font-size: 0.78em; color: #9fd0a8; margin: 3px 0 5px; }
+.colfig-empty { margin-bottom: 5px; }
+.colfig-prog {
+  height: 5px; border-radius: 3px; overflow: hidden;
+  background: rgba(var(--c-surface-rgb, 34 46 86) / 0.7);
+}
+.colfig-prog__bar { height: 100%; background: linear-gradient(90deg, #6a78b0, #f0d8a0); }
+.colfig-prog__label { font-size: 0.72em; margin: 2px 0 6px; }
+
 /* Icone risorsa con colore tematico (helper resIcon(k) in main.js).
    Risolve l'incoerenza per cui ⛭/⚡/❖/≈ avevano colore solo nell'HUD top
    (tutto ciano) e nei contesti di costo/produzione/potenziali erano plain

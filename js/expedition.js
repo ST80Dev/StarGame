@@ -222,8 +222,12 @@
   }
   function applyTechSpeed(time, colony) {
     const b = techSpeedBonus(colony);
-    if (b <= 0) return time;
-    return Math.max(1, Math.round(time * (1 - b)));
+    let t = (b > 0) ? time * (1 - b) : time;
+    /* M14 Fase B1 (decisione #77): Ingegnere capo assegnato → ulteriore
+       riduzione del tempo di assemblaggio (moltiplicativa, oltre i tecnici #41). */
+    const CF = root.ORION && root.ORION.colonyFigure;
+    if (CF && CF.assemblyMul) t *= CF.assemblyMul(colony);
+    return Math.max(1, Math.round(t));
   }
 
   /* canBuildShip — verifica preliminare per startShipBuild (decisione #41).

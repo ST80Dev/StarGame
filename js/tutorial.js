@@ -771,6 +771,22 @@
         'i bonus si attivano solo quando sono al comando. Servendo in battaglia salgono di <strong>rango</strong> ' +
         '(Tenente → Capitano → Commodoro → Ammiraglio) e i loro bonus crescono.</p>'
     },
+    /* M14 Fase B1 (#77) — figure di colonia. */
+    {
+      id: 'colony-figure', tag: 'Colonia · ⬡', title: 'Una figura di colonia emerge',
+      body:
+        '<p>Come le figure di flotta, anche quelle <strong>di colonia</strong> non si costruiscono: <strong>emergono</strong> ' +
+        'quando una colonia raggiunge la <strong>maturità amministrativa</strong> (gioca, la barra cresce nella tab Colonia).</p>' +
+        '<p>Il <strong>ruolo</strong> dipende dal carattere della colonia:</p>' +
+        '<ul>' +
+          '<li><strong>Governatore di sector</strong> — emerge se hai un <em>Governatore</em> attivo (#59): rende le deleghe più rapide, ' +
+          'sblocca le deleghe anche con poche colonie e mantiene autonomamente uno scafo esploratore di scorta.</li>' +
+          '<li><strong>Ingegnere capo</strong> — emerge altrimenti: <strong>riduce il tempo di assemblaggio</strong> di scafi ed equipaggi (oltre ai tecnici).</li>' +
+        '</ul>' +
+        '<p>Le figure vivono nel <strong>pool d\'Impero</strong> e si <strong>assegnano a una colonia</strong> (una per colonia) dalla sezione ' +
+        '"Figura di colonia". Servendo salgono di rango (Funzionario → Prefetto → Console) e i bonus crescono. ' +
+        'Puoi <strong>spostarle</strong> dove servono di più.</p>'
+    },
     /* Decisione #45 — espansione slot via bonifica + terraformazione. */
     {
       id: 'terraforming', tag: 'Strutture · ⛭', title: 'Bonifica e Terraformazione',

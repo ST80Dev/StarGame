@@ -337,6 +337,9 @@ function newGame(seed, opts) {
     /* Comandanti a livello Impero (decisione utente 2026-06-11): pool idle.
        Quelli assegnati vivono su fleet.commander. */
     commanders: [],
+    /* M14 Fase B1 (decisione #77): figure di colonia (pool idle d'Impero).
+       Quelle assegnate vivono su colony.figure. */
+    colonyFigures: [],
     /* M13 (decisione #57): ricerca tecnologica. catalogVersion = quella corrente
        (Fase B → 2: 5 punti fermi + pool pescato per-seed). Le partite Fase A
        restano a 1 (solo i 5) via legacy-snapshot. */
@@ -427,6 +430,10 @@ function newGame(seed, opts) {
     /* M14 Fase A (#75): converte le figure legacy (specialization → role) e
        riallinea i rank labels. Idempotente — no-op se già in formato #75. */
     if (ORION.commander && ORION.commander.migrateAll) ORION.commander.migrateAll(ORION.game);
+    /* M14 Fase B1 (#77): figure di colonia (pool idle; le assegnate vivono
+       su colony.figure). Save pre-25 → pool vuoto. */
+    if (Array.isArray(saved.colonyFigures)) ORION.game.colonyFigures = saved.colonyFigures.slice();
+    if (ORION.colonyFigure && ORION.colonyFigure.ensure) ORION.colonyFigure.ensure(ORION.game);
     /* M13 Fase A (decisione #57): ricerca tecnologica. Save pre-23 → null;
        ORION.research.ensure() sotto completa lo stato vuoto. */
     if (saved.research && typeof saved.research === 'object') {
@@ -1943,9 +1950,11 @@ function renderPlanetColoniaTab(host, planet, colony) {
         wasteRow +
         renderCapitalSection(colony, planet) +
         renderGovernorSection(colony, planet) +
+        renderColonyFigureSection(colony, planet) +
       '</div>';
     bindGovernorHandlers(host, planet, colony);
     bindCapitalHandlers(host, planet, colony);
+    bindColonyFigureHandlers(host, planet, colony);
     ensurePopAnim();
     return;
   }
@@ -2246,6 +2255,105 @@ function bindGovernorHandlers(host, planet, colony) {
       renderPlanetColoniaTab(host, planet, colony);
     });
   }
+}
+
+/* M14 Fase B1 (decisione #77): sezione "Figura di colonia" nella tab Colonia.
+   Mostra la figura assegnata (ruolo/rango/bonus) o l'invito ad assegnarne una
+   dal pool d'Impero + il progresso di maturazione amministrativa. */
+function renderColonyFigureSection(colony, planet) {
+  const CF = ORION.colonyFigure;
+  if (!CF || !colony || !colony.colonized || colony.phase === 'settling') return '';
+  const fig = colony.figure;
+  const glyph = (ORION.icon && ORION.icon('star')) || '★';
+  let body;
+  if (fig) {
+    const race = fig.raceLabel ? (' · <span class="colfig-race">' + escapeHtml(fig.raceLabel) + '</span>') : '';
+    body =
+      '<div class="colfig-card colfig-card--' + escapeHtml(fig.role) + '">' +
+        '<div class="colfig-card__top"><strong>' + escapeHtml((fig.rank || '') + ' ' + fig.name) + '</strong>' +
+          ' · <span class="colfig-role">' + escapeHtml(CF.roleLabel(fig)) + '</span></div>' +
+        '<div class="colfig-card__meta"><span class="colfig-trait" title="Tratto">' + escapeHtml(fig.traitLabel || '—') + '</span>' + race +
+          ' · <span class="xp-chip">xp ' + (fig.xp | 0) + '</span></div>' +
+        '<div class="colfig-card__bonus">' + escapeHtml(CF.bonusLabel(fig)) + '</div>' +
+        '<button class="btn btn--mini btn--danger" data-action="colfig-release" type="button">Rilascia</button>' +
+      '</div>';
+  } else {
+    const avail = CF.assignableOf(ORION.game).length;
+    const prog = Math.min(100, Math.round(((colony.adminXp || 0) / CF.ADMIN_THRESHOLD) * 100));
+    body =
+      '<p class="panel__note colfig-empty">Nessuna figura assegnata. ' +
+        (avail > 0
+          ? 'In organico: <strong>' + avail + '</strong> disponibili.'
+          : 'Le figure <strong>emergono</strong> dalle colonie mature (Governatore di sector se hai un Governatore attivo, altrimenti Ingegnere capo).') +
+      '</p>' +
+      '<div class="colfig-prog"><div class="colfig-prog__bar" style="width:' + prog + '%"></div></div>' +
+      '<p class="panel__note colfig-prog__label">Maturazione amministrativa: ' + prog + '%</p>' +
+      (avail > 0 ? '<button class="btn btn--mini" data-action="colfig-assign" type="button">Assegna figura</button>' : '');
+  }
+  return '<div class="gov-section colfig-section">' +
+    '<div class="gov-section__head"><p class="sysinfo__sub gov-section__title">' +
+      '<span class="gov-section__glyph ui-icon ui-icon--amber" aria-hidden="true">' + glyph + '</span> Figura di colonia</p></div>' +
+    body +
+  '</div>';
+}
+function bindColonyFigureHandlers(host, planet, colony) {
+  if (!host || !ORION.colonyFigure) return;
+  const colKey = planet.systemId + ':' + planet.bodyKey;
+  const persist = function () { if (ORION.save && ORION.save.autosave && ORION.game) ORION.save.autosave(ORION.game); };
+  const rel = host.querySelector('[data-action="colfig-release"]');
+  if (rel) rel.addEventListener('click', function () {
+    ORION.colonyFigure.releaseFromColony(ORION.game, colony);
+    pushChronicle(ORION.time.currentDS(ORION.game) + ' — Figura di colonia sollevata dall\'incarico su <strong>' + escapeHtml(systemNameFromKey(ORION.game, colKey)) + '</strong>.', 'figure');
+    persist(); renderPlanetColoniaTab(host, planet, colony);
+  });
+  const asg = host.querySelector('[data-action="colfig-assign"]');
+  if (asg) asg.addEventListener('click', function () {
+    openColonyFigurePicker(colKey, host, planet, colony);
+  });
+}
+/* Picker di assegnazione: elenca le figure di colonia idle nel pool d'Impero. */
+function openColonyFigurePicker(colKey, host, planet, colony) {
+  const g = ORION.game, CF = ORION.colonyFigure;
+  if (!CF) return;
+  const avail = CF.assignableOf(g);
+  if (!avail.length) { showToast('Nessuna figura di colonia disponibile — emergono dalle colonie mature'); return; }
+  const starHtml = (ORION.icon && ORION.icon('star')) || '★';
+  const rows = avail.map(function (f) {
+    const origin = f.originColonyKey ? (' · da ' + escapeHtml(systemNameFromKey(g, f.originColonyKey))) : '';
+    return '<button class="cmd-pick__row" data-colfig="' + escapeHtml(f.id) + '" type="button">' +
+      '<span class="cmd-pick__name">' + starHtml + ' ' + escapeHtml((f.rank || '') + ' ' + f.name) + '</span>' +
+      '<span class="cmd-pick__meta">' + escapeHtml(CF.roleLabel(f)) + ' · ' + escapeHtml(CF.bonusLabel(f)) +
+        ' · ' + escapeHtml(f.traitLabel || '') + origin + '</span>' +
+    '</button>';
+  }).join('');
+  const html =
+    '<div class="attack-overlay" data-colfig-overlay>' +
+      '<div class="attack-overlay__panel">' +
+        '<header class="attack-overlay__head"><h3>' + starHtml + ' Figura per ' + escapeHtml(systemNameFromKey(g, colKey)) + '</h3>' +
+          '<button class="attack-overlay__x btn--icon-only" data-colfig-close type="button" aria-label="Chiudi">' +
+            ((ORION.icon && ORION.icon('close')) || '✕') + '</button></header>' +
+        '<p class="attack-overlay__sub">Ruoli: <strong>Governatore di sector</strong> (deleghe più rapide, autonomia) · <strong>Ingegnere capo</strong> (−tempo assemblaggio). Una sola figura per colonia.</p>' +
+        '<div class="cmd-pick__list">' + rows + '</div>' +
+      '</div>' +
+    '</div>';
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  const node = wrap.firstChild;
+  document.body.appendChild(node);
+  function close() { if (node.parentNode) node.parentNode.removeChild(node); }
+  node.querySelector('[data-colfig-close]').addEventListener('click', close);
+  node.addEventListener('click', function (e) { if (e.target === node) close(); });
+  node.querySelectorAll('[data-colfig]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const r = CF.assignToColony(g, colony, colKey, b.dataset.colfig);
+      if (!r.ok) { showToast(r.reason || 'Assegnazione fallita'); return; }
+      pushChronicle(ORION.time.currentDS(g) + ' — <strong>' + escapeHtml((r.figure.rank || '') + ' ' + r.figure.name) +
+        '</strong> assume l\'incarico di <strong>' + escapeHtml(CF.roleLabel(r.figure)) + '</strong> su <strong>' +
+        escapeHtml(systemNameFromKey(g, colKey)) + '</strong>.', 'figure');
+      if (ORION.save && ORION.save.autosave) ORION.save.autosave(g);
+      close(); renderPlanetColoniaTab(host, planet, colony);
+    });
+  });
 }
 
 /* Decisione #66: la colonizzazione richiede una nave coloniale "Pioniere"
@@ -6827,7 +6935,9 @@ const DEFAULT_AUTOPAUSE = {
   'gov-slots-idle': false, 'gov-pop-near-cap': false, 'gov-veterans-idle': false,
   /* M07.1 Tier 2 (decisione #59): azioni del Governatore (build/espande).
      Default OFF: frequenti/atmosferiche, visibili in cronaca + log dedicato. */
-  'gov-build-started': false, 'gov-expand-started': false,
+  'gov-build-started': false, 'gov-expand-started': false, 'gov-asset-started': false,
+  /* M14 Fase B1 (#77): figure di colonia. Emergenza notevole (ON), rank OFF. */
+  'colony-figure-emerged': true, 'colony-figure-ranked': false,
   /* M08 Fase A (decisione #42): arrivo flotta + rotta completata + scoperta
      fortuita auto-pausano (esiti notevoli). Il launch è azione utente,
      non sorpresa. Hop intermedi mai. */
@@ -7218,6 +7328,9 @@ function showEventOverlay(events) {
     'gov-veterans-idle': 'Governatore: veterani disponibili',
     'gov-build-started': 'Governatore: nuova costruzione accodata',
     'gov-expand-started': 'Governatore: espansione accodata',
+    'gov-asset-started': 'Governatore: scafo di scorta avviato',
+    'colony-figure-emerged': 'Nuova figura di colonia',
+    'colony-figure-ranked': 'Figura di colonia promossa',
     'fleet-arrived': 'Flotta arrivata',
     'fleet-route-complete': 'Flotta: rotta completata',
     'fleet-discovery': 'Flotta: sistema esplorato',
@@ -7481,6 +7594,18 @@ function chronicleEvent(ev) {
     /* M14 (#75): la figura sale di rango servendo in battaglia. */
     const c = ev.commander;
     pushChronicle(ds + ' — <strong>' + escapeHtml(c.name) + '</strong> promosso al rango di <strong>' + escapeHtml(ev.rank) + '</strong> (' + escapeHtml(cmdRoleLabel(c)) + ').', 'figure');
+  } else if (ev.kind === 'colony-figure-emerged') {
+    /* M14 Fase B1 (#77): una colonia matura genera una figura amministrativa. */
+    const f = ev.figure;
+    const roleL = ORION.colonyFigure ? ORION.colonyFigure.roleLabel(f) : (f.roleLabel || f.role);
+    const cn = systemNameFromKey(ORION.game, ev.colonyKey);
+    pushChronicle(ds + ' — <strong>' + escapeHtml(f.name) + '</strong> emerge come <strong>' + escapeHtml(roleL) + '</strong> dall\'amministrazione matura di <strong>' + escapeHtml(cn) + '</strong> · tratto <em>' + escapeHtml(f.traitLabel || '') + '</em>.', 'figure');
+    if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('colony-figure');
+  } else if (ev.kind === 'colony-figure-ranked') {
+    const f = ev.figure;
+    pushChronicle(ds + ' — <strong>' + escapeHtml(f.name) + '</strong> sale al rango di <strong>' + escapeHtml(ev.rank) + '</strong>.', 'figure');
+  } else if (ev.kind === 'gov-asset-started') {
+    pushChronicle(ds + ' — <strong>Governatore di sector di ' + pname + ptag + '</strong>: avviato uno scafo esploratore di scorta.', 'figure');
   } else if (ev.kind === 'expedition-arrived') {
     const sys = ORION.game.galaxy.systems[ev.systemId];
     const tag = ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
