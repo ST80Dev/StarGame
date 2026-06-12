@@ -373,6 +373,7 @@
       this.colony = null;
       this.onExit = null;
       this.onSelectMoon = null;
+      this._navCdUntil = 0;            // decisione #80: cooldown tra livelli
 
       this.cssW = 0; this.cssH = 0; this.dpr = 1;
       this.scale = 1;       // moltiplicatore del raggio "fit"
@@ -607,6 +608,10 @@
         const d = this._pinchDist();
         if (this.lastPinchDist > 0) {
           const k = d / this.lastPinchDist;
+          /* decisione #80 — pinch-out contro il muro → risali al sistema. */
+          if (k < 1 && this.scale <= 0.5 + 1e-3 && this._navReady() && this.onExit) {
+            this._armNavCd(); this.onExit(); return;
+          }
           this.scale = clamp(this.scale * k, 0.5, 3.5);
         }
         this.lastPinchDist = d;
@@ -634,9 +639,17 @@
       }
     }
     _onPointerLeave() { if (this.hoverMoonKey) { this.hoverMoonKey = null; this.requestRender(); } }
+    _navReady() { return this._now() >= this._navCdUntil; }
+    _armNavCd() { this._navCdUntil = this._now() + 450; }
+    _now() { return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(); }
+
     _onWheel(e) {
       e.preventDefault();
       const k = Math.pow(1.0015, -e.deltaY);
+      /* decisione #80 — contro il muro dello zoom OUT → risali al sistema. */
+      if (k < 1 && this.scale <= 0.5 + 1e-3 && this._navReady() && this.onExit) {
+        this._armNavCd(); this.onExit(); return;
+      }
       this.scale = clamp(this.scale * k, 0.5, 3.5);
       this.requestRender();
     }

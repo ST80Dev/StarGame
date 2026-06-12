@@ -866,6 +866,7 @@ function renderGalaxyView(stage) {
   ORION.map = new ORION.GalaxyMap().mount(holder, g.galaxy, g.state, {
     onContext: onMapContext,
     onActivateSystem: (id) => openSystem(id),  // doppio click → vista interna (M03)
+    onDiveIn: (id) => openSystem(id),          // decisione #80: scroll-in → sistema centrato
     // M08 polish (decisione #61): drag&drop dal canvas per ordinare flotte.
     // Polish post-wizard: il click sul marker NON entra più direttamente
     // in picker mode — apre un popup info con dettagli del viaggio; il
@@ -1200,6 +1201,17 @@ function renderSystemPanel(title, content, id) {
    Il SystemView è un layer sopra la mappa galassia (dentro .galaxy-root);
    breadcrumb e pannello destro diventano coerenti col livello Sistema.
    --------------------------------------------------------------------- */
+/* decisione #80 — mini-dissolvenza sull'holder che compare a ogni cambio di
+   livello (Galassia↔Sistema↔Pianeta), così lo scroll-in/out non "stacca" di
+   colpo. Vale per scroll, bottoni e doppio-click (stessi open/close). */
+function zoomFadeIn(el) {
+  if (!el) return;
+  el.classList.remove('is-zoom-entering');
+  void el.offsetWidth;                       // forza il restart dell'animazione
+  el.classList.add('is-zoom-entering');
+  setTimeout(function () { if (el) el.classList.remove('is-zoom-entering'); }, 260);
+}
+
 function openSystem(id) {
   const g = ORION.game;
   if (!g) return;
@@ -1216,7 +1228,7 @@ function openSystem(id) {
   const sysHolder = root.querySelector('[data-system-holder]');
   const galHolder = root.querySelector('.galaxy-holder');
   if (galHolder) galHolder.style.visibility = 'hidden';
-  if (sysHolder) sysHolder.hidden = false;
+  if (sysHolder) { sysHolder.hidden = false; zoomFadeIn(sysHolder); }
 
   if (ORION.systemView) ORION.systemView.destroy();
   ORION.systemView = new ORION.SystemView().mount(sysHolder, system, {
@@ -1249,7 +1261,7 @@ function closeSystem() {
     const sysHolder = root.querySelector('[data-system-holder]');
     const galHolder = root.querySelector('.galaxy-holder');
     if (sysHolder) sysHolder.hidden = true;
-    if (galHolder) galHolder.style.visibility = '';
+    if (galHolder) { galHolder.style.visibility = ''; zoomFadeIn(galHolder); }
   }
   setNavActive('galaxy');
   setGalaxyHint('galaxy');
@@ -1459,7 +1471,7 @@ function openPlanet(sysId, bodyKey) {
   const planetHolder = root.querySelector('[data-planet-holder]');
   const sysHolder = root.querySelector('[data-system-holder]');
   if (sysHolder) sysHolder.style.visibility = 'hidden';
-  if (planetHolder) planetHolder.hidden = false;
+  if (planetHolder) { planetHolder.hidden = false; zoomFadeIn(planetHolder); }
 
   if (ORION.planetView) ORION.planetView.destroy();
   if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
@@ -1500,7 +1512,7 @@ function closePlanet() {
     const sysHolder = root.querySelector('[data-system-holder]');
     const deckHolder = root.querySelector('[data-colony-deck]');
     if (planetHolder) planetHolder.hidden = true;
-    if (sysHolder) sysHolder.style.visibility = '';
+    if (sysHolder) { sysHolder.style.visibility = ''; zoomFadeIn(sysHolder); }
     if (deckHolder) deckHolder.hidden = true;
   }
   setNavActive('system');
