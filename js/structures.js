@@ -301,6 +301,31 @@
       requires: ['tech:terraformazione', 'struct:centro-ingegneria-planetaria:1'],
       expandsSlots: { terrestre: 12, oceanico: 12, forestale: 12,
                       desertico: 7, vulcanico: 7, ghiacciato: 7 }
+    },
+    /* M15 — Bacino orbitale (decisione #41): cantiere pesante per le navi
+       capitali. L'Hangar planetario (#41) basta per l'Incrociatore (lvl 4),
+       ma Dreadnought e Nave Ammiraglia richiedono questa infrastruttura
+       dedicata. Aggiunge cantieri (slip) e attracchi di grossa stazza,
+       SOMMATI a quelli dell'Hangar in expedition.js. lvl 1 → Dreadnought,
+       lvl 2 → Ammiraglia. Richiede un Hangar già evoluto (lvl 3). M16
+       introdurrà la variante orbitale su stazione, di stazza maggiore. */
+    {
+      id: 'bacino-orbitale', name: 'Bacino orbitale', cat: 'militare', glyph: '⊠',
+      desc: 'Cantiere pesante per navi capitali. lvl 1 sblocca il Dreadnought, lvl 2 la Nave Ammiraglia. Aggiunge cantieri e attracchi di grossa stazza.',
+      cost: { met: 500, en: 220, food: 30 }, time: 120,
+      upkeep: { en: 6, met: 3 },
+      rates: {},
+      slots: 4, maxLevel: 2,
+      bodyTypes: HABITABLE,
+      requires: ['struct:cantiere-navale:3'],   // serve un Hangar già evoluto
+      /* Capacità aggiuntiva (#41): sommata a cantiere-navale.hangarCapacity
+         in expedition.js. Le navi capitali pesano molto (dockWeight) → questi
+         attracchi servono a contenerle senza saturare l'Hangar leggero. */
+      hangarCapacity: {
+        buildSlots: [1, 2],     // slip capitali (lente: 1-2 in parallelo)
+        docks:      [12, 24]    // attracchi pesati
+      },
+      hooks: ['fleet']          // gancio M15/M16
     }
   ];
 

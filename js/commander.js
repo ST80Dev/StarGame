@@ -247,10 +247,28 @@
   function list(game) {
     return (game && Array.isArray(game.commanders)) ? game.commanders : [];
   }
+  /* M15 — accessor canonico delle figure assegnate a una flotta. Il modello
+     M14 usava lo slot singolo `fleet.commander`; M15 ospita più figure sulle
+     navi capitali → `fleet.officers[]`. Back-compat: se una flotta ha ancora
+     il vecchio slot singolo, lo si vede come lista di 1. */
+  function officersOf(fleet) {
+    if (!fleet) return [];
+    if (Array.isArray(fleet.officers)) return fleet.officers;
+    return fleet.commander ? [fleet.commander] : [];
+  }
+  /* Normalizza la flotta al modello multi-slot (idempotente). */
+  function ensureOfficers(fleet) {
+    if (!fleet) return [];
+    if (!Array.isArray(fleet.officers)) {
+      fleet.officers = fleet.commander ? [fleet.commander] : [];
+    }
+    if (fleet.commander) fleet.commander = null;   // single source of truth = officers[]
+    return fleet.officers;
+  }
   function allOf(game) {
     var out = list(game).slice();
     ((game && game.fleets) || []).forEach(function (f) {
-      if (f && f.commander) out.push(f.commander);
+      officersOf(f).forEach(function (o) { out.push(o); });
     });
     return out;
   }
@@ -275,12 +293,17 @@
     cmd.rank = rankFor(cmd.xp || 0).label;
     return cmd;
   }
-  /* Converte tutte le figure dell'Impero (pool + assegnate). Idempotente. */
+  /* Converte tutte le figure dell'Impero (pool + assegnate). Idempotente.
+     M15: normalizza anche lo slot singolo legacy → fleet.officers[]. */
   function migrateAll(game) {
     if (!game) return;
     ensure(game);
     game.commanders.forEach(migrateFigure);
-    (game.fleets || []).forEach(function (f) { if (f && f.commander) migrateFigure(f.commander); });
+    (game.fleets || []).forEach(function (f) {
+      if (!f) return;
+      ensureOfficers(f);
+      f.officers.forEach(migrateFigure);
+    });
   }
 
   /* ---------------------------------------------------------------
@@ -291,9 +314,19 @@
       .filter(function (cmd) { return cmd.status !== 'assigned'; })
       .map(function (cmd) { return { colonyKey: cmd.originColonyKey || null, commander: cmd }; });
   }
+  /* Quanti slot figura ospita la flotta (dalla nave capitale più grande,
+     M15). Fallback 1 se ORION.fleet non è caricato (test headless). */
+  function officerSlots(fleet) {
+    var F = root.ORION && root.ORION.fleet;
+    return (F && F.fleetOfficerSlots) ? F.fleetOfficerSlots(fleet) : 1;
+  }
   function assignToFleet(game, fleet, commanderId) {
     if (!game || !fleet) return { ok: false, reason: 'Dati mancanti' };
-    if (fleet.commander && fleet.commander.id === commanderId) return { ok: true, commander: fleet.commander };
+    var officers = ensureOfficers(fleet);
+    /* già a bordo? no-op idempotente */
+    for (var k = 0; k < officers.length; k++) {
+      if (officers[k].id === commanderId) return { ok: true, commander: officers[k] };
+    }
     var pool = list(game);
     var idx = -1;
     for (var i = 0; i < pool.length; i++) {
@@ -301,42 +334,91 @@
     }
     if (idx < 0) return { ok: false, reason: 'Figura non disponibile' };
     var found = pool[idx];
-    if (fleet.commander) releaseFromFleet(game, fleet);
+    /* M15 — vincoli multi-slot: capienza dalla classe capitale + max un
+       bonus per ruolo (due Comandanti non si sommano). */
+    var slots = officerSlots(fleet);
+    if (officers.length >= slots) {
+      return { ok: false, reason: 'Posti ufficiale pieni (' + officers.length + '/' + slots + '): serve una nave capitale più grande' };
+    }
+    for (var j = 0; j < officers.length; j++) {
+      if (officers[j].role === found.role) {
+        return { ok: false, reason: 'Ruolo ' + (ROLES[found.role] ? ROLES[found.role].label : found.role) + ' già presente in flotta' };
+      }
+    }
     pool.splice(idx, 1);
     found.status = 'assigned';
     found.assignedFleetId = fleet.id;
-    fleet.commander = found;
+    officers.push(found);
     return { ok: true, commander: found };
   }
+  /* Rilascia UNA figura (per id) o, senza id, TUTTE (back-compat con i
+     chiamanti M14 che passavano solo la flotta — annientamento/dissolve). */
   function releaseFromFleet(game, fleet, opts) {
-    if (!fleet || !fleet.commander) return null;
-    var cmd = fleet.commander;
+    if (!fleet) return null;
+    var officers = ensureOfficers(fleet);
+    if (!officers.length) return null;
     ensure(game);
-    cmd.status = 'idle';
-    delete cmd.assignedFleetId;
-    game.commanders.push(cmd);
-    fleet.commander = null;
-    return cmd;
+    var id = (typeof opts === 'string') ? opts : (opts && opts.commanderId) || null;
+    if (!id) {
+      /* nessun id → rilascia tutte (semantica storica) */
+      var released = officers.slice();
+      released.forEach(function (cmd) {
+        cmd.status = 'idle'; delete cmd.assignedFleetId; game.commanders.push(cmd);
+      });
+      fleet.officers = [];
+      return released.length === 1 ? released[0] : released;
+    }
+    for (var i = 0; i < officers.length; i++) {
+      if (officers[i].id === id) {
+        var cmd = officers.splice(i, 1)[0];
+        cmd.status = 'idle'; delete cmd.assignedFleetId; game.commanders.push(cmd);
+        return cmd;
+      }
+    }
+    return null;
+  }
+  function releaseAllFromFleet(game, fleet) {
+    return releaseFromFleet(game, fleet);
   }
 
-  /* Moltiplicatore di durata viaggio dalla figura (Ingegnere). Letto da
-     fleet.js in startNextLeg. (Nome storico mantenuto per i call-site.) */
+  /* M15 — xp a TUTTE le figure di flotta (servizio condiviso). Sostituisce
+     i call-site che davano xp solo a fleet.commander. */
+  function grantFleetXp(game, fleet, amount, events) {
+    officersOf(fleet).forEach(function (o) { grantXp(game, o, amount, events); });
+  }
+
+  /* Aggrega i bonus delle figure di una flotta (M15). Max un bonus per
+     ruolo è già garantito da assignToFleet → moltiplichiamo i canali
+     moltiplicativi e sommiamo l'imboscata. Con una sola figura coincide col
+     comportamento M14. */
+  function aggregateBonuses(fleet) {
+    var agg = { fpMul: 1, hpMul: 1, firstStrike: 0, travelMul: 1, viveriMul: 1 };
+    officersOf(fleet).forEach(function (cmd) {
+      var b = bonuses(cmd);
+      agg.fpMul *= b.fpMul;
+      agg.hpMul *= b.hpMul;
+      agg.firstStrike += b.firstStrike;
+      agg.travelMul *= b.travelMul;
+      agg.viveriMul *= b.viveriMul;
+    });
+    agg.firstStrike = Math.min(0.30, agg.firstStrike);
+    agg.travelMul = Math.max(0.5, agg.travelMul);
+    agg.viveriMul = Math.max(0.4, agg.viveriMul);
+    return agg;
+  }
+  /* Moltiplicatore di durata viaggio (Ingegnere). Letto da fleet.startNextLeg. */
   function fleetSpeedMul(fleet) {
-    var cmd = fleet && fleet.commander;
-    return cmd ? bonuses(cmd).travelMul : 1;
+    return aggregateBonuses(fleet).travelMul;
   }
   /* Moltiplicatore di consumo viveri (Ingegnere/Logistico). Letto da
-     fleet.js in processViveri. <1 = consumo più lento. */
+     fleet.processViveri. <1 = consumo più lento. */
   function viveriDrainMul(fleet) {
-    var cmd = fleet && fleet.commander;
-    return cmd ? bonuses(cmd).viveriMul : 1;
+    return aggregateBonuses(fleet).viveriMul;
   }
   /* Bundle di combattimento per la flotta (Comandante fp / Ingegnere scafo /
-     Stratega imboscata). Letto da combat.js in forceFromFleet + resolve. */
+     Stratega imboscata). Letto da combat.forceFromFleet + resolve. */
   function combatBonus(fleet) {
-    var cmd = fleet && fleet.commander;
-    if (!cmd) return { fpMul: 1, hpMul: 1, firstStrike: 0 };
-    var b = bonuses(cmd);
+    var b = aggregateBonuses(fleet);
     return { fpMul: b.fpMul, hpMul: b.hpMul, firstStrike: b.firstStrike };
   }
 
@@ -379,6 +461,12 @@
     assignableOf: assignableOf,
     assignToFleet: assignToFleet,
     releaseFromFleet: releaseFromFleet,
+    releaseAllFromFleet: releaseAllFromFleet,
+    officersOf: officersOf,
+    ensureOfficers: ensureOfficers,
+    officerSlots: officerSlots,
+    grantFleetXp: grantFleetXp,
+    aggregateBonuses: aggregateBonuses,
     fleetSpeedMul: fleetSpeedMul,
     viveriDrainMul: viveriDrainMul,
     combatBonus: combatBonus,

@@ -1056,8 +1056,11 @@
           colony.ships = colony.ships || { explorer: 0 };
           const k = q.kind || 'explorer';
           colony.ships[k] = (colony.ships[k] || 0) + 1;
+          /* M15: il varo di una nave capitale è un evento notevole (auto-pausa
+             ON), il resto resta frequente/silenzioso (ship-built OFF). */
+          const isCapital = (k === 'incrociatore' || k === 'dreadnought' || k === 'ammiraglia');
           events.push({
-            kind: 'ship-built',
+            kind: isCapital ? 'capital-built' : 'ship-built',
             colony: colony, planet: planet,
             shipKind: k,
             impulso: game.timeImpulsi
@@ -1286,9 +1289,9 @@
       if (playerWon && root.ORION.fleet && root.ORION.fleet.awardCrewXp) {
         root.ORION.fleet.awardCrewXp(game, fleet, 1, events, 'combat');
       }
-      /* M14 (#75): la figura assegnata matura individualmente in battaglia (§12.3). */
-      if (playerWon && fleet.commander && root.ORION.commander && root.ORION.commander.grantXp) {
-        root.ORION.commander.grantXp(game, fleet.commander, 1, events);
+      /* M14 (#75) → M15: tutte le figure di flotta maturano in battaglia (§12.3). */
+      if (playerWon && root.ORION.commander && root.ORION.commander.grantFleetXp) {
+        root.ORION.commander.grantFleetXp(game, fleet, 1, events);
       }
       // Decisione #66: refund 50% se la coloniale è stata persa nel scontro.
       if (hadColonial) {
@@ -1372,10 +1375,10 @@
       }
       // Se la flotta è stata annientata → rimuovila
       if (fleet.ships.length === 0) {
-        /* Il Comandante si salva (scialuppa, come il crew M07): torna in
-           panchina invece di perdersi (recovery-friendly #22). */
-        if (fleet.commander && root.ORION.commander && root.ORION.commander.releaseFromFleet) {
-          root.ORION.commander.releaseFromFleet(game, fleet);
+        /* Le figure si salvano (scialuppa, come il crew M07): tornano nel
+           pool d'Impero invece di perdersi (recovery-friendly #22). */
+        if (root.ORION.commander && root.ORION.commander.releaseAllFromFleet) {
+          root.ORION.commander.releaseAllFromFleet(game, fleet);
         }
         game.fleets = game.fleets.filter(function (f) { return f !== fleet; });
       }
@@ -1569,8 +1572,8 @@
       if (root.ORION.fleet && root.ORION.fleet.awardCrewXp) {
         root.ORION.fleet.awardCrewXp(game, fleets[i], 1, events, 'combat');
       }
-      if (fleets[i].commander && root.ORION.commander && root.ORION.commander.grantXp) {
-        root.ORION.commander.grantXp(game, fleets[i].commander, 1, events);
+      if (root.ORION.commander && root.ORION.commander.grantFleetXp) {
+        root.ORION.commander.grantFleetXp(game, fleets[i], 1, events);
       }
     }
   }
@@ -1661,16 +1664,16 @@
     if (playerWon && root.ORION.fleet && root.ORION.fleet.awardCrewXp) {
       root.ORION.fleet.awardCrewXp(game, fleet, 1, events, 'combat');
     }
-    if (playerWon && fleet.commander && root.ORION.commander && root.ORION.commander.grantXp) {
-      root.ORION.commander.grantXp(game, fleet.commander, 1, events);
+    if (playerWon && root.ORION.commander && root.ORION.commander.grantFleetXp) {
+      root.ORION.commander.grantFleetXp(game, fleet, 1, events);
     }
     if (outcome.lost > 0) warRegisterLoss(game, outcome.lost * CFG.WAR_MORALE_PER_SHIP, outcome.lost * CFG.WAR_PRESSURE_PER_LOSS);
     if (playerWon) warRegisterWin(game);
     else warRegisterLoss(game, CFG.WAR_MORALE_PER_DEFEAT, CFG.WAR_PRESSURE_PER_LOSS);
-    // flotta annientata → Comandante in salvo, rimuovi
+    // flotta annientata → figure in salvo, rimuovi
     if (fleet.ships.length === 0) {
-      if (fleet.commander && root.ORION.commander && root.ORION.commander.releaseFromFleet) {
-        root.ORION.commander.releaseFromFleet(game, fleet);
+      if (root.ORION.commander && root.ORION.commander.releaseAllFromFleet) {
+        root.ORION.commander.releaseAllFromFleet(game, fleet);
       }
       game.fleets = game.fleets.filter(function (f) { return f !== fleet; });
     }
