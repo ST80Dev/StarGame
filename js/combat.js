@@ -123,7 +123,12 @@
      se la flotta ha un comandante assegnato con specializzazione 'tattico'. */
   function forceFromFleet(game, fleet, side) {
     const F = ORION.fleet;
-    const cmdMul = fleetCommanderFpMul(game, fleet);
+    /* Figura di flotta (M14 Fase A, decisione #75): Comandante = +fuoco,
+       Ingegnere = +scafo (durabilità), Stratega = imboscata (first-strike,
+       applicata in resolve()). Sostituisce il vecchio check 'tattico' #43. */
+    const cb = (ORION.commander && ORION.commander.combatBonus)
+      ? ORION.commander.combatBonus(fleet) : { fpMul: 1, hpMul: 1, firstStrike: 0 };
+    const cmdMul = cb.fpMul;
     /* M13 Fase B (decisione #57): tech armi/scudi = +X% potenza di fuoco e
        corazza alle navi DEL GIOCATORE (le flotte sono sue; le AI usano
        forceFromMaterialized → non toccate). Modificatori passivi. L'hpMul è
@@ -131,7 +136,7 @@
        al maxHp naturale così non resta inflazionato fra una battaglia e l'altra. */
     const RM = (ORION.research && ORION.research.mods) ? ORION.research.mods(game) : null;
     const fpMul = RM ? RM.fpMul : 1;
-    const hpMul = RM ? RM.hpMul : 1;
+    const hpMul = (RM ? RM.hpMul : 1) * cb.hpMul;   // tech ×  Ingegnere
     const combatants = [];
     const ships = (fleet && fleet.ships) || [];
     for (let i = 0; i < ships.length; i++) {
@@ -155,17 +160,9 @@
       color: '#5fa8ff',
       immobile: false,
       formation: (fleet && fleet.formation) || 'balanced',
+      firstStrike: cb.firstStrike || 0,
       combatants: combatants
     };
-  }
-
-  /* Bonus di fuoco da Comandante Tattico assegnato alla flotta (gancio #43).
-     In Fase A l'assegnazione è opzionale (fleet.commander): se presente e
-     'tattico', +10% potenza di fuoco di tutta la flotta. */
-  function fleetCommanderFpMul(game, fleet) {
-    const cmd = fleet && fleet.commander;
-    if (cmd && cmd.specialization === 'tattico') return 1.10;
-    return 1;
   }
 
   /* Forza difensiva di una colonia: sintetizza un combattente per ogni
@@ -349,6 +346,18 @@
     const log = [];
     let round = 0;
     let retreatedA = false, retreatedB = false;
+
+    /* Imboscata (Stratega, M14 §12.4): bordata d'apertura prima del primo
+       round simultaneo. Una flotta con Stratega assegnato infligge una
+       frazione del proprio fuoco "a freddo". Deterministico (rng seedato).
+       In genere solo A (flotta del giocatore) ha firstStrike > 0. */
+    const fsA = A.firstStrike || 0, fsB = B.firstStrike || 0;
+    if (fsA > 0 || fsB > 0) {
+      const orng = ORION.rng.makeRng(seed + ':opening');
+      if (fsA > 0) applyDamage(B, totalFp(A) * fsA, orng);
+      if (fsB > 0) applyDamage(A, totalFp(B) * fsB, orng);
+      purgeDestroyed(A); purgeDestroyed(B);
+    }
 
     while (round < CFG.MAX_ROUNDS && A.combatants.length > 0 && B.combatants.length > 0) {
       round++;

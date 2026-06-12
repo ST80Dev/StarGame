@@ -1,46 +1,64 @@
 /* =====================================================================
-   commander.js — Figure Comandante (decisione #43, gancio M14)
+   commander.js — Figure di flotta (decisione #43 → M14 Fase A, decisione #75)
 
-   Promozione equipaggio M07 → Comandante nominato.
-   Trigger: al rientro di una spedizione un equipaggio raggiunge il grado
-   massimo 'Leggende' (xp ≥ 10, decisione utente 2026-06-11; coerente con
-   expedition.enrichmentForXp). L'esperienza dello staff veterano "esce"
-   col Comandante e viene aggregata nella figura.
-   Effetto (scelta utente):
-     - nasce una figura Comandante che eredita la xp del crew
-     - l'equipaggio NON viene consumato (sono più persone): la sua xp è
-       resettata a 0 → il crew riparte come "neo-riformato", l'entità
-       non si brucia, niente doppioni xp.
+   "Emergenza dal basso" (GDD §12.4): le figure NON si creano, EMERGONO
+   dall'equipaggio che raggiunge il grado massimo (xp ≥ 10, decisione #71)
+   per servizio vario — combattimenti, rotte lunghe, pattuglie, esplorazioni
+   (decisione utente 2026-06-11). L'esperienza dello staff veterano "esce"
+   col la figura e viene aggregata in essa; il crew si riforma (xp a 0).
 
-   Bonus interim ("in panchina", scelta utente): la figura nasce con
-   nome + rango + tratto + specializzazione + xp, viene listata nella
-   tab Forze. Nessun bonus attivo finché M08 (flotta da combattimento)
-   non l'aggancerà alle navi evolute. Per ora `status: 'idle'`.
+   M14 Fase A (decisione #75): tre RUOLI §12.4 al posto della singola
+   "specializzazione" #43, scelti dall'ATTIVITÀ dominante del crew:
+     - combattimenti  → Comandante  (potenza di fuoco, condotta in battaglia)
+     - viaggi/manutenzione → Ingegnere di Flotta (viaggio, viveri, scafo)
+     - pattuglie/ricognizioni → Stratega (imboscate, tattica)
+   Così un impero pacifico/esploratore genera Ingegneri e Strateghi, uno
+   militarizzato genera Comandanti — senza alcun cancello "prima la guerra".
 
-   Determinismo (decisione #5): RNG derivato da
-   `seed:commander:<crewId>` — replay identico.
+   Ogni figura ha:
+     - role   : i 3 tipi §12.4 (determina il profilo di bonus)
+     - rank   : progressione individuale dall'xp (Tenente → Capitano →
+                Commodoro → Ammiraglio) che SCALA la magnitudo dei bonus
+     - trait  : tratto con MODIFICATORI VERI (non più solo etichetta)
+     - race   : archetipo §18 (Umani/Kelhari/Vorn/Syndari/Mekhari/Anziani),
+                per ora NARRATIVO (flavor); i bias-razza arrivano in Fase B
+     - xp     : esperienza individuale, cresce servendo su una flotta
 
-   Persistenza (decisione utente 2026-06-11): i Comandanti sono figure
-   A LIVELLO IMPERO, NON legate a una colonia. Pool idle in
-   `game.commanders[]`; quelli al comando vivono su `fleet.commander`
-   (single source of truth). `originColonyKey` resta come provenienza
-   narrativa. Save schema 22 (migrazione v21→v22 sposta i vecchi
-   `colony.commanders[]` nel pool d'Impero).
+   Migrazione legacy: la vecchia `specialization` (#43) → role
+   (tattico→comandante, navigatore/logista→ingegnere; logista lascia il
+   tratto "Logistico"). Schema save 24 (v23→v24).
 
-   Lessico SW-flavor (decisione #34): rank "Comandante" come carica
-   iniziale (M08/M15 estenderanno a Capitano/Ammiraglio); nomi propri
-   procedurali (niente personaggi 1:1).
+   Determinismo (#5): RNG derivato da `seed:commander:<crewId>`.
+   Persistenza (decisione utente 2026-06-11): figure A LIVELLO IMPERO.
+   Pool idle in `game.commanders[]`; quelle al comando vivono su
+   `fleet.commander` (single source of truth).
    ===================================================================== */
 (function (root) {
   'use strict';
 
-  /* Soglia di promozione: xp ≥ 10 = grado 'Leggende', il massimo della
-     scala equipaggio (coerente con expedition.enrichmentForXp).
-     Cambiare qui se M14 vorrà alzarla. */
+  /* Soglia di promozione: xp ≥ 10 = grado 'Leggende' (scala equipaggio,
+     coerente con expedition.enrichmentForXp / decisione #71). */
   var PROMOTION_THRESHOLD = 10;
 
-  /* Pool nomi propri — neutri / sci-fi, evitando marchi (#34).
-     ~40 voci, brevi, mix maschili/femminili/ambigui. */
+  /* Ranghi — progressione individuale, scalano la magnitudo dei bonus.
+     Niente "Comandante" qui per non confonderlo col ruolo (#34 lessico).
+     Una figura nasce dallo staff a xp 10 → Tenente, poi cresce in servizio. */
+  var RANKS = [
+    { id: 'tenente',    label: 'Tenente',    min: 0 },
+    { id: 'capitano',   label: 'Capitano',   min: 18 },
+    { id: 'commodoro',  label: 'Commodoro',  min: 40 },
+    { id: 'ammiraglio', label: 'Ammiraglio', min: 75 }
+  ];
+
+  /* I tre RUOLI §12.4 (il primo asse, determina il profilo di bonus). */
+  var ROLES = {
+    comandante: { id: 'comandante', label: 'Comandante',          glyph: '★', hint: 'Morale, potenza di fuoco, condotta in battaglia' },
+    ingegnere:  { id: 'ingegnere',  label: 'Ingegnere di Flotta', glyph: '⚙', hint: 'Consumi di viaggio, viveri, resistenza dello scafo' },
+    stratega:   { id: 'stratega',   label: 'Stratega',            glyph: '◈', hint: 'Imboscate, tattica, difesa perimetrale' }
+  };
+  var ROLE_ORDER = ['comandante', 'ingegnere', 'stratega'];
+
+  /* Pool nomi propri — neutri / sci-fi, evitando marchi (#34). */
   var NAME_POOL = [
     'Vance', 'Kade', 'Theron', 'Lyra', 'Rhea', 'Cassian',
     'Mira', 'Dax', 'Selene', 'Orin', 'Talia', 'Renn',
@@ -51,27 +69,34 @@
     'Ostara', 'Jarek', 'Liora', 'Tarek'
   ];
 
-  /* Tratti personalità — orientano la narrazione (e in futuro
-     piccoli modificatori tematici quando M08/M09 entreranno). */
+  /* Tratti con MODIFICATORI VERI (M14 Fase A). I campi di `mod` sono bonus
+     ADDITIVI applicati in bonuses(): fpMul/hpMul/firstStrike si sommano al
+     moltiplicatore; travelMul/viveriMul RIDUCONO ulteriormente il fattore
+     (viaggio più corto / viveri più lenti). Magnitudo piccola: il ruolo +
+     rango restano il driver principale, il tratto colora. */
   var TRAIT_POOL = [
-    { id: 'audace',      label: 'Audace' },
-    { id: 'prudente',    label: 'Prudente' },
-    { id: 'risoluto',    label: 'Risoluto' },
-    { id: 'carismatico', label: 'Carismatico' },
-    { id: 'tenace',      label: 'Tenace' },
-    { id: 'astuto',      label: 'Astuto' },
-    { id: 'lucido',      label: 'Lucido' },
-    { id: 'spavaldo',    label: 'Spavaldo' },
-    { id: 'stoico',      label: 'Stoico' },
-    { id: 'implacabile', label: 'Implacabile' }
+    { id: 'audace',      label: 'Audace',      mod: { fpMul: 0.03, firstStrike: 0.02 } },
+    { id: 'prudente',    label: 'Prudente',    mod: { hpMul: 0.04 } },
+    { id: 'risoluto',    label: 'Risoluto',    mod: { fpMul: 0.02 } },
+    { id: 'carismatico', label: 'Carismatico', mod: { fpMul: 0.02, hpMul: 0.02 } },
+    { id: 'tenace',      label: 'Tenace',      mod: { hpMul: 0.05 } },
+    { id: 'astuto',      label: 'Astuto',      mod: { firstStrike: 0.04 } },
+    { id: 'lucido',      label: 'Lucido',      mod: { firstStrike: 0.03 } },
+    { id: 'logistico',   label: 'Logistico',   mod: { travelMul: 0.04, viveriMul: 0.06 } },
+    { id: 'stoico',      label: 'Stoico',      mod: { hpMul: 0.03 } },
+    { id: 'implacabile', label: 'Implacabile', mod: { fpMul: 0.04 } }
   ];
 
-  /* Specializzazioni — tematiche, copertura dei 3 grandi assi del
-     gioco-flotta. M08/M09/M15 le aggancieranno ai bonus veri. */
-  var SPEC_POOL = [
-    { id: 'navigatore', label: 'Navigatore', hint: 'Esperto di rotte iperspaziali' },
-    { id: 'tattico',    label: 'Tattico',    hint: 'Comando in battaglia' },
-    { id: 'logista',    label: 'Logista',    hint: 'Gestione supply chain e usura' }
+  /* Archetipi §18 — per ora NARRATIVI (flavor): nessun modificatore.
+     I bias-razza (Kelhari +fuoco caccia, Vorn +riparazione, ...) arrivano
+     in Fase B. Pesi: Umani comuni, Anziani del Vuoto rarissimi. */
+  var RACE_POOL = [
+    { id: 'umani',   label: 'Umani',            weight: 6 },
+    { id: 'kelhari', label: 'Kelhari',          weight: 4 },
+    { id: 'vorn',    label: 'Vorn',             weight: 3 },
+    { id: 'syndari', label: 'Syndari',          weight: 2 },
+    { id: 'mekhari', label: 'Mekhari',          weight: 2 },
+    { id: 'anziani', label: 'Anziani del Vuoto', weight: 1 }
   ];
 
   function pickFromPool(rng, pool) {
@@ -79,64 +104,149 @@
     if (idx >= pool.length) idx = pool.length - 1;
     return pool[idx];
   }
+  function pickWeighted(rng, pool) {
+    var total = 0, i;
+    for (i = 0; i < pool.length; i++) total += pool[i].weight || 1;
+    var x = rng.float() * total;
+    for (i = 0; i < pool.length; i++) {
+      x -= pool[i].weight || 1;
+      if (x <= 0) return pool[i];
+    }
+    return pool[pool.length - 1];
+  }
 
-  /* Genera una figura Comandante a partire da un crewId.
-     Esposta come API per test e per usi futuri (M14 farà
-     promozioni alternative, es. da figura "Ufficiale" → "Capitano"). */
-  function make(game, crewId, inheritedXp, originColonyKey) {
+  /* ---------------------------------------------------------------
+     Rango (dall'xp individuale) + bonus per ruolo/rango/tratto.
+     --------------------------------------------------------------- */
+  function rankIndexForXp(xp) {
+    xp = xp | 0;
+    var idx = 0;
+    for (var i = 0; i < RANKS.length; i++) if (xp >= RANKS[i].min) idx = i;
+    return idx;
+  }
+  function rankFor(xp) { return RANKS[rankIndexForXp(xp)]; }
+  function rankLabel(cmd) { return rankFor((cmd && cmd.xp) || 0).label; }
+  function roleLabel(cmd) {
+    var r = cmd && ROLES[cmd.role];
+    return r ? r.label : 'Comandante';
+  }
+  function traitMod(id) {
+    for (var i = 0; i < TRAIT_POOL.length; i++) if (TRAIT_POOL[i].id === id) return TRAIT_POOL[i].mod || {};
+    return {};
+  }
+
+  /* Bundle di bonus della figura (ruolo + rango + tratto). Driver di tutti
+     gli effetti veri letti dai consumer (combat.js / fleet.js). */
+  function bonuses(cmd) {
+    var b = { fpMul: 1, hpMul: 1, firstStrike: 0, travelMul: 1, viveriMul: 1 };
+    if (!cmd) return b;
+    var r = rankIndexForXp(cmd.xp || 0);   // 0..3
+    if (cmd.role === 'comandante') {
+      b.fpMul = 1 + 0.08 + 0.04 * r;        // +8% (Tenente) → +20% (Ammiraglio)
+    } else if (cmd.role === 'stratega') {
+      b.firstStrike = 0.06 + 0.03 * r;      // imboscata 6% → 15%
+      b.fpMul = 1 + 0.02 + 0.01 * r;        // leggera spinta di fuoco
+    } else if (cmd.role === 'ingegnere') {
+      b.hpMul = 1 + 0.05 + 0.03 * r;        // scafo +5% → +14%
+      b.travelMul = 1 - (0.10 + 0.03 * r);  // viaggio −10% → −19%
+      b.viveriMul = 1 - (0.10 + 0.03 * r);  // viveri consumati più lenti
+    }
+    var t = traitMod(cmd.trait);
+    if (t.fpMul) b.fpMul += t.fpMul;
+    if (t.hpMul) b.hpMul += t.hpMul;
+    if (t.firstStrike) b.firstStrike += t.firstStrike;
+    if (t.travelMul) b.travelMul -= t.travelMul;   // ulteriore sconto viaggio
+    if (t.viveriMul) b.viveriMul -= t.viveriMul;   // ulteriore risparmio viveri
+    /* clamp di sicurezza */
+    b.travelMul = Math.max(0.5, b.travelMul);
+    b.viveriMul = Math.max(0.4, b.viveriMul);
+    b.firstStrike = Math.min(0.30, b.firstStrike);
+    return b;
+  }
+
+  /* ---------------------------------------------------------------
+     Emergenza: il ruolo deriva dall'ATTIVITÀ dominante del crew.
+     --------------------------------------------------------------- */
+  function dominantRole(crewEntry) {
+    var svc = crewEntry && crewEntry.svc;
+    if (!svc) return 'comandante';
+    var c = svc.combat || 0, t = svc.travel || 0, k = svc.tactical || 0;
+    if (c >= t && c >= k) return 'comandante';   // ha combattuto di più
+    if (t >= k) return 'ingegnere';              // ha viaggiato di più
+    return 'stratega';                           // ha pattugliato/esplorato vario
+  }
+
+  /* Accumula servizio sul crew (kind ∈ combat|travel|tactical). Lazy. */
+  function bumpCrewSvc(crewEntry, kind, amount) {
+    if (!crewEntry || !(amount > 0)) return;
+    if (kind !== 'combat' && kind !== 'travel' && kind !== 'tactical') return;
+    if (!crewEntry.svc) crewEntry.svc = { combat: 0, travel: 0, tactical: 0 };
+    crewEntry.svc[kind] = (crewEntry.svc[kind] || 0) + amount;
+  }
+
+  /* Genera una figura a partire da un crewId + ruolo. */
+  function make(game, crewId, inheritedXp, originColonyKey, role) {
     var seed = (game && game.seed) || '';
     var rng = ORION.rng.makeRng(seed + ':commander:' + crewId);
     var name = pickFromPool(rng, NAME_POOL);
     var trait = pickFromPool(rng, TRAIT_POOL);
-    var spec = pickFromPool(rng, SPEC_POOL);
+    var race = pickWeighted(rng, RACE_POOL);
+    if (!ROLES[role]) role = 'comandante';
+    var xp = inheritedXp | 0;
     return {
       id: 'cmd-' + (game.timeImpulsi || 0) + '-' + crewId,
       name: name,
-      rank: 'Comandante',          /* M08/M15 estenderà a Capitano/Ammiraglio */
-      xp: inheritedXp | 0,         /* eredita l'esperienza dal crew */
+      role: role,
+      roleLabel: ROLES[role].label,
+      rank: rankFor(xp).label,
+      xp: xp,
       trait: trait.id,
       traitLabel: trait.label,
-      specialization: spec.id,
-      specializationLabel: spec.label,
+      race: race.id,
+      raceLabel: race.label,
       originColonyKey: originColonyKey,
-      originCrewId: crewId,        /* traccia il crew di provenienza */
-      status: 'idle',              /* "in panchina" finché M08 non aggancia */
+      originCrewId: crewId,
+      status: 'idle',
       bornAt: game.timeImpulsi || 0
     };
   }
 
-  /* Promozione vera e propria: chiamata al rientro/servizio di un
-     equipaggio. Riceve l'oggetto crew (per resettarne la xp) e lo xp
-     ereditato. Il Comandante è una figura A LIVELLO IMPERO (decisione
-     utente 2026-06-11): vive in `game.commanders[]`, NON appartiene a una
-     colonia. `originColonyKey` resta come etichetta narrativa "emerso su".
-     Emerge SEMPRE (anche da una flotta in esilio, senza colonie).
-     Ritorna la figura creata (o null se mancano dati). */
-  function promote(game, crewEntry, inheritedXp, originColonyKey) {
+  /* Promozione: figura A LIVELLO IMPERO (game.commanders[]). Il ruolo viene
+     dall'attività dominante del crew, salvo `roleHint` esplicito (es. le
+     spedizioni passano 'ingegnere' = viaggio). Emerge SEMPRE (anche in
+     esilio). Reset di xp E servizio del crew (l'entità non si brucia). */
+  function promote(game, crewEntry, inheritedXp, originColonyKey, roleHint) {
     if (!game || !crewEntry) return null;
     if (!Array.isArray(game.commanders)) game.commanders = [];
-    var cmd = make(game, crewEntry.id, inheritedXp, originColonyKey);
+    var role = (roleHint && ROLES[roleHint]) ? roleHint : dominantRole(crewEntry);
+    var cmd = make(game, crewEntry.id, inheritedXp, originColonyKey, role);
     game.commanders.push(cmd);
-    /* Reset xp del crew: l'entità non si brucia, l'equipaggio si
-       riforma sotto il vuoto lasciato dall'ufficiale promosso
-       (scelta utente). */
     crewEntry.xp = 0;
+    crewEntry.svc = { combat: 0, travel: 0, tactical: 0 };
     return cmd;
   }
 
-  /* Helper: l'equipaggio appena tornato è candidato alla promozione?
-     Centralizza la soglia così expedition.js resta agnostico. */
-  function isPromotable(newXp) {
-    return (newXp | 0) >= PROMOTION_THRESHOLD;
+  function isPromotable(newXp) { return (newXp | 0) >= PROMOTION_THRESHOLD; }
+
+  /* Esperienza individuale della figura (cresce in servizio su una flotta).
+     Può far salire di rango → evento `commander-ranked`. */
+  function grantXp(game, cmd, amount, events) {
+    if (!cmd || !(amount > 0)) return;
+    var before = rankIndexForXp(cmd.xp || 0);
+    cmd.xp = (cmd.xp || 0) + amount;
+    var after = rankIndexForXp(cmd.xp);
+    cmd.rank = RANKS[after].label;
+    if (after > before && events) {
+      events.push({
+        kind: 'commander-ranked', commander: cmd,
+        rank: RANKS[after].label, impulso: game && game.timeImpulsi
+      });
+    }
   }
 
-  /* Pool idle a livello Impero (in panchina, non assegnati a flotte). */
   function list(game) {
     return (game && Array.isArray(game.commanders)) ? game.commanders : [];
   }
-
-  /* Tutti i Comandanti dell'Impero: pool idle (game.commanders) +
-     assegnati (su fleet.commander). Per le UI di roster. */
   function allOf(game) {
     var out = list(game).slice();
     ((game && game.fleets) || []).forEach(function (f) {
@@ -144,32 +254,43 @@
     });
     return out;
   }
-
-  /* Lazy-init del pool d'Impero. */
   function ensure(game) {
     if (!game) return;
     if (!Array.isArray(game.commanders)) game.commanders = [];
   }
 
-  /* ---------------------------------------------------------------
-     Aggancio Comandante → flotta (M09, chiude il gancio #43/#49).
-     `combat.js` legge già `fleet.commander.specialization` per il
-     +10% Tattico; `fleet.js` legge il bonus Navigatore sul viaggio.
-     Modello a "spostamento" (single source of truth): un Comandante
-     vive O nel pool d'Impero (game.commanders) O su una flotta
-     (fleet.commander), mai duplicato → round-trip JSON pulito.
-     --------------------------------------------------------------- */
+  /* Migrazione di una singola figura legacy (#43 → #75). Idempotente. */
+  function migrateFigure(cmd) {
+    if (!cmd) return cmd;
+    if (!cmd.role) {
+      var s = cmd.specialization;
+      cmd.role = (s === 'tattico') ? 'comandante'
+        : (s === 'navigatore' || s === 'logista') ? 'ingegnere'
+        : 'comandante';
+      if (s === 'logista' && !cmd.trait) { cmd.trait = 'logistico'; cmd.traitLabel = 'Logistico'; }
+    }
+    if (!ROLES[cmd.role]) cmd.role = 'comandante';
+    cmd.roleLabel = ROLES[cmd.role].label;
+    if (!cmd.race) { cmd.race = 'umani'; cmd.raceLabel = 'Umani'; }
+    cmd.rank = rankFor(cmd.xp || 0).label;
+    return cmd;
+  }
+  /* Converte tutte le figure dell'Impero (pool + assegnate). Idempotente. */
+  function migrateAll(game) {
+    if (!game) return;
+    ensure(game);
+    game.commanders.forEach(migrateFigure);
+    (game.fleets || []).forEach(function (f) { if (f && f.commander) migrateFigure(f.commander); });
+  }
 
-  /* Tutti i Comandanti assegnabili (idle, nel pool d'Impero). La chiave
-     `colonyKey` resta come provenienza narrativa (dove è emerso). */
+  /* ---------------------------------------------------------------
+     Aggancio figura → flotta (single source of truth).
+     --------------------------------------------------------------- */
   function assignableOf(game) {
     return list(game)
       .filter(function (cmd) { return cmd.status !== 'assigned'; })
       .map(function (cmd) { return { colonyKey: cmd.originColonyKey || null, commander: cmd }; });
   }
-
-  /* Assegna un Comandante idle (per id) alla flotta. Se la flotta ne ha
-     già uno, prima lo rilascia. Recovery-friendly: niente perdita. */
   function assignToFleet(game, fleet, commanderId) {
     if (!game || !fleet) return { ok: false, reason: 'Dati mancanti' };
     if (fleet.commander && fleet.commander.id === commanderId) return { ok: true, commander: fleet.commander };
@@ -178,19 +299,15 @@
     for (var i = 0; i < pool.length; i++) {
       if (pool[i].id === commanderId && pool[i].status !== 'assigned') { idx = i; break; }
     }
-    if (idx < 0) return { ok: false, reason: 'Comandante non disponibile' };
+    if (idx < 0) return { ok: false, reason: 'Figura non disponibile' };
     var found = pool[idx];
-    if (fleet.commander) releaseFromFleet(game, fleet);   // libera il precedente
-    pool.splice(idx, 1);                                  // esce dal pool d'Impero
+    if (fleet.commander) releaseFromFleet(game, fleet);
+    pool.splice(idx, 1);
     found.status = 'assigned';
     found.assignedFleetId = fleet.id;
     fleet.commander = found;
     return { ok: true, commander: found };
   }
-
-  /* Rilascia il Comandante di una flotta, rimettendolo nel pool d'Impero.
-     Sempre possibile (il pool esiste a prescindere dalle colonie → niente
-     più verruca dell'esilio). `opts` mantenuta per compat, ignorata. */
   function releaseFromFleet(game, fleet, opts) {
     if (!fleet || !fleet.commander) return null;
     var cmd = fleet.commander;
@@ -202,39 +319,69 @@
     return cmd;
   }
 
-  /* Moltiplicatore di velocità di viaggio dal Comandante (Navigatore −15%).
-     Letto da fleet.js in startNextLeg. */
+  /* Moltiplicatore di durata viaggio dalla figura (Ingegnere). Letto da
+     fleet.js in startNextLeg. (Nome storico mantenuto per i call-site.) */
   function fleetSpeedMul(fleet) {
     var cmd = fleet && fleet.commander;
-    if (cmd && cmd.specialization === 'navigatore') return 0.85;
-    return 1;
+    return cmd ? bonuses(cmd).travelMul : 1;
+  }
+  /* Moltiplicatore di consumo viveri (Ingegnere/Logistico). Letto da
+     fleet.js in processViveri. <1 = consumo più lento. */
+  function viveriDrainMul(fleet) {
+    var cmd = fleet && fleet.commander;
+    return cmd ? bonuses(cmd).viveriMul : 1;
+  }
+  /* Bundle di combattimento per la flotta (Comandante fp / Ingegnere scafo /
+     Stratega imboscata). Letto da combat.js in forceFromFleet + resolve. */
+  function combatBonus(fleet) {
+    var cmd = fleet && fleet.commander;
+    if (!cmd) return { fpMul: 1, hpMul: 1, firstStrike: 0 };
+    var b = bonuses(cmd);
+    return { fpMul: b.fpMul, hpMul: b.hpMul, firstStrike: b.firstStrike };
   }
 
-  /* Etichetta del bonus attivo, per la UI. */
+  /* Etichetta concisa dei bonus attivi, per la UI. */
   function bonusLabel(cmd) {
     if (!cmd) return '';
-    if (cmd.specialization === 'tattico') return '+10% potenza di fuoco';
-    if (cmd.specialization === 'navigatore') return '−15% durata viaggio';
-    if (cmd.specialization === 'logista') return 'logistica/cargo (gancio M12)';
-    return '';
+    var b = bonuses(cmd), parts = [];
+    if (b.fpMul > 1.001) parts.push('+' + Math.round((b.fpMul - 1) * 100) + '% fuoco');
+    if (b.firstStrike > 0.001) parts.push('imboscata +' + Math.round(b.firstStrike * 100) + '%');
+    if (b.hpMul > 1.001) parts.push('scafo +' + Math.round((b.hpMul - 1) * 100) + '%');
+    if (b.travelMul < 0.999) parts.push('−' + Math.round((1 - b.travelMul) * 100) + '% viaggio');
+    if (b.viveriMul < 0.999) parts.push('−' + Math.round((1 - b.viveriMul) * 100) + '% viveri');
+    return parts.join(' · ');
   }
 
   root.ORION = root.ORION || {};
   root.ORION.commander = {
     PROMOTION_THRESHOLD: PROMOTION_THRESHOLD,
+    RANKS: RANKS,
+    ROLES: ROLES,
+    ROLE_ORDER: ROLE_ORDER,
     NAME_POOL: NAME_POOL,
     TRAIT_POOL: TRAIT_POOL,
-    SPEC_POOL: SPEC_POOL,
+    RACE_POOL: RACE_POOL,
     make: make,
     promote: promote,
     isPromotable: isPromotable,
+    grantXp: grantXp,
+    bumpCrewSvc: bumpCrewSvc,
+    dominantRole: dominantRole,
+    bonuses: bonuses,
+    rankFor: rankFor,
+    rankLabel: rankLabel,
+    roleLabel: roleLabel,
     list: list,
     allOf: allOf,
     ensure: ensure,
+    migrateFigure: migrateFigure,
+    migrateAll: migrateAll,
     assignableOf: assignableOf,
     assignToFleet: assignToFleet,
     releaseFromFleet: releaseFromFleet,
     fleetSpeedMul: fleetSpeedMul,
+    viveriDrainMul: viveriDrainMul,
+    combatBonus: combatBonus,
     bonusLabel: bonusLabel
   };
 }(typeof window !== 'undefined' ? window : this));

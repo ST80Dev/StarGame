@@ -754,23 +754,22 @@
         '<p>La scelta è per-colonia: una colonia mineraria, una agricola, una militare, ecc. Puoi cambiarla in qualunque momento.</p>'
     },
     {
-      id: 'commander-promoted', tag: 'Forze · ★', title: 'Un Comandante emerge dall\'equipaggio',
+      id: 'commander-promoted', tag: 'Forze · ★', title: 'Una figura di flotta emerge dall\'equipaggio',
       body:
-        '<p>Quando un equipaggio raggiunge il <strong>grado massimo</strong> (xp 10, equipaggio <em>Leggende</em>), dal gruppo emerge ' +
-        'naturalmente un <strong>Comandante nominato</strong>: una figura militare con <strong>nome proprio</strong>, ' +
-        '<strong>tratto di personalità</strong> e <strong>specializzazione</strong>.</p>' +
-        '<p>Il Comandante eredita l\'esperienza che il crew aveva accumulato. L\'equipaggio <strong>non viene perso</strong> ' +
-        'ma riparte da zero — sono più persone, l\'ufficiale si stacca e il gruppo si riforma sotto il vuoto lasciato.</p>' +
-        '<p><strong>Specializzazioni</strong> (tre famiglie):</p>' +
+        '<p>Le figure <strong>non si costruiscono</strong>: <strong>emergono</strong> (§12.4). Quando un equipaggio raggiunge ' +
+        'il <strong>grado massimo</strong> (xp 10, <em>Leggende</em>) per servizio prestato, dal gruppo nasce una figura ' +
+        'nominata con <strong>nome</strong>, <strong>tratto</strong>, <strong>archetipo</strong> (Umani, Kelhari, Vorn…) e un <strong>ruolo</strong>.</p>' +
+        '<p>Il <strong>ruolo riflette ciò che l\'equipaggio ha fatto di più</strong>:</p>' +
         '<ul>' +
-          '<li><strong>Navigatore</strong> — esperto di rotte iperspaziali</li>' +
-          '<li><strong>Tattico</strong> — comando in battaglia</li>' +
-          '<li><strong>Logista</strong> — supply chain e usura della flotta</li>' +
+          '<li>più <strong>combattimenti</strong> → <strong>Comandante</strong> (più potenza di fuoco in battaglia)</li>' +
+          '<li>più <strong>viaggi / rotte lunghe / esplorazione</strong> → <strong>Ingegnere di Flotta</strong> (viaggio più breve, viveri più lenti, scafo più resistente)</li>' +
+          '<li>più <strong>pattuglie / ricognizioni</strong> → <strong>Stratega</strong> (imboscata: bordata d\'apertura in battaglia)</li>' +
         '</ul>' +
-        '<p>I Comandanti vengono elencati nella tab <strong>Forze</strong>. Per ora restano <em>in panchina</em>: ' +
-        'i loro bonus si attiveranno con il modulo <strong>Flotta</strong> (M08), quando potranno essere assegnati ' +
-        'a navi più evolute (corvette, fregate, incrociatori) e portare i bonus della loro specializzazione. ' +
-        'Tienili da parte: sono il nucleo della tua futura ufficialità.</p>'
+        '<p>Non serve avere flotte da guerra: anche solo <strong>girando la galassia</strong> le figure maturano — solo di tipo diverso. ' +
+        'L\'equipaggio non si perde, riparte da zero.</p>' +
+        '<p>Le figure vivono nel <strong>roster d\'Impero</strong> (vista Flotta). Assegnale a una flotta col pulsante <strong>★ Comandante</strong>: ' +
+        'i bonus si attivano solo quando sono al comando. Servendo in battaglia salgono di <strong>rango</strong> ' +
+        '(Tenente → Capitano → Commodoro → Ammiraglio) e i loro bonus crescono.</p>'
     },
     /* Decisione #45 — espansione slot via bonifica + terraformazione. */
     {

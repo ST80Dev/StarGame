@@ -1284,7 +1284,11 @@
       /* Servizio (decisione utente 2026-06-11): scaramuccia vinta → +1 xp
          all'equipaggio aderente alla flotta sopravvissuta. */
       if (playerWon && root.ORION.fleet && root.ORION.fleet.awardCrewXp) {
-        root.ORION.fleet.awardCrewXp(game, fleet, 1, events);
+        root.ORION.fleet.awardCrewXp(game, fleet, 1, events, 'combat');
+      }
+      /* M14 (#75): la figura assegnata matura individualmente in battaglia (§12.3). */
+      if (playerWon && fleet.commander && root.ORION.commander && root.ORION.commander.grantXp) {
+        root.ORION.commander.grantXp(game, fleet.commander, 1, events);
       }
       // Decisione #66: refund 50% se la coloniale è stata persa nel scontro.
       if (hadColonial) {
@@ -1563,7 +1567,10 @@
       /* Servizio (decisione utente 2026-06-11): assedio respinto → +1 xp
          all'equipaggio delle flotte che hanno difeso la colonia. */
       if (root.ORION.fleet && root.ORION.fleet.awardCrewXp) {
-        root.ORION.fleet.awardCrewXp(game, fleets[i], 1, events);
+        root.ORION.fleet.awardCrewXp(game, fleets[i], 1, events, 'combat');
+      }
+      if (fleets[i].commander && root.ORION.commander && root.ORION.commander.grantXp) {
+        root.ORION.commander.grantXp(game, fleets[i].commander, 1, events);
       }
     }
   }
@@ -1652,7 +1659,10 @@
     const playerWon = (report.winner === 'B');
     /* Servizio (decisione utente 2026-06-11): raider respinto → +1 xp crew. */
     if (playerWon && root.ORION.fleet && root.ORION.fleet.awardCrewXp) {
-      root.ORION.fleet.awardCrewXp(game, fleet, 1, events);
+      root.ORION.fleet.awardCrewXp(game, fleet, 1, events, 'combat');
+    }
+    if (playerWon && fleet.commander && root.ORION.commander && root.ORION.commander.grantXp) {
+      root.ORION.commander.grantXp(game, fleet.commander, 1, events);
     }
     if (outcome.lost > 0) warRegisterLoss(game, outcome.lost * CFG.WAR_MORALE_PER_SHIP, outcome.lost * CFG.WAR_PRESSURE_PER_LOSS);
     if (playerWon) warRegisterWin(game);

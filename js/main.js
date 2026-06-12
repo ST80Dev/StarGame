@@ -424,6 +424,9 @@ function newGame(seed, opts) {
     if (Array.isArray(saved.expeditions)) ORION.game.expeditions = saved.expeditions.slice();
     if (Array.isArray(saved.fleets)) ORION.game.fleets = saved.fleets.slice();
     if (Array.isArray(saved.commanders)) ORION.game.commanders = saved.commanders.slice();
+    /* M14 Fase A (#75): converte le figure legacy (specialization → role) e
+       riallinea i rank labels. Idempotente — no-op se già in formato #75. */
+    if (ORION.commander && ORION.commander.migrateAll) ORION.commander.migrateAll(ORION.game);
     /* M13 Fase A (decisione #57): ricerca tecnologica. Save pre-23 → null;
        ORION.research.ensure() sotto completa lo stato vuoto. */
     if (saved.research && typeof saved.research === 'object') {
@@ -4506,8 +4509,8 @@ function renderFleetView(stage) {
          emergente dagli equipaggi veterani, decisione #43). */
       const starHtml = uiIcon('star', 'amber');
       const cmdHtml = cmd
-        ? '<div class="fleet-item__cmd">' + starHtml + ' <strong>' + escapeHtml(cmd.rank + ' ' + cmd.name) + '</strong> · ' +
-            escapeHtml(cmd.specializationLabel || cmd.specialization) +
+        ? '<div class="fleet-item__cmd">' + starHtml + ' <strong>' + escapeHtml((cmd.rank || '') + ' ' + cmd.name) + '</strong> · ' +
+            escapeHtml(cmdRoleLabel(cmd)) +
             ' <span class="fleet-item__cmdbonus">' + escapeHtml(ORION.commander ? ORION.commander.bonusLabel(cmd) : '') + '</span></div>'
         : '';
       const cmdBtnLabel = cmd
@@ -4617,6 +4620,12 @@ function renderFleetView(stage) {
    Comandanti sono figure A LIVELLO IMPERO, non legate a una colonia.
    Elenca il pool idle (game.commanders) + quelli al comando di una flotta.
    La provenienza ("emerso su X") resta come etichetta narrativa. */
+/* Etichetta ruolo §12.4 di una figura (con fallback per save legacy). */
+function cmdRoleLabel(c) {
+  if (!c) return '—';
+  if (ORION.commander && ORION.commander.roleLabel) return ORION.commander.roleLabel(c);
+  return c.roleLabel || c.role || c.specializationLabel || c.specialization || '—';
+}
 function buildCommanderRoster(g) {
   if (!ORION.commander || !ORION.commander.allOf) return '';
   const all = ORION.commander.allOf(g);
@@ -4628,23 +4637,25 @@ function buildCommanderRoster(g) {
       ? 'al comando di <strong>' + escapeHtml(fleet ? fleet.name : '—') + '</strong>'
       : 'in panchina';
     const origin = c.originColonyKey ? (' · emerso su ' + escapeHtml(systemNameFromKey(g, c.originColonyKey))) : '';
+    const race = c.raceLabel ? (' · <span class="commander-roster__race" title="Archetipo">' + escapeHtml(c.raceLabel) + '</span>') : '';
     return '<li class="commander-roster__item">' +
-      '<span class="commander-roster__rank">' + escapeHtml(c.rank || 'Comandante') + '</span>' +
+      '<span class="commander-roster__rank">' + escapeHtml(c.rank || 'Tenente') + '</span>' +
       '<span class="commander-roster__name">' + escapeHtml(c.name || '—') + '</span>' +
-      '<span class="commander-roster__spec">' + escapeHtml(c.specializationLabel || c.specialization || '—') + '</span>' +
-      '<span class="commander-roster__trait" title="Tratto">' + escapeHtml(c.traitLabel || c.trait || '—') + '</span>' +
-      '<span class="xp-chip" title="Esperienza ereditata dall\'equipaggio">xp ' + (c.xp | 0) + '</span>' +
+      '<span class="commander-roster__spec commander-roster__spec--' + escapeHtml(c.role || 'comandante') + '">' + escapeHtml(cmdRoleLabel(c)) + '</span>' +
+      '<span class="commander-roster__trait" title="Tratto">' + escapeHtml(c.traitLabel || c.trait || '—') + '</span>' + race +
+      '<span class="xp-chip" title="Esperienza individuale (cresce in servizio)">xp ' + (c.xp | 0) + '</span>' +
+      '<span class="commander-roster__bonus" title="Bonus attivi">' + escapeHtml(ORION.commander.bonusLabel(c)) + '</span>' +
       '<span class="commander-roster__status commander-roster__status--' + escapeHtml(c.status || 'idle') + '">' + statusHtml + origin + '</span>' +
     '</li>';
   }).join('');
   return '<div class="cantieri-row commander-row">' +
     '<div class="cantieri-row__head">' +
       '<span class="cantieri-row__glyph ui-icon ui-icon--amber" aria-hidden="true">' + starHtml + '</span>' +
-      '<span class="cantieri-row__name">Comandanti dell\'Impero</span>' +
+      '<span class="cantieri-row__name">Figure dell\'Impero</span>' +
       '<span class="cantieri-row__counter">In organico: <strong>' + all.length + '</strong></span>' +
     '</div>' +
     '<ul class="commander-roster">' + rows + '</ul>' +
-    '<p class="commander-row__hint">Figure d\'Impero, non legate a una colonia: assegnale a una flotta col pulsante <strong>★ Comandante</strong>. Bonus per specializzazione (Tattico/Navigatore/Logista).</p>' +
+    '<p class="commander-row__hint">Figure di flotta emerse dal servizio (§12.4): <strong>Comandante</strong> (fuoco) · <strong>Ingegnere di Flotta</strong> (viaggio/scafo) · <strong>Stratega</strong> (imboscate). Il rango cresce in battaglia. Assegnale a una flotta col pulsante <strong>★ Comandante</strong>.</p>' +
   '</div>';
 }
 
@@ -4796,21 +4807,21 @@ function openCommanderPicker(fleetId, stage) {
   if (!fleet || !ORION.commander) return;
   const avail = ORION.commander.assignableOf(g);
   const cur = fleet.commander;
-  if (!avail.length && !cur) { showToast('Nessun Comandante disponibile — emergono dagli equipaggi veterani (xp≥5)'); return; }
+  if (!avail.length && !cur) { showToast('Nessuna figura disponibile — emergono dagli equipaggi al grado massimo (xp 10)'); return; }
   const starHtml = uiIcon('star', 'amber');
   const rows = avail.map(function (a) {
     const c = a.commander;
     const origin = a.colonyKey ? (' · da ' + escapeHtml(systemNameFromKey(g, a.colonyKey))) : '';
     return '<button class="cmd-pick__row" data-cmd="' + escapeHtml(c.id) + '" type="button">' +
-      '<span class="cmd-pick__name">' + starHtml + ' ' + escapeHtml(c.rank + ' ' + c.name) + '</span>' +
-      '<span class="cmd-pick__meta">' + escapeHtml(c.specializationLabel || c.specialization) +
+      '<span class="cmd-pick__name">' + starHtml + ' ' + escapeHtml((c.rank || '') + ' ' + c.name) + '</span>' +
+      '<span class="cmd-pick__meta">' + escapeHtml(cmdRoleLabel(c)) +
         ' · ' + escapeHtml(ORION.commander.bonusLabel(c)) + ' · ' + escapeHtml(c.traitLabel || '') +
         origin + '</span>' +
     '</button>';
-  }).join('') || '<p class="cmd-pick__empty">Nessun Comandante in panchina.</p>';
+  }).join('') || '<p class="cmd-pick__empty">Nessuna figura in panchina.</p>';
   const curHtml = cur
-    ? '<div class="cmd-pick__current">Assegnato: <strong>' + starHtml + ' ' + escapeHtml(cur.rank + ' ' + cur.name) + '</strong> · ' +
-        escapeHtml(cur.specializationLabel || cur.specialization) +
+    ? '<div class="cmd-pick__current">Assegnato: <strong>' + starHtml + ' ' + escapeHtml((cur.rank || '') + ' ' + cur.name) + '</strong> · ' +
+        escapeHtml(cmdRoleLabel(cur)) +
         ' <button class="btn btn--mini btn--with-icon btn--danger" data-cmd-release type="button">' +
         uiIcon('close', 'pink') + ' Rimuovi</button></div>'
     : '';
@@ -4821,7 +4832,7 @@ function openCommanderPicker(fleetId, stage) {
           '<button class="attack-overlay__x btn--icon-only" data-cmd-close type="button" aria-label="Chiudi">' +
             uiIcon('close') + '</button></header>' +
         curHtml +
-        '<p class="attack-overlay__sub">Specializzazioni: <strong>Tattico</strong> +10% fuoco · <strong>Navigatore</strong> −15% durata viaggio · <strong>Logista</strong> (gancio M12).</p>' +
+        '<p class="attack-overlay__sub">Ruoli §12.4: <strong>Comandante</strong> +fuoco · <strong>Ingegnere di Flotta</strong> −viaggio/viveri, +scafo · <strong>Stratega</strong> imboscata. Il rango cresce in battaglia.</p>' +
         '<div class="cmd-pick__list">' + rows + '</div>' +
       '</div>' +
     '</div>';
@@ -6835,6 +6846,8 @@ const DEFAULT_AUTOPAUSE = {
   /* Decisione #43 (M07.2): nascita di un Comandante nominato — evento
      narrativo forte (nuova figura giocabile), auto-pausa di default. */
   'commander-promoted': true,
+  /* M14 (#75): salita di rango della figura — atmosferico, non interrompe. */
+  'commander-ranked': false,
   /* Decisione #45: eventi rari capitale di gruppo, sempre notevoli. */
   'capital-declared': true,
   'capital-transition-end': true,
@@ -7218,7 +7231,8 @@ function showEventOverlay(events) {
     'fleet-colonize-orbit': 'Coloniale: orbita di setup',
     'fleet-colonize-foundation': 'Coloniale: fondazione in corso',
     'fleet-colonize-failed': 'Coloniale: fondazione fallita',
-    'commander-promoted': 'Nuovo Comandante nominato',
+    'commander-promoted': 'Nuova figura di flotta',
+    'commander-ranked': 'Figura promossa di rango',
     'capital-declared': 'Capitale di gruppo dichiarata',
     'capital-transition-end': 'Capitale entrata in carica',
     'capital-decommissioned': 'Vecchia capitale decommissionata',
@@ -7460,8 +7474,13 @@ function chronicleEvent(ev) {
     /* Decisione #43: la promozione di una figura Comandante è il
        "punto di nascita" dei soggetti militari nominati (gancio M14). */
     const c = ev.commander;
-    pushChronicle(ds + ' — <strong>' + escapeHtml(c.rank) + ' ' + escapeHtml(c.name) + '</strong> emerge dall\'equipaggio leggendario su ' + pname + ptag + ' · specializzazione <em>' + escapeHtml(c.specializationLabel) + '</em> · tratto <em>' + escapeHtml(c.traitLabel) + '</em>.', 'figure');
+    const raceTxt = c.raceLabel ? (' · <em>' + escapeHtml(c.raceLabel) + '</em>') : '';
+    pushChronicle(ds + ' — <strong>' + escapeHtml(c.rank) + ' ' + escapeHtml(c.name) + '</strong> emerge dall\'equipaggio leggendario su ' + pname + ptag + ' · ruolo <em>' + escapeHtml(cmdRoleLabel(c)) + '</em> · tratto <em>' + escapeHtml(c.traitLabel) + '</em>' + raceTxt + '.', 'figure');
     if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('commander-promoted');
+  } else if (ev.kind === 'commander-ranked') {
+    /* M14 (#75): la figura sale di rango servendo in battaglia. */
+    const c = ev.commander;
+    pushChronicle(ds + ' — <strong>' + escapeHtml(c.name) + '</strong> promosso al rango di <strong>' + escapeHtml(ev.rank) + '</strong> (' + escapeHtml(cmdRoleLabel(c)) + ').', 'figure');
   } else if (ev.kind === 'expedition-arrived') {
     const sys = ORION.game.galaxy.systems[ev.systemId];
     const tag = ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
