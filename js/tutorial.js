@@ -808,6 +808,36 @@
     },
 
     /* ==================================================================
+       M13 — Tecnologia (decisione #57, Fase A)
+       ================================================================== */
+    {
+      id: 'research-overview', tag: 'Ricerca · ⚛', title: 'Ricerca tecnologica',
+      body:
+        '<p>I tuoi <strong>laboratori</strong> §10 (su tutte le colonie) alimentano un <strong>pool d\'impero unico</strong>: ' +
+        'scegli <strong>un progetto alla volta</strong> dalla vista <em>Ricerca</em> e i punti/<span class="ds-unit">Ι</span> ' +
+        'lo riempiono. Più laboratori costruisci, più in fretta ricerchi.</p>' +
+        '<p><strong>Filosofia:</strong> una tecnologia <em>non aggiunge mai nuove cose da gestire</em>. O <strong>accende una ' +
+        'struttura che esiste già</strong> nel catalogo (Scudo planetario, Impianto esotico, Centro di ingegneria, ' +
+        'Terraformatori — finora bloccati da <code>tech:</code>), oppure è un <strong>modificatore passivo</strong> ' +
+        '(l\'Iperguida rende i viaggi di flotta tre volte più rapidi: lo senti, non lo gestisci).</p>' +
+        '<p><strong>Pista vittoria:</strong> la ricerca accumulata alimenta l\'<em>Ascensione tech</em> (§23).</p>'
+    },
+    {
+      id: 'research-tree', tag: 'Ricerca · ⚛', title: 'L\'albero tecnologico',
+      body:
+        '<p>In questa fase il catalogo è fatto dai <strong>5 punti fermi</strong> garantiti: <em>Iperguida I</em>, ' +
+        '<em>Scudi deflettori</em>, <em>Estrazione esotica</em>, <em>Bonifica territoriale</em> e ' +
+        '<em>Terraformazione</em>.</p>' +
+        '<p>Alcune tech sono <strong>nascoste</strong> (§11.1) finché non sblocchi il prerequisito: la Terraformazione ' +
+        'compare solo dopo la Bonifica territoriale.</p>' +
+        '<p><strong>Game-changer</strong> (★ es. Terraformazione): potenti ma a <em>doppia leva</em> — richiedono una ' +
+        '<strong>soglia di ricerca d\'impero</strong> (gioco avanzato) <em>e</em> una <strong>spesa di risorse all\'avvio</strong> ' +
+        '(pagata dalla capitale, rimborsata se cambi progetto).</p>' +
+        '<p><strong>In arrivo (Fase B):</strong> un catalogo ampio di cui ogni partita pesca dal seed solo un sottoinsieme ' +
+        '("la scienza è imprevedibile"), con tech-modificatore passive in più categorie.</p>'
+    },
+
+    /* ==================================================================
        M08 — Flotta base (decisione #42 + decisione #46 Fase B)
        ================================================================== */
     {

@@ -633,9 +633,16 @@
       stock[k] = (stock[k] || 0) + net[k];
       if (stock[k] < 0) stock[k] = 0;     // i negativi diventano "carestia"
     });
-    // Ricerca/exotic si accumulano in campi gancio (M13).
+    // Ricerca: accumulo lifetime (pista Ascensione tech §23) + finanziamento
+    // del progetto attivo (M13, decisione #57). Il tasso modulato dalla
+    // scarsità (come l'accumulo storico) alimenta il pool d'impero.
     if (out.rates.research) {
-      colony.researchAccum = (colony.researchAccum || 0) + out.rates.research * malus;
+      const research = out.rates.research * malus;
+      colony.researchAccum = (colony.researchAccum || 0) + research;
+      if (root.ORION.research) {
+        root.ORION.research.fund(game, research);
+        if (game.research) game.research._rateAccum = (game.research._rateAccum || 0) + research;
+      }
     }
     if (out.rates.exotic) {
       colony.exoticAccum = (colony.exoticAccum || 0) + out.rates.exotic * malus;
@@ -1819,6 +1826,13 @@
 
   function tick(game, events) {
     game.timeImpulsi = (game.timeImpulsi || 0) + 1;
+    /* M13 (decisione #57): azzera l'accumulatore del tasso di ricerca del
+       tick — viene riempito da processProduction e usato per l'ETA del
+       progetto attivo (etaImpulsi). */
+    if (root.ORION.research) {
+      root.ORION.research.ensure(game);
+      game.research._rateAccum = 0;
+    }
     const colonies = game.colonies || {};
     const keys = Object.keys(colonies);
     for (let i = 0; i < keys.length; i++) {
@@ -1909,6 +1923,13 @@
        Determinismo: zero RNG. */
     if (root.ORION.diplomacy && root.ORION.diplomacy.tick) {
       root.ORION.diplomacy.tick(game, events);
+    }
+    /* M13 (decisione #57): ricerca tecnologica. Il progetto attivo è stato
+       finanziato in processProduction; qui registriamo il tasso del tick (per
+       l'ETA) e controlliamo il completamento (sblocco + evento). */
+    if (root.ORION.research) {
+      game.research._lastRate = game.research._rateAccum || 0;
+      root.ORION.research.tick(game, events);
     }
   }
 
@@ -2060,6 +2081,11 @@
     /* M12 Fase A2: accordi commerciali AI in scadenza. */
     if (root.ORION.agreements && root.ORION.agreements.minDuration) {
       const d = root.ORION.agreements.minDuration(game);
+      if (d > 0 && d < best) best = d;
+    }
+    /* M13 (decisione #57): progetto di ricerca in completamento. */
+    if (root.ORION.research && root.ORION.research.etaImpulsi) {
+      const d = root.ORION.research.etaImpulsi(game);
       if (d > 0 && d < best) best = d;
     }
     /* M07: spedizioni in viaggio (outbound o returning) */
