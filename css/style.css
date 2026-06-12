@@ -396,6 +396,14 @@ button { font-family: inherit; }
 .galaxy-canvas { display: block; width: 100%; height: 100%; cursor: grab; }
 .galaxy-canvas:active { cursor: grabbing; }
 
+/* decisione #80 — navigazione a zoom: mini-dissolvenza dell'holder che
+   compare cambiando livello (Galassia↔Sistema↔Pianeta). */
+.is-zoom-entering { animation: zoom-fade-in 200ms ease-out; }
+@keyframes zoom-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .is-zoom-entering { animation: none; }
+}
+
 .btn--mini {
   font-family: var(--font-data);
   font-size: 0.68rem;
