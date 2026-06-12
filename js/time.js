@@ -400,10 +400,14 @@
        Il display usa Math.ceil sulla duration per non mostrare frazioni
        (decisione di sessione, vedi PR build-progress). */
     const settling = (colony.phase === 'settling');
+    /* M13 Fase B (decisione #57): tech costruzione = la coda matura più in
+       fretta (modificatore passivo, zero nuove strutture). */
+    const buildMul = (root.ORION.research && root.ORION.research.mods)
+      ? root.ORION.research.mods(game).buildSpeedMul : 1;
     const stillQueued = [];
     for (let i = 0; i < colony.queue.length; i++) {
       const q = colony.queue[i];
-      const dec = (settling && i === 0) ? 1.5 : 1;
+      const dec = ((settling && i === 0) ? 1.5 : 1) * buildMul;
       q.duration = (q.duration || 0) - dec;
       if (q.duration <= 0) {
         const def = root.ORION.structures.get(q.id);
@@ -637,7 +641,12 @@
     // del progetto attivo (M13, decisione #57). Il tasso modulato dalla
     // scarsità (come l'accumulo storico) alimenta il pool d'impero.
     if (out.rates.research) {
-      const research = out.rates.research * malus;
+      /* M13 Fase B (decisione #57): tech informatica = +X% velocità ricerca
+         (modificatore passivo). Applicato uniformemente a funding + ETA +
+         accumulo lifetime per coerenza. */
+      const researchMul = (root.ORION.research && root.ORION.research.mods)
+        ? root.ORION.research.mods(game).researchMul : 1;
+      const research = out.rates.research * malus * researchMul;
       colony.researchAccum = (colony.researchAccum || 0) + research;
       if (root.ORION.research) {
         root.ORION.research.fund(game, research);
@@ -829,6 +838,12 @@
         } else {
           colony.diaspora = null;
         }
+      }
+
+      /* M13 Fase B (decisione #57): tech biologia = +X% crescita popolazione
+         (modificatore passivo, zero nuove strutture). */
+      if (root.ORION.research && root.ORION.research.mods) {
+        growth *= root.ORION.research.mods(game).popGrowthMul;
       }
 
       /* Capacità di carico (DECISIONE #45 emenda v3): il consumo pop è

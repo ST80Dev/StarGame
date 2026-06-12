@@ -825,16 +825,16 @@
     {
       id: 'research-tree', tag: 'Ricerca · ⚛', title: 'L\'albero tecnologico',
       body:
-        '<p>In questa fase il catalogo è fatto dai <strong>5 punti fermi</strong> garantiti: <em>Iperguida I</em>, ' +
-        '<em>Scudi deflettori</em>, <em>Estrazione esotica</em>, <em>Bonifica territoriale</em> e ' +
-        '<em>Terraformazione</em>.</p>' +
-        '<p>Alcune tech sono <strong>nascoste</strong> (§11.1) finché non sblocchi il prerequisito: la Terraformazione ' +
-        'compare solo dopo la Bonifica territoriale.</p>' +
-        '<p><strong>Game-changer</strong> (★ es. Terraformazione): potenti ma a <em>doppia leva</em> — richiedono una ' +
-        '<strong>soglia di ricerca d\'impero</strong> (gioco avanzato) <em>e</em> una <strong>spesa di risorse all\'avvio</strong> ' +
-        '(pagata dalla capitale, rimborsata se cambi progetto).</p>' +
-        '<p><strong>In arrivo (Fase B):</strong> un catalogo ampio di cui ogni partita pesca dal seed solo un sottoinsieme ' +
-        '("la scienza è imprevedibile"), con tech-modificatore passive in più categorie.</p>'
+        '<p>Il catalogo ha sempre i <strong>5 punti fermi</strong> garantiti (Iperguida I, Scudi, Estrazione esotica, ' +
+        'Bonifica, Terraformazione) <em>più</em> un <strong>pool</strong> di tecnologie pescato <strong>dal seed</strong>: ' +
+        'ogni galassia ne rende disponibile solo una parte (~60%), le altre quella partita sono <em>impossibili</em>. ' +
+        '"La scienza è imprevedibile" → alberi diversi ad ogni partita.</p>' +
+        '<p>Le tech del pool sono <strong>modificatori passivi</strong> (niente nuove strutture da gestire): più estrazione, ' +
+        'costruzione/ricerca più rapide, navi con più fuoco/corazza, popolazione che cresce prima, rotte più capienti/lunghe, ' +
+        'e i tier superiori di Iperguida (×⅛, ×1/20).</p>' +
+        '<p>Alcune sono <strong>nascoste</strong> (§11.1) finché non sblocchi il prerequisito. I <strong>game-changer</strong> ' +
+        '(★) hanno doppia leva: <strong>soglia di ricerca d\'impero</strong> + <strong>spesa di risorse all\'avvio</strong> ' +
+        '(pagata dalla capitale, rimborsata se cambi progetto).</p>'
     },
 
     /* ==================================================================

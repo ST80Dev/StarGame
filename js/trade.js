@@ -173,18 +173,29 @@
   /* Cargo effettivo (throughput/Ι) di un mercantile = cargo tier × cargoMul
      del rango. La penalità d'usura (§15.7) riduce gradualmente il cargo. */
   function mercantileWear(merc) { return Math.max(0, Math.min(WEAR_MAX, merc.wear || 0)); }
+  /* M13 Fase B (decisione #57): tech trasferimento = +X% cargo e +N raggio
+     (modificatori passivi). Letti dal game globale (le rotte operano sempre
+     sulla partita corrente); guardati per i test headless. */
+  function tradeMods() {
+    const RM = root.ORION.research;
+    return (RM && RM.mods && root.ORION.game) ? RM.mods(root.ORION.game) : null;
+  }
+
   function mercantileCargo(merc) {
     const t = getTier(merc.tier);
     if (!t) return 0;
     const wearMul = 1 - WEAR_CARGO_PENALTY * (mercantileWear(merc) / WEAR_MAX);
-    return Math.round(t.cargo * rankForXp(merc.xp).cargoMul * wearMul * 10) / 10;
+    const m = tradeMods();
+    const techMul = m ? m.cargoMul : 1;
+    return Math.round(t.cargo * rankForXp(merc.xp).cargoMul * wearMul * techMul * 10) / 10;
   }
 
-  /* Raggio massimo (hop) di un mercantile = hop del tier + bonus rango. */
+  /* Raggio massimo (hop) di un mercantile = hop del tier + bonus rango + tech. */
   function mercantileMaxHops(merc) {
     const t = getTier(merc.tier);
     if (!t) return 0;
-    return t.hops + rankForXp(merc.xp).hopBonus;
+    const m = tradeMods();
+    return t.hops + rankForXp(merc.xp).hopBonus + (m ? m.hopBonus : 0);
   }
 
   /* ------------------------------------------------------------------

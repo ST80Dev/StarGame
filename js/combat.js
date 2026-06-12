@@ -124,6 +124,14 @@
   function forceFromFleet(game, fleet, side) {
     const F = ORION.fleet;
     const cmdMul = fleetCommanderFpMul(game, fleet);
+    /* M13 Fase B (decisione #57): tech armi/scudi = +X% potenza di fuoco e
+       corazza alle navi DEL GIOCATORE (le flotte sono sue; le AI usano
+       forceFromMaterialized → non toccate). Modificatori passivi. L'hpMul è
+       un buffer di combattimento: il writeback (applyOutcomeToFleet) lo clampa
+       al maxHp naturale così non resta inflazionato fra una battaglia e l'altra. */
+    const RM = (ORION.research && ORION.research.mods) ? ORION.research.mods(game) : null;
+    const fpMul = RM ? RM.fpMul : 1;
+    const hpMul = RM ? RM.hpMul : 1;
     const combatants = [];
     const ships = (fleet && fleet.ships) || [];
     for (let i = 0; i < ships.length; i++) {
@@ -133,9 +141,9 @@
         id: s.id,
         kind: s.kind,
         label: s.name ? (cls.name + ' «' + s.name + '»') : cls.name,
-        hp: (s.hp != null ? s.hp : cls.hp),
-        maxHp: cls.hp,
-        fp: cls.fp || 0,
+        hp: (s.hp != null ? s.hp : cls.hp) * hpMul,
+        maxHp: cls.hp * hpMul,
+        fp: (cls.fp || 0) * fpMul,
         xp: s.xp || 0,
         cmdMul: cmdMul,
         src: { type: 'ship', ref: s, fleet: fleet }
@@ -400,7 +408,11 @@
       const s = fleet.ships[i];
       const surv = survivingIds[s.id];
       if (!surv) { lost++; continue; }
-      s.hp = Math.max(1, Math.round(surv.hp));
+      /* Clamp al maxHp naturale: l'hpMul da tech (Fase B) è un buffer di
+         combattimento, non hp permanente → non si accumula fra battaglie. */
+      const F = ORION.fleet;
+      const naturalMax = (F && F.getClass(s.kind) && F.getClass(s.kind).hp) || surv.hp;
+      s.hp = Math.max(1, Math.min(naturalMax, Math.round(surv.hp)));
       const beforeTier = veterancyTierIndex(s.xp || 0);
       s.xp = (s.xp || 0) + 1;
       const afterTier = veterancyTierIndex(s.xp);
