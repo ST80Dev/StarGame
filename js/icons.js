@@ -336,6 +336,53 @@
       '<path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>'
     ),
 
+    /* ---- Classi navi (riserva Hangar, M08 #42) — silhouette dedicate per
+       riconoscere a colpo d'occhio la classe, tutte top-view "verso l'alto".
+       La complessità della sagoma cresce con la stazza. ---- */
+
+    /* Scafo esploratore — sonda snella con sensore in punta. */
+    shipExplorer: svg(
+      '<path d="M12 3l2.2 6.5v4.5l-2.2 2.5-2.2-2.5V9.5z"/>' +
+      '<line x1="12" y1="3" x2="12" y2="1.5"/>' +
+      '<path d="M9.8 14l-2.5 3M14.2 14l2.5 3"/>'
+    ),
+
+    /* Caccia stellare — fusoliera + ali a freccia (star-fighter). */
+    shipCaccia: svg(
+      '<path d="M12 2v17"/>' +
+      '<path d="M12 8L5 6 4 12M12 8l7-2 1 6"/>' +
+      '<path d="M9.5 19h5"/>'
+    ),
+
+    /* Intercettore — dardo affusolato con doppio propulsore. */
+    shipIntercettore: svg(
+      '<path d="M12 2l3 11-1 5h-4l-1-5z"/>' +
+      '<path d="M9 10L5 14M15 10l4 4"/>' +
+      '<path d="M10.5 18l-1 3M13.5 18l1 3"/>'
+    ),
+
+    /* Corvetta — scafo medio con pod laterali. */
+    shipCorvetta: svg(
+      '<path d="M12 2.5c2.2 2.4 3.3 6.2 3.3 10.3L14.5 19h-5l-.8-6.2c0-4.1 1.1-7.9 3.3-10.3z"/>' +
+      '<path d="M9.5 11L5.5 13M14.5 11l4 2"/>'
+    ),
+
+    /* Fregata — scafo massiccio, doppie ali + plancia. */
+    shipFregata: svg(
+      '<path d="M12 2c2.8 3 4 8 4 13l-1 5H9l-1-5c0-5 1.2-10 4-13z"/>' +
+      '<path d="M8.2 10L3 12M15.8 10L21 12"/>' +
+      '<path d="M8.5 15L4.5 18M15.5 15l4 3"/>' +
+      '<circle cx="12" cy="9" r="1" fill="currentColor" stroke="none"/>'
+    ),
+
+    /* Pioniere coloniale — modulo tozzo con cupola e pannelli. */
+    shipColoniale: svg(
+      '<rect x="7.5" y="6" width="9" height="12" rx="3.5"/>' +
+      '<path d="M12 6V2.8"/>' +
+      '<path d="M7.5 10H3.5M16.5 10h4"/>' +
+      '<circle cx="12" cy="11.5" r="2.3"/>'
+    ),
+
     /* PR-H: 4 sigle del Calendario del Faro (decisione #30). Ognuna
        ha un glifo dedicato per sostituire la lettera greca nel testo,
        più colore tematico per scansione rapida. */

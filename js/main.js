@@ -3004,6 +3004,48 @@ function uiIcon(name, tone) {
   return '<span class="ui-icon' + cls + '" aria-hidden="true">' + ORION.icon(name) + '</span>';
 }
 
+/* Visual per classe nave nella riserva Hangar (#42): icona SVG dedicata
+   (icons.js) + tinta per ruolo (esplorazione ciano · combattimento caldo ·
+   coloniale verde). Fallback al glifo monocolore se l'icona manca. */
+const SHIP_VIS = {
+  explorer:     { icon: 'shipExplorer',     tone: 'cyan' },
+  caccia:       { icon: 'shipCaccia',       tone: 'gold' },
+  intercettore: { icon: 'shipIntercettore', tone: 'amber' },
+  corvetta:     { icon: 'shipCorvetta',     tone: 'pink' },
+  fregata:      { icon: 'shipFregata',      tone: 'violet' },
+  coloniale:    { icon: 'shipColoniale',    tone: 'green' }
+};
+function shipVisIcon(cls) {
+  const v = SHIP_VIS[cls.id] || { tone: 'soft' };
+  const svg = (v.icon && ORION.icon && ORION.icon(v.icon)) || '';
+  const inner = svg || ('<span class="hangar-ship__glyph">' + (cls.glyph || '◈') + '</span>');
+  return '<span class="hangar-ship__ico ui-icon ui-icon--' + v.tone + '" aria-hidden="true">' + inner + '</span>';
+}
+
+/* Riquadro di riepilogo della riserva navi a terra (#42): una card per
+   classe presente, con icona estesa + conteggio + stazza (hp/fuoco/eq). */
+function shipReserveBox(colony, classes) {
+  const cards = classes.map(function (cls) {
+    const n = (colony.ships && colony.ships[cls.id]) || 0;
+    if (!n) return null;
+    const stats = [];
+    if (cls.hp) stats.push('<span title="Corazza">♥ ' + cls.hp + '</span>');
+    if (cls.fp) stats.push('<span title="Potenza di fuoco">⚔ ' + cls.fp + '</span>');
+    if (cls.crew) stats.push('<span title="Equipaggio richiesto">☗ ' + cls.crew + '</span>');
+    return '<div class="hangar-ship" title="' + escapeHtml(cls.name) + '">' +
+        shipVisIcon(cls) +
+        '<div class="hangar-ship__main">' +
+          '<div class="hangar-ship__top"><b>×' + n + '</b> ' + escapeHtml(cls.name) + '</div>' +
+          '<div class="hangar-ship__stats">' + stats.join('<i>·</i>') + '</div>' +
+        '</div>' +
+      '</div>';
+  }).filter(Boolean);
+  if (!cards.length) {
+    return '<div class="hangar-reserve hangar-reserve--empty">Nessuna nave in riserva — costruiscine una qui sotto.</div>';
+  }
+  return '<div class="hangar-reserve">' + cards.join('') + '</div>';
+}
+
 function renderCantieriSection(colony, planet) {
   const hasHangar = !!(colony.structures && colony.structures['cantiere-navale']);
   const hasAcademy = !!(colony.structures && colony.structures['accademia-militare']);
@@ -3109,27 +3151,18 @@ function renderCantieriSection(colony, planet) {
     const buildEnabled = payOkShip && check.ok;
     const blockReason = !check.ok ? check.reason : (!payOkShip ? 'Risorse insufficienti' : '');
 
-    /* Counter per-classe (riepilogo compatto). */
-    const counterParts = classes.map(function (cls) {
-      const n = (colony.ships && colony.ships[cls.id]) || 0;
-      if (!n) return null;
-      return '<span title="' + escapeHtml(cls.name) + '">' + cls.glyph + ' ' + n + '</span>';
-    }).filter(Boolean);
-    const counterHtml = counterParts.length
-      ? counterParts.join(' · ')
-      : '<span class="cantieri-row__base">nessuna nave</span>';
-
     html += '<div class="cantieri-row">' +
       '<div class="cantieri-row__head">' +
         '<span class="cantieri-row__glyph" aria-hidden="true">▱</span>' +
         '<span class="cantieri-row__name">Hangar di costruzione <span class="cantieri-row__base">lvl ' + hangarLvl + '</span></span>' +
-        '<span class="cantieri-row__counter">Scafi: <strong>' + sShips + '</strong> ' + counterHtml + '</span>' +
+        '<span class="cantieri-row__counter">Scafi a terra: <strong>' + sShips + '</strong></span>' +
       '</div>' +
       '<div class="cantieri-row__caps">' +
         '<span class="cantieri-cap' + cantieriCls + '" title="Build paralleli abilitati dal livello dell\'Hangar (scafi + mercantili)">Cantieri <strong>' + cantieriUse + ' / ' + buildSlots + '</strong></span>' +
         '<span class="cantieri-cap' + portCls + '" title="Posti d\'attracco a terra · in spedizione: ' + flying + '">Attracchi <strong>' + bound + ' / ' + docks + '</strong></span>' +
         techHtml +
-      '</div>';
+      '</div>' +
+      shipReserveBox(colony, classes);
     queue.forEach(function (q, idx) {
       const qKind = q.kind || 'explorer';
       const qCls = (F.getClass && F.getClass(qKind)) || { name: 'Scafo esploratore', glyph: '▱' };
