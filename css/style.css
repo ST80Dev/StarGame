@@ -2811,6 +2811,64 @@ select.main-menu__input { cursor: pointer; }
   gap: 4px;
 }
 
+/* Riserva navi Hangar (#42): riquadro di riepilogo con card per classe.
+   Icone SVG estese e tintate per ruolo (icons.js shipExplorer/…). */
+.hangar-reserve {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 6px;
+  margin: 2px 0 9px;
+}
+.hangar-reserve--empty {
+  display: block;
+  font-size: 0.82em;
+  color: var(--c-muted, #8a93b8);
+  padding: 7px 9px;
+  border: 1px dashed rgba(125, 110, 220, 0.28);
+  border-radius: 9px;
+  background: rgba(110, 90, 200, 0.05);
+}
+.hangar-ship {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 9px;
+  background: rgb(var(--c-surface-rgb, 34 46 86) / 0.55);
+  border: 1px solid rgba(125, 110, 220, 0.22);
+  border-radius: 10px;
+  min-width: 0;
+}
+.hangar-ship__ico {
+  flex: 0 0 auto;
+  font-size: 1.95em;
+  line-height: 1;
+}
+.hangar-ship__glyph { font-size: 0.85em; }
+.hangar-ship__main { min-width: 0; flex: 1; }
+.hangar-ship__top {
+  font-size: 0.82em;
+  font-weight: 600;
+  color: var(--c-text, #d8def0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hangar-ship__top b {
+  font-family: var(--font-mono, monospace);
+  font-weight: 700;
+  color: #fff;
+  margin-right: 2px;
+}
+.hangar-ship__stats {
+  display: flex;
+  gap: 5px;
+  margin-top: 2px;
+  font-size: 0.72em;
+  color: var(--c-muted, #8a93b8);
+  font-family: var(--font-mono, monospace);
+}
+.hangar-ship__stats i { opacity: 0.4; font-style: normal; }
+
 /* Roster equipaggi (tab Forze): lista per-equipaggio a riposo / in missione */
 .crew-roster {
   list-style: none;
