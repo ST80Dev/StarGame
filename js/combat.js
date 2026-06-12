@@ -128,7 +128,10 @@
        applicata in resolve()). Sostituisce il vecchio check 'tattico' #43. */
     const cb = (ORION.commander && ORION.commander.combatBonus)
       ? ORION.commander.combatBonus(fleet) : { fpMul: 1, hpMul: 1, firstStrike: 0 };
-    const cmdMul = cb.fpMul;
+    /* M15 — bonus di nave ammiraglia (GDD §12.1): +fuoco e +scafo a TUTTA
+       la flotta, indipendente dalle figure. Si combina coi bonus comandante. */
+    const flag = (F && F.flagshipBonus) ? F.flagshipBonus(fleet) : { fpMul: 1, hpMul: 1 };
+    const cmdMul = cb.fpMul * flag.fpMul;
     /* M13 Fase B (decisione #57): tech armi/scudi = +X% potenza di fuoco e
        corazza alle navi DEL GIOCATORE (le flotte sono sue; le AI usano
        forceFromMaterialized → non toccate). Modificatori passivi. L'hpMul è
@@ -136,7 +139,7 @@
        al maxHp naturale così non resta inflazionato fra una battaglia e l'altra. */
     const RM = (ORION.research && ORION.research.mods) ? ORION.research.mods(game) : null;
     const fpMul = RM ? RM.fpMul : 1;
-    const hpMul = (RM ? RM.hpMul : 1) * cb.hpMul;   // tech ×  Ingegnere
+    const hpMul = (RM ? RM.hpMul : 1) * cb.hpMul * flag.hpMul;   // tech × Ingegnere × ammiraglia
     const combatants = [];
     const ships = (fleet && fleet.ships) || [];
     for (let i = 0; i < ships.length; i++) {

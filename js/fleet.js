@@ -72,6 +72,40 @@
          trasporta livelli demografici. popCargo=2 = "seme demografico" che
          alimenta la fondazione o il rinforzo di una colonia esistente. */
       popCargo: 2
+    },
+    /* ============================================================
+       M15 — Grandi navi (GDD §12.1, decisioni #41/#42).
+       Navi capitali rare e costose: averne è un traguardo (§12.1
+       "grandi navi rare"). Ospitano più figure (M14) in base alla
+       classe — vedi fleetOfficerSlots. `dockWeight` = quanto pesano
+       sugli attracchi (#41: caccia=1 … incrociatore alto). I tempi
+       seguono il GDD §4.4 (Incrociatore 20-40, Dreadnought 180-240).
+       ============================================================ */
+    incrociatore: {
+      id: 'incrociatore', name: 'Incrociatore', glyph: '◆',
+      cost: { met: 240, en: 110, food: 20 }, time: 40,
+      hp: 300, fp: 45, speed: 0.8, crew: 14, hangarLvl: 4,
+      maintMet: 0.9, dockWeight: 3
+    },
+    /* Dreadnought + Ammiraglia: l'Hangar planetario NON basta (#41) →
+       richiedono il Bacino orbitale (struttura dedicata, structures.js).
+       L'Ammiraglia è UNICA per civiltà (GDD §12.1) + bonus di nave a
+       tutta la flotta (flagshipBonus). */
+    dreadnought: {
+      id: 'dreadnought', name: 'Dreadnought', glyph: '⬢',
+      cost: { met: 600, en: 280, food: 40 }, time: 200,
+      hp: 650, fp: 95, speed: 0.65, crew: 30, hangarLvl: 5,
+      requiresStruct: { id: 'bacino-orbitale', level: 1 },
+      maintMet: 2.0, dockWeight: 6
+    },
+    ammiraglia: {
+      id: 'ammiraglia', name: 'Nave Ammiraglia', glyph: '❖',
+      cost: { met: 1000, en: 480, food: 80, water: 40 }, time: 280,
+      hp: 1000, fp: 140, speed: 0.7, crew: 50, hangarLvl: 5,
+      requiresStruct: { id: 'bacino-orbitale', level: 2 },
+      maintMet: 3.0, dockWeight: 10,
+      unique: true,        // GDD §12.1: una sola per civiltà
+      flagship: true       // bonus di nave a tutta la flotta (flagshipBonus)
     }
   };
 
@@ -86,7 +120,42 @@
     }
     return cap;
   }
-  const CLASS_ORDER = ['explorer', 'caccia', 'intercettore', 'corvetta', 'fregata', 'coloniale'];
+  const CLASS_ORDER = ['explorer', 'caccia', 'intercettore', 'corvetta', 'fregata', 'incrociatore', 'dreadnought', 'ammiraglia', 'coloniale'];
+
+  /* M15: una flotta contiene una nave di questa classe? */
+  function fleetHasKind(fleet, kind) {
+    if (!fleet || !Array.isArray(fleet.ships)) return false;
+    for (let i = 0; i < fleet.ships.length; i++) {
+      if (fleet.ships[i].kind === kind) return true;
+    }
+    return false;
+  }
+
+  /* M15 — slot figura (M14) ospitabili dalla flotta, dettati dalla nave
+     capitale più grande presente (decisione utente 2026-06-12):
+       nessuna capitale → 1 · Incrociatore → 2 · Dreadnought/Ammiraglia → 3.
+     Max un bonus per ruolo (gestito in commander.assignToFleet). */
+  function fleetOfficerSlots(fleet) {
+    if (fleetHasKind(fleet, 'ammiraglia') || fleetHasKind(fleet, 'dreadnought')) return 3;
+    if (fleetHasKind(fleet, 'incrociatore')) return 2;
+    return 1;
+  }
+
+  /* M15 — bonus di NAVE AMMIRAGLIA (GDD §12.1 "bonus speciale"): la nave
+     unica per civiltà dà +fuoco e +scafo a TUTTA la flotta, indipendente
+     dalle figure. Letto da combat.forceFromFleet. */
+  function flagshipBonus(fleet) {
+    if (fleetHasKind(fleet, 'ammiraglia')) return { fpMul: 1.15, hpMul: 1.10 };
+    return { fpMul: 1, hpMul: 1 };
+  }
+
+  /* M15 — peso d'attracco di una flotta/colonia (#41). Le navi capitali
+     pesano più di una unità: una flotta di dreadnought satura il porto in
+     fretta. Usato dal cap attracchi in expedition.js. */
+  function dockWeightOf(kind) {
+    const c = CLASSES[kind];
+    return (c && c.dockWeight) ? c.dockWeight : 1;
+  }
 
   /* Costanti del viaggio inter-sistema. Coerenti con expedition.js M07
      (decisione #32): un hop sub-luce dura 40-80 Ι (+ scaling danger). M13
@@ -379,6 +448,9 @@
       location: { systemId: colony.systemId, status: 'docked' },
       ships: [],
       crew: [],
+      /* M14 → M15: figure di flotta. Slot multipli sulle navi capitali
+         (vedi fleetOfficerSlots). Single source of truth. */
+      officers: [],
       orders: { type: 'idle' },
       route: [],
       routeIdx: 0,
@@ -598,8 +670,10 @@
     for (let i = 0; i < fleet.crew.length; i++) {
       colony.crews.explorer.push(fleet.crew[i]);
     }
-    /* Restituisci il Comandante alla panchina della colonia (#43/#49). */
-    if (fleet.commander && ORION.commander && ORION.commander.releaseFromFleet) {
+    /* Restituisci TUTTE le figure al pool d'Impero (#43/#49 → M15 multi-figura). */
+    if (ORION.commander && ORION.commander.releaseAllFromFleet) {
+      ORION.commander.releaseAllFromFleet(game, fleet);
+    } else if (fleet.commander && ORION.commander && ORION.commander.releaseFromFleet) {
       ORION.commander.releaseFromFleet(game, fleet, { toColonyKey: fleet.ownerColonyKey });
     }
     /* Rimuovi la flotta dal gioco. */
@@ -1904,6 +1978,11 @@
     FORMATIONS: FORMATIONS,
     setFormation: setFormation,
     fleetHasColonial: fleetHasColonial,
+    /* M15 — grandi navi. */
+    fleetHasKind: fleetHasKind,
+    fleetOfficerSlots: fleetOfficerSlots,
+    flagshipBonus: flagshipBonus,
+    dockWeightOf: dockWeightOf,
     /* Decisione #66 estensione: API trasporto coloni. */
     fleetPopCargoCap: fleetPopCargoCap,
     embarkPop: embarkPop,

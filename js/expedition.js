@@ -117,15 +117,32 @@
     const L = Math.max(1, level | 0);
     return table[Math.min(L, table.length) - 1] || 0;
   }
+  /* M15 — il Bacino orbitale aggiunge capacità (cantieri + attracchi) per le
+     navi capitali, SOMMATA all'Hangar (#41). Letta dal proprio hangarCapacity. */
+  function bacinoCap(colony, kind) {
+    const ent = colony && colony.structures && colony.structures['bacino-orbitale'];
+    if (!ent) return 0;
+    const S = root.ORION && root.ORION.structures;
+    const def = S && S.get('bacino-orbitale');
+    const hc = def && def.hangarCapacity;
+    const table = (hc && Array.isArray(hc[kind])) ? hc[kind] : (kind === 'buildSlots' ? [1, 2] : [12, 24]);
+    return _capForLevel(table, ent.level || 1);
+  }
   function hangarBuildSlots(colony) {
     const ent = colony && colony.structures && colony.structures['cantiere-navale'];
-    if (!ent) return 0;
-    return _capForLevel(hangarCapTable('buildSlots'), ent.level || 1);
+    let n = ent ? _capForLevel(hangarCapTable('buildSlots'), ent.level || 1) : 0;
+    return n + bacinoCap(colony, 'buildSlots');
   }
   function hangarDockCapacity(colony) {
     const ent = colony && colony.structures && colony.structures['cantiere-navale'];
-    if (!ent) return 0;
-    return _capForLevel(hangarCapTable('docks'), ent.level || 1);
+    let n = ent ? _capForLevel(hangarCapTable('docks'), ent.level || 1) : 0;
+    return n + bacinoCap(colony, 'docks');
+  }
+  /* Peso d'attracco di una classe nave (#41 → M15): le capitali pesano più
+     di 1. Fallback 1 se ORION.fleet non è caricato (test headless). */
+  function shipDockWeight(kind) {
+    const F = root.ORION && root.ORION.fleet;
+    return (F && F.dockWeightOf) ? F.dockWeightOf(kind) : 1;
   }
   function activeShipBuilds(colony) {
     return (colony && colony.assets && Array.isArray(colony.assets.shipQueue))
@@ -197,8 +214,16 @@
      mantenuto per retro-compat. Il limite "quanta flotta posso permettermi"
      vive ora nel sostentamento (viveri #69 + equipaggi + usura). */
   function totalShipsBound(game, colony, colonyKey) {
-    const docked = availableShips(colony);                 // contatore a terra
-    const queued = activeShipBuilds(colony);               // in costruzione (occupano cantiere ma non porto)
+    /* M15: conteggio PESATO per attracco (le capitali pesano dockWeight>1)
+       su TUTTE le classi a terra, non solo gli explorer. */
+    let docked = 0;
+    const ships = (colony && colony.ships) || {};
+    Object.keys(ships).forEach(function (k) {
+      docked += (ships[k] || 0) * shipDockWeight(k);
+    });
+    let queued = 0;
+    const q = (colony && colony.assets && colony.assets.shipQueue) || [];
+    for (let i = 0; i < q.length; i++) queued += shipDockWeight(q[i].kind || 'explorer');
     const flying = shipsOnExpedition(game, colonyKey);     // spedizioni legacy (0 post-#60)
     return { docked: docked, queued: queued, flying: flying, total: docked + queued + flying };
   }
@@ -232,19 +257,22 @@
 
   /* canBuildShip — verifica preliminare per startShipBuild (decisione #41).
      Recovery-friendly: ritorna {ok:false, reason} con motivo umano. */
-  function canBuildShip(game, colony, colonyKey) {
+  function canBuildShip(game, colony, colonyKey, kind) {
     if (!colony) return { ok: false, reason: 'Colonia inesistente' };
     const ent = colony.structures && colony.structures['cantiere-navale'];
     if (!ent) return { ok: false, reason: 'Hangar di costruzione non costruito' };
     const slots = hangarBuildSlots(colony);
     const active = activeCantieriUse(colony);
     if (active >= slots) {
-      return { ok: false, reason: 'Cantieri saturi (' + active + '/' + slots + '). Espandi l\'Hangar o attendi.' };
+      return { ok: false, reason: 'Cantieri saturi (' + active + '/' + slots + '). Espandi l\'Hangar o il Bacino orbitale.' };
     }
     const docks = hangarDockCapacity(colony);
     const bound = totalShipsBound(game, colony, colonyKey).total;
-    if (bound >= docks) {
-      return { ok: false, reason: 'Porto saturo (' + bound + '/' + docks + ' navi). Espandi l\'Hangar o lancia spedizioni per liberare attracchi.' };
+    /* M15: la nave in arrivo pesa dockWeight (capitali > 1). Controlla che ci
+       stia (non solo "almeno 1 unità libera"). */
+    const w = kind ? shipDockWeight(kind) : 1;
+    if (bound + w > docks) {
+      return { ok: false, reason: 'Porto saturo (' + bound + '/' + docks + ', servono ' + w + '). Espandi l\'Hangar/Bacino o libera attracchi.' };
     }
     return { ok: true };
   }
