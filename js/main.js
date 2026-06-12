@@ -17,7 +17,7 @@ ORION.version = '0.6.6';
 
 /* Etichette provvisorie del viewport per le viste non ancora implementate. */
 ORION.viewLabels = {
-  research:  { caption: 'VISTA RICERCA',    hint: "L'albero tecnologico arriverà più avanti nello sviluppo." },
+  research:  { caption: 'VISTA RICERCA',    hint: 'Pool d’impero + albero tecnologico (M13).' },
   diplomacy: { caption: 'VISTA DIPLOMAZIA', hint: 'La diplomazia arriverà più avanti nello sviluppo.' }
 };
 
@@ -337,6 +337,9 @@ function newGame(seed, opts) {
     /* Comandanti a livello Impero (decisione utente 2026-06-11): pool idle.
        Quelli assegnati vivono su fleet.commander. */
     commanders: [],
+    /* M13 Fase A (decisione #57): ricerca tecnologica. catalogVersion 1 =
+       solo i 5 punti fermi (il pool/sorteggio è Fase B). */
+    research: { catalogVersion: 1, unlocked: [], activeProject: null, progress: 0, activationPaid: null },
     /* Decisione #45: mapping centrale gruppo→capitale (lazy initFromHome
        dopo colonizeHomePlanet). */
     capitals: {},
@@ -420,6 +423,17 @@ function newGame(seed, opts) {
     if (Array.isArray(saved.expeditions)) ORION.game.expeditions = saved.expeditions.slice();
     if (Array.isArray(saved.fleets)) ORION.game.fleets = saved.fleets.slice();
     if (Array.isArray(saved.commanders)) ORION.game.commanders = saved.commanders.slice();
+    /* M13 Fase A (decisione #57): ricerca tecnologica. Save pre-23 → null;
+       ORION.research.ensure() sotto completa lo stato vuoto. */
+    if (saved.research && typeof saved.research === 'object') {
+      ORION.game.research = {
+        catalogVersion: saved.research.catalogVersion || 1,
+        unlocked: Array.isArray(saved.research.unlocked) ? saved.research.unlocked.slice() : [],
+        activeProject: saved.research.activeProject || null,
+        progress: saved.research.progress || 0,
+        activationPaid: saved.research.activationPaid || null
+      };
+    }
     if (Array.isArray(saved.chronicle)) ORION.game.chronicle = saved.chronicle.slice();
     /* Decisione #45: ripristina mapping capitali; se vuoto, initFromHome
        sotto auto-popola con la home (retro-compat schema 6). */
@@ -528,6 +542,11 @@ function newGame(seed, opts) {
      assente (save pre-schema-11 → parte dall'anteprima M10). Idempotente. */
   if (ORION.diplomacy && ORION.diplomacy.ensureReputation) {
     ORION.diplomacy.ensureReputation(ORION.game);
+  }
+  /* M13 Fase A (decisione #57): inizializza lo stato ricerca se assente
+     (partita nuova o save pre-schema-23). Idempotente. */
+  if (ORION.research && ORION.research.ensure) {
+    ORION.research.ensure(ORION.game);
   }
 
   setHudDate(ORION.time.currentDS(ORION.game));
@@ -751,6 +770,17 @@ function renderView(stage, view) {
     if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
     if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
     renderMarketView(stage);
+    return;
+  }
+
+  // M13 Fase A (decisione #57): vista "Ricerca" — pool d'impero + albero
+  // tecnologico (i 5 punti fermi). Read+azione (scegli progetto), no Canvas.
+  if (view === 'research') {
+    if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; } if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
+    if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
+    if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
+    if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
+    renderResearchView(stage);
     return;
   }
 
@@ -3994,6 +4024,123 @@ function renderDestinyView(stage) {
   });
 }
 
+/* M13 Fase A (decisione #57): vista "Ricerca". Pool d'impero distribuito,
+   1 progetto attivo; albero dei 5 punti fermi raggruppato per categoria §11.2.
+   I rami nascosti (§11.1) compaiono solo quando i prereq sono sbloccati. */
+function renderResearchView(stage) {
+  if (!stage) return;
+  const g = ORION.game;
+  const R = ORION.research;
+  if (!g || !R) return;
+  R.ensure(g);
+  if (ORION.tutorial) ORION.tutorial.fire('research-overview');
+
+  const cat = R.catalogFor(g);
+  const rate = (g.research._lastRate && g.research._lastRate > 0) ? g.research._lastRate : R.empireResearchRate(g);
+  const total = Math.round(R.empireResearchTotal(g));
+  const unlocked = g.research.unlocked.length;
+
+  /* ----- progetto attivo ----- */
+  let activeHtml;
+  if (g.research.activeProject) {
+    const t = R.get(g.research.activeProject);
+    const prog = g.research.progress || 0;
+    const pct = t ? Math.max(0, Math.min(100, Math.round(prog / t.cost * 100))) : 0;
+    const eta = R.etaImpulsi(g);
+    activeHtml =
+      '<div class="res-active">' +
+        '<div class="res-active__head">' +
+          '<span class="res-active__name">' + escapeHtml(t ? t.name : g.research.activeProject) + '</span>' +
+          '<span class="res-active__eta">' + (eta > 0 ? ('completa in ~' + eta + ' ' + iU()) : 'in attesa di ricerca') + '</span>' +
+        '</div>' +
+        '<div class="res-bar"><div class="res-bar__fill" style="width:' + pct + '%"></div></div>' +
+        '<div class="res-active__foot">' +
+          '<span class="res-active__prog">' + Math.round(prog) + ' / ' + (t ? t.cost : '?') + ' punti</span>' +
+          '<button class="btn btn--mini btn--danger" data-action="research-cancel" type="button">Annulla progetto</button>' +
+        '</div>' +
+      '</div>';
+  } else {
+    activeHtml = '<p class="panel__note">Nessun progetto attivo. Scegli una tecnologia da ricercare qui sotto: i laboratori di tutto l\'impero la finanziano insieme.</p>';
+  }
+
+  /* ----- albero per categoria (solo tech visibili §11.1) ----- */
+  const cats = Object.keys(R.CATEGORIES);
+  let treeHtml = '';
+  cats.forEach(function (cid) {
+    const items = cat.filter(function (t) { return t.cat === cid && t.visible; });
+    if (!items.length) return;
+    treeHtml += '<p class="sysinfo__sub">' + escapeHtml(R.CATEGORIES[cid]) + '</p>';
+    treeHtml += '<ul class="res-list">' + items.map(function (t) {
+      let chip, action = '';
+      if (t.status === 'unlocked') {
+        chip = '<span class="res-chip res-chip--ok">✓ sbloccata</span>';
+      } else if (t.status === 'active') {
+        chip = '<span class="res-chip res-chip--active">in ricerca</span>';
+      } else if (t.status === 'available') {
+        chip = '<span class="res-chip res-chip--avail">' + t.cost + ' punti</span>';
+        action = '<button class="btn btn--mini btn--enter" data-action="research-pick" data-id="' + t.id + '" type="button">Ricerca</button>';
+      } else { /* locked */
+        const cr = R.canResearch(g, t.id);
+        chip = '<span class="res-chip res-chip--lock" title="' + escapeHtml(cr.reason || '') + '">bloccata</span>';
+      }
+      const gc = t.gameChanger ? '<span class="res-gc" title="Game-changer">★</span>' : '';
+      let meta = '';
+      if (t.requires.length) {
+        meta += '<span class="res-meta">richiede ' + t.requires.map(function (rq) {
+          return escapeHtml((R.get(rq) || { name: rq }).name);
+        }).join(', ') + '</span>';
+      }
+      if (t.gameChanger) {
+        const acParts = t.activationCost ? Object.keys(t.activationCost).map(function (k) {
+          return resIcon(k) + ' ' + t.activationCost[k];
+        }).join(' ') : '';
+        meta += '<span class="res-meta">ricerca d\'impero ≥ ' + t.minResearch + (acParts ? (' · attivazione ' + acParts) : '') + '</span>';
+      }
+      return '<li class="res-item res-item--' + t.status + '">' +
+        '<div class="res-item__head">' +
+          '<span class="res-item__name">' + gc + escapeHtml(t.name) + '</span>' + chip +
+        '</div>' +
+        '<p class="res-item__desc">' + escapeHtml(t.desc) + '</p>' +
+        (meta ? '<div class="res-item__meta">' + meta + '</div>' : '') +
+        (action ? '<div class="res-item__action">' + action + '</div>' : '') +
+      '</li>';
+    }).join('') + '</ul>';
+  });
+
+  stage.innerHTML =
+    '<div class="fleet-view research-view">' +
+      '<header class="fleet-view__head">' +
+        '<h2 class="fleet-view__title">Ricerca <span class="fleet-view__sub">M13 · Tecnologia</span></h2>' +
+      '</header>' +
+      '<div class="market-summary">' +
+        '<div class="market-summary__cell"><span class="market-summary__val">' + (Math.round(rate * 10) / 10) + '</span><span class="market-summary__lbl">Ricerca / ' + iU() + '</span></div>' +
+        '<div class="market-summary__cell"><span class="market-summary__val">' + total + '</span><span class="market-summary__lbl">Ricerca d\'impero</span></div>' +
+        '<div class="market-summary__cell"><span class="market-summary__val">' + unlocked + ' / ' + cat.length + '</span><span class="market-summary__lbl">Tech sbloccate</span></div>' +
+      '</div>' +
+      '<p class="sysinfo__sub">Progetto attivo</p>' +
+      activeHtml +
+      treeHtml +
+      '<p class="panel__note">I <em>laboratori</em> §10 di tutte le colonie alimentano un <em>pool d\'impero</em> unico: un progetto alla volta. Costruire più laboratori accelera ogni ricerca. Alcune tecnologie restano nascoste finché non sblocchi il prerequisito.</p>' +
+    '</div>';
+
+  /* ----- handlers ----- */
+  stage.querySelectorAll('[data-action="research-pick"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const r = ORION.research.setProject(g, b.dataset.id);
+      if (!r.ok) { showToast(r.reason || 'Ricerca non disponibile'); return; }
+      if (ORION.tutorial) ORION.tutorial.fire('research-tree');
+      persistGame(g);
+      renderResearchView(stage);
+    });
+  });
+  const cancelBtn = stage.querySelector('[data-action="research-cancel"]');
+  if (cancelBtn) cancelBtn.addEventListener('click', function () {
+    ORION.research.clearProject(g);
+    persistGame(g);
+    renderResearchView(stage);
+  });
+}
+
 function renderMarketView(stage) {
   if (!stage) return;
   const g = ORION.game;
@@ -6729,6 +6876,9 @@ const DEFAULT_AUTOPAUSE = {
   'system-cohesion-broken': false,
   'federation-formed': true,
   'federation-broken': true,
+  /* M13 Fase A (decisione #57): completamento di una ricerca — momento
+     notevole (sblocca strutture/effetti), auto-pausa ON. */
+  'research-complete': true,
   /* M12 Fase A1 (decisione #53): eventi commercio. Tutti OFF di default —
      frequenti/atmosferici e recovery-friendly (le interruzioni rotta
      ripartono da sole). L'utente può accenderli dall'overlay. */
@@ -7087,6 +7237,7 @@ function showEventOverlay(events) {
     'system-cohesion-broken': 'Sistema coeso: dissolto',
     'federation-formed': 'Federazione emergente',
     'federation-broken': 'Federazione dissolta',
+    'research-complete': 'Ricerca completata',
     'mercantile-built': 'Mercantile varato',
     'mercantile-promoted': 'Mercantile promosso',
     'trade-route-interrupted': 'Rotta commerciale interrotta',
@@ -7424,6 +7575,19 @@ function chronicleEvent(ev) {
     if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('capital');
   } else if (ev.kind === 'capital-decommissioned') {
     pushChronicle(ds + ' — <strong>' + pname + ptag + '</strong> ha terminato il decommissioning · ritorno a regime normale.', 'planet');
+  } else if (ev.kind === 'research-complete') {
+    /* M13 Fase A (decisione #57): ricerca completata. Blurb dell'effetto
+       sbloccato (struttura esistente o modificatore passivo). */
+    const techBlurb = {
+      iperguida: 'viaggi di flotta ×⅓ · sbloccato il Convoglio iperspaziale (Mercantile III)',
+      scudi: 'sbloccato lo <strong>Scudo planetario</strong>',
+      esotici: 'sbloccato l\'<strong>Impianto esotico</strong>',
+      bonifica: 'sbloccato il <strong>Centro di ingegneria planetaria</strong> (più slot)',
+      terraform: 'sbloccati i <strong>Terraformatori</strong> (forte espansione slot)'
+    };
+    const blurb = techBlurb[ev.effect] || 'nuovo ramo tecnologico disponibile';
+    pushChronicle(ds + ' — <strong>Ricerca completata</strong>: <strong>' + escapeHtml(ev.name || ev.techId) + '</strong> · ' + blurb + '.', 'planet');
+    if (ORION.tutorial) ORION.tutorial.fire('research-overview');
   } else if (ev.kind === 'civ-contact') {
     /* M10 Fase A (decisione #47): primo contatto con una civiltà AI.
        La scheda-dossier vera arriva in Fase B; qui è una voce di cronaca. */

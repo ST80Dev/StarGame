@@ -160,7 +160,12 @@
     if (base < TRAVEL_MIN) base = TRAVEL_MIN;
     if (base > TRAVEL_MAX) base = TRAVEL_MAX;
     const sp = minSpeed && minSpeed > 0 ? minSpeed : 1;
-    return Math.max(1, Math.round(base / sp));
+    /* M13 (decisione #32/#57): l'Iperguida T1 riduce i tempi di viaggio a un
+       terzo. Applicato qui (punto unico) così stima e durata reale coincidono
+       per tutti i consumer (startNextLeg, routeImpulsi, wizard viveri). */
+    let t = base / sp;
+    if (ORION.research && ORION.research.hyperMul) t *= ORION.research.hyperMul(ORION.game);
+    return Math.max(1, Math.round(t));
   }
 
   /* Velocità minima delle navi in flotta (la più lenta detta il passo). */

@@ -55,7 +55,7 @@
      DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
      nuovo gioco la preserva e una recovery best-effort prova a dedurla
      da colonie/flotte/spedizioni/cronaca. */
-  const SCHEMA_VERSION = 22;
+  const SCHEMA_VERSION = 23;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -196,7 +196,19 @@
          Il pool idle vive in game.commanders[]; quelli assegnati vivono su
          fleet.commander (auto-serializzati in game.fleets). La migrazione
          v21→v22 sposta i vecchi colony.commanders[] qui. */
-      commanders: Array.isArray(game.commanders) ? game.commanders : []
+      commanders: Array.isArray(game.commanders) ? game.commanders : [],
+      /* Schema 23 (M13 Fase A, decisione #57): ricerca tecnologica. Si persiste
+         lo stato mutevole (tech sbloccate, progetto attivo, progresso) +
+         catalogVersion come legacy-snapshot per-partita (il pool/sorteggio
+         arriva in Fase B e bumperà catalogVersion). I campi cache (_lastRate,
+         _rateAccum) NON si salvano (ricalcolati al primo tick). */
+      research: (game.research && typeof game.research === 'object') ? {
+        catalogVersion: game.research.catalogVersion || 1,
+        unlocked: Array.isArray(game.research.unlocked) ? game.research.unlocked.slice() : [],
+        activeProject: game.research.activeProject || null,
+        progress: game.research.progress || 0,
+        activationPaid: game.research.activationPaid || null
+      } : null
     };
   }
 
@@ -558,6 +570,15 @@
         });
       }
       payload.schema = 22;
+    }
+    /* v22 → v23 (M13 Fase A, decisione #57): ricerca tecnologica. Save vecchi
+       → stato vuoto (catalogVersion 1, nessuna tech sbloccata, nessun progetto).
+       Lazy: ORION.research.ensure(game) al load completa eventuali campi. */
+    if ((payload.schema || 22) < 23) {
+      if (!payload.research || typeof payload.research !== 'object') {
+        payload.research = { catalogVersion: 1, unlocked: [], activeProject: null, progress: 0, activationPaid: null };
+      }
+      payload.schema = 23;
     }
     return payload;
   }

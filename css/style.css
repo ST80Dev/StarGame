@@ -6688,3 +6688,55 @@ select.main-menu__input { cursor: pointer; }
 .destiny-card__foot { margin-top: auto; display: flex; justify-content: flex-end; }
 
 .lp-launcher__btn--destiny.is-active { box-shadow: inset 0 0 0 1px var(--c-violet); }
+
+/* =====================================================================
+   M13 Fase A — Ricerca (decisione #57)
+   ===================================================================== */
+.research-view .res-active {
+  background: rgb(var(--c-surface-rgb) / 0.55);
+  border: 1px solid rgba(120,200,230,0.22);
+  border-radius: 8px; padding: 10px 12px; margin-bottom: 12px;
+}
+.res-active__head, .res-active__foot {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+}
+.res-active__name { font-family: var(--font-display); color: var(--c-text); font-size: 0.95rem; }
+.res-active__eta { color: var(--c-accent); font-size: 0.78rem; }
+.res-active__prog { color: var(--c-text-faint); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+.res-bar {
+  height: 8px; border-radius: 5px; margin: 8px 0;
+  background: rgb(var(--c-bg-deep-rgb) / 0.8); overflow: hidden;
+}
+.res-bar__fill {
+  height: 100%; border-radius: 5px;
+  background: linear-gradient(90deg, var(--c-violet), var(--c-accent));
+  transition: width 0.2s ease;
+}
+.research-view .res-list {
+  list-style: none; margin: 0 0 14px; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px;
+}
+.res-item {
+  background: rgb(var(--c-surface-rgb) / 0.45);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-left: 3px solid var(--c-violet);
+  border-radius: 7px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px;
+}
+.res-item--unlocked { border-left-color: var(--c-ok, #7fd6a0); opacity: 0.85; }
+.res-item--active   { border-left-color: var(--c-accent); }
+.res-item--locked   { opacity: 0.6; }
+.res-item__head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.res-item__name { font-family: var(--font-display); color: var(--c-text); font-size: 0.86rem; }
+.res-item__desc { color: var(--c-text-faint); font-size: 0.74rem; line-height: 1.35; margin: 0; }
+.res-item__meta { display: flex; flex-wrap: wrap; gap: 8px; }
+.res-meta { color: var(--c-text-faint); font-size: 0.68rem; }
+.res-item__action { margin-top: 4px; }
+.res-chip {
+  font-size: 0.66rem; padding: 1px 7px; border-radius: 10px; white-space: nowrap;
+  font-family: var(--font-display);
+}
+.res-chip--ok     { background: rgba(127,214,160,0.16); color: #9fe0b6; }
+.res-chip--active { background: rgba(120,200,230,0.18); color: var(--c-accent); }
+.res-chip--avail  { background: rgba(180,150,230,0.16); color: #cdb6ee; }
+.res-chip--lock   { background: rgba(255,255,255,0.05); color: var(--c-text-faint); }
+.res-gc { color: #f0d670; margin-right: 4px; }

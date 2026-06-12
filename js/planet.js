@@ -593,8 +593,14 @@
         const have = colony.structures[id];
         if (!have || (have.level || 1) < lvl) return { ok: false, reason: 'Richiede ' + (root.ORION.structures.get(id) || { name: id }).name + ' lvl ' + lvl };
       } else if (r.indexOf('tech:') === 0) {
-        // gancio M13: per ora consideriamo non disponibile.
-        return { ok: false, reason: 'Richiede tecnologia (M13)' };
+        // M13 (decisione #57): la tech è disponibile se sbloccata nel pool
+        // d'impero. Fallback difensivo: se il modulo research non è caricato
+        // (test headless legacy), la tech resta bloccata come prima.
+        const techId = r.slice(5);
+        if (!root.ORION.research || !root.ORION.research.isUnlocked(game, techId)) {
+          const tdef = root.ORION.research && root.ORION.research.get(techId);
+          return { ok: false, reason: 'Richiede ricerca: ' + ((tdef && tdef.name) || techId) };
+        }
       }
     }
     // risorse: costo escalante del prossimo modulo (decisione #38)

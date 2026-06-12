@@ -163,9 +163,8 @@
     for (let i = 0; i < req.length; i++) {
       const r = req[i];
       if (r.indexOf('tech:') === 0) {
-        /* Gancio M13: nessuna tech sbloccata in Fase A1. */
-        const techs = (game && game.tech) || null;
-        if (!techs || !techs[r.slice(5)]) return false;
+        /* M13 (decisione #57): sbloccata se la tech è nel pool d'impero. */
+        if (!root.ORION.research || !root.ORION.research.isUnlocked(game, r.slice(5))) return false;
       }
     }
     return true;
