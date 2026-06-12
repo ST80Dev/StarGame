@@ -571,7 +571,8 @@
           var promotedCmd = null;
           var C = root.ORION && root.ORION.commander;
           if (C && C.isPromotable(newCrew.xp)) {
-            promotedCmd = C.promote(game, newCrew, newCrew.xp, exp.originColonyKey);
+            /* Spedizione = servizio di viaggio → Ingegnere di Flotta (#75). */
+            promotedCmd = C.promote(game, newCrew, newCrew.xp, exp.originColonyKey, 'ingegnere');
             if (promotedCmd) {
               events.push({
                 kind: 'commander-promoted',

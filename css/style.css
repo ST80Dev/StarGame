@@ -2926,6 +2926,31 @@ select.main-menu__input { cursor: pointer; }
   color: #c8b6ff;
   font-style: italic;
 }
+/* M14 (#75): chip ruolo colorata per i 3 tipi §12.4. */
+.commander-roster__spec--comandante {
+  background: rgba(230, 90, 110, 0.14);
+  border-color: rgba(230, 90, 110, 0.34);
+  color: #f0a8b4;
+}
+.commander-roster__spec--ingegnere {
+  background: rgba(240, 200, 110, 0.14);
+  border-color: rgba(240, 200, 110, 0.32);
+  color: #f0d8a0;
+}
+.commander-roster__spec--stratega {
+  background: rgba(140, 110, 230, 0.16);
+  border-color: rgba(140, 110, 230, 0.34);
+  color: #c8b6ff;
+}
+.commander-roster__race {
+  font-size: 0.74em;
+  color: var(--c-muted, #8a93b8);
+  font-style: italic;
+}
+.commander-roster__bonus {
+  font-size: 0.74em;
+  color: #9fd0a8;
+}
 .commander-roster__status {
   margin-left: auto;
   font-size: 0.78em;

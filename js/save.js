@@ -55,7 +55,7 @@
      DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
      nuovo gioco la preserva e una recovery best-effort prova a dedurla
      da colonie/flotte/spedizioni/cronaca. */
-  const SCHEMA_VERSION = 23;
+  const SCHEMA_VERSION = 24;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -579,6 +579,28 @@
         payload.research = { catalogVersion: 1, unlocked: [], activeProject: null, progress: 0, activationPaid: null };
       }
       payload.schema = 23;
+    }
+
+    /* v23 → v24 (M14 Fase A, decisione #75): figure di flotta con RUOLO
+       (Comandante/Ingegnere/Stratega) al posto della vecchia
+       `specialization` #43. Conversione inline (dependency-free):
+       tattico→comandante, navigatore/logista→ingegnere; logista lascia il
+       tratto "Logistico"; archetipo §18 default "Umani" (narrativo). Le
+       figure assegnate vivono su fleet.commander → migra anche quelle.
+       ORION.commander.migrateAll(game) al load completa eventuali residui. */
+    if ((payload.schema || 23) < 24) {
+      var migFig = function (cmd) {
+        if (!cmd || cmd.role) return;
+        var s = cmd.specialization;
+        cmd.role = (s === 'tattico') ? 'comandante'
+          : (s === 'navigatore' || s === 'logista') ? 'ingegnere'
+          : 'comandante';
+        if (s === 'logista' && !cmd.trait) { cmd.trait = 'logistico'; cmd.traitLabel = 'Logistico'; }
+        if (!cmd.race) { cmd.race = 'umani'; cmd.raceLabel = 'Umani'; }
+      };
+      if (Array.isArray(payload.commanders)) payload.commanders.forEach(migFig);
+      if (Array.isArray(payload.fleets)) payload.fleets.forEach(function (f) { if (f && f.commander) migFig(f.commander); });
+      payload.schema = 24;
     }
     return payload;
   }

@@ -1145,7 +1145,10 @@
       return;
     }
     if (fleet.viveri > 0) {
-      fleet.viveri -= 1;
+      /* Ingegnere di Flotta (M14 #75): consumo viveri più lento (viveriMul < 1). */
+      const vmul = (root.ORION.commander && root.ORION.commander.viveriDrainMul)
+        ? root.ORION.commander.viveriDrainMul(fleet) : 1;
+      fleet.viveri = Math.max(0, fleet.viveri - vmul);
       if (fleet.viveri <= VIVERI_WARN && !fleet._supplyWarned) {
         fleet._supplyWarned = true;
         events.push({ kind: 'fleet-supply-low', fleetId: fleet.id, fleetName: fleet.name,
@@ -1458,7 +1461,8 @@
         /* Promozione Comandante (#43): se xp >= 5, spawn figura nominata. */
         const C = ORION.commander;
         if (C && C.isPromotable && C.isPromotable(newCrew.xp)) {
-          const promotedCmd = C.promote(game, newCrew, newCrew.xp, fleet.ownerColonyKey);
+          /* Rientro esplorazione = servizio di viaggio → Ingegnere di Flotta (#75). */
+          const promotedCmd = C.promote(game, newCrew, newCrew.xp, fleet.ownerColonyKey, 'ingegnere');
           if (promotedCmd) {
             events.push({
               kind: 'commander-promoted',
@@ -1722,7 +1726,7 @@
          conclusa → l'equipaggio matura. Anti-farm: le rotte brevi (1-2
          tappe) non danno xp. */
       if (order.waypoints && order.waypoints.length >= 3) {
-        awardCrewXp(game, fleet, 1, events);
+        awardCrewXp(game, fleet, 1, events, 'travel');
       }
       finishCompound(game, fleet, events, 'route-complete');
       return;
@@ -1734,7 +1738,7 @@
          Anti-farm: il ping-pong a 2 sistemi non matura; un giro a 3+
          sistemi costa ≥120 Ι, quindi la crescita è lenta (servizio). */
       if (order.loopIdx === 0 && order.loop.length >= 3) {
-        awardCrewXp(game, fleet, 1, events);
+        awardCrewXp(game, fleet, 1, events, 'tactical');
       }
       const next = order.loop[order.loopIdx];
       const path = computePath(game.galaxy, fleet.location.systemId, next);
@@ -1776,7 +1780,7 @@
      d'origine) e il crew si riforma (commander.promote resetta a 0).
      Deterministico (#5), recovery-friendly (#22): se la colonia d'origine
      non esiste più, l'xp resta sul crew e la promozione avverrà al rientro. */
-  function awardCrewXp(game, fleet, amount, events) {
+  function awardCrewXp(game, fleet, amount, events, kind) {
     if (!fleet || !Array.isArray(fleet.crew) || !(amount > 0)) return;
     const C = root.ORION && root.ORION.commander;
     const colony = game.colonies && game.colonies[fleet.ownerColonyKey];
@@ -1784,6 +1788,9 @@
       const cr = fleet.crew[i];
       if (!cr) continue;
       cr.xp = (cr.xp || 0) + amount;
+      /* M14 (#75): accumula il TIPO di servizio → al momento della
+         promozione il ruolo della figura riflette l'attività dominante. */
+      if (C && C.bumpCrewSvc) C.bumpCrewSvc(cr, kind || 'combat', amount);
       /* Comandante a livello Impero (decisione utente 2026-06-11): la
          promozione avviene SEMPRE al grado massimo, anche se la flotta è
          lontano da casa / in esilio (niente colonia richiesta). */
