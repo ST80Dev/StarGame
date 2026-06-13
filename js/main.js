@@ -1978,6 +1978,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
        progress bar. Recovery-friendly: finisce sempre da sola. */
     let settlingBanner = '';
     if (colony.phase === 'settling' && colony.settlingStart != null) {
+      if (ORION.tutorial) ORION.tutorial.fire('settling');
       const dur = colony.settlingDuration || 60;
       const elapsed = Math.max(0, (g.timeImpulsi || 0) - colony.settlingStart);
       const remain = Math.max(0, dur - elapsed);
@@ -5362,6 +5363,15 @@ function renderFleetView(stage) {
         : '';
       /* Decisione #69: gauge viveri (autonomia logistica). */
       const viveriHtml = fleetViveriHtml(f);
+      /* #69 follow-up: rifornimento a pagamento presso AI in pace. */
+      let refuelBtn = '';
+      if (ORION.fleet && ORION.fleet.payablePortAt && ORION.fleet.payRefuelAt &&
+          ORION.fleet.payablePortAt(g, f.location.systemId) &&
+          ORION.fleet.viveriOf(f) < ORION.fleet.viveriCap()) {
+        const rc = ORION.fleet.payRefuelCost(g, f);
+        refuelBtn = '<button class="btn btn--mini" data-action="fleet-refuel-pay" data-fleet="' +
+          escapeHtml(f.id) + '" type="button" title="Rifornisci al cap pagando la valuta locale">⛽ Rifornisci (' + rc + ' cr)</button>';
+      }
       return '<li class="fleet-item" data-fleet-id="' + escapeHtml(f.id) + '">' +
         '<div class="fleet-item__head">' +
           '<span class="fleet-item__name"><strong>' + escapeHtml(f.name) + '</strong> ' +
@@ -5385,6 +5395,7 @@ function renderFleetView(stage) {
             '<span class="ui-icon ui-icon--pink" aria-hidden="true">' + ((ORION.icon && ORION.icon('forces')) || '') + '</span> ' + FORM_LABEL[formation] +
           '</button>' +
           '<button class="btn btn--mini" data-action="fleet-commander" data-fleet="' + escapeHtml(f.id) + '" type="button" title="Assegna un Comandante alla flotta">' + cmdBtnLabel + '</button>' +
+          refuelBtn +
           '<button class="btn btn--mini" data-action="fleet-manage" data-fleet="' + escapeHtml(f.id) + '" type="button">Gestisci navi/eq.</button>' +
           '<button class="btn btn--mini btn--danger" data-action="fleet-dissolve" data-fleet="' + escapeHtml(f.id) + '" type="button">Dissolvi</button>' +
         '</div>' +
@@ -5438,6 +5449,19 @@ function renderFleetView(stage) {
   });
   stage.querySelectorAll('[data-action="fleet-manage"]').forEach(function (b) {
     b.addEventListener('click', function () { openFleetManageOverlay(b.dataset.fleet); });
+  });
+  stage.querySelectorAll('[data-action="fleet-refuel-pay"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const fleet = findFleet(b.dataset.fleet);
+      if (!fleet) return;
+      const r = ORION.fleet.payRefuelAt(g, fleet);
+      if (!r.ok) { showToast(r.reason); return; }
+      pushChronicle(ORION.time.currentDS(g) + ' — <strong>' + escapeHtml(fleet.name) +
+        '</strong> rifornita presso <strong>' + escapeHtml(r.civ.name || 'porto in pace') +
+        '</strong> (−' + r.cost + ' cr).', 'planet');
+      persistGame(g);
+      renderFleetView(stage);
+    });
   });
   stage.querySelectorAll('[data-action="fleet-dissolve"]').forEach(function (b) {
     b.addEventListener('click', function () {
@@ -7044,13 +7068,35 @@ function openFleetWizard(fleetId) {
     }
     const ttDef = TRIP_TYPES.filter(function (t) { return t.id === state.tripType; })[0];
     const crewOk = fleet.crew.length >= ORION.fleet.fleetCrewRequired(fleet);
-    return '<p class="fleet-wizard__sum-line">' +
+    let html = '<p class="fleet-wizard__sum-line">' +
       ttDef.glyph + ' <span>' + ttDef.label + '</span> → ' + body +
       '</p>' +
       '<p class="fleet-wizard__sum-line fleet-wizard__sum-crew">' +
         (crewOk ? '✓ ' : '⚠ ') +
         'Equipaggio ' + fleet.crew.length + ' / ' + ORION.fleet.fleetCrewRequired(fleet) + ' richiesti' +
       '</p>';
+    /* Avviso proattivo viveri (#69 follow-up): stima Ι rotta vs autonomia. */
+    if (ORION.fleet.supplyOutlook) {
+      const so = ORION.fleet.supplyOutlook(g, fleet, buildOrderFromState());
+      if (so) {
+        let cls, icon, txt;
+        if (so.enough) {
+          cls = 'is-ok'; icon = '✓';
+          txt = 'Viveri sufficienti (~' + so.routeI + ' Ι rotta · ' + so.autonomyI + ' Ι autonomia)';
+        } else if (so.refuelEnRoute) {
+          cls = 'is-ok'; icon = '⛽';
+          txt = 'Rotta oltre l\'autonomia (~' + so.routeI + ' Ι), ma c\'è un porto amico lungo il percorso';
+        } else if (so.payableEnRoute) {
+          cls = 'is-warn'; icon = '⛽';
+          txt = 'Rotta oltre l\'autonomia (~' + so.routeI + ' Ι): potrai rifornirti a pagamento presso un porto in pace';
+        } else {
+          cls = 'is-warn'; icon = '⚠';
+          txt = 'Rotta oltre l\'autonomia (~' + so.routeI + ' Ι vs ' + so.autonomyI + ' Ι), nessun porto sul percorso: la flotta andrà in deriva e rientrerà';
+        }
+        html += '<p class="fleet-wizard__sum-line fleet-wizard__sum-supply ' + cls + '">' + icon + ' ' + txt + '</p>';
+      }
+    }
+    return html;
   }
 
   /* ----- Navigation row ----- */
@@ -7140,51 +7186,43 @@ function openFleetWizard(fleetId) {
     if (optExp) optExp.addEventListener('change', function () { state.options.exploreEach = optExp.checked; });
   }
 
-  /* ----- Conferma → costruisce e dispatcha l'ordine ----- */
-  function confirmOrder() {
-    let order;
+  /* Costruisce l'oggetto ordine dallo stato corrente del wizard (condiviso
+     fra il riepilogo Step 3 e la conferma). null se incompleto. */
+  function buildOrderFromState() {
     if (state.tripType === 'explore') {
       /* Esplorazione: per ora il modello flotta auto-rientra dopo aver
          esplorato. Se l'utente vuole RESTARE in orbita, mandiamo un
          move-route con 1 sola tappa + exploreEach=true + returnHome=false. */
-      if (state.options.returnHome) {
-        order = { type: 'explore', toSysId: state.target };
-      } else {
-        order = {
-          type: 'move-route',
-          waypoints: [state.target],
-          dwell: [0],
-          exploreEach: true,
-          returnHome: false
-        };
-      }
+      if (state.target == null) return null;
+      if (state.options.returnHome) return { type: 'explore', toSysId: state.target };
+      return { type: 'move-route', waypoints: [state.target], dwell: [0], exploreEach: true, returnHome: false };
     } else if (state.tripType === 'transfer') {
-      order = { type: 'move', toSysId: state.target };
+      return state.target != null ? { type: 'move', toSysId: state.target } : null;
     } else if (state.tripType === 'patrol') {
-      order = {
-        type: 'patrol',
-        sysA: state.waypoints[0].sysId,
-        sysB: state.waypoints[1].sysId
-      };
+      if (state.waypoints.length < 2) return null;
+      return { type: 'patrol', sysA: state.waypoints[0].sysId, sysB: state.waypoints[1].sysId };
     } else if (state.tripType === 'patrol-loop') {
-      order = {
-        type: 'patrol-loop',
+      if (state.waypoints.length < 2) return null;
+      return { type: 'patrol-loop',
         loop:  state.waypoints.map(function (wp) { return wp.sysId; }),
-        dwell: state.waypoints.map(function (wp) { return wp.dwell; })
-      };
+        dwell: state.waypoints.map(function (wp) { return wp.dwell; }) };
     } else if (state.tripType === 'move-route') {
-      order = {
-        type: 'move-route',
+      if (!state.waypoints.length) return null;
+      return { type: 'move-route',
         waypoints: state.waypoints.map(function (wp) { return wp.sysId; }),
         dwell:     state.waypoints.map(function (wp) { return wp.dwell; }),
         exploreEach: state.options.exploreEach,
-        returnHome:  state.options.returnHome
-      };
+        returnHome:  state.options.returnHome };
     } else if (state.tripType === 'return') {
-      order = { type: 'return' };
-    } else {
-      return;
+      return { type: 'return' };
     }
+    return null;
+  }
+
+  /* ----- Conferma → costruisce e dispatcha l'ordine ----- */
+  function confirmOrder() {
+    const order = buildOrderFromState();
+    if (!order) return;
     const r = ORION.fleet.setOrder(g, fleet, order);
     if (!r.ok) { showToast(r.reason); return; }
     /* Coesione AI (M10 Fase B, decisione #52 §13.6) — invariato col vecchio overlay. */
