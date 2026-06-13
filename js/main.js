@@ -387,6 +387,8 @@ function newGame(seed, opts) {
     /* M12 Fase A2 (decisione #56 §15.3): accordi commerciali bilaterali
        con le civiltà AI. */
     tradeAgreements: [],
+    /* #48 Fase 2b: contratti di export rifiuti verso le AI. */
+    wasteDeals: [],
     /* M11 Fase B parziale: sistemi occupati dopo vittoria su civiltà AI.
        Lazy, additivo; nessun bump di schema. */
     occupations: {},
@@ -516,6 +518,7 @@ function newGame(seed, opts) {
     }
     /* M12 Fase A2 (decisione #56 §15.3): accordi commerciali AI. */
     if (Array.isArray(saved.tradeAgreements)) ORION.game.tradeAgreements = saved.tradeAgreements.slice();
+    if (Array.isArray(saved.wasteDeals)) ORION.game.wasteDeals = saved.wasteDeals.slice();
     /* M17 Fase A (decisione #83): Dispacci & Missioni + Memoria Storica. */
     if (Array.isArray(saved.missions)) ORION.game.missions = saved.missions.slice();
     if (Array.isArray(saved.memoria)) ORION.game.memoria = saved.memoria.slice();
@@ -1978,6 +1981,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
        progress bar. Recovery-friendly: finisce sempre da sola. */
     let settlingBanner = '';
     if (colony.phase === 'settling' && colony.settlingStart != null) {
+      if (ORION.tutorial) ORION.tutorial.fire('settling');
       const dur = colony.settlingDuration || 60;
       const elapsed = Math.max(0, (g.timeImpulsi || 0) - colony.settlingStart);
       const remain = Math.max(0, dur - elapsed);
@@ -3921,7 +3925,7 @@ function doLaunchExpedition(colony, targetSystemId) {
    "Mercato" (launcher sx).
    ===================================================================== */
 function tradeResLabel(k) {
-  return { met: 'metalli', en: 'energia', food: 'cibo', water: 'acqua' }[k] || k;
+  return { met: 'metalli', en: 'energia', food: 'cibo', water: 'acqua', waste: 'rifiuti ♻' }[k] || k;
 }
 function tradeRouteStatusMeta(status) {
   if (status === 'interrupted-source') return { label: 'sorgente esaurita', cls: 'warn' };
@@ -4242,13 +4246,18 @@ function openRoutePicker(colony) {
       return '<option value="' + m.id + '"' + (m.id === mercId ? ' selected' : '') + '>' +
         escapeHtml(t.name || ('Tier ' + m.tier)) + ' · ' + T.rankLabel(m.xp) + ' · cargo ' + T.mercantileCargo(m) + ' · ' + T.mercantileMaxHops(m) + ' salti</option>';
     }).join('');
-    const resOpts = T.TRADE_RESOURCES.map(function (k) {
+    const resList = T.ROUTE_RESOURCES || T.TRADE_RESOURCES;
+    const resOpts = resList.map(function (k) {
       return '<option value="' + k + '"' + (k === resource ? ' selected' : '') + '>' + tradeResLabel(k) + '</option>';
     }).join('');
+    const stockOf = function (c, res) {
+      if (res === 'waste') return c.waste ? Math.round(c.waste.stock || 0) : 0;
+      return c.stock ? Math.round(c.stock[res] || 0) : 0;
+    };
     const destCards = dests.length ? dests.map(function (k) {
       const hops = T.routeHopCount(g, srcKey, k);
       const c = g.colonies[k];
-      const stock = c.stock ? Math.round(c.stock[resource] || 0) : 0;
+      const stock = stockOf(c, resource);
       return '<div class="route-dest-card">' +
         '<div class="route-dest-card__head">' +
           '<span class="route-dest-card__name">' + colonyNameFromKey(k) + '</span>' +
@@ -5362,6 +5371,15 @@ function renderFleetView(stage) {
         : '';
       /* Decisione #69: gauge viveri (autonomia logistica). */
       const viveriHtml = fleetViveriHtml(f);
+      /* #69 follow-up: rifornimento a pagamento presso AI in pace. */
+      let refuelBtn = '';
+      if (ORION.fleet && ORION.fleet.payablePortAt && ORION.fleet.payRefuelAt &&
+          ORION.fleet.payablePortAt(g, f.location.systemId) &&
+          ORION.fleet.viveriOf(f) < ORION.fleet.viveriCap()) {
+        const rc = ORION.fleet.payRefuelCost(g, f);
+        refuelBtn = '<button class="btn btn--mini" data-action="fleet-refuel-pay" data-fleet="' +
+          escapeHtml(f.id) + '" type="button" title="Rifornisci al cap pagando la valuta locale">⛽ Rifornisci (' + rc + ' cr)</button>';
+      }
       return '<li class="fleet-item" data-fleet-id="' + escapeHtml(f.id) + '">' +
         '<div class="fleet-item__head">' +
           '<span class="fleet-item__name"><strong>' + escapeHtml(f.name) + '</strong> ' +
@@ -5385,6 +5403,7 @@ function renderFleetView(stage) {
             '<span class="ui-icon ui-icon--pink" aria-hidden="true">' + ((ORION.icon && ORION.icon('forces')) || '') + '</span> ' + FORM_LABEL[formation] +
           '</button>' +
           '<button class="btn btn--mini" data-action="fleet-commander" data-fleet="' + escapeHtml(f.id) + '" type="button" title="Assegna un Comandante alla flotta">' + cmdBtnLabel + '</button>' +
+          refuelBtn +
           '<button class="btn btn--mini" data-action="fleet-manage" data-fleet="' + escapeHtml(f.id) + '" type="button">Gestisci navi/eq.</button>' +
           '<button class="btn btn--mini btn--danger" data-action="fleet-dissolve" data-fleet="' + escapeHtml(f.id) + '" type="button">Dissolvi</button>' +
         '</div>' +
@@ -5438,6 +5457,19 @@ function renderFleetView(stage) {
   });
   stage.querySelectorAll('[data-action="fleet-manage"]').forEach(function (b) {
     b.addEventListener('click', function () { openFleetManageOverlay(b.dataset.fleet); });
+  });
+  stage.querySelectorAll('[data-action="fleet-refuel-pay"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const fleet = findFleet(b.dataset.fleet);
+      if (!fleet) return;
+      const r = ORION.fleet.payRefuelAt(g, fleet);
+      if (!r.ok) { showToast(r.reason); return; }
+      pushChronicle(ORION.time.currentDS(g) + ' — <strong>' + escapeHtml(fleet.name) +
+        '</strong> rifornita presso <strong>' + escapeHtml(r.civ.name || 'porto in pace') +
+        '</strong> (−' + r.cost + ' cr).', 'planet');
+      persistGame(g);
+      renderFleetView(stage);
+    });
   });
   stage.querySelectorAll('[data-action="fleet-dissolve"]').forEach(function (b) {
     b.addEventListener('click', function () {
@@ -6035,7 +6067,8 @@ function renderCivView(stage) {
             '<span class="civ-disp__fill civ-disp__fill--' + dispCls + '" style="width:' + pct.toFixed(0) + '%"></span></div>' +
         '</div>' +
         dipActions +
-        civTradeHtml(g, c);
+        civTradeHtml(g, c) +
+        civWasteHtml(g, c);
     }
     /* KNOWN+ — vocazione + tratto + intel forza. */
     if (rank >= KNOWLEDGE.known) {
@@ -6293,6 +6326,22 @@ function renderCivView(stage) {
       renderCivView(stage);
     });
   });
+  /* #48 Fase 2b: handler export rifiuti. */
+  stage.querySelectorAll('[data-action="waste-deal-open"]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const civ = (g.civs || []).filter(function (c) { return c.id === btn.dataset.civ; })[0];
+      if (civ) openWasteDealPicker(civ, stage);
+    });
+  });
+  stage.querySelectorAll('[data-action="waste-deal-cancel"]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const r = ORION.trade.cancelWasteDeal(g, btn.dataset.deal);
+      if (!r.ok) { showToast(r.reason || 'Annullamento rifiutato'); return; }
+      showToast('Contratto rifiuti chiuso');
+      persistGame(g);
+      renderCivView(stage);
+    });
+  });
 }
 
 /* M12 Fase A2 (#56 §15.3): blocco "Commercio" nella card civiltà. */
@@ -6322,6 +6371,61 @@ function civTradeHtml(g, civ) {
     inner += '<p class="panel__note agr-note">Il commercio richiede <strong>pace o alleanza</strong>.</p>';
   }
   return '<div class="civ-trade"><span class="civ-card__k">Commercio</span>' + inner + '</div>';
+}
+
+/* #48 Fase 2b: blocco "Rifiuti" nella card civiltà (export rifiuti). */
+function civWasteHtml(g, civ) {
+  const T = ORION.trade;
+  if (!T || !T.openWasteDeal) return '';
+  const rel = ORION.diplomacy ? ORION.diplomacy.effectiveRelation(g, civ) : (civ.relation || 'peace');
+  const list = T.wasteDealsForCiv(g, civ.id);
+  let inner = '';
+  if (list.length) {
+    inner += '<ul class="agr-list">' + list.map(function (d) {
+      const stCls = d.status === 'active' ? 'ok' : 'warn';
+      const stLbl = d.status === 'active' ? 'attivo' : 'sospeso';
+      const modLbl = d.mode === 'sell' ? 'vende (+cr)' : 'smaltisce (−cr)';
+      return '<li class="agr-item">' +
+        '<span class="agr-item__deal">♻ ' + d.flow + '/' + iU() + ' · ' + escapeHtml(systemNameFromKey(g, d.colonyKey)) + ' · ' + modLbl + '</span>' +
+        '<span class="route-item__status is-' + stCls + '">' + stLbl + '</span>' +
+        '<button class="btn btn--mini btn--danger" data-action="waste-deal-cancel" data-deal="' + d.id + '" type="button" title="Chiudi contratto">×</button>' +
+      '</li>';
+    }).join('') + '</ul>';
+  }
+  const canTrade = (rel === 'peace' || rel === 'alliance');
+  if (canTrade) {
+    const values = T.wasteDealValues(civ);
+    inner += '<button class="btn btn--mini" data-action="waste-deal-open" data-civ="' + escapeHtml(civ.id) + '" type="button">+ Export rifiuti</button>' +
+      '<p class="panel__note agr-note">' + (values ? 'Valorizza i rifiuti: <strong>li compra</strong>.' : 'Accetta i rifiuti come <strong>smaltimento a pagamento</strong>.') + '</p>';
+  } else {
+    inner += '<p class="panel__note agr-note">L\'export rifiuti richiede <strong>pace o alleanza</strong>.</p>';
+  }
+  return '<div class="civ-trade"><span class="civ-card__k">Rifiuti ♻</span>' + inner + '</div>';
+}
+
+/* Overlay scelta colonia per l'export rifiuti (#48 Fase 2b). */
+function openWasteDealPicker(civ, civStage) {
+  const g = ORION.game;
+  const T = ORION.trade;
+  if (!T) return;
+  const mine = myColonyKeys().filter(function (k) {
+    const c = g.colonies[k];
+    return c && c.colonized && !T.wasteDealsForCiv(g, civ.id).some(function (d) { return d.colonyKey === k; });
+  });
+  if (!mine.length) { showToast('Nessuna colonia disponibile per un nuovo contratto'); return; }
+  /* Scelta semplice: la colonia con più rifiuti accumulati. */
+  let best = mine[0], bestW = -1;
+  mine.forEach(function (k) {
+    const w = (g.colonies[k].waste && g.colonies[k].waste.stock) || 0;
+    if (w > bestW) { bestW = w; best = k; }
+  });
+  const r = T.openWasteDeal(g, civ.id, best);
+  if (!r.ok) { showToast(r.reason); return; }
+  const modLbl = r.deal.mode === 'sell' ? 'acquisto' : 'smaltimento a pagamento';
+  pushChronicle(ORION.time.currentDS(g) + ' — Contratto rifiuti con <strong>' + escapeHtml(civ.name) +
+    '</strong> (' + modLbl + ') da <strong>' + escapeHtml(systemNameFromKey(g, best)) + '</strong>.', 'civ');
+  persistGame(g);
+  if (civStage) renderCivView(civStage);
 }
 
 /* Overlay proposta accordo commerciale (M12 Fase A2, §15.3). */
@@ -7044,13 +7148,35 @@ function openFleetWizard(fleetId) {
     }
     const ttDef = TRIP_TYPES.filter(function (t) { return t.id === state.tripType; })[0];
     const crewOk = fleet.crew.length >= ORION.fleet.fleetCrewRequired(fleet);
-    return '<p class="fleet-wizard__sum-line">' +
+    let html = '<p class="fleet-wizard__sum-line">' +
       ttDef.glyph + ' <span>' + ttDef.label + '</span> → ' + body +
       '</p>' +
       '<p class="fleet-wizard__sum-line fleet-wizard__sum-crew">' +
         (crewOk ? '✓ ' : '⚠ ') +
         'Equipaggio ' + fleet.crew.length + ' / ' + ORION.fleet.fleetCrewRequired(fleet) + ' richiesti' +
       '</p>';
+    /* Avviso proattivo viveri (#69 follow-up): stima Ι rotta vs autonomia. */
+    if (ORION.fleet.supplyOutlook) {
+      const so = ORION.fleet.supplyOutlook(g, fleet, buildOrderFromState());
+      if (so) {
+        let cls, icon, txt;
+        if (so.enough) {
+          cls = 'is-ok'; icon = '✓';
+          txt = 'Viveri sufficienti (~' + so.routeI + ' Ι rotta · ' + so.autonomyI + ' Ι autonomia)';
+        } else if (so.refuelEnRoute) {
+          cls = 'is-ok'; icon = '⛽';
+          txt = 'Rotta oltre l\'autonomia (~' + so.routeI + ' Ι), ma c\'è un porto amico lungo il percorso';
+        } else if (so.payableEnRoute) {
+          cls = 'is-warn'; icon = '⛽';
+          txt = 'Rotta oltre l\'autonomia (~' + so.routeI + ' Ι): potrai rifornirti a pagamento presso un porto in pace';
+        } else {
+          cls = 'is-warn'; icon = '⚠';
+          txt = 'Rotta oltre l\'autonomia (~' + so.routeI + ' Ι vs ' + so.autonomyI + ' Ι), nessun porto sul percorso: la flotta andrà in deriva e rientrerà';
+        }
+        html += '<p class="fleet-wizard__sum-line fleet-wizard__sum-supply ' + cls + '">' + icon + ' ' + txt + '</p>';
+      }
+    }
+    return html;
   }
 
   /* ----- Navigation row ----- */
@@ -7140,51 +7266,43 @@ function openFleetWizard(fleetId) {
     if (optExp) optExp.addEventListener('change', function () { state.options.exploreEach = optExp.checked; });
   }
 
-  /* ----- Conferma → costruisce e dispatcha l'ordine ----- */
-  function confirmOrder() {
-    let order;
+  /* Costruisce l'oggetto ordine dallo stato corrente del wizard (condiviso
+     fra il riepilogo Step 3 e la conferma). null se incompleto. */
+  function buildOrderFromState() {
     if (state.tripType === 'explore') {
       /* Esplorazione: per ora il modello flotta auto-rientra dopo aver
          esplorato. Se l'utente vuole RESTARE in orbita, mandiamo un
          move-route con 1 sola tappa + exploreEach=true + returnHome=false. */
-      if (state.options.returnHome) {
-        order = { type: 'explore', toSysId: state.target };
-      } else {
-        order = {
-          type: 'move-route',
-          waypoints: [state.target],
-          dwell: [0],
-          exploreEach: true,
-          returnHome: false
-        };
-      }
+      if (state.target == null) return null;
+      if (state.options.returnHome) return { type: 'explore', toSysId: state.target };
+      return { type: 'move-route', waypoints: [state.target], dwell: [0], exploreEach: true, returnHome: false };
     } else if (state.tripType === 'transfer') {
-      order = { type: 'move', toSysId: state.target };
+      return state.target != null ? { type: 'move', toSysId: state.target } : null;
     } else if (state.tripType === 'patrol') {
-      order = {
-        type: 'patrol',
-        sysA: state.waypoints[0].sysId,
-        sysB: state.waypoints[1].sysId
-      };
+      if (state.waypoints.length < 2) return null;
+      return { type: 'patrol', sysA: state.waypoints[0].sysId, sysB: state.waypoints[1].sysId };
     } else if (state.tripType === 'patrol-loop') {
-      order = {
-        type: 'patrol-loop',
+      if (state.waypoints.length < 2) return null;
+      return { type: 'patrol-loop',
         loop:  state.waypoints.map(function (wp) { return wp.sysId; }),
-        dwell: state.waypoints.map(function (wp) { return wp.dwell; })
-      };
+        dwell: state.waypoints.map(function (wp) { return wp.dwell; }) };
     } else if (state.tripType === 'move-route') {
-      order = {
-        type: 'move-route',
+      if (!state.waypoints.length) return null;
+      return { type: 'move-route',
         waypoints: state.waypoints.map(function (wp) { return wp.sysId; }),
         dwell:     state.waypoints.map(function (wp) { return wp.dwell; }),
         exploreEach: state.options.exploreEach,
-        returnHome:  state.options.returnHome
-      };
+        returnHome:  state.options.returnHome };
     } else if (state.tripType === 'return') {
-      order = { type: 'return' };
-    } else {
-      return;
+      return { type: 'return' };
     }
+    return null;
+  }
+
+  /* ----- Conferma → costruisce e dispatcha l'ordine ----- */
+  function confirmOrder() {
+    const order = buildOrderFromState();
+    if (!order) return;
     const r = ORION.fleet.setOrder(g, fleet, order);
     if (!r.ok) { showToast(r.reason); return; }
     /* Coesione AI (M10 Fase B, decisione #52 §13.6) — invariato col vecchio overlay. */
@@ -7854,6 +7972,8 @@ const DEFAULT_AUTOPAUSE = {
   /* M12 Fase A2 (§15.3): accordi commerciali AI. Tutti OFF (atmosferici,
      recovery-friendly: le sospensioni riprendono da sole). */
   'agreement-suspended': false, 'agreement-resumed': false, 'agreement-ended': false,
+  /* #48 Fase 2b: export rifiuti — auto-chiusura atmosferica. */
+  'waste-deal-closed': false,
   /* Decisione #66: fasi della nave coloniale. L'orbit phase è breve e
      scenografica → OFF. Foundation start è atmosferico (la colonia
      "in arrivo" appare già in UI) → OFF. Failure (colonia perduta) è
@@ -8236,6 +8356,7 @@ function showEventOverlay(events) {
     'trade-route-closed': 'Rotta commerciale chiusa',
     'trade-raid': 'Razzia pirata su rotta',
     'trade-mercantile-lost': 'Mercantile perso',
+    'waste-deal-closed': 'Contratto rifiuti chiuso',
     'agreement-suspended': 'Accordo commerciale sospeso',
     'agreement-resumed': 'Accordo commerciale ripreso',
     'agreement-ended': 'Accordo commerciale concluso'
@@ -8454,6 +8575,8 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — Rotta ' + colonyNameFromKey(ev.src) + ' → ' + colonyNameFromKey(ev.dst) + ' di nuovo <strong>operativa</strong>.', 'system');
   } else if (ev.kind === 'trade-route-closed') {
     pushChronicle(ds + ' — Rotta commerciale chiusa.', 'system');
+  } else if (ev.kind === 'waste-deal-closed') {
+    pushChronicle(ds + ' — Contratto di export rifiuti chiuso.', 'system');
   } else if (ev.kind === 'trade-raid') {
     const sys = ORION.game.galaxy.systems[ev.sysId];
     const where = sys ? (' presso <strong>' + escapeHtml(sys.name) + '</strong>') : '';

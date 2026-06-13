@@ -187,6 +187,7 @@
   const VIVERI_WARN = 60;          // soglia avviso (~25% del cap)
   const VIVERI_DRIFT_WEAR = 2;     // usura/Ι sulle navi in deriva (viveri a 0)
   const VIVERI_DRIFT_SLOW = 2;     // moltiplicatore durata leg in deriva
+  const REFUEL_MARKUP = 1.6;       // sovrapprezzo rifornimento a pagamento presso AI in pace (#69)
 
   function getClass(kind) {
     return CLASSES[kind] || null;
@@ -1133,11 +1134,9 @@
     }
     return null;
   }
-  /* La flotta è a un porto amico? (tua colonia, una tua STAZIONE operativa
-     #81, o colonia di AI alleata #51). */
-  function fleetAtFriendlyPort(game, fleet) {
-    if (!fleet || !fleet.location) return false;
-    const sys = fleet.location.systemId;
+  /* Porto amico (rifornimento gratuito) nel sistema indicato? (tua colonia,
+     una tua STAZIONE operativa #81, o colonia di AI alleata #51). */
+  function isFriendlyPortAt(game, sys) {
     if (sys == null) return false;
     if (ownColonyAt(game, sys)) return true;
     /* M16 (#81): una tua stazione operativa con serbatoio è un porto amico
@@ -1151,6 +1150,20 @@
       if (civ && civ.relation === 'alliance') return true;
     }
     return false;
+  }
+  /* La flotta è a un porto amico? */
+  function fleetAtFriendlyPort(game, fleet) {
+    if (!fleet || !fleet.location) return false;
+    return isFriendlyPortAt(game, fleet.location.systemId);
+  }
+  /* AI in PACE (non alleata, non in guerra) nel sistema indicato — porto dove
+     rifornirsi A PAGAMENTO (valuta regionale M12, #69 follow-up). */
+  function payablePortAt(game, sys) {
+    if (sys == null || isFriendlyPortAt(game, sys)) return null;
+    if (!ORION.ai || !ORION.ai.civForSystem) return null;
+    const civ = ORION.ai.civForSystem(game, sys);
+    if (civ && (civ.relation === 'peace' || civ.relation === 'truce')) return civ;
+    return null;
   }
   /* Rifornisce al cap. A una tua colonia addebita food/acqua dallo stock
      (parziale se a corto, recovery-friendly); porto alleato = gratis. Costo
@@ -1280,6 +1293,75 @@
     if (v > VIVERI_WARN) return v - VIVERI_WARN;
     if (v > 0) return v;
     return 0;
+  }
+
+  /* Avviso proattivo viveri (#69 follow-up): stima Ι della rotta di un ordine
+     vs autonomia corrente + presenza di porti di rifornimento (amici gratis /
+     AI in pace a pagamento) lungo il percorso. Ritorna null se non
+     applicabile. La stima è di sola andata (advisory; la deriva fail-safe
+     garantisce che la flotta non resti mai bloccata, #69). */
+  function supplyOutlook(game, fleet, order) {
+    if (!order || !fleet || !fleet.location) return null;
+    let waypoints = null;
+    switch (order.type) {
+      case 'move': case 'explore': case 'transfer':
+      case 'attack': case 'garrison': case 'colonize':
+        if (order.toSysId != null) waypoints = [order.toSysId];
+        break;
+      case 'move-route': waypoints = order.waypoints || []; break;
+      case 'patrol-loop': waypoints = order.loop || []; break;
+      case 'patrol': waypoints = [order.sysA, order.sysB]; break;
+      default: return null;
+    }
+    if (!waypoints || !waypoints.length) return null;
+    const chain = buildChainedRoute(game.galaxy, fleet.location.systemId, waypoints);
+    if (!chain || !chain.ok) return null;
+    const sp = fleetMinSpeed(fleet);
+    let routeI = 0, refuel = false, payable = false;
+    for (let li = 0; li < chain.legs.length; li++) {
+      const leg = chain.legs[li];
+      for (let i = 1; i < leg.length; i++) {
+        routeI += tempoLeg(game.galaxy, leg[i - 1], leg[i], sp);
+        if (isFriendlyPortAt(game, leg[i])) refuel = true;
+        else if (payablePortAt(game, leg[i])) payable = true;
+      }
+    }
+    const autonomyI = viveriOf(fleet);
+    return {
+      routeI: Math.round(routeI),
+      autonomyI: Math.round(autonomyI),
+      enough: routeI <= autonomyI,
+      refuelEnRoute: refuel,
+      payableEnRoute: payable
+    };
+  }
+
+  /* Costo in crediti del riempimento al cap presso un porto a pagamento. */
+  function payRefuelCost(game, fleet) {
+    const fillI = VIVERI_CAP - viveriOf(fleet);
+    if (fillI <= 0) return 0;
+    const crew = Math.max(1, fleetCrewRequired(fleet));
+    const ref = (ORION.treasury && ORION.treasury.REF_PRICE) || { met: 1, en: 0.9, food: 1.4, water: 1.2 };
+    const perI = crew * (VIVERI_RATE_FOOD * ref.food + VIVERI_RATE_WATER * ref.water +
+                         VIVERI_RATE_MET * ref.met + VIVERI_RATE_EN * ref.en);
+    return Math.ceil(perI * fillI * REFUEL_MARKUP);
+  }
+  /* Rifornimento A PAGAMENTO presso una colonia AI in pace (#69 follow-up):
+     paga in crediti (qualunque valuta, treasury.spendCredits) e riempie al
+     cap. Azione utente esplicita (mai automatica → niente drain silenzioso). */
+  function payRefuelAt(game, fleet) {
+    if (!fleet || !fleet.location) return { ok: false, reason: 'Flotta non valida' };
+    const civ = payablePortAt(game, fleet.location.systemId);
+    if (!civ) return { ok: false, reason: 'Nessun porto in pace in questo sistema' };
+    if (!ORION.treasury || !ORION.treasury.spendCredits) return { ok: false, reason: 'Tesoreria non disponibile' };
+    if (viveriOf(fleet) >= VIVERI_CAP) return { ok: false, reason: 'Serbatoio già pieno' };
+    const cost = payRefuelCost(game, fleet);
+    const paid = ORION.treasury.spendCredits(game, cost);
+    if (!paid || !paid.ok) return { ok: false, reason: 'Crediti insufficienti (' + cost + ' richiesti)' };
+    fleet.viveri = VIVERI_CAP;
+    fleet._drift = false;
+    fleet._supplyWarned = false;
+    return { ok: true, cost: cost, civ: civ };
   }
 
   /* ------------------------------------------------------------------
@@ -2012,6 +2094,11 @@
     fleetAtFriendlyPort: fleetAtFriendlyPort,
     loadViveriAtPort: loadViveriAtPort,
     routeImpulsi: routeImpulsi,
-    viveriNextEventDelta: viveriNextEventDelta
+    viveriNextEventDelta: viveriNextEventDelta,
+    isFriendlyPortAt: isFriendlyPortAt,
+    payablePortAt: payablePortAt,
+    supplyOutlook: supplyOutlook,
+    payRefuelCost: payRefuelCost,
+    payRefuelAt: payRefuelAt
   };
 })(typeof window !== 'undefined' ? window : this);

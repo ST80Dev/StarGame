@@ -55,7 +55,7 @@
      DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
      nuovo gioco la preserva e una recovery best-effort prova a dedurla
      da colonie/flotte/spedizioni/cronaca. */
-  const SCHEMA_VERSION = 30;
+  const SCHEMA_VERSION = 31;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -181,6 +181,9 @@
       /* Schema 18 (M12 Fase A2, decisione #56 §15.3): accordi commerciali
          bilaterali con le AI. La relazione/disposizione vive in game.civs. */
       tradeAgreements: Array.isArray(game.tradeAgreements) ? game.tradeAgreements : [],
+      /* Schema 31 (#48 Fase 2b): contratti di export rifiuti verso le AI
+         (smaltimento a pagamento / vendita a chi li valorizza). */
+      wasteDeals: Array.isArray(game.wasteDeals) ? game.wasteDeals : [],
       /* M11 Fase B parziale: sistemi occupati dal giocatore dopo vittoria su
          civiltà AI (sostituisce il rollback-a-neutrale). Mappa sysId →
          { fromCivId, fromCivName, fromCivColor, fromAlignment, sinceI }.
@@ -700,6 +703,12 @@
         payload.dispatchMeta = { lastOfferAt: -1, offers: 0, completed: 0 };
       }
       payload.schema = 30;
+    }
+    /* v30 → v31 (#48 Fase 2b): export rifiuti verso le AI. Save vecchi →
+       lista vuota (nessun contratto retroattivo). */
+    if ((payload.schema || 30) < 31) {
+      if (!Array.isArray(payload.wasteDeals)) payload.wasteDeals = [];
+      payload.schema = 31;
     }
     return payload;
   }

@@ -112,6 +112,10 @@
       tag: 'Strutture',
       title: 'Strutture, slot ed espansione',
       body:
+        '<p><strong>Da dove parti?</strong> Sul mondo natale conviene coprire prima il <strong>fabbisogno di base</strong>: ' +
+        'un paio di <strong>estrattive</strong> per le 4 risorse (metalli, energia, cibo, acqua) prima di laboratori o ' +
+        'militari. Cibo e acqua sostengono la popolazione — senza, la crescita si ferma. Accoda subito, poi avanza il ' +
+        'tempo e tieni d\'occhio i <strong>saldi netti</strong> nella scheda Risorse.</p>' +
         '<p>Ogni struttura occupa <strong>slot</strong> e si costruisce in <strong>Impulsi</strong> (non è istantanea: ' +
         'avanza il tempo per veder maturare la coda). Gli slot di un pianeta sono <strong>limitati</strong>: sono la tua ' +
         'risorsa strategica più scarsa.</p>' +
@@ -131,6 +135,21 @@
         'rimborsa <strong>il 50% / 70% sulla natale</strong> del costo dello <em>step</em> appena smontato, ' +
         'lasciando i livelli inferiori operativi. A livello 1 invece smantella per davvero (struttura rimossa, ' +
         'rimborso sul costo base). Sempre malus morale −0,10 per 30 <span class="ds-unit">Ι</span>, che decade da solo.</p>'
+    },
+    {
+      id: 'settling',
+      tag: 'Insediamento',
+      title: 'La fase di Insediamento',
+      body:
+        '<p>Una colonia appena fondata attraversa una <strong>fase di Insediamento</strong> (qualche decina di ' +
+        '<span class="ds-unit">Ι</span>): la produzione è al <strong>50%</strong> e la <strong>crescita della ' +
+        'popolazione è bloccata</strong>. È una fase di rodaggio, non una penalità: <strong>finisce sempre da sola</strong> ' +
+        'e promuove la colonia a operativa.</p>' +
+        '<p><strong>Sfrutta il bonus:</strong> la <strong>prima struttura</strong> che metti in coda durante l\'Insediamento ' +
+        'gode di <strong>+50% di velocità</strong> di costruzione. Conviene quindi <strong>accodare subito</strong> qualcosa ' +
+        '(tipicamente un\'estrattiva di base) invece di aspettare la fine della fase.</p>' +
+        '<p>Usa l\'attesa per <strong>decidere la vocazione</strong> del mondo e pianificare i primi slot. Quando la barra ' +
+        'di Insediamento si riempie, la colonia parte a pieno regime.</p>'
     },
     {
       id: 'advance',
@@ -220,8 +239,14 @@
         '<p>La leva è l\'<strong>Impianto di riciclo</strong>: <strong>un solo impianto</strong> regge una colonia matura. ' +
         'Si <strong>autoalimenta</strong> (nessun upkeep) e mentre brucia rifiuti <strong>recupera energia</strong> — un guadagno ' +
         'temporaneo mostrato nella scheda Colonia, finché c\'è rifiuto da trattare.</p>' +
-        '<p><strong>In arrivo:</strong> esportare i rifiuti alle civiltà AI (commercio) e dedicare i mondi ostili a ' +
-        '<em>colonie riciclanti</em>, trasformando una zavorra in infrastruttura d\'impero.</p>'
+        '<p><strong>Colonie riciclanti (mondi ostili):</strong> su vulcanici, gassosi, ghiacciati, lune e cinture l\'impianto ' +
+        'di riciclo ha <strong>capacità e resa molto più alte</strong>. Questi mondi-zavorra diventano <strong>hub di smaltimento</strong>: ' +
+        'apri una <strong>rotta commerciale di "rifiuti ♻"</strong> da una colonia inquinata a una colonia riciclante e i rifiuti ' +
+        'viaggiano lì per essere bruciati (più energia).</p>' +
+        '<p><strong>Export alle AI:</strong> dalla vista Civiltà puoi stipulare un <strong>contratto rifiuti</strong> con un\'AI in ' +
+        'pace — chi li <em>valorizza</em> (Tecnocratici, Vehryn, Mekhari) te li <strong>compra</strong>, gli altri li accettano come ' +
+        '<strong>smaltimento a pagamento</strong>. La tech <strong>Ecologia industriale</strong> riduce i rifiuti generati, ' +
+        '<strong>Riciclo avanzato</strong> potenzia gli impianti.</p>'
     },
     {
       id: 'advanced',

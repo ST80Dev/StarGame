@@ -117,6 +117,12 @@
     WASTE_SAT_WARN:      0.75,   // saturazione oltre cui inizia il malus (stato 'saturo')
     WASTE_MALUS_SAT:     0.10,   // malus produzione a saturazione = 1.0
     WASTE_MALUS_CRIT:    0.25,   // malus massimo (saturazione ≥ 2.0, overflow ignorato)
+    /* #48 Fase 1: i mondi OSTILI (bassa pop, "liability") fanno da hub di
+       riciclo — bonus su capacità + trattamento dell'impianto di riciclo.
+       Dà scopo ai mondi-discarica quando ricevono rifiuti via rotte (Fase 2). */
+    WASTE_RECYCLE_BODY_BONUS: {
+      gassoso: 1.6, cintura: 1.5, vulcanico: 1.5, ghiacciato: 1.4, luna: 1.3, desertico: 1.2
+    },
 
     /* Combattimento M09 — Fase A (decisione #49). Filosofia "declino a
        spirale con leve di recovery": le perdite alimentano un MORALE
@@ -298,17 +304,27 @@
     return colony.waste;
   }
 
-  /* Capacità di contenimento rifiuti: base + moduli impianto di riciclo. */
+  /* Capacità di contenimento rifiuti: base + moduli impianto di riciclo,
+     amplificati dal moltiplicatore di riciclo (#48 Fase 1: tipo di mondo
+     ostile × tech Ecologia/Riciclo), calcolato da processWaste e memorizzato
+     in colony.waste.recycleMul (default 1 → save vecchi / pre-tick). */
   function wasteCapacity(colony) {
     let cap = CFG.WASTE_BASE_CAPACITY;
     const S = root.ORION.structures;
+    const rmul = (colony.waste && colony.waste.recycleMul) || 1;
     Object.keys(colony.structures || {}).forEach(function (id) {
       const def = S.get(id);
       if (def && def.wasteCapacity) {
-        cap += def.wasteCapacity * S.moduleSum(colony.structures[id].level || 1);
+        cap += def.wasteCapacity * S.moduleSum(colony.structures[id].level || 1) * rmul;
       }
     });
     return cap;
+  }
+  /* #48 Fase 1: bonus di riciclo per tipo di corpo ostile (× su capacità e
+     trattamento dell'impianto di riciclo). */
+  function recycleBodyBonus(planet) {
+    if (!planet) return 1;
+    return CFG.WASTE_RECYCLE_BODY_BONUS[planet.type] || 1;
   }
 
   /* Malus di produzione da rifiuti — PROGRESSIVO (il "deperimento"):
@@ -966,6 +982,16 @@
     const waste = ensureWaste(colony);
     const S = root.ORION.structures;
 
+    /* #48 Fase 1: modificatori passivi dalla ricerca (Ecologia → meno
+       generazione; Riciclo avanzato → più trattamento/capacità) + bonus per
+       mondo ostile. recycleMul (eff tech × bonus corpo) è memorizzato per
+       wasteCapacity/UI. */
+    const eco = (root.ORION.research && root.ORION.research.mods) ? root.ORION.research.mods(game) : null;
+    const genMul = eco ? (eco.wasteGenMul || 1) : 1;   // <1 con Ecologia
+    const effMul = eco ? (eco.wasteEffMul || 1) : 1;   // >1 con Riciclo avanzato
+    const recycleMul = effMul * recycleBodyBonus(planet);
+    waste.recycleMul = recycleMul;
+
     // 1) Generazione (popolazione SUPER-LINEARE K·pop²) + 2) industria/trattamento
     //    Super-lineare: a pop bassa è trascurabile, conta solo vicino al cap.
     const pt = colony.pop.total || 0;
@@ -979,8 +1005,9 @@
       const msum = S.moduleSum(lvl);
       const wcat = CFG.WASTE_BY_CAT[def.cat];
       if (wcat) gen += wcat * msum;
-      if (def.wasteProcess) { process += def.wasteProcess * msum; if (lvl > recyLevel) recyLevel = lvl; }
+      if (def.wasteProcess) { process += def.wasteProcess * msum * recycleMul; if (lvl > recyLevel) recyLevel = lvl; }
     });
+    gen *= genMul;
 
     const before = waste.stock || 0;
     let after = before + gen - process;
@@ -2177,6 +2204,11 @@
        sospensione in guerra/tregua, durata. Dopo le rotte interne. */
     if (root.ORION.agreements && root.ORION.agreements.process) {
       root.ORION.agreements.process(game, events);
+    }
+    /* #48 Fase 2b: export rifiuti verso le AI (smaltimento a pagamento /
+       vendita a chi li valorizza). Dopo gli accordi commerciali. */
+    if (root.ORION.trade && root.ORION.trade.processWasteDeals) {
+      root.ORION.trade.processWasteDeals(game, events);
     }
     /* M09 Fase A (decisione #49): combattimento. Scaramucce lampo (flotte
        co-locate con presenza ostile), incursioni pirata inbound, assedi in
