@@ -166,6 +166,18 @@
       requires: [], mod: { popGrowthMul: 0.12 },
       desc: '+12% aggiuntivo alla crescita della popolazione.'
     },
+    /* Biologia — gestione rifiuti (#48 Fase 1): modificatori passivi sul
+       ciclo dei rifiuti (nessuna nuova struttura, vincolo #57). */
+    {
+      id: 'ecologia', name: 'Ecologia industriale', cat: 'biologia', cost: 240,
+      requires: [], mod: { wasteGenMul: -0.25 },
+      desc: '−25% rifiuti generati da popolazione e industria.'
+    },
+    {
+      id: 'riciclo-avanzato', name: 'Riciclo avanzato', cat: 'biologia', cost: 320,
+      requires: ['ecologia'], mod: { wasteEffMul: 0.40 },
+      desc: '+40% capacità di trattamento e resa energetica degli impianti di riciclo.'
+    },
     /* Costruzione — buildSpeedMul */
     {
       id: 'architetture-modulari', name: 'Architetture modulari', cat: 'costruzione', cost: 210,
@@ -286,7 +298,7 @@
        cargoMul / hopBonus → trade.js (mercantili)
      Cache invalidata quando cresce `unlocked` (cresce solo, mai cala). */
   function mods(game) {
-    const base = { extractionMul: 1, buildSpeedMul: 1, researchMul: 1, fpMul: 1, hpMul: 1, popGrowthMul: 1, cargoMul: 1, hopBonus: 0 };
+    const base = { extractionMul: 1, buildSpeedMul: 1, researchMul: 1, fpMul: 1, hpMul: 1, popGrowthMul: 1, cargoMul: 1, hopBonus: 0, wasteGenMul: 1, wasteEffMul: 1 };
     const r = game && game.research;
     if (!r || !Array.isArray(r.unlocked)) return base;
     if (r._mods && r._modsLen === r.unlocked.length) return r._mods;

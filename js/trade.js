@@ -39,6 +39,23 @@
   /* Risorse base trasportabili (Fase A1). Le avanzate §7.2 in lotti
      arriveranno con prerequisiti tech (Fase A2/M13). */
   const TRADE_RESOURCES = ['met', 'en', 'food', 'water'];
+  /* #48 Fase 2a: i RIFIUTI sono una merce trasportabile (colonia inquinante →
+     colonia riciclante sui mondi ostili). Vivono in colony.waste.stock, non
+     in colony.stock → accessi astratti via resStock/addResStock. */
+  const ROUTE_RESOURCES = TRADE_RESOURCES.concat(['waste']);
+  function resStock(colony, res) {
+    if (res === 'waste') return (colony.waste && colony.waste.stock) || 0;
+    return colony.stock ? (colony.stock[res] || 0) : 0;
+  }
+  function addResStock(colony, res, delta) {
+    if (res === 'waste') {
+      if (!colony.waste) colony.waste = { stock: 0, saturation: 0, capacity: 0, net: 0, state: 'ok', announced: {} };
+      colony.waste.stock = Math.max(0, (colony.waste.stock || 0) + delta);
+      return;
+    }
+    if (!colony.stock) colony.stock = { met: 0, en: 0, food: 0, water: 0 };
+    colony.stock[res] = Math.max(0, (colony.stock[res] || 0) + delta);
+  }
 
   /* Catalogo mercantili (§15.6). `cargo` = throughput sostenibile per rotta
      (unità/Ι) — reinterpretiamo il "cargo per viaggio" come tetto di flusso
@@ -401,7 +418,7 @@
     if (!src || !src.colonized) return { ok: false, reason: 'Sorgente non operativa' };
     if (!dst || !dst.colonized) return { ok: false, reason: 'Destinazione non operativa' };
     if (srcKey === dstKey) return { ok: false, reason: 'Sorgente e destinazione coincidono' };
-    if (TRADE_RESOURCES.indexOf(resource) < 0) return { ok: false, reason: 'Risorsa non trasportabile' };
+    if (ROUTE_RESOURCES.indexOf(resource) < 0) return { ok: false, reason: 'Risorsa non trasportabile' };
     /* Cap rotte dal Mercato. */
     const cap = marketCapacity(game);
     if (cap.routes <= 0) return { ok: false, reason: 'Nessun Mercato costruito (serve §10 Mercato)' };
@@ -527,8 +544,9 @@
         continue;
       }
 
-      /* Sorgente esaurita: niente da spostare. */
-      const avail = src.stock ? (src.stock[route.resource] || 0) : 0;
+      /* Sorgente esaurita: niente da spostare. (Per i rifiuti #48: legge
+         src.waste.stock — la rotta idle se la colonia non ha rifiuti.) */
+      const avail = resStock(src, route.resource);
       if (avail <= 0) {
         markInterrupt(route, 'interrupted-source', events, game, src, dst);
         continue;
@@ -568,7 +586,7 @@
           const wear = RAID_WEAR_MIN + Math.round(rng.range(0, RAID_WEAR_MAX - RAID_WEAR_MIN));
           merc.wear = mercantileWear(merc) + wear;
           /* Cargo perso: la sorgente paga, la destinazione non riceve. */
-          src.stock[route.resource] = (src.stock[route.resource] || 0) - flow;
+          addResStock(src, route.resource, -flow);
           events.push({
             kind: 'trade-raid',
             routeId: route.id, src: route.src, dst: route.dst,
@@ -594,9 +612,8 @@
       }
 
       if (!raided) {
-        src.stock[route.resource] = (src.stock[route.resource] || 0) - flow;
-        if (!dst.stock) dst.stock = { met: 0, en: 0, food: 0, water: 0 };
-        dst.stock[route.resource] = (dst.stock[route.resource] || 0) + flow;
+        addResStock(src, route.resource, -flow);
+        addResStock(dst, route.resource, flow);
         budget -= flow;
         route.delivered = (route.delivered || 0) + flow;
       } else {
@@ -716,8 +733,113 @@
   }
   function rankLabel(xp) { return rankForXp(xp).label; }
 
+  /* ------------------------------------------------------------------
+     #48 Fase 2b — Export rifiuti verso le AI (mercato + asse diplomatico).
+     Una colonia esporta rifiuti a una civiltà contattata in pace/alleanza:
+     chi LI VALORIZZA (tecnocratici / Vehryn / Mekhari) li compra → Tesoreria
+     GUADAGNA; gli altri li accettano come SMALTIMENTO a pagamento → Tesoreria
+     PAGA. Flusso passivo/Ι sul waste.stock. Recovery-friendly: se non puoi
+     pagare o sei in guerra, il contratto si sospende (mai fail-state).
+     ------------------------------------------------------------------ */
+  const WASTE_EXPORT_PRICE = 0.12;   // crediti per unità di rifiuto esportato
+  const WASTE_EXPORT_FLOW  = 4;      // unità/Ι per contratto
+
+  function wasteCivById(game, civId) {
+    return (game.civs || []).filter(function (c) { return c.id === civId; })[0] || null;
+  }
+  function wasteRelationOf(game, civ) {
+    const D = root.ORION.diplomacy;
+    if (D && D.effectiveRelation) return D.effectiveRelation(game, civ);
+    return civ && civ.relation ? civ.relation : 'peace';
+  }
+  /* L'AI valorizza i rifiuti? (li compra invece di farsi pagare per smaltirli) */
+  function wasteDealValues(civ) {
+    if (!civ) return false;
+    if (civ.vocation === 'tecnocratici') return true;
+    if (civ.faction === 'vehryn' || civ.faction === 'mekhari') return true;
+    return false;
+  }
+  function ensureWasteDeals(game) {
+    if (!Array.isArray(game.wasteDeals)) game.wasteDeals = [];
+    return game.wasteDeals;
+  }
+  function wasteDealsForCiv(game, civId) {
+    return ensureWasteDeals(game).filter(function (d) { return d.civId === civId; });
+  }
+  function canWasteDeal(game, civId, colonyKey) {
+    const civ = wasteCivById(game, civId);
+    if (!civ || !civ.alive) return { ok: false, reason: 'Civiltà non disponibile' };
+    const rel = wasteRelationOf(game, civ);
+    if (rel !== 'peace' && rel !== 'alliance') return { ok: false, reason: 'Serve pace o alleanza' };
+    const col = game.colonies && game.colonies[colonyKey];
+    if (!col || !col.colonized) return { ok: false, reason: 'Colonia non operativa' };
+    const dup = ensureWasteDeals(game).some(function (d) { return d.civId === civId && d.colonyKey === colonyKey; });
+    if (dup) return { ok: false, reason: 'Contratto già attivo per questa colonia' };
+    return { ok: true, civ: civ, values: wasteDealValues(civ) };
+  }
+  function openWasteDeal(game, civId, colonyKey) {
+    const chk = canWasteDeal(game, civId, colonyKey);
+    if (!chk.ok) return chk;
+    const deal = {
+      id: nextRouteId(game),
+      civId: civId, colonyKey: colonyKey,
+      flow: WASTE_EXPORT_FLOW,
+      mode: chk.values ? 'sell' : 'dispose',
+      status: 'active', moved: 0
+    };
+    ensureWasteDeals(game).push(deal);
+    return { ok: true, deal: deal };
+  }
+  function cancelWasteDeal(game, dealId) {
+    const arr = ensureWasteDeals(game);
+    let idx = -1;
+    for (let i = 0; i < arr.length; i++) { if (arr[i].id === dealId) { idx = i; break; } }
+    if (idx < 0) return { ok: false, reason: 'Contratto inesistente' };
+    arr.splice(idx, 1);
+    return { ok: true };
+  }
+  function processWasteDeals(game, events) {
+    const arr = ensureWasteDeals(game);
+    if (!arr.length) return;
+    const TR = root.ORION.treasury;
+    for (let i = arr.length - 1; i >= 0; i--) {
+      const deal = arr[i];
+      const civ = wasteCivById(game, deal.civId);
+      const col = game.colonies && game.colonies[deal.colonyKey];
+      if (!civ || !civ.alive || !col || !col.colonized) {
+        events.push({ kind: 'waste-deal-closed', dealId: deal.id, reason: 'gone', impulso: game.timeImpulsi });
+        arr.splice(i, 1); continue;
+      }
+      if (wasteRelationOf(game, civ) === 'war') { deal.status = 'suspended'; continue; }
+      const have = (col.waste && col.waste.stock) || 0;
+      const move = Math.min(deal.flow, have);
+      if (move <= 0) { deal.status = 'active'; continue; }
+      const credits = Math.round(move * WASTE_EXPORT_PRICE * 100) / 100;
+      if (deal.mode === 'dispose') {
+        if (!TR || !TR.spendCredits) { deal.status = 'suspended'; continue; }
+        const paid = TR.spendCredits(game, credits);
+        if (!paid || !paid.ok) { deal.status = 'suspended'; continue; }   // non puoi pagare → sospeso
+      } else { /* sell: guadagni nella valuta della tua regione */
+        if (TR && TR.addBalance && TR.clusterOfSystem) {
+          const cl = TR.clusterOfSystem(game, col.systemId);
+          if (cl != null) TR.addBalance(game, cl, credits);
+        }
+      }
+      col.waste.stock = Math.max(0, have - move);
+      deal.moved = (deal.moved || 0) + move;
+      deal.status = 'active';
+    }
+  }
+
   ORION.trade = {
     TRADE_RESOURCES: TRADE_RESOURCES,
+    ROUTE_RESOURCES: ROUTE_RESOURCES,
+    wasteDealValues: wasteDealValues,
+    wasteDealsForCiv: wasteDealsForCiv,
+    canWasteDeal: canWasteDeal,
+    openWasteDeal: openWasteDeal,
+    cancelWasteDeal: cancelWasteDeal,
+    processWasteDeals: processWasteDeals,
     MERCANTILE_TIERS: MERCANTILE_TIERS,
     MERC_RANKS: MERC_RANKS,
     MARKET_ROUTES: MARKET_ROUTES,

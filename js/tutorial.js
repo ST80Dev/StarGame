@@ -239,8 +239,14 @@
         '<p>La leva è l\'<strong>Impianto di riciclo</strong>: <strong>un solo impianto</strong> regge una colonia matura. ' +
         'Si <strong>autoalimenta</strong> (nessun upkeep) e mentre brucia rifiuti <strong>recupera energia</strong> — un guadagno ' +
         'temporaneo mostrato nella scheda Colonia, finché c\'è rifiuto da trattare.</p>' +
-        '<p><strong>In arrivo:</strong> esportare i rifiuti alle civiltà AI (commercio) e dedicare i mondi ostili a ' +
-        '<em>colonie riciclanti</em>, trasformando una zavorra in infrastruttura d\'impero.</p>'
+        '<p><strong>Colonie riciclanti (mondi ostili):</strong> su vulcanici, gassosi, ghiacciati, lune e cinture l\'impianto ' +
+        'di riciclo ha <strong>capacità e resa molto più alte</strong>. Questi mondi-zavorra diventano <strong>hub di smaltimento</strong>: ' +
+        'apri una <strong>rotta commerciale di "rifiuti ♻"</strong> da una colonia inquinata a una colonia riciclante e i rifiuti ' +
+        'viaggiano lì per essere bruciati (più energia).</p>' +
+        '<p><strong>Export alle AI:</strong> dalla vista Civiltà puoi stipulare un <strong>contratto rifiuti</strong> con un\'AI in ' +
+        'pace — chi li <em>valorizza</em> (Tecnocratici, Vehryn, Mekhari) te li <strong>compra</strong>, gli altri li accettano come ' +
+        '<strong>smaltimento a pagamento</strong>. La tech <strong>Ecologia industriale</strong> riduce i rifiuti generati, ' +
+        '<strong>Riciclo avanzato</strong> potenzia gli impianti.</p>'
     },
     {
       id: 'advanced',
