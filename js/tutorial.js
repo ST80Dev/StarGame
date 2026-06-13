@@ -514,7 +514,7 @@
     {
       id: 'struct:laboratorio', tag: 'Strutture · ⌬', title: 'Laboratorio',
       body:
-        '<p>Produce <strong>ricerca</strong> (1/<span class="ds-unit">Ι</span> a livello 1, di più coi livelli). Uso 1 en + 1 met/<span class="ds-unit">Ι</span>.</p>' +
+        '<p>Produce <strong>ricerca</strong> (0,5/<span class="ds-unit">Ι</span> a livello 1, di più coi livelli). Uso 1 en + 1 met/<span class="ds-unit">Ι</span>.</p>' +
         '<p><strong>Ricerca distribuita §11.1:</strong> ogni laboratorio è una struttura per-colonia, ma tutta la ricerca confluisce in un <strong>unico pool d\'impero</strong> sul progetto attivo. Le tecnologie avanzate sono volutamente <strong>lente</strong>: si raggiungono con <strong>più laboratori su più colonie</strong> che lavorano insieme, non con un singolo lab early.</p>' +
         '<p>Specializzare un mondo a vocazione scientifica (più livelli di laboratorio) accelera tutto l\'impero. Vedi la vista <em>Ricerca ⚛</em> per il progetto attivo.</p>' +
         '<p><strong>Pista vittoria:</strong> contribuisce all\'<em>Ascensione tech</em>.</p>'
