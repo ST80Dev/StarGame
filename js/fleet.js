@@ -561,6 +561,26 @@
     return { ok: true };
   }
 
+  /* Decisione #76: assegna un equipaggio SPECIFICO (per id) anziché il
+     primo in lista. Permette alla UI di scegliere il veterano giusto invece
+     di "+1 a caso" (l'utente decide quale esperienza mandare in missione).
+     Stessi vincoli di assignCrew (docked alla colonia origine). */
+  function assignCrewById(game, fleet, colonyKey, crewId) {
+    if (!fleet) return { ok: false, reason: 'Flotta inesistente' };
+    if (crewId == null) return { ok: false, reason: 'Equipaggio non indicato' };
+    const colony = game.colonies && game.colonies[colonyKey];
+    if (!colony) return { ok: false, reason: 'Colonia inesistente' };
+    if (fleet.location.status !== 'docked' || fleet.location.systemId !== colony.systemId) {
+      return { ok: false, reason: 'La flotta deve essere all\'attracco della colonia' };
+    }
+    if (!colony.crews) colony.crews = { explorer: [] };
+    if (!Array.isArray(colony.crews.explorer)) colony.crews.explorer = [];
+    const idx = colony.crews.explorer.findIndex(function (c) { return c && c.id === crewId; });
+    if (idx < 0) return { ok: false, reason: 'Equipaggio non disponibile' };
+    fleet.crew.push(colony.crews.explorer.splice(idx, 1)[0]);
+    return { ok: true };
+  }
+
   function unassignCrew(game, fleet, colonyKey, count) {
     if (!fleet) return { ok: false, reason: 'Flotta inesistente' };
     count = Math.max(0, count | 0);
@@ -2114,6 +2134,7 @@
     assignShips: assignShips,
     unassignShips: unassignShips,
     assignCrew: assignCrew,
+    assignCrewById: assignCrewById,
     unassignCrew: unassignCrew,
     dissolveFleet: dissolveFleet,
     setOrder: setOrder,

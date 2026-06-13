@@ -728,6 +728,10 @@
         '<p>Una spedizione consuma <strong>1 scafo esploratore</strong> (Hangar di costruzione) + ' +
         '<strong>1 equipaggio esploratore</strong> (Accademia militare). Gli equipaggi accumulano <strong>xp</strong> ad ogni rientro: ' +
         'più xp = viaggi più rapidi e meno incidenti (cap −15% durata, −20% incidenti).</p>' +
+        '<p>«Organizza spedizione» mostra <strong>tutta la frontiera raggiungibile</strong> (sistemi DETECTED a qualunque ' +
+        'distanza, attraverso lo spazio già esplorato — non solo i vicini a 1 salto). Man mano che esplori, la frontiera ' +
+        'si allarga e nuovi sistemi compaiono nella lista. Puoi <strong>scegliere quale equipaggio</strong> mandare ' +
+        '(per esperienza) e se <strong>rientrare</strong> alla base o restare in orbita al target.</p>' +
         '<p>Il <em>pericolo</em> del sistema target modula la durata del salto iperspaziale (40-80 Ι base) ' +
         'e la probabilità di incidente (5% sicuro → 30% letale). ' +
         '<strong>Recovery-friendly</strong>: nel peggiore dei casi perdi lo scafo, l\'equipaggio si salva sempre.</p>' +

@@ -1470,9 +1470,10 @@ button { font-family: inherit; }
   white-space: nowrap;
   text-transform: none;
   font-family: var(--font-data);
-  /* Larghezza fissa: il label varia ("0.5× · 60s/Ι" → "32× · 938ms/Ι")
-     e altrimenti il bottone si stringe/allarga al cambio velocità. */
-  width: 150px;
+  /* Larghezza fissa, dimensionata sul label più lungo "0.5× · 60s/Ι"
+     (12 caratteri monospace, solo al livello più lento; tutti gli altri
+     ≤10). Fissa così non si stringe/allarga al cambio velocità. */
+  width: 130px;
   justify-content: center;
   background: rgba(47, 230, 224, 0.06);
   border-color: var(--c-accent-dim);
@@ -3362,6 +3363,44 @@ select.main-menu__input { cursor: pointer; }
   display: flex;
   justify-content: flex-end;
 }
+
+/* Decisione #76 — selettore equipaggio per esperienza + opzione rientro */
+.exp-crew-select {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+.exp-crew-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 5px 10px;
+  background: rgba(80, 110, 200, 0.08);
+  border: 1px solid rgba(120, 150, 220, 0.25);
+  border-radius: 6px;
+  color: var(--c-text);
+  cursor: pointer;
+  font: inherit;
+  line-height: 1.15;
+  transition: border-color 120ms, background 120ms;
+}
+.exp-crew-chip:hover { border-color: rgba(150, 180, 240, 0.5); }
+.exp-crew-chip.is-selected {
+  border-color: var(--c-accent);
+  background: rgba(80, 200, 230, 0.14);
+  box-shadow: 0 0 0 1px var(--c-accent) inset;
+}
+.exp-crew-chip__rank { font-weight: 600; font-size: 0.82rem; }
+.exp-crew-chip__xp { font-size: 0.68rem; color: var(--c-text-faint); }
+.exp-return-opt {
+  display: block;
+  margin: 8px 0 2px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.exp-return-opt small { color: var(--c-text-faint); }
 
 /* Tab "Esplorazione" — riusa lo stile planet-tab esistente */
 .planet-tab[data-tab="esplorazione"].is-active { color: #b39cff; }

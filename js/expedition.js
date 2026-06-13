@@ -346,6 +346,12 @@
     return s.links.indexOf(targetSystemId) >= 0;
   }
 
+  /* DEPRECATA (decisione #76): ritorna solo l'adiacenza a 1 hop (e include
+     gli UNKNOWN), retaggio M07. La UI di esplorazione usa ora
+     `ORION.fleet.visibleDestinations(galaxy, state, from, {includeDetected:true,
+     includeExplored:false})` — frontiera DETECTED multi-hop attraverso lo
+     spazio esplorato, coerente col Fleet Wizard. Mantenuta solo per
+     retro-compatibilità (canLaunch/test). */
   function reachableTargets(galaxy, state, fromSystemId) {
     const out = [];
     const s = galaxy.systems[fromSystemId];
