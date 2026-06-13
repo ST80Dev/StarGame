@@ -814,10 +814,17 @@
     /* M15 — Dreadnought/Ammiraglia richiedono il Bacino orbitale (#41). */
     if (cls && cls.requiresStruct) {
       const rs = cls.requiresStruct;
-      if (!hasStructLevel(colony, rs.id, rs.level || 1)) {
+      let satisfied = hasStructLevel(colony, rs.id, rs.level || 1);
+      /* M16 Fase B (#81): un Bacino ORBITALE (stazione di livello alto entro
+         raggio) soddisfa il requisito dei capitali al posto di quello planetario. */
+      if (!satisfied && rs.id === 'bacino-orbitale' && game &&
+          root.ORION.station && root.ORION.station.orbitalShipyardFor) {
+        satisfied = root.ORION.station.orbitalShipyardFor(game, colonyKey, rs.level || 1);
+      }
+      if (!satisfied) {
         const sdef = root.ORION && root.ORION.structures && root.ORION.structures.get(rs.id);
         const sname = sdef ? sdef.name : rs.id;
-        return { ok: false, reason: sname + ' lvl ' + (rs.level || 1) + ' richiesto per ' + cls.name };
+        return { ok: false, reason: sname + ' lvl ' + (rs.level || 1) + ' richiesto per ' + cls.name + ' (anche un cantiere orbitale vicino)' };
       }
     }
     /* M15 — Nave Ammiraglia unica per civiltà (GDD §12.1). */

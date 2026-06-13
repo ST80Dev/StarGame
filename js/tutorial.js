@@ -954,14 +954,19 @@
           '<li><strong>Rifornimento flotte</strong> — è un <em>porto amico avanzato</em>: le flotte ci ricaricano i viveri in ' +
           'territorio profondo, dove non hai colonie. Estende drasticamente il raggio operativo.</li>' +
           '<li><strong>Difesa</strong> — corazza + fuoco difensivo. Fortifica il sistema: combatte al fianco delle tue flotte ' +
-          'e respinge i predoni. Se sopraffatta viene distrutta (la ricostruisci).</li>' +
-          '<li><strong>Deposito</strong> — il serbatoio fa anche da scorta avanzata.</li>' +
+          'e respinge i predoni.</li>' +
+          '<li><strong>Hub commerciale</strong> — ogni stazione operativa aggiunge rotte e <em>throughput</em> alle tue rotte ' +
+          'interne (oltre i Mercati planetari).</li>' +
+          '<li><strong>Cantiere orbitale</strong> — una stazione di <strong>livello alto</strong> (≥3) fa da <em>Bacino orbitale</em> ' +
+          'per una colonia vicina: le permette di varare i <strong>capitali</strong> (Dreadnought lvl 3 · Ammiraglia lvl 4) anche ' +
+          'senza Bacino planetario.</li>' +
         '</ul>' +
-        '<p>Cresce di <strong>livello come una struttura</strong>: ogni modulo aggiunge corazza, fuoco e capacità del serbatoio. ' +
-        'La <strong>linea di rifornimento</strong> dalla colonia riempie il serbatoio; se la stazione resta <em>isolata</em> ' +
-        '(nessuna colonia entro raggio) le funzioni degradano gradualmente — mai un\'autodistruzione: riavvicina una colonia ' +
-        'o smantellala.</p>' +
-        '<p>Cantiere orbitale per le grandi navi e hub commerciale di larga scala arrivano in una fase successiva.</p>'
+        '<p>Cresce di <strong>livello come una struttura</strong>; la <strong>linea di rifornimento</strong> dalla colonia riempie ' +
+        'il serbatoio; se <em>isolata</em> le funzioni degradano (mai autodistruzione).</p>' +
+        '<p><strong>Assedio (Fase B):</strong> AI e predoni possono <strong>assediare</strong> le tue stazioni con un combattimento ' +
+        'a più round — manda rinforzi finché regge. Se cade: i predoni la <strong>distruggono</strong>, una civiltà la ' +
+        '<strong>cattura</strong> (diventa un presidio nemico). Una stazione catturata si <strong>riconquista</strong> inviando ' +
+        'una flotta armata e usando <em>Attacca</em> sul suo sistema.</p>'
     },
     {
       id: 'colonial-ship',
