@@ -115,7 +115,7 @@
       desc: 'Contribuisce alla ricerca distribuita della civiltà.',
       cost: { met: 60, en: 20 }, time: 14,
       upkeep: { en: 1, met: 1 },   // +met manutenzione (2026-06-11); #48: 2→1 en
-      rates: { research: 3 },
+      rates: { research: 0.5 },   // pacing M13 (2026-06-13, #87): 3→0.5, la ricerca avanzata è un traguardo d'impero (spinge a colonizzare + costruire più lab)
       slots: 1, maxLevel: 4,
       bodyTypes: HABITABLE,
       hooks: ['research']         // gancio M13

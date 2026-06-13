@@ -213,6 +213,23 @@
     }
   ];
 
+  /* ------------------------------------------------------------------
+     PACING (richiesta utente 2026-06-13): la ricerca deve essere un
+     traguardo d'IMPERO (più colonie + più laboratori che lavorano sullo
+     stesso pool, §11.1), non una cosa da una-colonia-early. Due leve:
+       - resa per-laboratorio abbassata a ⅓ (structures.js: rates.research 3→1)
+       - costi tech ×COST_MUL e soglie game-changer ×MINRES_MUL
+     Netto: completare una tech ≈ 9× più lento di prima. Applicato qui in
+     un solo punto così vale anche per le tech aggiunte in futuro. Le soglie
+     restano facili da ritoccare col playtest (M20).
+     ------------------------------------------------------------------ */
+  const COST_MUL = 4;     // costo per tech (#87: ×4, ricerca = traguardo d'impero)
+  const MINRES_MUL = 3;   // soglia di ricerca d'impero (game-changer)
+  CATALOG.forEach(function (t) {
+    if (t.cost) t.cost = Math.round(t.cost * COST_MUL);
+    if (t.minResearch) t.minResearch = Math.round(t.minResearch * MINRES_MUL);
+  });
+
   const BY_ID = {};
   const POOL_IDS = [];
   CATALOG.forEach(function (t) {
