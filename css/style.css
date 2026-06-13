@@ -1711,6 +1711,15 @@ button { font-family: inherit; }
     flex: 0 1 auto;
     padding-bottom: calc(var(--mnav-h, 60px) + 20px);
   }
+  /* Sheet a tutto schermo = un solo contenitore scrollabile: la cronaca
+     scorre con la sheet, non come scroll annidato (override del flex:1
+     desktop che la farebbe scrollare a parte). */
+  .panel--left .lp-section--chron { flex: 0 0 auto; }
+  .panel--left .lp-section--chron .lp-section__body {
+    flex: 0 0 auto;
+    max-height: none;
+    overflow: visible;
+  }
 
   /* HUD top compatto: indici+tempo+azioni su una riga, risorse scrollabili.
      position+z-index: resta SOPRA le sheet a tutto schermo (che partono a
@@ -5550,7 +5559,12 @@ select.main-menu__input { cursor: pointer; }
 }
 
 /* --- Sezione generica del launcher --- */
-.lp-section { display: flex; flex-direction: column; min-height: 0; }
+/* flex-shrink:0 → ogni sezione mantiene la sua altezza naturale e non viene
+   compressa sotto il contenuto quando il launcher è pieno (evita che i bottoni
+   di una sezione traboccino sopra l'header della successiva). Lo scroll lo fa
+   il contenitore .panel__content--launcher (overflow-y:auto). La CRONACA
+   ridefinisce flex più sotto per crescere fino al fondo. */
+.lp-section { display: flex; flex-direction: column; min-height: 0; flex-shrink: 0; }
 .lp-section__head {
   display: flex; align-items: center; gap: 8px;
   padding: 6px 6px 6px 2px;
@@ -5631,10 +5645,13 @@ select.main-menu__input { cursor: pointer; }
 .lp-section.is-collapsed .lp-section__caret::before { content: '▸'; }
 .lp-section:not(.is-collapsed) .lp-section__caret::before { content: '▾'; }
 
-/* Roster cronaca scrollabile */
+/* Roster cronaca scrollabile — ultima sezione: cresce fino al fondo della
+   sidebar (flex:1) e scorre internamente, così si sfrutta tutta l'altezza
+   disponibile. Niente più max-height fisso (impediva di arrivare al bottom). */
 .lp-section--chron { flex: 1 1 auto; min-height: 120px; }
 .lp-section--chron .lp-section__body {
-  max-height: 260px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   font-size: 0.84rem; line-height: 1.5;
   padding: 6px 4px;
