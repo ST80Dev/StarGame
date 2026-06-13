@@ -1425,8 +1425,8 @@ button { font-family: inherit; }
 .time-control--inline {
   flex-direction: row;
   align-items: center;
-  gap: 6px;
-  padding: 5px 8px;
+  gap: 4px;
+  padding: 4px 6px;
   background: rgb(var(--c-surface-rgb) / 0.65);
   border: 1px solid var(--c-border);
   box-shadow: none;
@@ -1434,15 +1434,15 @@ button { font-family: inherit; }
 }
 .time-control--inline::before { display: none; }
 .time-control--inline .btn--mini {
-  padding: 6px 8px;
+  padding: 5px 6px;
   font-size: 0.95rem;
-  min-width: 30px;
+  min-width: 28px;
   font-family: var(--font-data);
   letter-spacing: 0;
   text-transform: none;
 }
 .time-control--inline .btn--play {
-  padding: 6px 10px;
+  padding: 5px 8px;
   font-size: 0.74rem;
   letter-spacing: 0.06em;
   white-space: nowrap;
@@ -1450,7 +1450,7 @@ button { font-family: inherit; }
   font-family: var(--font-data);
   /* Larghezza fissa: il label varia ("0.5× · 60s/Ι" → "32× · 938ms/Ι")
      e altrimenti il bottone si stringe/allarga al cambio velocità. */
-  width: 160px;
+  width: 152px;
   justify-content: center;
   background: rgba(47, 230, 224, 0.06);
   border-color: var(--c-accent-dim);
@@ -1463,12 +1463,22 @@ button { font-family: inherit; }
   font-size: 1rem;
   color: var(--c-accent);
 }
+.time-control--inline .btn--step,
+.time-control--inline .btn--play-step {
+  padding: 5px 7px;
+}
 .time-control--inline .btn--next-event {
-  padding: 6px 10px;
+  padding: 5px 8px;
   font-size: 0.72rem;
   letter-spacing: 0.08em;
   white-space: nowrap;
+  /* Larghezza fissa: senza etichetta "EVENTO" basta lo spazio per il
+     glifo + delta ("in 5 Ι" → "in 2340 Ι"), così non spinge gli altri. */
+  min-width: 92px;
+  justify-content: center;
 }
+/* Etichetta "EVENTO" nascosta anche su desktop: resta glifo ⏭ + countdown. */
+.time-control--inline .btn--next-event .btn__label { display: none; }
 .time-control--inline .btn__glyph { font-size: 0.85rem; }
 
 .btn {

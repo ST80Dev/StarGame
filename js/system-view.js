@@ -794,7 +794,7 @@
         ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 3;
         ctx.strokeRect(-5, -5, 10, 10);
         ctx.restore();
-        ctx.font = '10px "JetBrains Mono", ui-monospace, monospace';
+        ctx.font = Math.round(10 * this._labelMul()) + 'px "JetBrains Mono", ui-monospace, monospace';
         ctx.textAlign = 'center'; ctx.textBaseline = 'top';
         ctx.fillStyle = hexA(col, 0.85);
         ctx.shadowColor = 'rgba(0,0,0,0.85)'; ctx.shadowBlur = 3;
@@ -814,8 +814,16 @@
         ctx.beginPath(); ctx.arc(p.x, p.y, radius, a0, a0 + 0.9); ctx.stroke();
       }
     }
+    // Moltiplicatore tipografico legato allo zoom: a fitScale = 1, cresce
+    // facendo zoom-in così i nomi si leggono meglio, ma cappato (oltre 2×
+    // il carattere si fissa) e mai sotto la dimensione base in zoom-out.
+    _labelMul() {
+      const base = this.fitScale || 1;
+      return clamp(this.scale / base, 1, 2);
+    }
     _label(ctx, p, text, r, strong) {
-      ctx.font = (strong ? '600 ' : '') + '11px "JetBrains Mono", ui-monospace, monospace';
+      const fs = Math.round(11 * this._labelMul());
+      ctx.font = (strong ? '600 ' : '') + fs + 'px "JetBrains Mono", ui-monospace, monospace';
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
       ctx.fillStyle = strong ? 'rgba(216,226,255,0.95)' : 'rgba(154,166,204,0.78)';
       ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 3;
