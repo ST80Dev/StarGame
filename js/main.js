@@ -390,6 +390,12 @@ function newGame(seed, opts) {
     /* M11 Fase B parziale: sistemi occupati dopo vittoria su civiltà AI.
        Lazy, additivo; nessun bump di schema. */
     occupations: {},
+    /* M17 Fase A (decisione #83): Dispacci & Missioni + Memoria Storica.
+       missions = offerte/incarichi; memoria = log milestone permanente
+       (uncapped); dispatchMeta = stato del generatore (cooldown/contatori). */
+    missions: [],
+    memoria: [],
+    dispatchMeta: { lastOfferAt: -1, offers: 0, completed: 0 },
     /* Identità del popolo del giocatore (decisione #65): { prefix, proper }.
        Default derivato dalla colonia natale dopo colonizeHomePlanet se non
        passato dal menu. Persistito (schema 20). */
@@ -504,6 +510,12 @@ function newGame(seed, opts) {
     }
     /* M12 Fase A2 (decisione #56 §15.3): accordi commerciali AI. */
     if (Array.isArray(saved.tradeAgreements)) ORION.game.tradeAgreements = saved.tradeAgreements.slice();
+    /* M17 Fase A (decisione #83): Dispacci & Missioni + Memoria Storica. */
+    if (Array.isArray(saved.missions)) ORION.game.missions = saved.missions.slice();
+    if (Array.isArray(saved.memoria)) ORION.game.memoria = saved.memoria.slice();
+    if (saved.dispatchMeta && typeof saved.dispatchMeta === 'object') {
+      ORION.game.dispatchMeta = Object.assign({ lastOfferAt: -1, offers: 0, completed: 0 }, saved.dispatchMeta);
+    }
     /* M11 Fase B parziale: sistemi occupati (additivo, no migrazione). */
     if (saved.occupations && typeof saved.occupations === 'object') {
       ORION.game.occupations = Object.assign({}, saved.occupations);
@@ -574,6 +586,12 @@ function newGame(seed, opts) {
      (partita nuova o save pre-schema-23). Idempotente. */
   if (ORION.research && ORION.research.ensure) {
     ORION.research.ensure(ORION.game);
+  }
+  /* M17 Fase A (decisione #83): inizializza Dispacci/Missioni/Memoria se
+     assenti (partita nuova o save pre-schema-30) e ricostruisce il seen-set
+     della Memoria. Idempotente. */
+  if (ORION.dispatch && ORION.dispatch.ensure) {
+    ORION.dispatch.ensure(ORION.game);
   }
 
   setHudDate(ORION.time.currentDS(ORION.game));
@@ -820,6 +838,17 @@ function renderView(stage, view) {
     if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
     if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
     renderResearchView(stage);
+    return;
+  }
+
+  // M17 Fase A (decisione #83): vista "Dispacci" — incarichi disponibili
+  // (offerte non bloccanti), incarichi in corso + Memoria Storica §17.2.
+  if (view === 'dispatch') {
+    if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; } if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
+    if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
+    if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
+    if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
+    renderDispatchView(stage);
     return;
   }
 
@@ -4729,6 +4758,145 @@ function stationCostStr(c) {
   return Object.keys(c).map(function (k) { return resIcon(k) + c[k]; }).join(' · ');
 }
 
+/* =====================================================================
+   M17 Fase A (decisione #83) — Dispacci & Missioni + Memoria Storica
+   ===================================================================== */
+function dispatchPending() {
+  const DP = ORION.dispatch, g = ORION.game;
+  return !!(DP && g && DP.pendingOffers(g).length);
+}
+function dispatchLauncherSub() {
+  const DP = ORION.dispatch, g = ORION.game;
+  if (!DP || !g) return 'M17';
+  const off = DP.pendingOffers(g).length;
+  const act = DP.activeMissions(g).length;
+  if (off) return off + (off === 1 ? ' nuovo' : ' nuovi');
+  if (act) return act + ' in corso';
+  return 'nessuno';
+}
+function dispatchSysName(sid) {
+  const g = ORION.game; const s = g && g.galaxy.systems[sid];
+  return s ? s.name : '—';
+}
+/* Testo dell'obiettivo (sui verbi esistenti — la missione osserva). */
+function dispatchObjective(m, active) {
+  const sn = dispatchSysName(m.targetSysId) + (m.targetSysId >= 0 ? systemTagHtml(m.targetSysId) : '');
+  if (m.type === 'bounty') return 'Sgomina il covo pirata su ' + sn + ' — invia una flotta armata.';
+  if (m.type === 'reach') return 'Raggiungi ' + sn + ' con una flotta.';
+  const left = active && m.progress ? (m.progress.holdLeft == null ? m.holdI : m.progress.holdLeft) : m.holdI;
+  const verb = (m.type === 'resupply') ? 'Mantieni una flotta a ' : 'Presidia ';
+  return verb + sn + ' · ' + Math.max(0, Math.ceil(left)) + ' / ' + m.holdI + ' ' + iU() + ' di presenza.';
+}
+function dispatchRewardStr(m) {
+  const r = m.reward || {};
+  const parts = [];
+  if (r.res) Object.keys(r.res).forEach(function (k) { parts.push(resIcon(k) + r.res[k]); });
+  if (r.credits && r.credits.amount) parts.push('✦ ' + r.credits.amount);
+  if (typeof r.reputation === 'number' && r.reputation) parts.push('rep +' + r.reputation);
+  if (typeof r.disposition === 'number' && r.disposition && m.sourceCivId) parts.push('relazioni +' + r.disposition);
+  return parts.join(' · ') || '—';
+}
+
+function renderDispatchView(stage) {
+  if (!stage) return;
+  const g = ORION.game, DP = ORION.dispatch;
+  if (!g || !DP) return;
+  if (ORION.tutorial) ORION.tutorial.fire('dispatches');
+
+  const offers = DP.pendingOffers(g);
+  const active = DP.activeMissions(g);
+  const now = g.timeImpulsi || 0;
+  const completed = (g.dispatchMeta && g.dispatchMeta.completed) || 0;
+
+  function offerCard(m) {
+    const ttl = Math.max(0, m.expiresAt - now);
+    return '<li class="dispatch-card dispatch-card--' + m.type + '">' +
+      '<div class="dispatch-card__head">' +
+        '<span class="dispatch-card__title">' + escapeHtml(m.title) + '</span>' +
+        '<span class="dispatch-card__ttl">scade in ' + Math.ceil(ttl) + ' ' + iU() + '</span>' +
+      '</div>' +
+      '<div class="dispatch-card__src">da <strong>' + escapeHtml(m.sourceName) + '</strong></div>' +
+      '<div class="dispatch-card__desc">' + escapeHtml(m.desc) + '</div>' +
+      '<div class="dispatch-card__obj">Obiettivo: ' + dispatchObjective(m, false) + '</div>' +
+      '<div class="dispatch-card__reward">Ricompensa: ' + dispatchRewardStr(m) + '</div>' +
+      '<div class="dispatch-card__actions">' +
+        '<button class="btn btn--mini btn--enter" data-dispatch-accept="' + m.id + '" type="button">Accetta</button>' +
+        '<button class="btn btn--mini btn--danger" data-dispatch-decline="' + m.id + '" type="button">Rifiuta</button>' +
+      '</div>' +
+    '</li>';
+  }
+  function activeCard(m) {
+    const dl = Math.max(0, (m.deadline || 0) - now);
+    return '<li class="dispatch-card dispatch-card--' + m.type + ' is-active">' +
+      '<div class="dispatch-card__head">' +
+        '<span class="dispatch-card__title">' + escapeHtml(m.title) + '</span>' +
+        '<span class="dispatch-card__ttl">entro ' + Math.ceil(dl) + ' ' + iU() + '</span>' +
+      '</div>' +
+      '<div class="dispatch-card__src">per <strong>' + escapeHtml(m.sourceName) + '</strong></div>' +
+      '<div class="dispatch-card__obj">' + dispatchObjective(m, true) + '</div>' +
+      '<div class="dispatch-card__reward">Ricompensa: ' + dispatchRewardStr(m) + '</div>' +
+      '<div class="dispatch-card__actions">' +
+        '<button class="btn btn--mini btn--danger" data-dispatch-abandon="' + m.id + '" type="button">Abbandona</button>' +
+      '</div>' +
+    '</li>';
+  }
+
+  const offersHtml = offers.length
+    ? '<ul class="dispatch-list">' + offers.map(offerCard).join('') + '</ul>'
+    : '<p class="panel__note">Nessun incarico disponibile. I dispacci arrivano col tempo da civiltà contattate, dal Sindacato Mekhari e come segnali di frontiera.</p>';
+  const activeHtml = active.length
+    ? '<ul class="dispatch-list">' + active.map(activeCard).join('') + '</ul>'
+    : '<p class="panel__note">Nessun incarico in corso.</p>';
+
+  const mem = (g.memoria || []);
+  const memHtml = mem.length
+    ? '<ul class="memoria-list">' + mem.slice(0, 60).map(function (e) {
+        return '<li class="memoria-item memoria-item--' + (e.mod || 'system') + '">' +
+          '<span class="memoria-item__ds">' + ORION.time.format(e.impulso) + '</span>' +
+          '<span class="memoria-item__txt">' + escapeHtml(e.text) + '</span>' +
+        '</li>';
+      }).join('') + '</ul>'
+    : '<p class="panel__note">La storia del tuo popolo si scriverà qui: prime colonie, primi contatti, alleanze, svolte.</p>';
+
+  stage.innerHTML =
+    '<div class="fleet-view dispatch-view">' +
+      '<header class="fleet-view__head">' +
+        '<h2 class="fleet-view__title">Dispacci &amp; Missioni <span class="fleet-view__sub">M17 · Eventi</span></h2>' +
+      '</header>' +
+      '<div class="market-summary">' +
+        '<div class="market-summary__cell"><span class="market-summary__val">' + offers.length + '</span><span class="market-summary__lbl">Disponibili</span></div>' +
+        '<div class="market-summary__cell"><span class="market-summary__val">' + active.length + '</span><span class="market-summary__lbl">In corso</span></div>' +
+        '<div class="market-summary__cell"><span class="market-summary__val">' + completed + '</span><span class="market-summary__lbl">Completati</span></div>' +
+      '</div>' +
+      '<section class="dispatch-sec"><h3 class="dispatch-sec__title">Incarichi disponibili</h3>' + offersHtml + '</section>' +
+      '<section class="dispatch-sec"><h3 class="dispatch-sec__title">Incarichi in corso</h3>' + activeHtml + '</section>' +
+      '<p class="panel__note">Gli incarichi si adempiono con le flotte che già hai: manda una squadra a sgominare un covo, a raggiungere o presidiare un sistema. Accettare è un impegno; abbandonare o lasciar scadere costa qualche relazione, completare ricompensa.</p>' +
+      '<section class="dispatch-sec dispatch-sec--memoria"><h3 class="dispatch-sec__title">Memoria Storica</h3>' + memHtml + '</section>' +
+    '</div>';
+
+  stage.querySelectorAll('[data-dispatch-accept]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const r = DP.accept(g, b.dataset.dispatchAccept);
+      if (!r.ok) { showToast(r.reason || 'Non riuscito'); return; }
+      showToast('Incarico accettato');
+      persistGame(g); renderDispatchView(stage); renderLeftPanel();
+    });
+  });
+  stage.querySelectorAll('[data-dispatch-decline]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      DP.decline(g, b.dataset.dispatchDecline);
+      persistGame(g); renderDispatchView(stage); renderLeftPanel();
+    });
+  });
+  stage.querySelectorAll('[data-dispatch-abandon]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (!confirm('Abbandonare l\'incarico? Costa qualche punto di relazione.')) return;
+      DP.abandon(g, b.dataset.dispatchAbandon);
+      persistGame(g); renderDispatchView(stage); renderLeftPanel();
+    });
+  });
+}
+
 /* Overlay di costruzione: scegli la colonia fondatrice + il sistema target
    (esplorato, entro raggio, senza stazione), poi conferma. */
 function openStationBuildPicker(stage) {
@@ -7420,6 +7588,11 @@ const DEFAULT_AUTOPAUSE = {
   /* Decisione intra-sistema: minaccia sopra una flotta in garrison.
      Default ON — l'utente decide il da farsi (Ingaggia/Ritira/Resta). */
   'garrison-threat-detected': true,
+  /* M17 Fase A (decisione #83): Dispacci & Missioni. L'offerta è
+     un'opportunità non bloccante (OFF, vive nel pannello Dispacci);
+     gli esiti done/failed sono notevoli (ON); scadenza/void OFF. */
+  'dispatch-offered': false, 'dispatch-done': true, 'dispatch-failed': true,
+  'dispatch-expired': false, 'dispatch-void': false,
   /* Fase B (decisione #46): tappa intermedia raggiunta. Default OFF —
      non interrompiamo a ogni waypoint, può essere una rotta lunga. L'arrivo
      finale e la `route-complete` continuano a fermare il tempo. */
@@ -7825,6 +7998,9 @@ function showEventOverlay(events) {
     'fleet-supply-low': 'Flotta: viveri in esaurimento',
     'fleet-supply-critical': 'Flotta: viveri esauriti',
     'fleet-resupplied': 'Flotta rifornita',
+    'dispatch-offered': 'Nuovo incarico disponibile',
+    'dispatch-done': 'Incarico completato',
+    'dispatch-failed': 'Incarico fallito',
     'fleet-leg-hop': 'Flotta: hop intermedio',
     'fleet-waypoint-reached': 'Flotta: tappa raggiunta',
     'garrison-threat-detected': 'Garrison: minaccia rilevata',
@@ -7955,7 +8131,12 @@ function runAdvance(impulsi) {
   if (after === before) return res;
 
   if (res.events && res.events.length) {
-    res.events.forEach(function (ev) { chronicleEvent(ev); });
+    res.events.forEach(function (ev) {
+      chronicleEvent(ev);
+      /* M17 (decisione #83): Memoria Storica — registra le milestone
+         (firsts + svolte) da ogni evento. Idempotente (seen-set). */
+      if (ORION.dispatch && ORION.dispatch.recordMemoria) ORION.dispatch.recordMemoria(g, ev);
+    });
   }
   setHudDate(ORION.time.currentDS(g));
   /* La pulse marca lo "snap a fine batch" (decisione M05). In auto-advance
@@ -8530,6 +8711,17 @@ function chronicleEvent(ev) {
     const sys = ORION.game.galaxy.systems[ev.systemId];
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName) + '</strong> rifornita presso <strong>' +
       (sys ? sys.name : '—') + '</strong>: viveri al massimo, deriva rientrata.', 'system');
+  } else if (ev.kind === 'dispatch-offered') {
+    pushChronicle(ds + ' — Nuovo incarico da <strong>' + escapeHtml(ev.sourceName || '—') + '</strong>: ' +
+      escapeHtml(ev.title || '') + ' <span class="chronicle__hint">(pannello Dispacci ✉)</span>.', 'civ');
+  } else if (ev.kind === 'dispatch-done') {
+    pushChronicle(ds + ' — Incarico completato: <strong>' + escapeHtml(ev.title || '') + '</strong> · ricompensa riscossa.', 'civ');
+  } else if (ev.kind === 'dispatch-failed') {
+    pushChronicle(ds + ' — Incarico fallito: <strong>' + escapeHtml(ev.title || '') + '</strong> · qualche relazione incrinata.', 'crit');
+  } else if (ev.kind === 'dispatch-expired') {
+    pushChronicle(ds + ' — Incarico scaduto senza risposta: ' + escapeHtml(ev.title || '') + '.', 'system');
+  } else if (ev.kind === 'dispatch-void') {
+    pushChronicle(ds + ' — Incarico annullato: ' + escapeHtml(ev.title || '') + (ev.reason ? ' (' + escapeHtml(ev.reason) + ')' : '') + '.', 'system');
   } else if (ev.kind === 'empire-fallen') {
     if (ev.hard) {
       pushChronicle(ds + ' — <strong>La tua civiltà è caduta.</strong> Senza più colonie, l\'impero si dissolve negli annali galattici.', 'system');
@@ -9071,6 +9263,11 @@ function renderLeftPanel() {
       '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('station') + '</span>' +
       '<span>Stazioni</span>' +
       '<span class="lp-launcher__sub">' + stationLauncherSub() + '</span>' +
+    '</button>' +
+    '<button class="lp-launcher__btn' + (currentView === 'dispatch' ? ' is-active' : '') + (dispatchPending() ? ' lp-launcher__btn--alert' : '') + '" data-view="dispatch" type="button">' +
+      '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('dispatch') + '</span>' +
+      '<span>Dispacci</span>' +
+      '<span class="lp-launcher__sub">' + dispatchLauncherSub() + '</span>' +
     '</button>';
 
   /* ----- Cronaca (collassabile) -----

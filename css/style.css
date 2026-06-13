@@ -6933,3 +6933,52 @@ select.main-menu__input { cursor: pointer; }
   background: rgba(180,150,230,0.14); color: #cdb6ee;
   border: 1px solid rgba(180,150,230,0.25); white-space: nowrap;
 }
+
+/* ===================================================================
+   M17 — Dispacci & Missioni + Memoria Storica (decisione #83).
+   Accento rosa (concetto Diplomazia/relazioni, UI_GUIDE §1) per gli
+   incarichi; tinte semantiche per la Memoria.
+   =================================================================== */
+.lp-launcher__btn--alert .lp-launcher__sub {
+  color: #ff9ab0; font-weight: 600;
+}
+.dispatch-view .dispatch-sec { margin-top: 14px; }
+.dispatch-sec__title {
+  font-family: var(--font-display); font-size: 0.8rem; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--c-text-faint); margin: 0 0 8px;
+  border-bottom: 1px solid rgba(var(--c-surface-rgb) / 0.6); padding-bottom: 4px;
+}
+.dispatch-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.dispatch-card {
+  padding: 12px 14px; border-radius: 9px;
+  background: rgba(var(--c-surface-rgb) / 0.55);
+  border: 1px solid rgba(255,138,170,0.22);
+  border-left: 3px solid rgba(255,138,170,0.6);
+}
+.dispatch-card.is-active { border-left-color: var(--c-accent); }
+.dispatch-card__head { display: flex; align-items: baseline; gap: 8px; }
+.dispatch-card__title { font-family: var(--font-display); font-size: 0.96rem; color: #ffc6d4; flex: 1; min-width: 0; }
+.dispatch-card.is-active .dispatch-card__title { color: var(--c-text); }
+.dispatch-card__ttl { font-size: 0.72rem; color: var(--c-text-faint); white-space: nowrap; }
+.dispatch-card__src { font-size: 0.78rem; color: var(--c-text-soft); margin-top: 2px; }
+.dispatch-card__desc { font-size: 0.82rem; color: var(--c-text-soft); margin-top: 6px; }
+.dispatch-card__obj { font-size: 0.82rem; margin-top: 6px; }
+.dispatch-card__reward { font-size: 0.82rem; margin-top: 4px; color: #9fd0a8; }
+.dispatch-card__actions { display: flex; gap: 8px; margin-top: 10px; }
+
+.memoria-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px;
+  max-height: 360px; overflow-y: auto; }
+.memoria-item {
+  display: flex; gap: 10px; align-items: baseline; padding: 5px 8px; border-radius: 6px;
+  background: rgba(var(--c-surface-rgb) / 0.4); border-left: 2px solid var(--c-text-faint);
+}
+.memoria-item__ds { font-family: var(--font-display); font-size: 0.7rem; color: var(--c-text-faint);
+  white-space: nowrap; min-width: 5.5em; }
+.memoria-item__txt { font-size: 0.84rem; color: var(--c-text-soft); }
+.memoria-item--planet { border-left-color: var(--c-warn, #f0c060); }
+.memoria-item--civ    { border-left-color: #ff8aaa; }
+.memoria-item--figure { border-left-color: #b496e6; }
+.memoria-item--crit   { border-left-color: var(--c-crit, #e06060); }
+.memoria-item--crit .memoria-item__txt { color: #f0b0b0; }
+.memoria-item--ok     { border-left-color: #80d0a0; }
+.memoria-item--ok .memoria-item__txt { color: #a8e6c0; font-weight: 600; }

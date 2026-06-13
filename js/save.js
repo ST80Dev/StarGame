@@ -55,7 +55,7 @@
      DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
      nuovo gioco la preserva e una recovery best-effort prova a dedurla
      da colonie/flotte/spedizioni/cronaca. */
-  const SCHEMA_VERSION = 29;
+  const SCHEMA_VERSION = 30;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -225,7 +225,17 @@
       /* Schema 29 (M14 Fase B3, decisione #79): pool dei Luminari (figure
          scientifiche da elevare al seggio). I seggi elevati + lo stato di
          costituzione vivono in game.council (auto-serializzato). */
-      luminari: Array.isArray(game.luminari) ? game.luminari : []
+      luminari: Array.isArray(game.luminari) ? game.luminari : [],
+      /* Schema 30 (M17 Fase A, decisione #83): Dispacci & Missioni +
+         Memoria Storica §17.2. game.missions[] = offerte/incarichi attivi;
+         game.memoria[] = log milestone PERMANENTE (uncapped, distinto dalla
+         cronaca cap 40); dispatchMeta = cooldown/contatori del generatore.
+         Il seen-set (game._memoriaSeen) è transitorio (ricostruito da
+         ORION.dispatch.ensure al load), NON serializzato. */
+      missions: Array.isArray(game.missions) ? game.missions : [],
+      memoria: Array.isArray(game.memoria) ? game.memoria : [],
+      dispatchMeta: (game.dispatchMeta && typeof game.dispatchMeta === 'object')
+        ? game.dispatchMeta : { lastOfferAt: -1, offers: 0, completed: 0 }
     };
   }
 
@@ -670,6 +680,17 @@
     if ((payload.schema || 28) < 29) {
       if (!Array.isArray(payload.luminari)) payload.luminari = [];
       payload.schema = 29;
+    }
+    /* v29 → v30 (M17 Fase A, decisione #83): Dispacci & Missioni + Memoria
+       Storica. Save vecchi → liste vuote; nessun incarico/voce retroattivi.
+       Il generatore parte dal warm-up come una partita nuova. */
+    if ((payload.schema || 29) < 30) {
+      if (!Array.isArray(payload.missions)) payload.missions = [];
+      if (!Array.isArray(payload.memoria)) payload.memoria = [];
+      if (!payload.dispatchMeta || typeof payload.dispatchMeta !== 'object') {
+        payload.dispatchMeta = { lastOfferAt: -1, offers: 0, completed: 0 };
+      }
+      payload.schema = 30;
     }
     return payload;
   }
