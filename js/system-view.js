@@ -52,6 +52,7 @@
       this.onSelectBody = null;
       this.onActivateBody = null;
       this.onExit = null;
+      this._navCdUntil = 0;            // decisione #80: cooldown tra livelli
 
       this.scale = 1;
       this.offsetX = 0;
@@ -326,9 +327,55 @@
       if (this.onExit) this.onExit();
     }
 
+    /* decisione #80 — corpo apribile più vicino al centro schermo (salta le
+       cinture: non hanno vista pianeta). Soglia di distanza per non scendere
+       se al centro non c'è nulla di inquadrato. */
+    _bodyNearestCenter() {
+      if (!this.revealed()) return null;
+      const bs = this.system.bodies;
+      const cx = this.cssW / 2, cy = this.cssH / 2;
+      let best = null, bd = Infinity;
+      for (let i = 0; i < bs.length; i++) {
+        const b = bs[i];
+        const def = BODY_TYPES[b.type];
+        if (def && def.cat === 'belt') continue;
+        const w = this.bodyWorldPos(b);
+        const p = this.worldToScreen(w.x, w.y);
+        const dx = p.x - cx, dy = p.y - cy, d = dx * dx + dy * dy;
+        if (d < bd) { bd = d; best = b.key; }
+      }
+      const lim = Math.min(this.cssW, this.cssH) * 0.40;
+      return bd <= lim * lim ? best : null;
+    }
+
+    _navReady() { return this._now() >= this._navCdUntil; }
+    _armNavCd() { this._navCdUntil = this._now() + 450; }
+    _now() { return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(); }
+
     _zoomAt(sx, sy, factor) {
       const minScale = this.fitScale * 0.55;
       const maxScale = this.fitScale * 14;
+      /* decisione #80 — navigazione a zoom: contro il muro IN → scendi nel
+         pianeta centrato; contro il muro OUT → risali alla galassia. */
+      if (this._navReady()) {
+        if (factor > 1 && this.scale >= maxScale - 1e-3 && this.onActivateBody) {
+          const key = this._bodyNearestCenter();
+          if (key) {
+            this._armNavCd();
+            // lascia margine sotto al max così, tornando dal pianeta, non si
+            // ridiscende subito (anti-rimbalzo sulla giuntura).
+            this.scale = maxScale * 0.78;
+            this.selectBody(key);
+            this.onActivateBody(key);
+            return;
+          }
+        }
+        if (factor < 1 && this.scale <= minScale + 1e-3 && this.onExit) {
+          this._armNavCd();
+          this.onExit();
+          return;
+        }
+      }
       const newScale = clamp(this.scale * factor, minScale, maxScale);
       const k = newScale / this.scale;
       this.offsetX = sx - (sx - this.offsetX) * k;

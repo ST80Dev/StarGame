@@ -872,6 +872,7 @@ function renderGalaxyView(stage) {
   ORION.map = new ORION.GalaxyMap().mount(holder, g.galaxy, g.state, {
     onContext: onMapContext,
     onActivateSystem: (id) => openSystem(id),  // doppio click → vista interna (M03)
+    onDiveIn: (id) => openSystem(id),          // decisione #80: scroll-in → sistema centrato
     // M08 polish (decisione #61): drag&drop dal canvas per ordinare flotte.
     // Polish post-wizard: il click sul marker NON entra più direttamente
     // in picker mode — apre un popup info con dettagli del viaggio; il
@@ -1206,6 +1207,17 @@ function renderSystemPanel(title, content, id) {
    Il SystemView è un layer sopra la mappa galassia (dentro .galaxy-root);
    breadcrumb e pannello destro diventano coerenti col livello Sistema.
    --------------------------------------------------------------------- */
+/* decisione #80 — mini-dissolvenza sull'holder che compare a ogni cambio di
+   livello (Galassia↔Sistema↔Pianeta), così lo scroll-in/out non "stacca" di
+   colpo. Vale per scroll, bottoni e doppio-click (stessi open/close). */
+function zoomFadeIn(el) {
+  if (!el) return;
+  el.classList.remove('is-zoom-entering');
+  void el.offsetWidth;                       // forza il restart dell'animazione
+  el.classList.add('is-zoom-entering');
+  setTimeout(function () { if (el) el.classList.remove('is-zoom-entering'); }, 260);
+}
+
 function openSystem(id) {
   const g = ORION.game;
   if (!g) return;
@@ -1222,7 +1234,7 @@ function openSystem(id) {
   const sysHolder = root.querySelector('[data-system-holder]');
   const galHolder = root.querySelector('.galaxy-holder');
   if (galHolder) galHolder.style.visibility = 'hidden';
-  if (sysHolder) sysHolder.hidden = false;
+  if (sysHolder) { sysHolder.hidden = false; zoomFadeIn(sysHolder); }
 
   if (ORION.systemView) ORION.systemView.destroy();
   ORION.systemView = new ORION.SystemView().mount(sysHolder, system, {
@@ -1255,7 +1267,7 @@ function closeSystem() {
     const sysHolder = root.querySelector('[data-system-holder]');
     const galHolder = root.querySelector('.galaxy-holder');
     if (sysHolder) sysHolder.hidden = true;
-    if (galHolder) galHolder.style.visibility = '';
+    if (galHolder) { galHolder.style.visibility = ''; zoomFadeIn(galHolder); }
   }
   setNavActive('galaxy');
   setGalaxyHint('galaxy');
@@ -1465,7 +1477,7 @@ function openPlanet(sysId, bodyKey) {
   const planetHolder = root.querySelector('[data-planet-holder]');
   const sysHolder = root.querySelector('[data-system-holder]');
   if (sysHolder) sysHolder.style.visibility = 'hidden';
-  if (planetHolder) planetHolder.hidden = false;
+  if (planetHolder) { planetHolder.hidden = false; zoomFadeIn(planetHolder); }
 
   if (ORION.planetView) ORION.planetView.destroy();
   if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
@@ -1506,7 +1518,7 @@ function closePlanet() {
     const sysHolder = root.querySelector('[data-system-holder]');
     const deckHolder = root.querySelector('[data-colony-deck]');
     if (planetHolder) planetHolder.hidden = true;
-    if (sysHolder) sysHolder.style.visibility = '';
+    if (sysHolder) { sysHolder.style.visibility = ''; zoomFadeIn(sysHolder); }
     if (deckHolder) deckHolder.hidden = true;
   }
   setNavActive('system');
@@ -3295,6 +3307,51 @@ function capitalBuildBlock(colony, cls) {
   return '';
 }
 
+/* Visual per classe nave nella riserva Hangar (#42): icona SVG dedicata
+   (icons.js) + tinta per ruolo (esplorazione ciano · combattimento caldo ·
+   coloniale verde · capitali M15). Fallback al glifo monocolore se manca. */
+const SHIP_VIS = {
+  explorer:     { icon: 'shipExplorer',     tone: 'cyan' },
+  caccia:       { icon: 'shipCaccia',       tone: 'gold' },
+  intercettore: { icon: 'shipIntercettore', tone: 'amber' },
+  corvetta:     { icon: 'shipCorvetta',     tone: 'pink' },
+  fregata:      { icon: 'shipFregata',      tone: 'violet' },
+  coloniale:    { icon: 'shipColoniale',    tone: 'green' },
+  incrociatore: { icon: 'shipIncrociatore', tone: 'pink' },
+  dreadnought:  { icon: 'shipDreadnought',  tone: 'pink' },
+  ammiraglia:   { icon: 'shipAmmiraglia',   tone: 'gold' }
+};
+function shipVisIcon(cls) {
+  const v = SHIP_VIS[cls.id] || { tone: 'soft' };
+  const svg = (v.icon && ORION.icon && ORION.icon(v.icon)) || '';
+  const inner = svg || ('<span class="hangar-ship__glyph">' + (cls.glyph || '◈') + '</span>');
+  return '<span class="hangar-ship__ico ui-icon ui-icon--' + v.tone + '" aria-hidden="true">' + inner + '</span>';
+}
+
+/* Riquadro di riepilogo della riserva navi a terra (#42): una card per
+   classe presente, con icona estesa + conteggio + stazza (hp/fuoco/eq). */
+function shipReserveBox(colony, classes) {
+  const cards = classes.map(function (cls) {
+    const n = (colony.ships && colony.ships[cls.id]) || 0;
+    if (!n) return null;
+    const stats = [];
+    if (cls.hp) stats.push('<span title="Corazza">♥ ' + cls.hp + '</span>');
+    if (cls.fp) stats.push('<span title="Potenza di fuoco">⚔ ' + cls.fp + '</span>');
+    if (cls.crew) stats.push('<span title="Equipaggio richiesto">☗ ' + cls.crew + '</span>');
+    return '<div class="hangar-ship" title="' + escapeHtml(cls.name) + '">' +
+        shipVisIcon(cls) +
+        '<div class="hangar-ship__main">' +
+          '<div class="hangar-ship__top"><b>×' + n + '</b> ' + escapeHtml(cls.name) + '</div>' +
+          '<div class="hangar-ship__stats">' + stats.join('<i>·</i>') + '</div>' +
+        '</div>' +
+      '</div>';
+  }).filter(Boolean);
+  if (!cards.length) {
+    return '<div class="hangar-reserve hangar-reserve--empty">Nessuna nave in riserva — costruiscine una qui sotto.</div>';
+  }
+  return '<div class="hangar-reserve">' + cards.join('') + '</div>';
+}
+
 function renderCantieriSection(colony, planet) {
   const hasHangar = !!(colony.structures && colony.structures['cantiere-navale']);
   const hasAcademy = !!(colony.structures && colony.structures['accademia-militare']);
@@ -3373,21 +3430,11 @@ function renderCantieriSection(colony, planet) {
     const buildEnabled = payOkShip && check.ok && !capBlock;
     const blockReason = capBlock || (!check.ok ? check.reason : (!payOkShip ? 'Risorse insufficienti' : ''));
 
-    /* Counter per-classe (riepilogo compatto). */
-    const counterParts = classes.map(function (cls) {
-      const n = (colony.ships && colony.ships[cls.id]) || 0;
-      if (!n) return null;
-      return '<span title="' + escapeHtml(cls.name) + '">' + cls.glyph + ' ' + n + '</span>';
-    }).filter(Boolean);
-    const counterHtml = counterParts.length
-      ? counterParts.join(' · ')
-      : '<span class="cantieri-row__base">nessuna nave</span>';
-
     html += '<div class="cantieri-row">' +
       '<div class="cantieri-row__head">' +
         '<span class="cantieri-row__glyph" aria-hidden="true">▱</span>' +
         '<span class="cantieri-row__name">Hangar di costruzione <span class="cantieri-row__base">lvl ' + hangarLvl + '</span></span>' +
-        '<span class="cantieri-row__counter">Scafi: <strong>' + sShips + '</strong> ' + counterHtml + '</span>' +
+        '<span class="cantieri-row__counter">Scafi a terra: <strong>' + sShips + '</strong></span>' +
       '</div>' +
       '<div class="cantieri-row__caps">' +
         '<span class="cantieri-cap' + cantieriCls + '" title="Build paralleli abilitati dal livello dell\'Hangar (scafi + mercantili)">Cantieri <strong>' + cantieriUse + ' / ' + buildSlots + '</strong></span>' +
@@ -3396,7 +3443,8 @@ function renderCantieriSection(colony, planet) {
           ? '<span class="cantieri-cap" title="Manutenzione/riparazione delle navi al porto: riserva + flotte ferme qui (occupare un attracco consuma metalli). Le flotte in viaggio pagano la riserva di viaggio.">Manutenzione <strong>−' + F.portMaintenance(ORION.game, colony).toFixed(2) + ' ' + resIcon('met') + '/' + iU() + '</strong></span>'
           : '') +
         techHtml +
-      '</div>';
+      '</div>' +
+      shipReserveBox(colony, classes);
     queue.forEach(function (q, idx) {
       const qKind = q.kind || 'explorer';
       const qCls = (F.getClass && F.getClass(qKind)) || { name: 'Scafo esploratore', glyph: '▱' };

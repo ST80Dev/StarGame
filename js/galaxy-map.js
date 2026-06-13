@@ -155,6 +155,8 @@
       this.state = null;
       this.onContext = null;
       this.onActivateSystem = null;
+      this.onDiveIn = null;            // decisione #80: scroll-in → scendi nel sistema
+      this._navCdUntil = 0;            // cooldown anti-rimbalzo tra livelli
 
       // viewport (trasformazione mondo->schermo)
       this.scale = 1;
@@ -210,6 +212,7 @@
       this.state = state;
       this.onContext = opts.onContext || null;
       this.onActivateSystem = opts.onActivateSystem || null;
+      this.onDiveIn = opts.onDiveIn || null;
       /* M08 polish (decisione #61): callback per il drag&drop ordini flotte. */
       this.onFleetPicked = opts.onFleetPicked || null;
       this.onFleetOrderRequest = opts.onFleetOrderRequest || null;
@@ -400,6 +403,28 @@
       }
       return best;
     }
+
+    /* decisione #80 — sistema il cui marker proiettato è più vicino al centro
+       schermo, entro una soglia ragionevole (così il dive-in non scatta se al
+       centro non c'è nulla di inquadrato). */
+    _systemNearestCenter() {
+      const sys = this.galaxy.systems;
+      const cx = this.cssW / 2, cy = this.cssH / 2;
+      let best = -1, bd = Infinity;
+      for (let i = 0; i < sys.length; i++) {
+        const p = this.project(sys[i].x, sys[i].y, sys[i].z || 0);
+        const dx = p.x - cx, dy = p.y - cy, d = dx * dx + dy * dy;
+        if (d < bd) { bd = d; best = i; }
+      }
+      const lim = Math.min(this.cssW, this.cssH) * 0.35;
+      return bd <= lim * lim ? best : -1;
+    }
+
+    /* Cooldown tra transizioni di livello: ingoia l'inerzia residua della
+       rotella/pinch così non si rimbalza avanti-indietro sulla giuntura. */
+    _navReady() { return (this._now()) >= this._navCdUntil; }
+    _armNavCooldown() { this._navCdUntil = this._now() + 450; }
+    _now() { return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(); }
 
     _groupById(id) {
       const groups = this.galaxy.groups;
@@ -752,6 +777,14 @@
     _zoomAt(sx, sy, factor) {
       const minScale = this.fitScale * 0.6;
       const maxScale = this.fitScale * 9;
+      /* decisione #80 — navigazione a zoom: sei contro il muro dello zoom IN,
+         a livello gruppo, e continui a spingere → scendi nel sistema centrato
+         (sostituisce il click in sidebar / doppio-click, senza toglierli). */
+      if (factor > 1 && this.scale >= maxScale - 1e-3 &&
+          this.effectiveLevel() === 'group' && this._navReady() && this.onDiveIn) {
+        const id = this._systemNearestCenter();
+        if (id >= 0) { this._armNavCooldown(); this.onDiveIn(id); return; }
+      }
       const newScale = clamp(this.scale * factor, minScale, maxScale);
       const k = newScale / this.scale;
       this.offsetX = sx - (sx - this.offsetX) * k;
