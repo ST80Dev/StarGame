@@ -5317,6 +5317,37 @@ select.main-menu__input { cursor: pointer; }
 .fleet-chip--pop { color: var(--c-accent-warm, #f0a868); }
 .fleet-item__open { margin-left: auto; opacity: 0.6; }
 .fleet-item--card:hover .fleet-item__open { opacity: 1; }
+.fleet-chip--dist { color: var(--c-accent-warm, #f0a868); }
+
+/* raggruppamento per gruppo stellare (collassabile) */
+.fleet-groups { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.fleet-group { display: flex; flex-direction: column; }
+.fleet-group__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 4px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--c-border-soft, rgba(255, 255, 255, 0.08));
+  color: var(--c-text, #e9ecf6);
+  font-size: 0.84rem;
+  cursor: pointer;
+  text-align: left;
+}
+.fleet-group__head:hover { color: var(--c-violet, #b89cff); }
+.fleet-group__caret { font-size: 0.7rem; color: var(--c-text-faint, #98a3c8); width: 12px; }
+.fleet-group__count {
+  margin-left: auto;
+  font-family: var(--font-data, monospace);
+  font-size: 0.8rem;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgb(var(--c-surface-rgb) / 0.6);
+  color: var(--c-text-faint, #98a3c8);
+}
+.fleet-group .fleet-list { margin-top: 6px; }
 
 /* =====================================================================
    DETTAGLIO FLOTTA — pannello unico (#2026-06-13)
