@@ -45,8 +45,17 @@
     OFFER_TTL: 220,       // finestra dell'offerta (poi scade in silenzio)
     DEADLINE: 650,        // tempo per completare dopo l'accettazione
     ESCORT_HOLD: 60,      // Ι di presenza richiesti (scorta)
-    RESUPPLY_HOLD: 50     // Ι di presenza richiesti (rifornimento)
+    RESUPPLY_HOLD: 50,    // Ι di presenza richiesti (rifornimento)
+    /* M17 Fase B (#83) — covi-boss + contractor Mekhari. */
+    BOSS_CAP: 2,          // max covi-boss nominati per partita
+    BOSS_DANGER_MIN: 0.55,// solo nei sistemi profondi/pericolosi
+    BOSS_REWARD_MUL: 2.4, // ricompensa taglia-boss (premium, solo risorse/crediti)
+    HUNT_BASE_CREDITS: 90,// costo base contractor (× livello, × boss)
+    HUNT_DURATION: 130    // Ι prima che i cacciatori sgominino il covo
   };
+
+  const BOSS_TITLES = ['Sciacallo', 'Falce', 'Artiglio', 'Vipera', 'Corsaro', 'Spettro', 'Lama', 'Avvoltoio'];
+  const BOSS_EPITHETS = ['Cremisi', 'del Vuoto', 'Nero', 'di Ferro', 'Spezzaossa', 'Scarlatto', 'dell\'Abisso'];
 
   /* ------------------------------------------------------------------
      LIFECYCLE / ENSURE
@@ -58,7 +67,41 @@
     if (!game.dispatchMeta || typeof game.dispatchMeta !== 'object') {
       game.dispatchMeta = { lastOfferAt: -1, offers: 0, completed: 0 };
     }
+    /* M17 Fase B (#83): contractor Mekhari attivi (auto-risolutivi). */
+    if (!Array.isArray(game.contracts)) game.contracts = [];
     rebuildMemoriaSeen(game);
+  }
+
+  /* M17 Fase B (#83): promozione deterministica di alcuni covi a BOSS
+     nominati (più duri in combattimento via combat.forceFromPirateNest).
+     Vivono nei sistemi profondi/pericolosi; cap BOSS_CAP. I flag
+     (boss/name/bossTier) vivono in game.piracy.nests (auto-serializzati).
+     Idempotente: non ri-promuove i già nominati. */
+  function ensureBosses(game) {
+    const nests = (game.piracy && game.piracy.nests) || [];
+    if (!nests.length) return;
+    let bossCount = nests.filter(function (n) { return n.boss; }).length;
+    if (bossCount >= CFG.BOSS_CAP) return;
+    /* Candidati ordinati per pericolo decrescente (deterministico per sysId). */
+    const cand = nests.filter(function (n) {
+      if (n.boss) return false;
+      const s = game.galaxy.systems[n.sysId];
+      return s && (s.danger || 0) >= CFG.BOSS_DANGER_MIN;
+    }).sort(function (a, b) {
+      const da = game.galaxy.systems[a.sysId].danger || 0;
+      const db = game.galaxy.systems[b.sysId].danger || 0;
+      if (db !== da) return db - da;
+      return a.sysId - b.sysId;
+    });
+    for (let i = 0; i < cand.length && bossCount < CFG.BOSS_CAP; i++) {
+      const n = cand[i];
+      const rng = ORION.rng.makeRng(game.seed + ':boss:' + n.sysId);
+      if (!rng.chance(0.5)) continue;
+      n.boss = true;
+      n.bossTier = 1 + rng.int(0, 1);
+      n.name = rng.pick(BOSS_TITLES) + ' ' + rng.pick(BOSS_EPITHETS);
+      bossCount++;
+    }
   }
 
   function rebuildMemoriaSeen(game) {
@@ -171,16 +214,33 @@
 
     if (type === 'bounty') {
       const nests = ORION.ai.knownNests(game);
-      const nest = rng.pick(nests);
+      /* Preferisci un covo-BOSS noto (taglia maggiore, ricompensa premium). */
+      const realOf = function (sid) { return ((game.piracy && game.piracy.nests) || []).filter(function (n) { return n.sysId === sid; })[0]; };
+      const bossKnown = nests.filter(function (k) { const r = realOf(k.sysId); return r && r.boss; });
+      const nest = bossKnown.length ? rng.pick(bossKnown) : rng.pick(nests);
+      const real = realOf(nest.sysId);
+      const isBoss = !!(real && real.boss);
       base.targetSysId = nest.sysId;
+      base.boss = isBoss;
       const lvl = nest.level || 1;
       const broker = mekhariBroker(game);
       if (broker) { base.sourceKind = 'mekhari'; base.sourceCivId = broker.id; base.sourceName = broker.name; }
-      base.title = 'Taglia: covo pirata su ' + sys(nest.sysId);
-      base.desc = 'Un covo pirata (livello ' + lvl + ') infesta ' + sys(nest.sysId) + (nest.regionLabel ? ' · ' + nest.regionLabel : '') +
-        '. Invia una flotta armata e sgominalo.';
-      base.reward = { res: { met: 60 + 40 * lvl, en: 30 + 20 * lvl }, reputation: 3, credits: maybeCredits(game, 40 * lvl) };
-      base.penalty = { reputation: 2, disposition: 6 };
+      const mul = isBoss ? CFG.BOSS_REWARD_MUL : 1;
+      if (isBoss) {
+        base.title = 'Taglia maggiore: ' + (real.name || 'covo pirata') + ' su ' + sys(nest.sysId);
+        base.desc = 'Il temuto covo-boss ' + (real.name || '—') + ' (livello ' + lvl + ', scortato) infesta ' +
+          sys(nest.sysId) + (nest.regionLabel ? ' · ' + nest.regionLabel : '') +
+          '. Servirà una flotta robusta — o dei cacciatori prezzolati. Ricompensa premium.';
+      } else {
+        base.title = 'Taglia: covo pirata su ' + sys(nest.sysId);
+        base.desc = 'Un covo pirata (livello ' + lvl + ') infesta ' + sys(nest.sysId) + (nest.regionLabel ? ' · ' + nest.regionLabel : '') +
+          '. Invia una flotta armata e sgominalo.';
+      }
+      base.reward = {
+        res: { met: Math.round((60 + 40 * lvl) * mul), en: Math.round((30 + 20 * lvl) * mul) },
+        reputation: isBoss ? 5 : 3, credits: maybeCredits(game, Math.round(40 * lvl * mul))
+      };
+      base.penalty = { reputation: isBoss ? 3 : 2, disposition: 6 };
       return base;
     }
 
@@ -348,6 +408,8 @@
   function tick(game, events) {
     if (!game) return;
     ensure(game);
+    ensureBosses(game);
+    processContracts(game, events);
     const now = game.timeImpulsi || 0;
     /* Scadenza offerte non accettate (silenziosa). */
     for (let i = 0; i < game.missions.length; i++) {
@@ -386,7 +448,77 @@
         if (d > 0 && d < best) best = d;
       }
     }
+    /* Contractor Mekhari in corso (Fase B): fermati alla risoluzione. */
+    (game.contracts || []).forEach(function (c) {
+      if (c.status === 'active' && c.resolveAt) {
+        const d = c.resolveAt - now;
+        if (d > 0 && d < best) best = d;
+      }
+    });
     return isFinite(best) ? best : 0;
+  }
+
+  /* ------------------------------------------------------------------
+     CONTRACTOR MEKHARI (freelance, decisione #83 Fase B) — auto-risolutivo
+     Paghi crediti (Tesoreria) → dopo HUNT_DURATION Ι i cacciatori sgominano
+     il covo (nessuna flotta da gestire). Sinergia: se sul covo c'è una taglia
+     attiva, si completa da sola al "covo sparito" (tracking esistente).
+     ------------------------------------------------------------------ */
+  function nestAt(game, sysId) {
+    return ((game.piracy && game.piracy.nests) || []).filter(function (n) { return n.sysId === sysId; })[0] || null;
+  }
+
+  /* Preventivo: costo in crediti per assoldare i cacciatori su un covo. */
+  function huntQuote(game, sysId) {
+    if (!(ORION.mekhari && ORION.mekhari.isAvailable && ORION.mekhari.isAvailable(game))) {
+      return { ok: false, reason: 'Cacciatori non disponibili (contatta i Mekhari)' };
+    }
+    const nest = nestAt(game, sysId);
+    if (!nest) return { ok: false, reason: 'Nessun covo noto in quel sistema' };
+    if ((game.contracts || []).some(function (c) { return c.targetSysId === sysId && c.status === 'active'; })) {
+      return { ok: false, reason: 'Cacciatori già ingaggiati su quel covo' };
+    }
+    const lvl = nest.level || 1;
+    const sc = (ORION.mekhari.surcharge ? ORION.mekhari.surcharge(game) : 0.35);
+    const credits = Math.round(CFG.HUNT_BASE_CREDITS * lvl * (nest.boss ? 2 : 1) * (1 + sc));
+    return { ok: true, credits: credits, level: lvl, boss: !!nest.boss, name: nest.name || null };
+  }
+
+  function hireHunter(game, sysId) {
+    const q = huntQuote(game, sysId);
+    if (!q.ok) return q;
+    const T = ORION.treasury;
+    if (!T || !T.spendCredits) return { ok: false, reason: 'Tesoreria non disponibile' };
+    const pay = T.spendCredits(game, q.credits);
+    if (!pay.ok) return { ok: false, reason: pay.reason || 'Crediti insufficienti' };
+    const now = game.timeImpulsi || 0;
+    if (!Array.isArray(game.contracts)) game.contracts = [];
+    const id = (ORION.time && ORION.time.nextSeqId) ? ORION.time.nextSeqId(game, 'contract') : ('contract-' + now);
+    const nest = nestAt(game, sysId);
+    game.contracts.push({
+      id: id, kind: 'hunt', targetSysId: sysId,
+      name: (nest && nest.name) || null, boss: !!(nest && nest.boss),
+      resolveAt: now + CFG.HUNT_DURATION, cost: q.credits, status: 'active'
+    });
+    return { ok: true, credits: q.credits, eta: CFG.HUNT_DURATION };
+  }
+
+  function processContracts(game, events) {
+    if (!Array.isArray(game.contracts) || !game.contracts.length) return;
+    const now = game.timeImpulsi || 0;
+    let changed = false;
+    for (let i = 0; i < game.contracts.length; i++) {
+      const c = game.contracts[i];
+      if (c.status !== 'active' || now < c.resolveAt) continue;
+      /* I cacciatori sgominano il covo (se ancora c'è). */
+      const nests = (game.piracy && game.piracy.nests) || [];
+      const idx = nests.findIndex(function (n) { return n.sysId === c.targetSysId; });
+      if (idx >= 0) { nests.splice(idx, 1); }
+      c.status = 'done';
+      changed = true;
+      events.push({ kind: 'mekhari-contract-done', sysId: c.targetSysId, name: c.name, boss: c.boss, impulso: now });
+    }
+    if (changed) game.contracts = game.contracts.filter(function (c) { return c.status === 'active'; });
   }
 
   /* ------------------------------------------------------------------
@@ -468,10 +600,24 @@
   function activeMissions(game) {
     return (game.missions || []).filter(function (m) { return m.status === 'active'; });
   }
+  function activeContracts(game) {
+    return (game.contracts || []).filter(function (c) { return c.status === 'active'; });
+  }
+  /* Covi noti con flag boss/name (per la UI cacciatori). */
+  function knownNestsDetailed(game) {
+    const AI = ORION.ai;
+    const base = (AI && AI.knownNests) ? AI.knownNests(game) : [];
+    return base.map(function (k) {
+      const real = nestAt(game, k.sysId);
+      return { sysId: k.sysId, level: k.level, regionLabel: k.regionLabel,
+        sysName: k.name, boss: !!(real && real.boss), bossName: real ? real.name : null };
+    });
+  }
 
   ORION.dispatch = {
     CFG: CFG,
     ensure: ensure,
+    ensureBosses: ensureBosses,
     tick: tick,
     nextEventDelta: nextEventDelta,
     recordMemoria: recordMemoria,
@@ -481,6 +627,10 @@
     find: find,
     pendingOffers: pendingOffers,
     activeMissions: activeMissions,
+    activeContracts: activeContracts,
+    knownNestsDetailed: knownNestsDetailed,
+    huntQuote: huntQuote,
+    hireHunter: hireHunter,
     payColonyKey: payColonyKey,
     playerFleetAt: playerFleetAt
   };

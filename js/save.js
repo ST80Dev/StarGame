@@ -235,7 +235,10 @@
       missions: Array.isArray(game.missions) ? game.missions : [],
       memoria: Array.isArray(game.memoria) ? game.memoria : [],
       dispatchMeta: (game.dispatchMeta && typeof game.dispatchMeta === 'object')
-        ? game.dispatchMeta : { lastOfferAt: -1, offers: 0, completed: 0 }
+        ? game.dispatchMeta : { lastOfferAt: -1, offers: 0, completed: 0 },
+      /* M17 Fase B (#83): contractor Mekhari attivi. Additivo lazy, nessun
+         bump di schema (resta 30) — i flag boss vivono in game.piracy.nests. */
+      contracts: Array.isArray(game.contracts) ? game.contracts : []
     };
   }
 

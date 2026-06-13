@@ -396,6 +396,8 @@ function newGame(seed, opts) {
     missions: [],
     memoria: [],
     dispatchMeta: { lastOfferAt: -1, offers: 0, completed: 0 },
+    /* M17 Fase B (#83): contractor Mekhari (cacciatori di taglie). */
+    contracts: [],
     /* Identità del popolo del giocatore (decisione #65): { prefix, proper }.
        Default derivato dalla colonia natale dopo colonizeHomePlanet se non
        passato dal menu. Persistito (schema 20). */
@@ -516,6 +518,7 @@ function newGame(seed, opts) {
     if (saved.dispatchMeta && typeof saved.dispatchMeta === 'object') {
       ORION.game.dispatchMeta = Object.assign({ lastOfferAt: -1, offers: 0, completed: 0 }, saved.dispatchMeta);
     }
+    if (Array.isArray(saved.contracts)) ORION.game.contracts = saved.contracts.slice();
     /* M11 Fase B parziale: sistemi occupati (additivo, no migrazione). */
     if (saved.occupations && typeof saved.occupations === 'object') {
       ORION.game.occupations = Object.assign({}, saved.occupations);
@@ -4808,11 +4811,12 @@ function renderDispatchView(stage) {
   const now = g.timeImpulsi || 0;
   const completed = (g.dispatchMeta && g.dispatchMeta.completed) || 0;
 
+  const bossBadge = function (m) { return m.boss ? '<span class="dispatch-boss">⚑ BOSS</span> ' : ''; };
   function offerCard(m) {
     const ttl = Math.max(0, m.expiresAt - now);
-    return '<li class="dispatch-card dispatch-card--' + m.type + '">' +
+    return '<li class="dispatch-card dispatch-card--' + m.type + (m.boss ? ' is-boss' : '') + '">' +
       '<div class="dispatch-card__head">' +
-        '<span class="dispatch-card__title">' + escapeHtml(m.title) + '</span>' +
+        '<span class="dispatch-card__title">' + bossBadge(m) + escapeHtml(m.title) + '</span>' +
         '<span class="dispatch-card__ttl">scade in ' + Math.ceil(ttl) + ' ' + iU() + '</span>' +
       '</div>' +
       '<div class="dispatch-card__src">da <strong>' + escapeHtml(m.sourceName) + '</strong></div>' +
@@ -4827,9 +4831,9 @@ function renderDispatchView(stage) {
   }
   function activeCard(m) {
     const dl = Math.max(0, (m.deadline || 0) - now);
-    return '<li class="dispatch-card dispatch-card--' + m.type + ' is-active">' +
+    return '<li class="dispatch-card dispatch-card--' + m.type + ' is-active' + (m.boss ? ' is-boss' : '') + '">' +
       '<div class="dispatch-card__head">' +
-        '<span class="dispatch-card__title">' + escapeHtml(m.title) + '</span>' +
+        '<span class="dispatch-card__title">' + bossBadge(m) + escapeHtml(m.title) + '</span>' +
         '<span class="dispatch-card__ttl">entro ' + Math.ceil(dl) + ' ' + iU() + '</span>' +
       '</div>' +
       '<div class="dispatch-card__src">per <strong>' + escapeHtml(m.sourceName) + '</strong></div>' +
@@ -4847,6 +4851,40 @@ function renderDispatchView(stage) {
   const activeHtml = active.length
     ? '<ul class="dispatch-list">' + active.map(activeCard).join('') + '</ul>'
     : '<p class="panel__note">Nessun incarico in corso.</p>';
+
+  /* M17 Fase B (#83): cacciatori di taglie freelance (Mekhari, auto-risolutivi). */
+  let huntersHtml = '';
+  const mekhariOn = !!(ORION.mekhari && ORION.mekhari.isAvailable && ORION.mekhari.isAvailable(g));
+  if (mekhariOn && ORION.tutorial) ORION.tutorial.fire('mekhari-hunters');
+  if (mekhariOn) {
+    const nests = DP.knownNestsDetailed(g);
+    const contracts = DP.activeContracts(g);
+    const contractSys = {};
+    contracts.forEach(function (c) { contractSys[c.targetSysId] = c; });
+    const rows = nests.map(function (n) {
+      const c = contractSys[n.sysId];
+      const tag = n.boss ? '<span class="dispatch-boss">⚑ ' + escapeHtml(n.bossName || 'BOSS') + '</span> ' : '';
+      if (c) {
+        const eta = Math.max(0, c.resolveAt - now);
+        return '<li class="hunter-row is-hired">' + tag + escapeHtml(n.sysName) +
+          ' <span class="hunter-row__sys">' + systemTagHtml(n.sysId) + '</span>' +
+          '<span class="hunter-row__eta">cacciatori in azione · ' + Math.ceil(eta) + ' ' + iU() + '</span></li>';
+      }
+      const q = DP.huntQuote(g, n.sysId);
+      const btn = q.ok
+        ? '<button class="btn btn--mini" data-hunt="' + n.sysId + '" type="button" title="Paga dalla Tesoreria">Assolda · ✦ ' + q.credits + '</button>'
+        : '<span class="hunter-row__na">' + escapeHtml(q.reason || '—') + '</span>';
+      return '<li class="hunter-row">' + tag + escapeHtml(n.sysName) +
+        ' <span class="hunter-row__sys">' + systemTagHtml(n.sysId) + ' · lvl ' + n.level + '</span>' + btn + '</li>';
+    }).join('');
+    huntersHtml =
+      '<section class="dispatch-sec"><h3 class="dispatch-sec__title">Cacciatori di taglie · Mekhari</h3>' +
+        (nests.length
+          ? '<ul class="hunter-list">' + rows + '</ul>'
+          : '<p class="panel__note">Nessun covo pirata noto. Esplora la Frontiera per scovarli.</p>') +
+        '<p class="panel__note">Il Sindacato Mekhari ingaggia <strong>cacciatori freelance</strong> che sgominano un covo per te (paghi dalla Tesoreria, si risolve da solo dopo un po\'). Se sul covo pende una tua taglia, si completa anche quella.</p>' +
+      '</section>';
+  }
 
   const mem = (g.memoria || []);
   const memHtml = mem.length
@@ -4871,6 +4909,7 @@ function renderDispatchView(stage) {
       '<section class="dispatch-sec"><h3 class="dispatch-sec__title">Incarichi disponibili</h3>' + offersHtml + '</section>' +
       '<section class="dispatch-sec"><h3 class="dispatch-sec__title">Incarichi in corso</h3>' + activeHtml + '</section>' +
       '<p class="panel__note">Gli incarichi si adempiono con le flotte che già hai: manda una squadra a sgominare un covo, a raggiungere o presidiare un sistema. Accettare è un impegno; abbandonare o lasciar scadere costa qualche relazione, completare ricompensa.</p>' +
+      huntersHtml +
       '<section class="dispatch-sec dispatch-sec--memoria"><h3 class="dispatch-sec__title">Memoria Storica</h3>' + memHtml + '</section>' +
     '</div>';
 
@@ -4893,6 +4932,18 @@ function renderDispatchView(stage) {
       if (!confirm('Abbandonare l\'incarico? Costa qualche punto di relazione.')) return;
       DP.abandon(g, b.dataset.dispatchAbandon);
       persistGame(g); renderDispatchView(stage); renderLeftPanel();
+    });
+  });
+  stage.querySelectorAll('[data-hunt]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const sid = Number(b.dataset.hunt);
+      const r = DP.hireHunter(g, sid);
+      if (!r.ok) { showToast(r.reason || 'Non riuscito'); return; }
+      const sys = g.galaxy.systems[sid];
+      pushChronicle(ORION.time.format(g.timeImpulsi) + ' — Cacciatori Mekhari ingaggiati su <strong>' +
+        (sys ? sys.name : '—') + '</strong> (✦ ' + r.credits + ').', 'civ');
+      showToast('Cacciatori assoldati · ✦ ' + r.credits + ' · in azione tra ' + r.eta + ' Ι');
+      persistGame(g); renderDispatchView(stage); updateGlobalResourceHud();
     });
   });
 }
@@ -7593,6 +7644,8 @@ const DEFAULT_AUTOPAUSE = {
      gli esiti done/failed sono notevoli (ON); scadenza/void OFF. */
   'dispatch-offered': false, 'dispatch-done': true, 'dispatch-failed': true,
   'dispatch-expired': false, 'dispatch-void': false,
+  /* M17 Fase B (#83): contractor Mekhari risolto — notevole (covo sgominato). */
+  'mekhari-contract-done': true,
   /* Fase B (decisione #46): tappa intermedia raggiunta. Default OFF —
      non interrompiamo a ogni waypoint, può essere una rotta lunga. L'arrivo
      finale e la `route-complete` continuano a fermare il tempo. */
@@ -8001,6 +8054,7 @@ function showEventOverlay(events) {
     'dispatch-offered': 'Nuovo incarico disponibile',
     'dispatch-done': 'Incarico completato',
     'dispatch-failed': 'Incarico fallito',
+    'mekhari-contract-done': 'Cacciatori Mekhari: covo sgominato',
     'fleet-leg-hop': 'Flotta: hop intermedio',
     'fleet-waypoint-reached': 'Flotta: tappa raggiunta',
     'garrison-threat-detected': 'Garrison: minaccia rilevata',
@@ -8722,6 +8776,10 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — Incarico scaduto senza risposta: ' + escapeHtml(ev.title || '') + '.', 'system');
   } else if (ev.kind === 'dispatch-void') {
     pushChronicle(ds + ' — Incarico annullato: ' + escapeHtml(ev.title || '') + (ev.reason ? ' (' + escapeHtml(ev.reason) + ')' : '') + '.', 'system');
+  } else if (ev.kind === 'mekhari-contract-done') {
+    const sys = ORION.game.galaxy.systems[ev.sysId];
+    const who = ev.boss && ev.name ? ('il covo-boss <strong>' + escapeHtml(ev.name) + '</strong>') : 'il covo pirata';
+    pushChronicle(ds + ' — Cacciatori Mekhari hanno sgominato ' + who + ' su <strong>' + (sys ? sys.name : '—') + '</strong>.', 'civ');
   } else if (ev.kind === 'empire-fallen') {
     if (ev.hard) {
       pushChronicle(ds + ' — <strong>La tua civiltà è caduta.</strong> Senza più colonie, l\'impero si dissolve negli annali galattici.', 'system');

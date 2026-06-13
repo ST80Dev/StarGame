@@ -6982,3 +6982,22 @@ select.main-menu__input { cursor: pointer; }
 .memoria-item--crit .memoria-item__txt { color: #f0b0b0; }
 .memoria-item--ok     { border-left-color: #80d0a0; }
 .memoria-item--ok .memoria-item__txt { color: #a8e6c0; font-weight: 600; }
+
+/* M17 Fase B (#83) — covi-boss + cacciatori freelance Mekhari. */
+.dispatch-boss {
+  display: inline-block; font-family: var(--font-display); font-size: 0.66rem;
+  letter-spacing: 0.05em; padding: 1px 6px; border-radius: 4px;
+  background: rgba(224,96,96,0.18); color: #f0a0a0; border: 1px solid rgba(224,96,96,0.4);
+}
+.dispatch-card.is-boss { border-left-color: var(--c-crit, #e06060); }
+.hunter-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.hunter-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 10px; border-radius: 7px;
+  background: rgba(var(--c-surface-rgb) / 0.45); font-size: 0.84rem;
+}
+.hunter-row.is-hired { opacity: 0.82; }
+.hunter-row__sys { color: var(--c-text-faint); font-size: 0.76rem; }
+.hunter-row__eta { margin-left: auto; color: #cdb6ee; font-size: 0.76rem; }
+.hunter-row__na  { margin-left: auto; color: var(--c-text-faint); font-size: 0.74rem; }
+.hunter-row .btn { margin-left: auto; }

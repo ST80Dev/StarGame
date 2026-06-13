@@ -991,6 +991,20 @@
         'primi contatti, alleanze, svolte. Si scrive da sola e resta — la storia della tua partita.</p>'
     },
     {
+      id: 'mekhari-hunters',
+      tag: 'M17 · Cacciatori',
+      title: 'Covi-boss & cacciatori freelance',
+      body:
+        '<p>Alcuni covi pirata diventano <strong>covi-boss nominati ⚑</strong> (es. <em>Vipera Cremisi</em>) nei sistemi più ' +
+        'pericolosi: sono <strong>più duri</strong> — una scorta li difende in battaglia. Le loro <strong>taglie maggiori</strong> ' +
+        'pagano una ricompensa <em>premium</em>.</p>' +
+        '<p>Se non vuoi (o non puoi) mandare la tua flotta, una volta <strong>contattati i Mekhari</strong> puoi <strong>assoldare ' +
+        'cacciatori freelance</strong> dal pannello Dispacci: paghi dalla <strong>Tesoreria</strong> e dopo un po\' sgominano il ' +
+        'covo <em>da soli</em> (nessuna flotta da gestire).</p>' +
+        '<p>Sinergia: se sul covo pende una tua <strong>taglia</strong>, quando i cacciatori (o tu) lo sgominate la taglia si ' +
+        '<strong>completa</strong> e incassi anche quella ricompensa.</p>'
+    },
+    {
       id: 'colonial-ship',
       tag: 'Colonizzazione',
       title: 'Pioniere coloniale: come si colonizza',
