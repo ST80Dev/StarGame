@@ -936,6 +936,24 @@
       this._animateTo(cam.s, cam.ox, cam.oy);
     }
 
+    /* decisione #80 — uscendo da un Sistema in zoom-out, torna alla vista
+       Gruppo MANTENENDO al centro il sistema da cui si esce (continuità
+       visiva: il pull-back lo lascia dov'era), invece di inquadrare il
+       centroide del gruppo (che faceva "saltare" la visuale). Scala = stesso
+       atterraggio di focusGroup (2.3×). */
+    focusSystemAtGroup(id) {
+      const s = this.galaxy.systems[id];
+      if (!s) return;
+      this.activeGroupId = s.cluster;
+      this.state.selectedId = id;
+      const scale = this.fitScale * 2.3;
+      const r = this._rotatedXY(s.x, s.y, s.z || 0);
+      const ox = this.cssW / 2 - r.x * scale - scale * 0.5;
+      const oy = this.cssH / 2 - r.y * scale - scale * 0.5;
+      this._animateTo(scale, ox, oy);
+      this._emitContext(true);
+    }
+
     selectSystem(id) {
       this.state.selectedId = id;
       this.activeGroupId = this.galaxy.systems[id].cluster;

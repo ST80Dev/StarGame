@@ -1236,9 +1236,10 @@ function openSystem(id) {
     onSelectBody: (key) => updateSystemUI(system, key),
     onActivateBody: (key) => openPlanet(id, key),
     onExit: () => {
-      const cluster = g.galaxy.systems[id].cluster;
       closeSystem();
-      if (ORION.map) ORION.map.focusGroup(cluster);
+      /* decisione #80 — ritorna alla vista Gruppo col sistema da cui si esce
+         AL CENTRO (continuità visiva dello zoom-out), non il centroide. */
+      if (ORION.map) ORION.map.focusSystemAtGroup(id);
     }
   });
 
