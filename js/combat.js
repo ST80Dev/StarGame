@@ -229,6 +229,36 @@
   }
 
   /* Forza AI da un descrittore di materializzazione (decisione #47). */
+  /* M16 (#81): forza difensiva di una STAZIONE spaziale. Una piattaforma
+     immobile con corazza+fuoco difensivo (scala coi livelli/moduli). Il
+     writeback dell'hp residuo è gestito dal chiamante (time.js) via il
+     campo src.station. */
+  function forceFromStation(game, station, side) {
+    const ST = ORION.station;
+    const stats = (ST && ST.defenseStats) ? ST.defenseStats(station) : { hp: station.hp || 1, fp: 0 };
+    const combatants = [];
+    if (stats.fp > 0 || stats.hp > 0) {
+      combatants.push({
+        id: 'station-' + station.id,
+        kind: 'stazione',
+        label: station.name || 'Stazione',
+        hp: Math.max(1, Math.round(stats.hp)),
+        maxHp: stats.maxHp || stats.hp,
+        fp: stats.fp,
+        xp: 0,
+        src: { type: 'station', station: station }
+      });
+    }
+    return {
+      side: side || 'B',
+      name: station.name || 'Stazione',
+      color: '#7fc4ff',
+      immobile: true,
+      formation: 'defensive',
+      combatants: combatants
+    };
+  }
+
   function forceFromMaterialized(descriptor, side) {
     const combatants = [];
     const units = Math.max(1, (descriptor && descriptor.units) || 1);
@@ -571,6 +601,7 @@
     forceFromFleet: forceFromFleet,
     forceFromDefenses: forceFromDefenses,
     forceFromPirateNest: forceFromPirateNest,
+    forceFromStation: forceFromStation,
     forceFromMaterialized: forceFromMaterialized,
     totalHp: totalHp,
     totalFp: totalFp,

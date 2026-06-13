@@ -1133,12 +1133,19 @@
     }
     return null;
   }
-  /* La flotta è a un porto amico? (tua colonia O colonia di AI alleata #51). */
+  /* La flotta è a un porto amico? (tua colonia, una tua STAZIONE operativa
+     #81, o colonia di AI alleata #51). */
   function fleetAtFriendlyPort(game, fleet) {
     if (!fleet || !fleet.location) return false;
     const sys = fleet.location.systemId;
     if (sys == null) return false;
     if (ownColonyAt(game, sys)) return true;
+    /* M16 (#81): una tua stazione operativa con serbatoio è un porto amico
+       avanzato — rifornisce le flotte in territorio profondo. */
+    if (ORION.station && ORION.station.stationAt) {
+      const st = ORION.station.stationAt(game, sys);
+      if (st && ORION.station.isOperationalPort(st)) return true;
+    }
     if (ORION.ai && ORION.ai.civForSystem) {
       const civ = ORION.ai.civForSystem(game, sys);
       if (civ && civ.relation === 'alliance') return true;
@@ -1154,6 +1161,17 @@
     const crew = Math.max(1, fleetCrewRequired(fleet));
     const colony = ownColonyAt(game, fleet.location.systemId);
     let fillI = VIVERI_CAP - cur;
+    if (!colony && ORION.station && ORION.station.stationAt) {
+      /* M16 (#81): nessuna tua colonia qui ma una STAZIONE operativa →
+         rifornisce dal proprio serbatoio (limitato → parziale, recovery-
+         friendly). Se il serbatoio è a corto la flotta carica meno. */
+      const st = ORION.station.stationAt(game, fleet.location.systemId);
+      if (st && ORION.station.isOperationalPort(st)) {
+        fillI = ORION.station.drawRefuel(game, st, crew, fillI);
+        fleet.viveri = cur + fillI;
+        return fillI;
+      }
+    }
     if (colony && colony.stock) {
       /* Riserva a 4 risorse: per ogni Ι di autonomia attinge cibo/acqua
          (sostentamento) + metalli/energia (riparazioni/sistemi, quota

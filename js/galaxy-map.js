@@ -995,6 +995,8 @@
         this._drawPlanetMarkers(ctx, reveal);
         /* M10 Fase E: covi pirata noti (DETECTED+) — bersagli raidabili. */
         this._drawPirateNests(ctx, reveal);
+        /* M16 (decisione #81): tue stazioni spaziali (sempre note). */
+        this._drawStations(ctx, reveal);
         /* M08 Fase B (decisione #46): markers flotte + rotte in transito.
            M08 polish (decisione #61): drag&drop dal canvas per ordinare. */
         this._drawFleets(ctx, reveal);
@@ -1476,6 +1478,35 @@
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('☠', p.x, p.y - (r + 9));
+      }
+      ctx.restore();
+    }
+
+    /* M16 (decisione #81): marker delle tue stazioni spaziali. Sono tue →
+       sempre visibili (niente nebbia di guerra). Glifo ⬡ ciano sopra il
+       nodo; ambra se in costruzione, rosso se isolata. */
+    _drawStations(ctx, reveal) {
+      const game = root.ORION && root.ORION.game;
+      if (!game || !Array.isArray(game.stations) || !game.stations.length) return;
+      const g = this.galaxy;
+      ctx.save();
+      ctx.globalAlpha = reveal;
+      for (let i = 0; i < game.stations.length; i++) {
+        const st = game.stations[i];
+        if (!st) continue;
+        const sys = g.systems[st.systemId];
+        if (!sys) continue;
+        const p = this.project(sys.x, sys.y, sys.z || 0);
+        if (p.x < -30 || p.x > this.cssW + 30 || p.y < -30 || p.y > this.cssH + 30) continue;
+        const r = this.nodeRadius(p.parallax);
+        let color = '#7fc4ff';
+        if (st.phase === 'building') color = '#f0c050';
+        else if (st.supplyState === 'isolated') color = '#ff7a5a';
+        ctx.fillStyle = color;
+        ctx.font = Math.max(11, r + 6) + 'px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('⬡', p.x + (r + 8), p.y - (r + 2));
       }
       ctx.restore();
     }
