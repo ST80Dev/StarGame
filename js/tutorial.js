@@ -1063,7 +1063,9 @@
           '<li>Le <strong>reliquie antiche</strong> sono siti <strong>una tantum</strong>: presidiale per un po\' con una flotta → ' +
           'recuperi una cache di risorse (e una voce nella Memoria Storica).</li>' +
         '</ul>' +
-        '<p>Le trovi elencate nel pannello <strong>Dispacci</strong> man mano che esplori i sistemi.</p>'
+        '<p>A <strong>fine esplorazione</strong> di una reliquia il gioco si <strong>mette in pausa</strong> e un breve ' +
+        '<strong>resoconto</strong> riepiloga le risorse trovate; il bottino resta anche nella sezione <strong>Anomalie</strong> ' +
+        'del pannello Dispacci. Le anomalie si elencano lì man mano che esplori i sistemi.</p>'
     },
     {
       id: 'colonial-ship',
