@@ -192,7 +192,8 @@
       buildTotal: chk.time,
       hp: 0,
       supply: 0,
-      supplyState: 'ok'
+      supplyState: 'ok',
+      owner: null                // null = giocatore; <civId> = catturata (#81 Fase B)
     };
     game.stations.push(st);
     return { ok: true, station: st };
@@ -262,9 +263,34 @@
      "porto amico". Restituisce quanta autonomia (Ι) può dare per `crew`
      equipaggi e DEBITA il serbatoio. Recovery-friendly: parziale se a corto.
      ------------------------------------------------------------------ */
+  /* Ownership (#81 Fase B): una stazione catturata (owner != null) non è più
+     un porto/difesa del giocatore — diventa un presidio AI riconquistabile. */
+  function isPlayerStation(station) { return station && station.owner == null; }
+  function playerStationAt(game, sysId) {
+    var st = stationAt(game, sysId);
+    return (st && isPlayerStation(st)) ? st : null;
+  }
+  function capturedStationAt(game, sysId) {
+    var st = stationAt(game, sysId);
+    return (st && !isPlayerStation(st)) ? st : null;
+  }
   function isOperationalPort(station) {
-    return station && station.phase !== 'building' && station.level >= 1 &&
+    return station && isPlayerStation(station) && station.phase !== 'building' && station.level >= 1 &&
            station.supplyState !== 'isolated' && (station.supply || 0) > 0;
+  }
+  /* Cattura/riconquista. La cattura abbassa il serbatoio (saccheggiato) e
+     marca l'owner; la riconquista azzera owner e riporta hp a una frazione
+     (danneggiata ma recuperata). Recovery-friendly: mai persa per sempre. */
+  function captureStation(station, civId) {
+    station.owner = civId;
+    station.supply = Math.round((station.supply || 0) * 0.25);
+    station.supplyState = 'isolated';
+    station._sieged = false;
+  }
+  function retakeStation(station) {
+    station.owner = null;
+    station.hp = Math.max(1, Math.round(maxHp(Math.max(1, station.level)) * 0.4));
+    station._sieged = false;
   }
   /* Quanti Ι di autonomia può fornire per `crew` equipaggi, dato `wantI`. */
   function refuelCapacity(station, crew, wantI) {
@@ -280,6 +306,29 @@
     if (giveI <= 0) return 0;
     station.supply = Math.max(0, (station.supply || 0) - Math.max(1, crew) * CFG.REFUEL_COST * giveI);
     return giveI;
+  }
+
+  /* ------------------------------------------------------------------
+     M16 Fase B (#81): CANTIERE ORBITALE. Una stazione di livello alto fa da
+     "Bacino orbitale" (variante M15) per una colonia entro raggio di
+     rifornimento: soddisfa il requisito `bacino-orbitale` dei capitali, così
+     una colonia senza Bacino planetario può vararli appoggiandosi alla
+     stazione. Mappa: Dreadnought (bacino lvl 1) → stazione lvl ≥ 3 ·
+     Ammiraglia (bacino lvl 2) → stazione lvl ≥ 4.
+     ------------------------------------------------------------------ */
+  var ORBITAL_BACINO_LEVEL = { 1: 3, 2: 4 };
+  function orbitalShipyardFor(game, colonyKey, neededBacinoLevel) {
+    var colony = game.colonies && game.colonies[colonyKey];
+    if (!colony) return false;
+    var needLvl = ORBITAL_BACINO_LEVEL[neededBacinoLevel] || (neededBacinoLevel + 2);
+    var list = listOf(game);
+    for (var i = 0; i < list.length; i++) {
+      var st = list[i];
+      if (!st || !isPlayerStation(st) || st.phase === 'building' || st.level < needLvl) continue;
+      if (st.supplyState === 'isolated') continue;       // husk isolata non produce
+      if (hopsBetween(game.galaxy, colony.systemId, st.systemId) <= CFG.SUPPLY_RANGE) return true;
+    }
+    return false;
   }
 
   /* ------------------------------------------------------------------
@@ -328,6 +377,10 @@
         continue; // niente upkeep/refill mentre costruisce il primo modulo
       }
       if (st.level < 1) continue;
+
+      // Stazione CATTURATA (#81 Fase B): non è più tua → niente rifornimento
+      // né riparazione del giocatore. Resta come husk difensivo riconquistabile.
+      if (!isPlayerStation(st)) continue;
 
       // 2) Linea di rifornimento: la colonia fondatrice (o la più vicina
       //    propria entro raggio) riempie il serbatoio pagando risorse.
@@ -415,9 +468,12 @@
     msum: msum, maxHp: maxHp, defenseFp: defenseFp, supplyCap: supplyCap,
     stepCost: stepCost, stepTime: stepTime, hopsBetween: hopsBetween,
     stationAt: stationAt, stationById: stationById, listOf: listOf,
+    isPlayerStation: isPlayerStation, playerStationAt: playerStationAt, capturedStationAt: capturedStationAt,
+    captureStation: captureStation, retakeStation: retakeStation,
     canBuild: canBuild, build: build, canUpgrade: canUpgrade, upgrade: upgrade,
     demolish: demolish, cancelBuild: cancelBuild,
     isOperationalPort: isOperationalPort, refuelCapacity: refuelCapacity, drawRefuel: drawRefuel,
+    orbitalShipyardFor: orbitalShipyardFor,
     defenseStats: defenseStats, supplyColonyFor: supplyColonyFor,
     tick: tick, minBuildLeft: minBuildLeft
   };

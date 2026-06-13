@@ -1266,6 +1266,18 @@
           }
         }
       }
+      /* M16 Fase B (#81): RICONQUISTA di una stazione catturata. Una flotta
+         armata che ATTACCA esplicitamente il sistema ingaggia il presidio AI;
+         vincendo riprende la stazione (recovery-friendly). */
+      let retakeTarget = null;
+      if (!enemy && root.ORION.station && root.ORION.station.capturedStationAt) {
+        const capSt = root.ORION.station.capturedStationAt(game, sysId);
+        if (capSt && fleet.attackTarget === sysId) {
+          enemy = C.forceFromStation(game, capSt, 'B');
+          enemyKind = 'captured-station';
+          retakeTarget = capSt;
+        }
+      }
       if (!enemy) {
         if (fleet.attackTarget === sysId) { fleet.attackTarget = null; fleet.attackBodyKey = null; }
         continue;
@@ -1277,8 +1289,8 @@
          flotta (chokepoint fortificato). Le sue piattaforme si aggiungono
          al lato A; l'hp residuo è riscritto dopo lo scontro. */
       let coStation = null;
-      if (root.ORION.station && root.ORION.station.stationAt) {
-        const ms = root.ORION.station.stationAt(game, sysId);
+      if (root.ORION.station && root.ORION.station.playerStationAt) {
+        const ms = root.ORION.station.playerStationAt(game, sysId);
         if (ms && ms.phase !== 'building' && ms.level >= 1) {
           const sf = C.forceFromStation(game, ms, 'A');
           if (sf.combatants.length) { A.combatants = A.combatants.concat(sf.combatants); coStation = ms; }
@@ -1311,6 +1323,14 @@
       if (hadColonial) {
         const stillColonial = fleet.ships && fleet.ships.some(function (s) { return s.kind === 'coloniale'; });
         if (!stillColonial) handleColonialLost(game, fleet, events);
+      }
+
+      // M16 Fase B (#81): riconquista riuscita → la stazione torna tua
+      if (retakeTarget && playerWon && root.ORION.station) {
+        root.ORION.station.retakeStation(retakeTarget);
+        if (fleet.attackTarget === sysId) { fleet.attackTarget = null; fleet.attackBodyKey = null; }
+        events.push({ kind: 'station-retaken', stationId: retakeTarget.id, name: retakeTarget.name,
+          systemId: sysId, impulso: game.timeImpulsi });
       }
 
       // Effetti per tipo nemico
@@ -1423,9 +1443,18 @@
       /* M10 Fase E: i raider non assediano una colonia — colpiscono una
          flotta esposta (scaramuccia lampo). Risolto e tolto dalla coda. */
       if (inc.kind === 'pirate-raider') { resolvePirateRaider(game, inc, events); continue; }
-      // arrivo: la colonia esiste ancora?
-      const colonyKey = playerColonyKeyForSystem(game, inc.targetSysId);
-      if (!colonyKey || !C) continue;     // bersaglio sparito → incursione svanisce
+      if (!C) continue;
+      /* M16 Fase B (#81): bersaglio STAZIONE — l'incursione apre un assedio
+         multi-round contro la stazione (anziché una colonia). */
+      const ST = root.ORION.station;
+      const targetStation = (inc.targetStationId && ST) ? ST.stationById(game, inc.targetStationId) : null;
+      const colonyKey = inc.targetStationId ? null : playerColonyKeyForSystem(game, inc.targetSysId);
+      // bersaglio sparito (colonia persa o stazione distrutta/catturata) → svanisce
+      if (inc.targetStationId) {
+        if (!targetStation || !ST.isPlayerStation(targetStation) || targetStation.systemId !== inc.targetSysId) continue;
+      } else if (!colonyKey) {
+        continue;
+      }
       /* Forza attaccante: pirati (Fase A) o civiltà AI materializzata (Fase B).
          Gli AI possono CONQUISTARE/RADERE; i pirati solo saccheggiare. */
       let atkForce, attackerKind, attackerCiv = null;
@@ -1444,6 +1473,7 @@
         id: inc.id, kind: (attackerKind === 'ai') ? 'siege-ai' : 'siege-pirate',
         attackerKind: attackerKind, attackerCiv: attackerCiv,
         systemId: inc.targetSysId, colonyKey: colonyKey,
+        stationId: inc.targetStationId || null,   // M16 Fase B (#81)
         attacker: { name: atkForce.name, color: atkForce.color, formation: 'balanced',
                     combatants: atkForce.combatants },
         startAttackerHp: C.totalHp(atkForce),
@@ -1454,7 +1484,7 @@
       game.battles.push(battle);
       events.push({
         kind: 'siege-begin', battleId: battle.id,
-        systemId: inc.targetSysId, colonyKey: colonyKey,
+        systemId: inc.targetSysId, colonyKey: colonyKey, stationId: inc.targetStationId || null,
         impulso: game.timeImpulsi
       });
     }
@@ -1472,6 +1502,12 @@
     for (let bi = 0; bi < game.battles.length; bi++) {
       const battle = game.battles[bi];
       if (battle.status !== 'active') continue;
+      /* M16 Fase B (#81): assedio a una STAZIONE — difensore = forza stazione
+         + flotte presenti, esito cattura/distruzione. */
+      if (battle.stationId) {
+        if (processStationBattle(game, battle, events) === 'ongoing') still.push(battle);
+        continue;
+      }
       const colonyKey = battle.colonyKey;
       const colony = game.colonies && game.colonies[colonyKey];
       // colonia sparita o non più nel sistema → l'assedio decade
@@ -1746,6 +1782,116 @@
     return 'looted';
   }
 
+  /* M16 Fase B (#81): un round d'assedio contro una stazione. Difensore =
+     forza della stazione + flotte presenti (rinforzi/ritirate contano).
+     Esito a difensore annientato: pirata → distrutta, AI → catturata
+     (passa alla civiltà, riconquistabile). Recovery-friendly (#22). */
+  function processStationBattle(game, battle, events) {
+    const C = root.ORION.combat, ST = root.ORION.station;
+    const st = ST && ST.stationById(game, battle.stationId);
+    if (!st || !ST.isPlayerStation(st) || st.systemId !== battle.systemId) {
+      events.push({ kind: 'siege-end', battleId: battle.id, outcome: 'lifted',
+        stationId: battle.stationId, systemId: battle.systemId, impulso: game.timeImpulsi });
+      return 'done';
+    }
+    if ((game.timeImpulsi || 0) < battle.nextRoundAt) return 'ongoing';
+    battle.round++;
+    battle.nextRoundAt = (game.timeImpulsi || 0) + C.CFG.ROUND_EVERY_I;
+    st._underAttack = true;
+
+    const atk = {
+      side: 'A', name: battle.attacker.name, color: battle.attacker.color,
+      immobile: false, formation: battle.attacker.formation || 'balanced',
+      combatants: battle.attacker.combatants
+    };
+    const sf = C.forceFromStation(game, st, 'B');
+    const present = fleetsPresentAt(game, battle.systemId);
+    const defShips = [];
+    for (let i = 0; i < present.length; i++) {
+      const ff = C.forceFromFleet(game, present[i], 'B');
+      for (let j = 0; j < ff.combatants.length; j++) defShips.push(ff.combatants[j]);
+    }
+    const def = {
+      side: 'B', name: st.name, color: '#7fc4ff',
+      immobile: defShips.length === 0, formation: 'defensive',
+      combatants: sf.combatants.concat(defShips)
+    };
+
+    const rng = ORION.rng.makeRng((game.seed || '') + ':battle:' + battle.id + ':' + battle.round);
+    const startAtkHp = C.totalHp(atk);
+    const r = C.resolveRound(rng, atk, def);
+
+    // writeback: hp stazione (combatant sopravvissuto) + perdite navi
+    let stationAlive = false;
+    for (let i = 0; i < def.combatants.length; i++) {
+      const c = def.combatants[i];
+      if (c.src && c.src.type === 'station') { stationAlive = true; st.hp = Math.max(1, Math.round(c.hp)); }
+    }
+    const wb = C.applyDefenderWriteback(null,
+      def.combatants.filter(function (c) { return c.src && c.src.type === 'ship'; }),
+      r.destroyedB.filter(function (c) { return c.src && c.src.type === 'ship'; }));
+    if (wb.shipsLost > 0) warRegisterLoss(game, wb.shipsLost * CFG.WAR_MORALE_PER_SHIP, wb.shipsLost * CFG.WAR_PRESSURE_PER_LOSS);
+
+    battle.log.push({ round: battle.round, lostDef: r.destroyedB.length, lostAtk: r.destroyedA.length,
+      atkHp: Math.round(C.totalHp(atk)), defHp: Math.round(C.totalHp(def)) });
+    events.push({ kind: 'siege-round', battleId: battle.id, round: battle.round,
+      stationId: st.id, systemId: battle.systemId, atk: C.totalHp(atk), def: C.totalHp(def),
+      lostDef: r.destroyedB.length, lostAtk: r.destroyedA.length, impulso: game.timeImpulsi });
+
+    // la PIATTAFORMA è caduta → la stazione cade (le flotte presenti restano)
+    if (!stationAlive) {
+      const oc = applyStationSiegeWin(game, battle, st, events);
+      events.push({ kind: 'siege-end', battleId: battle.id, outcome: oc,
+        stationId: st.id, systemId: battle.systemId, impulso: game.timeImpulsi });
+      return 'done';
+    }
+    const atkWiped = atk.combatants.length === 0;
+    const atkRetreat = C.checkRetreat(atk, startAtkHp);
+    if (atkWiped || atkRetreat) {
+      warRegisterWin(game);
+      if (battle.attackerKind === 'ai' && root.ORION.ai && root.ORION.ai.recordBattle) {
+        root.ORION.ai.recordBattle(game, battle.attackerCiv, 'win', 'siege-defense', battle.systemId);
+      }
+      events.push({ kind: 'siege-end', battleId: battle.id, outcome: 'repelled',
+        stationId: st.id, systemId: battle.systemId, impulso: game.timeImpulsi });
+      grantSiegeVeterancy(game, present, events);
+      return 'done';
+    }
+    if (battle.round >= 12) {
+      const oc = applyStationSiegeWin(game, battle, st, events);
+      events.push({ kind: 'siege-end', battleId: battle.id, outcome: oc,
+        stationId: st.id, systemId: battle.systemId, impulso: game.timeImpulsi });
+      return 'done';
+    }
+    return 'ongoing';
+  }
+
+  /* Esito di un assedio-stazione vinto dall'attaccante: AI → CATTURA
+     (la stazione passa alla civiltà, riconquistabile), pirata → DISTRUZIONE.
+     Recovery-friendly: catturata si riconquista, distrutta si ricostruisce. */
+  function applyStationSiegeWin(game, battle, st, events) {
+    const ST = root.ORION.station;
+    warRegisterLoss(game, CFG.WAR_MORALE_PER_LOOT, CFG.WAR_PRESSURE_PER_LOSS);
+    if (battle.attackerKind === 'ai') {
+      const civ = (game.civs || []).filter(function (c) { return c.id === battle.attackerCiv; })[0];
+      if (root.ORION.ai && root.ORION.ai.recordBattle) {
+        root.ORION.ai.recordBattle(game, battle.attackerCiv, 'loss', 'siege-attack', battle.systemId);
+      }
+      if (civ && civ.alive) {
+        ST.captureStation(st, civ.id);
+        bumpIcg(game, 2);
+        events.push({ kind: 'station-captured', stationId: st.id, name: st.name,
+          systemId: battle.systemId, civName: civ.name, civColor: civ.color, impulso: game.timeImpulsi });
+        return 'captured';
+      }
+    }
+    // pirati (o civ sparita) → distruzione
+    game.stations = ST.listOf(game).filter(function (s) { return s !== st; });
+    events.push({ kind: 'station-destroyed', stationId: st.id, name: st.name,
+      systemId: battle.systemId, impulso: game.timeImpulsi });
+    return 'looted';
+  }
+
   function isCapitalColony(game, colonyKey) {
     if (!game.capitals) return false;
     const gids = Object.keys(game.capitals);
@@ -1866,6 +2012,12 @@
      la stazione combatte da sola (lampo, con cooldown per dare tempo di
      reagire — recovery-friendly #22). Perdendo viene distrutta (la
      conquista AI vera è Fase B). */
+  function stationSiegeActive(game, stationId) {
+    const b = game.battles;
+    if (!Array.isArray(b)) return false;
+    for (let i = 0; i < b.length; i++) if (b[i] && b[i].status === 'active' && b[i].stationId === stationId) return true;
+    return false;
+  }
   function processStationDefense(game, events) {
     const C = root.ORION.combat, ST = root.ORION.station;
     if (!C || !ST) return;
@@ -1873,6 +2025,10 @@
     for (let i = 0; i < list.length; i++) {
       const st = list[i];
       if (!st || st.phase === 'building' || st.level < 1) continue;
+      if (!ST.isPlayerStation(st)) continue;                      // catturata → non difende per te
+      // se c'è un assedio multi-round in corso su questa stazione, salta (lo
+      // gestisce processBattles, non la difesa lampo)
+      if (stationSiegeActive(game, st.id)) continue;
       if (st._defendedAt === game.timeImpulsi) continue;          // già difesa via flotta
       // cooldown anti-spam: una battaglia ogni STATION_DEFENSE_COOLDOWN Ι
       if (st._lastDefenseI != null && (game.timeImpulsi - st._lastDefenseI) < CFG.STATION_DEFENSE_COOLDOWN) continue;

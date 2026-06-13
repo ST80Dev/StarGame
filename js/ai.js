@@ -1167,6 +1167,22 @@
     }
     return false;
   }
+  /* M16 Fase B (#81): bersagli "stazione" — avamposti operativi del giocatore
+     che un'incursione può assediare/catturare al pari di una colonia. */
+  function playerStationTargets(game) {
+    const out = [];
+    const ST = ORION.station;
+    if (!ST || !Array.isArray(game.stations)) return out;
+    for (let i = 0; i < game.stations.length; i++) {
+      const st = game.stations[i];
+      if (!st || st.phase === 'building' || st.level < 1) continue;
+      if (!ST.isPlayerStation(st)) continue;        // già catturata
+      if (incursionTargeting(game, st.systemId) || siegeActiveAt(game, st.systemId)) continue;
+      out.push({ key: null, sysId: st.systemId, stationId: st.id });
+    }
+    return out;
+  }
+
   function maybePirateIncursion(game, rng, events) {
     if ((game.timeImpulsi || 0) < 120) return;
     const nests = game.piracy && game.piracy.nests;
@@ -1181,6 +1197,7 @@
       const c = game.colonies[k];
       if (c && c.colonized && c.phase !== 'settling') cols.push({ key: k, sysId: c.systemId });
     });
+    playerStationTargets(game).forEach(function (s) { cols.push(s); });
     if (!cols.length) return;
     if (!Array.isArray(game.incursions)) game.incursions = [];
     let spawned = 0;
@@ -1201,12 +1218,12 @@
       const id = 'inc-' + (game.timeImpulsi || 0) + '-' + i + '-' + (spawned++);
       game.incursions.push({
         id: id, kind: 'pirate', fromSysId: nest.sysId,
-        targetSysId: best.sysId, targetColonyKey: best.key,
+        targetSysId: best.sysId, targetColonyKey: best.key, targetStationId: best.stationId || null,
         level: nest.level || 1, eta: eta, launchedAt: game.timeImpulsi || 0
       });
       events.push({
         kind: 'incursion-inbound', incursionId: id,
-        targetColonyKey: best.key, targetSysId: best.sysId,
+        targetColonyKey: best.key, targetStationId: best.stationId || null, targetSysId: best.sysId,
         eta: eta, impulso: game.timeImpulsi
       });
     }
@@ -1225,6 +1242,7 @@
       const c = game.colonies[k];
       if (c && c.colonized && c.phase !== 'settling') cols.push({ key: k, sysId: c.systemId });
     });
+    playerStationTargets(game).forEach(function (s) { cols.push(s); });
     if (!cols.length) return;
     if (!Array.isArray(game.incursions)) game.incursions = [];
     const threshold = -50 + pressure * 20;
@@ -1270,12 +1288,12 @@
       civ.relation = 'war';
       game.incursions.push({
         id: id, kind: 'ai', civId: civ.id, civName: civ.name, civColor: civ.color,
-        fromSysId: sysArr[0], targetSysId: best.sysId, targetColonyKey: best.key,
+        fromSysId: sysArr[0], targetSysId: best.sysId, targetColonyKey: best.key, targetStationId: best.stationId || null,
         level: level, eta: eta, launchedAt: game.timeImpulsi || 0
       });
       events.push({
         kind: 'incursion-inbound', incursionId: id, attackerKind: 'ai',
-        civName: civ.name, targetColonyKey: best.key, targetSysId: best.sysId,
+        civName: civ.name, targetColonyKey: best.key, targetStationId: best.stationId || null, targetSysId: best.sysId,
         eta: eta, impulso: game.timeImpulsi
       });
     }

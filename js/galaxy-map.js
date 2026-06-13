@@ -1500,7 +1500,8 @@
         if (p.x < -30 || p.x > this.cssW + 30 || p.y < -30 || p.y > this.cssH + 30) continue;
         const r = this.nodeRadius(p.parallax);
         let color = '#7fc4ff';
-        if (st.phase === 'building') color = '#f0c050';
+        if (st.owner != null) color = st.civColor || '#ff5a5a';   // catturata (#81 Fase B)
+        else if (st.phase === 'building') color = '#f0c050';
         else if (st.supplyState === 'isolated') color = '#ff7a5a';
         ctx.fillStyle = color;
         ctx.font = Math.max(11, r + 6) + 'px monospace';

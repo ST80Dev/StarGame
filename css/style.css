@@ -6549,6 +6549,9 @@ select.main-menu__input { cursor: pointer; }
 .station-build { font-size: 0.78rem; color: var(--c-text-dim); margin-bottom: 8px; }
 .station-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .station-maxed { font-size: 0.74rem; color: var(--c-text-dim); align-self: center; }
+/* M16 Fase B (#81): stazione catturata — presidio nemico riconquistabile. */
+.station-item.is-captured { border-color: rgba(255, 90, 90, 0.4); background: rgba(255, 90, 90, 0.06); }
+.station-captured-note { font-size: 0.8rem; color: #ff9a7a; line-height: 1.4; }
 .station-stat__val.is-warn { color: #f0c050; }
 .station-stat__val.is-crit { color: #ff7a5a; }
 /* Picker di costruzione: lista candidati */

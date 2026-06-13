@@ -81,6 +81,9 @@
      tradeRoutes/tradeThroughput) se presenti, con questi come fallback. */
   const MARKET_ROUTES = [2, 3, 4, 5, 7];
   const MARKET_THROUGHPUT = [8, 12, 18, 26, 36];
+  /* M16 Fase B (#81): hub commerciale — bonus per stazione operativa. */
+  const STATION_HUB_ROUTES = 1;
+  const STATION_HUB_THROUGHPUT = 6;   // × livello stazione (lvl 4 → +24/Ι)
 
   /* Impulsi per "viaggio completo" usati per maturare 1 xp. Più la rotta è
      lunga (più hop), più lentamente matura — coerente con "tenere viva la
@@ -217,6 +220,19 @@
       routes += rArr[Math.min(idx, rArr.length - 1)] || 0;
       throughput += tArr[Math.min(idx, tArr.length - 1)] || 0;
     });
+    /* M16 Fase B (#81): le STAZIONI operative fanno da hub commerciale —
+       throughput di larga scala oltre i Mercati planetari. Ogni stazione
+       tua +1 rotta e +STATION_HUB_THROUGHPUT × livello unità/Ι. */
+    const ST = root.ORION.station;
+    if (ST && Array.isArray(game.stations)) {
+      for (let i = 0; i < game.stations.length; i++) {
+        const st = game.stations[i];
+        if (!st || st.phase === 'building' || st.level < 1) continue;
+        if (!ST.isPlayerStation(st) || st.supplyState === 'isolated') continue;
+        routes += STATION_HUB_ROUTES;
+        throughput += STATION_HUB_THROUGHPUT * st.level;
+      }
+    }
     return { routes: routes, throughput: throughput };
   }
 

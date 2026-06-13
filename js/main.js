@@ -4626,7 +4626,13 @@ function renderStationsView(stage) {
       const hpFrac = def.maxHp > 0 ? Math.max(0, Math.min(1, def.hp / def.maxHp)) : 0;
 
       let body;
-      if (st.phase === 'building') {
+      if (!ST.isPlayerStation(st)) {
+        /* M16 Fase B (#81): stazione catturata — presidio nemico riconquistabile. */
+        const civ = (g.civs || []).filter(function (c) { return c.id === st.owner; })[0];
+        body = '<div class="station-captured-note">⚠ <strong>Catturata</strong>' +
+          (civ ? (' da ' + escapeHtml(civ.name)) : '') +
+          ' — invia una flotta armata e usa <em>Attacca</em> sul sistema per riprenderla.</div>';
+      } else if (st.phase === 'building') {
         const prog = st.buildTotal > 0 ? Math.max(0, Math.min(1, 1 - (st.buildLeft || 0) / st.buildTotal)) : 0;
         const verb = (st.level === 0) ? 'Costruzione' : 'Potenziamento a lvl ' + (st.level + 1);
         body =
@@ -4658,10 +4664,11 @@ function renderStationsView(stage) {
           '</div>';
       }
 
-      return '<li class="station-item">' +
+      const capturedCls = ST.isPlayerStation(st) ? '' : ' is-captured';
+      return '<li class="station-item' + capturedCls + '">' +
         '<div class="station-item__head">' +
           '<span class="station-item__name">' + escapeHtml(st.name) + ' <span class="station-item__sys">' + sysName(st.systemId) + sysTag(st.systemId) + '</span></span>' +
-          '<span class="station-item__lvl">' + (st.level > 0 ? ('lvl ' + st.level) : 'in opera') + '</span>' +
+          '<span class="station-item__lvl">' + (ST.isPlayerStation(st) ? (st.level > 0 ? ('lvl ' + st.level) : 'in opera') : 'occupata') + '</span>' +
         '</div>' +
         body +
       '</li>';
@@ -7405,6 +7412,8 @@ const DEFAULT_AUTOPAUSE = {
      rifornire (ON); il rifornimento ripristinato è buona notizia (OFF). */
   'station-built': true, 'station-upgraded': true, 'station-attacked': true,
   'station-destroyed': true, 'station-isolated': true, 'station-resupplied': false,
+  /* M16 Fase B (#81): cattura/riconquista di una stazione — eventi notevoli. */
+  'station-captured': true, 'station-retaken': true,
   /* Decisione #69: viveri. L'avviso e l'esaurimento auto-pausano (finestra
      per reagire); il rifornimento no (è una buona notizia di routine). */
   'fleet-supply-low': true, 'fleet-supply-critical': true, 'fleet-resupplied': false,
@@ -7808,6 +7817,8 @@ function showEventOverlay(events) {
     'station-built': 'Stazione completata',
     'station-upgraded': 'Stazione potenziata',
     'station-attacked': 'Stazione sotto attacco',
+    'station-captured': 'Stazione catturata',
+    'station-retaken': 'Stazione riconquistata',
     'station-destroyed': 'Stazione distrutta',
     'station-isolated': 'Stazione isolata',
     'station-resupplied': 'Stazione rifornita',
@@ -8039,11 +8050,18 @@ function chronicleEvent(ev) {
     if (ORION.tutorial) ORION.tutorial.fire('capital-ships');
   } else if (ev.kind === 'station-built' || ev.kind === 'station-upgraded' ||
              ev.kind === 'station-attacked' || ev.kind === 'station-destroyed' ||
-             ev.kind === 'station-isolated' || ev.kind === 'station-resupplied') {
+             ev.kind === 'station-isolated' || ev.kind === 'station-resupplied' ||
+             ev.kind === 'station-captured' || ev.kind === 'station-retaken') {
     const sName = (ev.systemId != null && ORION.game.galaxy.systems[ev.systemId])
       ? ORION.game.galaxy.systems[ev.systemId].name : '—';
     const where = '<strong>' + escapeHtml(ev.name || 'Stazione') + '</strong> in ' + escapeHtml(sName) + (ev.systemId != null ? systemTagHtml(ev.systemId) : '');
-    if (ev.kind === 'station-built') {
+    if (ev.kind === 'station-captured') {
+      pushChronicle(ds + ' — ' + where + ' è stata <strong>catturata</strong> da <strong>' + escapeHtml(ev.civName || 'una civiltà') + '</strong>: ora è un presidio nemico. Riconquistala con un attacco.', 'system');
+      if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+    } else if (ev.kind === 'station-retaken') {
+      pushChronicle(ds + ' — ' + where + ' <strong>riconquistata</strong>: torna sotto il tuo controllo (danneggiata).', 'fleet');
+      if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+    } else if (ev.kind === 'station-built') {
       pushChronicle(ds + ' — ' + where + ' è operativa: rifornisce le flotte e fortifica il sistema.', 'fleet');
       if (ORION.tutorial) ORION.tutorial.fire('stations');
     } else if (ev.kind === 'station-upgraded') {
@@ -8451,22 +8469,23 @@ function chronicleEvent(ev) {
       ' · arrivo stimato fra <strong>' + ev.eta + ' ' + iU() + '</strong>. Prepara le difese.', 'system');
     if (ORION.tutorial) ORION.tutorial.fire(ev.attackerKind === 'ai' ? 'siege' : 'combat');
   } else if (ev.kind === 'siege-begin') {
-    const cn = colonyNameFromKey(ev.colonyKey);
+    const cn = siegeTargetName(ev);
     const tag = ev.systemId >= 0 ? bodyTagHtml(ev.systemId) : '';
-    pushChronicle(ds + ' — <strong>Assedio</strong> su ' + cn + tag + ': i predoni ingaggiano le difese. ' +
+    pushChronicle(ds + ' — <strong>Assedio</strong> su ' + cn + tag + ': l\'attaccante ingaggia le difese. ' +
       '<span class="chronicle__hint">reazioni nella vista Flotta ⬡</span>', 'system');
     if (ORION.tutorial) ORION.tutorial.fire('siege');
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
   } else if (ev.kind === 'siege-round') {
-    const cn = colonyNameFromKey(ev.colonyKey);
+    const cn = siegeTargetName(ev);
     pushChronicle(ds + ' — Assedio di ' + cn + ' · round ' + ev.round + ' — difese ' + Math.round(ev.def) +
-      ' / predoni ' + Math.round(ev.atk) + '.', 'system');
+      ' / attaccante ' + Math.round(ev.atk) + '.', 'system');
   } else if (ev.kind === 'siege-end') {
-    const cn = colonyNameFromKey(ev.colonyKey);
+    const cn = siegeTargetName(ev);
     const tag = ev.systemId >= 0 ? bodyTagHtml(ev.systemId) : '';
     let txt;
-    if (ev.outcome === 'repelled') txt = '<strong>Assedio respinto</strong> su ' + cn + tag + ' — i predoni si ritirano.';
-    else if (ev.outcome === 'looted') txt = '<strong>' + cn + tag + ' saccheggiata</strong>: risorse trafugate, danni alle strutture.';
+    if (ev.outcome === 'repelled') txt = '<strong>Assedio respinto</strong> su ' + cn + tag + ' — l\'attaccante si ritira.';
+    else if (ev.outcome === 'looted') txt = '<strong>' + cn + tag + ' saccheggiata</strong>: risorse trafugate, danni.';
+    else if (ev.outcome === 'captured') txt = '<strong>' + cn + tag + ' catturata</strong>: ora è un presidio nemico — riconquistala con un attacco.';
     else txt = 'Assedio revocato su ' + cn + tag + '.';
     pushChronicle(ds + ' — ' + txt, ev.outcome === 'repelled' ? 'explore' : 'system');
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
@@ -8652,6 +8671,18 @@ function colonyNameFromKey(key) {
     const pl = ORION.planet.generate(g.galaxy, sys, bk);
     return pl ? ('<strong>' + escapeHtml(pl.name) + '</strong>') : ('Sistema ' + sid);
   } catch (e) { return 'Sistema ' + sid; }
+}
+
+/* Nome del bersaglio di un assedio (colonia o stazione M16 Fase B #81). */
+function siegeTargetName(ev) {
+  if (ev.stationId) {
+    const g = ORION.game;
+    const st = (g && ORION.station) ? ORION.station.stationById(g, ev.stationId) : null;
+    if (st) return '<strong>' + escapeHtml(st.name) + '</strong>';
+    const sn = (g && ev.systemId != null && g.galaxy.systems[ev.systemId]) ? g.galaxy.systems[ev.systemId].name : null;
+    return sn ? ('<strong>la stazione in ' + escapeHtml(sn) + '</strong>') : '<strong>una stazione</strong>';
+  }
+  return colonyNameFromKey(ev.colonyKey);
 }
 
 /* Aggiorna solo il chip delta accanto a "⏭ Evento": il resto del bottone
