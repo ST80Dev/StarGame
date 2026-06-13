@@ -223,7 +223,7 @@
      un solo punto così vale anche per le tech aggiunte in futuro. Le soglie
      restano facili da ritoccare col playtest (M20).
      ------------------------------------------------------------------ */
-  const COST_MUL = 4;     // costo per tech (#86: 3→4, ricerca = traguardo d'impero)
+  const COST_MUL = 4;     // costo per tech (#87: ×4, ricerca = traguardo d'impero)
   const MINRES_MUL = 3;   // soglia di ricerca d'impero (game-changer)
   CATALOG.forEach(function (t) {
     if (t.cost) t.cost = Math.round(t.cost * COST_MUL);
