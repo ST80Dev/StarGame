@@ -208,7 +208,12 @@
   /* Forza pirata da un covo (§17.5): N predoni in base al livello. */
   function forceFromPirateNest(nest) {
     const level = (nest && nest.level) || 1;
-    const n = CFG.PIRATE_RAIDERS_BASE + level;
+    const isBoss = !!(nest && nest.boss);
+    const bossTier = isBoss ? Math.max(1, nest.bossTier || 1) : 0;
+    /* M17 Fase B (#83): un covo-boss nominato è più duro — scorta più
+       numerosa + un "Signore dei Predoni" d'élite (corazza/fuoco maggiori).
+       Niente sortite: si affronta col motore M09 quando il giocatore vuole. */
+    const n = CFG.PIRATE_RAIDERS_BASE + level + (isBoss ? bossTier * 2 : 0);
     const combatants = [];
     for (let i = 0; i < n; i++) {
       combatants.push({
@@ -222,8 +227,18 @@
         src: { type: 'pirate' }
       });
     }
+    if (isBoss) {
+      const hp = CFG.PIRATE_RAIDER_HP * (3 + bossTier);
+      combatants.push({
+        id: 'pir-capo', kind: 'predone-capo',
+        label: 'Signore dei Predoni',
+        hp: hp, maxHp: hp, fp: CFG.PIRATE_RAIDER_FP * (2 + bossTier),
+        xp: 0, src: { type: 'pirate' }
+      });
+    }
     return {
-      side: 'B', name: 'Predoni', color: '#b0763a',
+      side: 'B', name: isBoss && nest.name ? ('Predoni di ' + nest.name) : 'Predoni',
+      color: '#b0763a',
       immobile: false, formation: 'aggressive', combatants: combatants
     };
   }
