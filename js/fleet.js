@@ -803,6 +803,36 @@
       return { ok: true };
     }
 
+    /* Ordine `survey` (esplorazione/sfruttamento anomalie §17.3, decisione
+       di sessione): la flotta raggiunge il SISTEMA dell'anomalia e RESTA in
+       orbita. La raccolta (detriti→met / nebulosa→en) e l'esplorazione delle
+       reliquie avvengono passivamente in anomaly.tick finché la flotta è
+       presente. Nessun bodyKey (l'anomalia non è un corpo). Intra-sistema:
+       skip viaggio. Recovery-friendly: nessun rischio nel restare. */
+    if (type === 'survey') {
+      const to = order.toSysId;
+      if (to == null) return { ok: false, reason: 'Sistema target assente' };
+      const sys = game.galaxy.systems[to];
+      if (!sys) return { ok: false, reason: 'Sistema target inesistente' };
+      const currentSys = fleet.location.systemId;
+      const baseOrder = { type: 'survey', toSysId: to };
+      if (to === currentSys) {
+        fleet.orders = baseOrder;
+        fleet.route = [currentSys];
+        fleet.routeIdx = 0;
+        fleet.location.status = 'orbiting';
+        fleet.etaImpulsi = 0;
+        return { ok: true };
+      }
+      const path = computePath(game.galaxy, currentSys, to);
+      if (!path) return { ok: false, reason: 'Nessuna rotta verso il sistema target' };
+      fleet.orders = baseOrder;
+      fleet.route = path;
+      fleet.routeIdx = 0;
+      fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
+      return { ok: true };
+    }
+
     /* Decisione #66: ordine di colonizzazione.
        order = { type:'colonize', toSysId, bodyKey, foundationI }
        3 fasi: travel (BFS multi-hop come move) → orbit (ORBIT_DURATION Ι)
@@ -1305,7 +1335,7 @@
     let waypoints = null;
     switch (order.type) {
       case 'move': case 'explore': case 'transfer':
-      case 'attack': case 'garrison': case 'colonize':
+      case 'attack': case 'garrison': case 'colonize': case 'survey':
         if (order.toSysId != null) waypoints = [order.toSysId];
         break;
       case 'move-route': waypoints = order.waypoints || []; break;
@@ -1536,6 +1566,24 @@
         impulso: game.timeImpulsi
       });
       /* L'ordine garrison rimane attivo. */
+      return;
+    }
+
+    /* Arrivo `survey`: la flotta entra in orbita e RESTA (l'ordine non torna
+       a idle), così anomaly.tick continua a raccogliere/esplorare il sito. */
+    if (order.type === 'survey') {
+      _autoRevealAt(arrivedAt);
+      fleet.location.status = 'orbiting';
+      fleet.etaImpulsi = 0;
+      fleet.route = [arrivedAt];
+      fleet.routeIdx = 0;
+      events.push({
+        kind: 'fleet-arrived',
+        fleetId: fleet.id, fleetName: fleet.name,
+        systemId: arrivedAt,
+        impulso: game.timeImpulsi
+      });
+      /* L'ordine survey rimane attivo. */
       return;
     }
 

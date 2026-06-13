@@ -3774,6 +3774,50 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
   const reachable = ORION.expedition.reachableTargets(g.galaxy, g.state, colony.systemId);
   const hasTargets = reachable.length > 0;
 
+  /* Anomalie §17.3 raggiungibili (decisione di sessione: esplorazione
+     interna delle anomalie dalla tab Esplorazione). Inviare una flotta che
+     RESTA (ordine survey) sul sistema dell'anomalia per raccogliere/esplorare. */
+  const anomalies = reachableAnomaliesFor(colony);
+  let anomHtml;
+  if (!ORION.anomaly) {
+    anomHtml = '';
+  } else if (anomalies.length) {
+    anomHtml = '<ul class="expedition-list">' + anomalies.map(function (s) {
+      const sys = g.galaxy.systems[s.sysId];
+      const acr = regionAcronymFor(s.sysId);
+      const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
+      const meta = anomalyKindMeta(s.kind);
+      let stateTxt;
+      if (s.kind === 'reliquie') {
+        const pct = Math.round(((s.progress || 0) / (ORION.anomaly.CFG.RELIC_HOLD || 40)) * 100);
+        stateTxt = 'esplorazione ' + pct + '%';
+      } else {
+        const pct = s.cap ? Math.round((s.reserve / s.cap) * 100) : 0;
+        stateTxt = meta.res + ' · riserva ' + pct + '%';
+      }
+      const here = s.sysId === colony.systemId;
+      const dist = here ? 'stesso sistema' : (s.hops + ' salti');
+      const canSend = ships >= 1 && crews.length >= 1 && !s.harvesting;
+      const sendTitle = s.harvesting ? 'Una flotta è già presente sul sito'
+        : (canSend ? 'Invia una flotta a raccogliere/esplorare (resta sul posto)' : 'Servono uno scafo e un equipaggio');
+      return '<li class="expedition-item">' +
+        '<div class="expedition-item__head">' +
+          '<span class="expedition-item__status expedition-status--outbound">' + meta.label + '</span>' +
+          '<span class="expedition-item__target">' + escapeHtml(sys ? sys.name : '—') + tag + '</span>' +
+          '<span class="expedition-item__eta">' + dist + '</span>' +
+        '</div>' +
+        '<div class="expedition-item__bars">' +
+          '<span class="xp-chip" title="Stato del sito">' + stateTxt + '</span>' +
+          (s.harvesting ? '<span class="xp-chip" title="Flotta presente">✦ in raccolta</span>' : '') +
+          '<button class="btn btn--mini btn--primary" data-action="anom-send" data-sys="' + s.sysId + '" type="button"' +
+            (canSend ? '' : ' disabled') + ' title="' + sendTitle + '">Invia flotta</button>' +
+        '</div>' +
+      '</li>';
+    }).join('') + '</ul>';
+  } else {
+    anomHtml = '<p class="panel__note">Nessuna anomalia nota nei sistemi esplorati raggiungibili. Esplora i sistemi vicini per scoprirne.</p>';
+  }
+
   host.innerHTML =
     '<div class="sysinfo">' +
       '<p class="sysinfo__sub">Risorse disponibili</p>' +
@@ -3790,13 +3834,93 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
       '</button>' +
       '<p class="sysinfo__sub">Spedizioni attive</p>' +
       listHtml +
+      (ORION.anomaly ? ('<p class="sysinfo__sub">Anomalie raggiungibili</p>' + anomHtml) : '') +
       '<p class="panel__note">Costruisci scafi nell\'<em>Hangar di costruzione</em> e forma equipaggi nell\'<em>Accademia militare</em>. ' +
         'Ogni missione completata restituisce l\'equipaggio con +1 xp; gli scafi accumulano usura. ' +
-        'I tre tier di <em>iperguida</em> ridurranno i tempi di salto iperspaziale.</p>' +
+        'I tre tier di <em>iperguida</em> ridurranno i tempi di salto iperspaziale. ' +
+        'Le <em>anomalie §17.3</em> si sfruttano inviando una flotta che <strong>resta sul posto</strong>: ' +
+        'detriti→metalli, nebulose→energia (raccolta ricorrente), reliquie→ricompensa una-tantum.</p>' +
     '</div>';
 
   const btn = host.querySelector('[data-action="exp-organize"]');
   if (btn && !btn.disabled) btn.addEventListener('click', function () { openExpeditionPicker(colony); });
+  host.querySelectorAll('[data-action="anom-send"]').forEach(function (b) {
+    b.addEventListener('click', function () { doSurveyAnomaly(colony, Number(b.dataset.sys)); });
+  });
+}
+
+/* Metadati di presentazione per il tipo di anomalia (§17.3). */
+function anomalyKindMeta(kind) {
+  if (kind === 'detriti')  return { label: 'Campo di detriti', res: 'metalli' };
+  if (kind === 'nebulosa') return { label: 'Nebulosa',         res: 'energia' };
+  if (kind === 'reliquie') return { label: 'Reliquia antica',  res: null };
+  return { label: kind, res: null };
+}
+
+/* Anomalie note (§17.3) nei sistemi ESPLORATI raggiungibili da questa
+   colonia (incluso il suo stesso sistema). Registra i siti dal seed
+   (deterministico, idempotente) e li ordina per distanza in salti. */
+function reachableAnomaliesFor(colony) {
+  const g = ORION.game;
+  if (!g || !ORION.anomaly || !ORION.anomaly.ensureSites) return [];
+  const D = ORION.galaxy.DISCOVERY;
+  const start = colony.systemId;
+  const hops = {}; hops[start] = 0;
+  const queue = [start];
+  while (queue.length) {
+    const u = queue.shift();
+    const sys = g.galaxy.systems[u];
+    const links = (sys && sys.links) || [];
+    for (let i = 0; i < links.length; i++) {
+      const v = links[i];
+      if (hops[v] != null) continue;
+      if (g.state.discovery[v] < D.EXPLORED) continue;
+      hops[v] = hops[u] + 1;
+      queue.push(v);
+    }
+  }
+  Object.keys(hops).forEach(function (sid) { ORION.anomaly.ensureSites(g, Number(sid)); });
+  const sites = ORION.anomaly.knownSites(g).filter(function (s) {
+    if (hops[s.sysId] == null) return false;
+    if (s.kind === 'reliquie') return !s.explored;   // esaurite: non mostrare
+    return true;                                       // detriti/nebulosa: anche in rigenerazione
+  });
+  sites.forEach(function (s) { s.hops = hops[s.sysId]; });
+  sites.sort(function (a, b) { return a.hops - b.hops; });
+  return sites;
+}
+
+/* Invia una flotta di ricognizione (1 scafo + 1 equipaggio) verso il
+   sistema di un'anomalia con ordine `survey`: arriva e RESTA a
+   raccogliere/esplorare. Stesso pattern di doLaunchExpedition (decisione
+   #60), ma l'ordine non rientra. */
+function doSurveyAnomaly(colony, targetSystemId) {
+  const g = ORION.game;
+  const key = colony.systemId + ':' + colony.bodyKey;
+  if (!ORION.fleet || !ORION.fleet.createFleet) { showToast('Modulo flotta non disponibile'); return; }
+  const shipsAvail = (colony.ships && colony.ships.explorer) || 0;
+  const crewsAvail = (colony.crews && Array.isArray(colony.crews.explorer)) ? colony.crews.explorer.length : 0;
+  if (shipsAvail < 1) { showToast('Nessuno scafo esploratore disponibile'); return; }
+  if (crewsAvail < 1) { showToast('Nessun equipaggio esploratore disponibile'); return; }
+  const cf = ORION.fleet.createFleet(g, key, 'Ricognizione');
+  if (!cf.ok) { showToast(cf.reason || 'Creazione flotta fallita'); return; }
+  const fleet = cf.fleet;
+  const as = ORION.fleet.assignShips(g, fleet, key, 'explorer', 1);
+  if (!as.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(as.reason || 'Assegnazione nave fallita'); return; }
+  const ac = ORION.fleet.assignCrew(g, fleet, key, 1);
+  if (!ac.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(ac.reason || 'Assegnazione equipaggio fallita'); return; }
+  const so = ORION.fleet.setOrder(g, fleet, { type: 'survey', toSysId: targetSystemId });
+  if (!so.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(so.reason || 'Ordine ricognizione rifiutato'); return; }
+  const sys = g.galaxy.systems[targetSystemId];
+  const acr = regionAcronymFor(targetSystemId);
+  const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
+  const where = (targetSystemId === colony.systemId)
+    ? 'verso l\'anomalia nel sistema'
+    : 'verso l\'anomalia di <strong>' + (sys ? sys.name : 'sistema') + '</strong>' + tag;
+  pushChronicle(ORION.time.currentDS(g) + ' — Flotta di ricognizione in rotta ' + where + '.', 'explore');
+  if (ORION.tutorial) ORION.tutorial.fire('anomalies');
+  persistGame(g);
+  updatePlanetUI();
 }
 
 function openExpeditionPicker(colony) {
@@ -5305,6 +5429,7 @@ function renderFleetView(stage) {
     if (o.type === 'move') return 'rotta verso ' + sysName(o.toSysId);
     if (o.type === 'attack') return '⚔ attacco a ' + sysName(o.toSysId);
     if (o.type === 'explore') return 'esplorazione di ' + sysName(o.toSysId);
+    if (o.type === 'survey') return '✦ anomalia di ' + sysName(o.toSysId);
     if (o.type === 'return') return 'rientro alla base';
     if (o.type === 'patrol') return 'pattuglia ' + sysName(o.sysA) + ' ↔ ' + sysName(o.sysB);
     if (o.type === 'move-route') {
@@ -10701,6 +10826,7 @@ function describeFleetOrder(g, fleet) {
   if (o.type === 'idle' || !o.type) return { label: '<em>in attesa</em>', eta: eta };
   if (o.type === 'move')    return { label: 'rotta verso ' + escapeHtml(sysName(o.toSysId)),    eta: eta };
   if (o.type === 'explore') return { label: 'esplorazione di ' + escapeHtml(sysName(o.toSysId)), eta: eta };
+  if (o.type === 'survey')  return { label: '✦ anomalia di ' + escapeHtml(sysName(o.toSysId)),   eta: eta };
   if (o.type === 'attack')  return { label: 'attacco a ' + escapeHtml(sysName(o.toSysId)),       eta: eta };
   if (o.type === 'return')  return { label: 'rientro alla base',                                 eta: eta };
   if (o.type === 'patrol') {
