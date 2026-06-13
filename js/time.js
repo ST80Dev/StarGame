@@ -149,6 +149,7 @@
        danneggiate in battaglia risalgono di hp da sole quando il sistema
        non è sotto attacco. */
     STRUCT_REPAIR_PER_I:  1.5,   // hp/Ι recuperati dalle strutture danneggiate
+    STATION_DEFENSE_COOLDOWN: 8, // Ι fra due difese autonome di una stazione (#81)
 
     /* Osservatorio §7.3 */
     SCAN_OBSERVATION_I: 10,     // I di osservazione dopo completamento
@@ -1272,6 +1273,17 @@
 
       fleet.combatResolvedAt = sysId;
       const A = C.forceFromFleet(game, fleet, 'A');
+      /* M16 (#81): una tua STAZIONE nel sistema combatte al fianco della
+         flotta (chokepoint fortificato). Le sue piattaforme si aggiungono
+         al lato A; l'hp residuo è riscritto dopo lo scontro. */
+      let coStation = null;
+      if (root.ORION.station && root.ORION.station.stationAt) {
+        const ms = root.ORION.station.stationAt(game, sysId);
+        if (ms && ms.phase !== 'building' && ms.level >= 1) {
+          const sf = C.forceFromStation(game, ms, 'A');
+          if (sf.combatants.length) { A.combatants = A.combatants.concat(sf.combatants); coStation = ms; }
+        }
+      }
       const battleId = (game.timeImpulsi || 0) + ':' + sysId + ':' + fleet.id;
       const report = C.resolve(game, battleId, A, enemy);
       report.kind = 'skirmish';
@@ -1283,6 +1295,8 @@
         fleet.ships && fleet.ships.some(function (s) { return s.kind === 'coloniale'; });
       // Applica esito alla flotta del giocatore (perdite permanenti, +xp)
       const fleetOutcome = C.applyOutcomeToFleet(game, fleet, A);
+      // M16 (#81): scrivi l'hp residuo / distruzione della stazione co-combattente
+      if (coStation) { applyStationCombatOutcome(game, coStation, report._A, events); coStation._defendedAt = game.timeImpulsi; }
       const playerWon = (report.winner === 'A');
       /* Servizio (decisione utente 2026-06-11): scaramuccia vinta → +1 xp
          all'equipaggio aderente alla flotta sopravvissuta. */
@@ -1824,6 +1838,92 @@
     }
     return false;
   }
+  /* ------------------------------------------------------------------
+     M16 (#81) — STAZIONI spaziali.
+     ------------------------------------------------------------------ */
+  /* Scrive l'hp residuo della stazione co-combattente; se la sua piattaforma
+     è stata distrutta nello scontro → rimuove la stazione (recovery-friendly:
+     si ricostruisce). */
+  function applyStationCombatOutcome(game, station, force, events) {
+    let survived = null;
+    for (let i = 0; i < (force.combatants || []).length; i++) {
+      const c = force.combatants[i];
+      if (c.src && c.src.type === 'station' && c.src.station === station) { survived = c; break; }
+    }
+    if (survived) {
+      station.hp = Math.max(1, Math.round(survived.hp));
+      station._underAttack = true;   // sospende riparazione passiva del tick
+    } else {
+      // piattaforma abbattuta → stazione distrutta
+      game.stations = (game.stations || []).filter(function (s) { return s !== station; });
+      events.push({ kind: 'station-destroyed', stationId: station.id, name: station.name,
+        systemId: station.systemId, impulso: game.timeImpulsi });
+    }
+  }
+
+  /* Difesa autonoma della stazione: se una forza ostile è presente nel suo
+     sistema e nessuna flotta del giocatore ha già risolto lì questo tick,
+     la stazione combatte da sola (lampo, con cooldown per dare tempo di
+     reagire — recovery-friendly #22). Perdendo viene distrutta (la
+     conquista AI vera è Fase B). */
+  function processStationDefense(game, events) {
+    const C = root.ORION.combat, ST = root.ORION.station;
+    if (!C || !ST) return;
+    const list = ST.listOf(game);
+    for (let i = 0; i < list.length; i++) {
+      const st = list[i];
+      if (!st || st.phase === 'building' || st.level < 1) continue;
+      if (st._defendedAt === game.timeImpulsi) continue;          // già difesa via flotta
+      // cooldown anti-spam: una battaglia ogni STATION_DEFENSE_COOLDOWN Ι
+      if (st._lastDefenseI != null && (game.timeImpulsi - st._lastDefenseI) < CFG.STATION_DEFENSE_COOLDOWN) continue;
+      const sysId = st.systemId;
+      if (!C.hostilePresenceAt(game, sysId)) { st._sieged = false; continue; }
+      // costruisci la forza ostile (covo pirata o AI ostile materializzata)
+      const nest = pirateNestAt(game, sysId);
+      let enemy = null, enemyKind = null, civ = null;
+      if (nest) { enemy = C.forceFromPirateNest(nest); enemyKind = 'pirate'; }
+      else if (root.ORION.ai) {
+        civ = root.ORION.ai.civForSystem ? root.ORION.ai.civForSystem(game, sysId) : null;
+        if (civ && civ.alive && root.ORION.ai.materialize) {
+          enemy = C.forceFromMaterialized(root.ORION.ai.materialize(game, civ, sysId), 'B');
+          enemyKind = 'ai';
+        }
+      }
+      if (!enemy || !enemy.combatants.length) continue;
+
+      st._underAttack = true;
+      st._lastDefenseI = game.timeImpulsi;
+      const def = C.forceFromStation(game, st, 'A');
+      if (!def.combatants.length) continue;
+      const battleId = (game.timeImpulsi || 0) + ':station:' + st.id;
+      const report = C.resolve(game, battleId, def, enemy);
+      const won = (report.winner === 'A');
+      /* Avviso (auto-pausa) solo alla PRIMA battaglia di un assedio continuo:
+         un covo persistente raid ogni cooldown → niente spam di pause. */
+      if (!st._sieged) {
+        st._sieged = true;
+        events.push({ kind: 'station-attacked', stationId: st.id, name: st.name,
+          systemId: sysId, enemyKind: enemyKind, won: won, report: report, impulso: game.timeImpulsi });
+      }
+      // esito sull'ostile (pirati: attrito al covo)
+      if (won && enemyKind === 'pirate' && nest) {
+        nest.level = (nest.level || 1) - 1;
+        if (nest.level <= 0 && game.piracy) {
+          game.piracy.nests = game.piracy.nests.filter(function (n) { return n !== nest; });
+        }
+      } else if (enemyKind === 'ai' && civ && root.ORION.ai.demobilize) {
+        root.ORION.ai.demobilize(game, civ, { winner: won ? 'player' : 'civ', report: report });
+      }
+      // writeback hp / distruzione della stazione
+      applyStationCombatOutcome(game, st, report._A, events);
+    }
+  }
+
+  /* Avanza costruzione/upkeep/riparazione di tutte le stazioni. */
+  function processStations(game, events) {
+    if (root.ORION.station && root.ORION.station.tick) root.ORION.station.tick(game, events);
+  }
+
   function processStructRepair(game, colony, colonyKey) {
     if (colonyUnderSiege(game, colonyKey)) return;   // niente riparazione sotto assedio
     const structs = colony.structures || {};
@@ -1929,6 +2029,11 @@
     processSkirmishes(game, events);
     processIncursions(game, events);
     processBattles(game, events);
+    /* M16 (#81): difesa autonoma delle stazioni (dopo le scaramucce, così le
+       flotte hanno la prima occasione di ripulire la minaccia) + avanzamento
+       costruzione/upkeep/riparazione delle stazioni. */
+    processStationDefense(game, events);
+    processStations(game, events);
     processWarState(game);
     /* M09 Fase B: rilevamento sconfitta (0 colonie → esilio/gameover). */
     checkDefeat(game, events);
@@ -2140,6 +2245,11 @@
     /* M13 (decisione #57): progetto di ricerca in completamento. */
     if (root.ORION.research && root.ORION.research.etaImpulsi) {
       const d = root.ORION.research.etaImpulsi(game);
+      if (d > 0 && d < best) best = d;
+    }
+    /* M16 (#81): stazione in costruzione/upgrade. */
+    if (root.ORION.station && root.ORION.station.minBuildLeft) {
+      const d = root.ORION.station.minBuildLeft(game);
       if (d > 0 && d < best) best = d;
     }
     /* M07: spedizioni in viaggio (outbound o returning) */

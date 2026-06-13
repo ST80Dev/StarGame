@@ -6521,6 +6521,46 @@ select.main-menu__input { cursor: pointer; }
 .market-summary__val { font-family: var(--font-display); font-size: 1.25rem; color: #f0d670; }
 .market-summary__lbl { font-size: 0.72rem; color: var(--c-text-dim); }
 
+/* ===================================================================
+   M16 — Stazioni spaziali (decisione #81). Accento ciano (#7fc4ff).
+   =================================================================== */
+.station-view__new { margin: 0 0 14px; }
+.station-list { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.station-item {
+  padding: 10px 12px; border-radius: 9px;
+  background: rgba(127, 196, 255, 0.05);
+  border: 1px solid rgba(127, 196, 255, 0.22);
+}
+.station-item__head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.station-item__name { font-family: var(--font-display); font-size: 0.95rem; color: #aed4ff; }
+.station-item__sys { font-size: 0.78rem; color: var(--c-text-dim); font-family: inherit; }
+.station-item__lvl { margin-left: auto; font-size: 0.74rem; color: #7fc4ff; }
+.station-stats { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.station-stat { display: grid; grid-template-columns: 5.4em 1fr auto; align-items: center; gap: 8px; }
+.station-stat__lbl { font-size: 0.72rem; color: var(--c-text-dim); }
+.station-stat__val { font-size: 0.74rem; color: var(--c-text-dim); white-space: nowrap; }
+.station-bar { height: 7px; border-radius: 4px; background: rgba(255, 255, 255, 0.07); overflow: hidden; }
+.station-bar__fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+.station-bar__fill--ok { background: #5fd0a0; }
+.station-bar__fill--warn { background: #f0c050; }
+.station-bar__fill--crit { background: #ff7a5a; }
+.station-bar__fill--hp { background: #7fc4ff; }
+.station-bar__fill--build { background: #f0c050; }
+.station-build { font-size: 0.78rem; color: var(--c-text-dim); margin-bottom: 8px; }
+.station-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.station-maxed { font-size: 0.74rem; color: var(--c-text-dim); align-self: center; }
+.station-stat__val.is-warn { color: #f0c050; }
+.station-stat__val.is-crit { color: #ff7a5a; }
+/* Picker di costruzione: lista candidati */
+.station-cand-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; max-height: 320px; overflow-y: auto; }
+.station-cand {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 9px; border-radius: 6px;
+  background: rgba(127, 196, 255, 0.05); border: 1px solid rgba(127, 196, 255, 0.18);
+}
+.station-cand__name { font-size: 0.85rem; }
+.station-cand__hops { margin-left: auto; font-size: 0.74rem; color: var(--c-text-dim); }
+
 /* ----- M12 Fase A2: Tesoreria & valute regionali (decisione #56 §15.4) ----- */
 .cur-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .cur-item {

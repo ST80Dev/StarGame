@@ -330,6 +330,13 @@
       '<rect x="14" y="14" width="7" height="7" rx="1"/>'
     ),
 
+    /* Station — stazione spaziale (M16): anello orbitale + nucleo + bracci. */
+    station: svg(
+      '<circle cx="12" cy="12" r="3.2"/>' +
+      '<ellipse cx="12" cy="12" rx="9" ry="4.2"/>' +
+      '<path d="M12 8.8V5M12 19v-3.8"/>'
+    ),
+
     /* Book — libro (tutorial, indice schede). */
     book: svg(
       '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>' +

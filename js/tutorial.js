@@ -942,6 +942,28 @@
         '<p>Le perdite di una capitale sono pesanti: tienile scortate e usa la formazione difensiva sulle flotte che le contengono.</p>'
     },
     {
+      id: 'stations',
+      tag: 'M16 · Stazioni',
+      title: 'Stazioni spaziali: avamposti avanzati',
+      body:
+        '<p>Una <strong>stazione spaziale ⬡</strong> è un avamposto logistico-militare che costruisci in un <strong>sistema ' +
+        'esplorato qualsiasi</strong> — anche dove non hai colonie. Si fonda <em>a distanza</em> da una tua colonia (max ' +
+        '4 salti): la colonia paga, la stazione cresce sul posto.</p>' +
+        '<p>A cosa serve (Fase A):</p>' +
+        '<ul>' +
+          '<li><strong>Rifornimento flotte</strong> — è un <em>porto amico avanzato</em>: le flotte ci ricaricano i viveri in ' +
+          'territorio profondo, dove non hai colonie. Estende drasticamente il raggio operativo.</li>' +
+          '<li><strong>Difesa</strong> — corazza + fuoco difensivo. Fortifica il sistema: combatte al fianco delle tue flotte ' +
+          'e respinge i predoni. Se sopraffatta viene distrutta (la ricostruisci).</li>' +
+          '<li><strong>Deposito</strong> — il serbatoio fa anche da scorta avanzata.</li>' +
+        '</ul>' +
+        '<p>Cresce di <strong>livello come una struttura</strong>: ogni modulo aggiunge corazza, fuoco e capacità del serbatoio. ' +
+        'La <strong>linea di rifornimento</strong> dalla colonia riempie il serbatoio; se la stazione resta <em>isolata</em> ' +
+        '(nessuna colonia entro raggio) le funzioni degradano gradualmente — mai un\'autodistruzione: riavvicina una colonia ' +
+        'o smantellala.</p>' +
+        '<p>Cantiere orbitale per le grandi navi e hub commerciale di larga scala arrivano in una fase successiva.</p>'
+    },
+    {
       id: 'colonial-ship',
       tag: 'Colonizzazione',
       title: 'Pioniere coloniale: come si colonizza',

@@ -31,7 +31,7 @@
 
    Determinismo (#5): identità da `seed:council:<role>:<termN>` /
    `seed:luminary:<n>`, zero RNG nel tick. Recovery-friendly (#22): seggio
-   mai vuoto (fallback istituzionale). Schema save 28.
+   mai vuoto (fallback istituzionale). Schema save 29.
    ===================================================================== */
 (function (root) {
   'use strict';
