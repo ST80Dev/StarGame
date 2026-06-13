@@ -241,6 +241,13 @@ button { font-family: inherit; }
   text-transform: uppercase;
   letter-spacing: 0.12em;
 }
+/* Header stretto (tablet landscape / finestra ridotta, prima dei breakpoint
+   mobile): le sigle risorsa spariscono, restano icona + valore — così i
+   controlli del tempo non vengono mai schiacciati né tagliati. */
+@media (max-width: 1450px) {
+  .resource__label { display: none; }
+  .resource { gap: 5px; padding: 5px 7px; }
+}
 .resource__value {
   font-family: var(--font-data);
   font-size: 1rem;
@@ -1449,23 +1456,23 @@ button { font-family: inherit; }
 }
 .time-control--inline::before { display: none; }
 .time-control--inline .btn--mini {
-  padding: 5px 6px;
-  font-size: 0.95rem;
+  padding: 4px 5px;
+  font-size: 1.05rem;
   min-width: 28px;
   font-family: var(--font-data);
   letter-spacing: 0;
   text-transform: none;
 }
 .time-control--inline .btn--play {
-  padding: 5px 8px;
-  font-size: 0.74rem;
+  padding: 4px 7px;
+  font-size: 0.78rem;
   letter-spacing: 0.06em;
   white-space: nowrap;
   text-transform: none;
   font-family: var(--font-data);
   /* Larghezza fissa: il label varia ("0.5× · 60s/Ι" → "32× · 938ms/Ι")
      e altrimenti il bottone si stringe/allarga al cambio velocità. */
-  width: 152px;
+  width: 150px;
   justify-content: center;
   background: rgba(47, 230, 224, 0.06);
   border-color: var(--c-accent-dim);
@@ -1475,26 +1482,26 @@ button { font-family: inherit; }
   border-color: var(--c-accent);
 }
 .time-control--inline .btn--play .btn__glyph {
-  font-size: 1rem;
+  font-size: 1.1rem;
   color: var(--c-accent);
 }
 .time-control--inline .btn--step,
 .time-control--inline .btn--play-step {
-  padding: 5px 7px;
+  padding: 4px 6px;
 }
 .time-control--inline .btn--next-event {
-  padding: 5px 8px;
-  font-size: 0.72rem;
+  padding: 4px 6px;
+  font-size: 0.76rem;
   letter-spacing: 0.08em;
   white-space: nowrap;
   /* Larghezza fissa: senza etichetta "EVENTO" basta lo spazio per il
      glifo + delta ("in 5 Ι" → "in 2340 Ι"), così non spinge gli altri. */
-  min-width: 92px;
+  min-width: 90px;
   justify-content: center;
 }
 /* Etichetta "EVENTO" nascosta anche su desktop: resta glifo ⏭ + countdown. */
 .time-control--inline .btn--next-event .btn__label { display: none; }
-.time-control--inline .btn__glyph { font-size: 0.85rem; }
+.time-control--inline .btn__glyph { font-size: 0.95rem; }
 
 .btn {
   display: inline-flex;
