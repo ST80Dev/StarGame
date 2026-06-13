@@ -434,6 +434,40 @@
     return parts.join(' · ');
   }
 
+  /* Ricambio automatico (decisione #79): le figure di flotta hanno un
+     mandato lungo; superato, vanno in CONGEDO da sole (notifica, nessuna
+     azione forzata). La pipeline (crew xp) produce i successori. Tenure
+     deterministica dall'id → non si congedano tutte insieme. */
+  var FIG_TENURE_BASE = 8000, FIG_TENURE_SPREAD = 4000;
+  function figHash(s) {
+    var h = 2166136261; s = '' + s;
+    for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h * 16777619) >>> 0; }
+    return h >>> 0;
+  }
+  function figTenure(id) { return FIG_TENURE_BASE + (figHash(id) % (FIG_TENURE_SPREAD + 1)); }
+  function retireOld(game, events) {
+    if (!game) return;
+    ensure(game);
+    var now = game.timeImpulsi || 0;
+    function expired(cmd) { return (now - (cmd.bornAt || 0)) >= figTenure(cmd.id); }
+    function notify(cmd) {
+      if (events) events.push({ kind: 'figure-retired', scope: 'fleet', name: (cmd.rank || '') + ' ' + cmd.name, roleLabel: roleLabel(cmd), impulso: now });
+    }
+    /* assegnate (sulle flotte) */
+    (game.fleets || []).forEach(function (f) {
+      if (!f) return;
+      var officers = ensureOfficers(f);
+      for (var i = officers.length - 1; i >= 0; i--) {
+        if (expired(officers[i])) { var cmd = officers.splice(i, 1)[0]; notify(cmd); }
+      }
+    });
+    /* idle nel pool */
+    var pool = list(game);
+    for (var j = pool.length - 1; j >= 0; j--) {
+      if (expired(pool[j])) { var c = pool.splice(j, 1)[0]; notify(c); }
+    }
+  }
+
   root.ORION = root.ORION || {};
   root.ORION.commander = {
     PROMOTION_THRESHOLD: PROMOTION_THRESHOLD,
@@ -458,6 +492,7 @@
     ensure: ensure,
     migrateFigure: migrateFigure,
     migrateAll: migrateAll,
+    retireOld: retireOld,
     assignableOf: assignableOf,
     assignToFleet: assignToFleet,
     releaseFromFleet: releaseFromFleet,

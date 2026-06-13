@@ -55,7 +55,7 @@
      DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
      nuovo gioco la preserva e una recovery best-effort prova a dedurla
      da colonie/flotte/spedizioni/cronaca. */
-  const SCHEMA_VERSION = 28;
+  const SCHEMA_VERSION = 29;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -221,7 +221,11 @@
       council: (game.council && typeof game.council === 'object') ? game.council : null,
       /* M16 (decisione #81): stazioni spaziali. Entità top-level (vivono in
          un sistema, non in una colonia). Si persistono intere. */
-      stations: Array.isArray(game.stations) ? game.stations : []
+      stations: Array.isArray(game.stations) ? game.stations : [],
+      /* Schema 29 (M14 Fase B3, decisione #79): pool dei Luminari (figure
+         scientifiche da elevare al seggio). I seggi elevati + lo stato di
+         costituzione vivono in game.council (auto-serializzato). */
+      luminari: Array.isArray(game.luminari) ? game.luminari : []
     };
   }
 
@@ -657,6 +661,15 @@
     if ((payload.schema || 27) < 28) {
       if (!Array.isArray(payload.stations)) payload.stations = [];
       payload.schema = 28;
+    }
+
+    /* v28 → v29 (M14 Fase B3, decisione #79): Luminari + Consiglio costituito
+       a soglia + seggi elevabili. Save vecchi → pool luminari vuoto; i campi
+       nuovi del council (constituted/figure/termN/luminariBorn) sono lazy-init
+       da ORION.council.ensure() al load. */
+    if ((payload.schema || 28) < 29) {
+      if (!Array.isArray(payload.luminari)) payload.luminari = [];
+      payload.schema = 29;
     }
     return payload;
   }
