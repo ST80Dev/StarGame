@@ -5604,6 +5604,48 @@ select.main-menu__input { cursor: pointer; }
   min-height: 0;
 }
 
+/* =====================================================================
+   Plancia d'Impero — linguette a icone (decisione UI: stesso meccanismo
+   e stile della Plancia Operativa dx). Riusa .planet-tabs/.planet-tab →
+   glow identico; qui solo il layout del corpo della linguetta attiva. */
+.lp-tabs { margin-bottom: 8px; flex-shrink: 0; }
+.lp-tab-body {
+  display: flex; flex-direction: column; gap: 4px;
+  flex: 1 1 auto; min-height: 0;
+}
+.lp-tab-body__count {
+  font-family: var(--font-data);
+  font-size: 0.74rem; color: var(--c-text-soft);
+  letter-spacing: 0.04em; text-transform: uppercase;
+  margin-bottom: 4px;
+}
+/* Cronaca nella linguetta: scorre internamente fino al fondo della sidebar. */
+.lp-tab-body--chron {
+  overflow-y: auto;
+  font-size: 0.84rem; line-height: 1.5;
+  padding: 6px 4px;
+  background: rgb(var(--c-surface-rgb) / 0.4);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+}
+.lp-tab-body--chron .chronicle__log {
+  display: flex; flex-direction: column; gap: 5px;
+  margin: 0; padding: 0 4px; list-style: none;
+}
+.lp-tab-body--chron .chronicle__entry {
+  padding-left: 12px; position: relative;
+  color: var(--c-text-soft);
+  white-space: normal; word-wrap: break-word;
+}
+.lp-tab-body--chron .chronicle__entry::before {
+  content: "›"; position: absolute; left: 0; color: var(--c-accent);
+}
+.lp-tab-body--chron .chronicle__entry--system { color: var(--c-text-faint); font-style: italic; }
+.lp-tab-body--chron .chronicle__entry--explore { color: var(--c-text); }
+.lp-tab-body--chron .chronicle__entry--explore::before { color: var(--c-accent-warm); }
+.lp-tab-body--chron .chronicle__entry--civ { color: var(--c-text); }
+.lp-tab-body--chron .chronicle__entry--civ::before { color: #9d7bff; }
+
 /* --- Sezione generica del launcher --- */
 /* flex-shrink:0 → ogni sezione mantiene la sua altezza naturale e non viene
    compressa sotto il contenuto quando il launcher è pieno (evita che i bottoni

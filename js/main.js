@@ -52,8 +52,15 @@ ORION.dxTab = 'colonia';
 /* Cronaca: stato collassato (sx). Persistito in localStorage. */
 ORION.chronicleCollapsed = true;
 /* Stato delle sezioni della Plancia d'Impero (id → bool collassato).
-   Accordion: una sola sezione aperta per volta (default: Roster). */
+   Accordion: una sola sezione aperta per volta (default: Roster).
+   NB: superato dalle linguette a icone (ORION.lpTab) — tenuto solo per
+   retro-compat delle prefs vecchie e di lpAccordionOpen/normalize. */
 ORION.lpSectionCollapsed = { roster: false, nav: true, launcher: true, council: true };
+
+/* Linguetta attiva della Plancia d'Impero (stesso meccanismo della dx).
+   'roster' | 'nav' | 'launcher' | 'council' | 'chronicle'. Persistita in
+   uiprefs (è una scelta d'interfaccia, non stato di gioco). */
+ORION.lpTab = 'roster';
 
 /* Sezioni dell'accordion Plancia d'Impero (la cronaca è gestita a parte).
    Tenuta come unica fonte così aggiungere una sezione non rompe il toggle
@@ -100,6 +107,7 @@ function loadUiPrefs() {
       Object.assign(ORION.lpSectionCollapsed, d.lpSectionCollapsed);
     }
     if (d.empireDeckOpen != null) ORION.empireDeckOpen = !!d.empireDeckOpen;
+    if (typeof d.lpTab === 'string') ORION.lpTab = d.lpTab;
     /* La pin si recupera per partita (chiave seed-aware), perché un
        seed diverso → colonie diverse → il pin vecchio non è valido. */
   } catch (_) { /* niente */ }
@@ -111,7 +119,8 @@ function saveUiPrefs() {
     localStorage.setItem('orion.uiprefs', JSON.stringify({
       chronicleCollapsed: ORION.chronicleCollapsed,
       lpSectionCollapsed: ORION.lpSectionCollapsed,
-      empireDeckOpen: ORION.empireDeckOpen
+      empireDeckOpen: ORION.empireDeckOpen,
+      lpTab: ORION.lpTab
     }));
   } catch (_) { /* niente */ }
 }
@@ -9758,6 +9767,17 @@ function renderLeftPanel() {
     (myKeys.length ? colItems : '<p class="lp-empty">Nessuna colonia operativa.</p>') +
     (fleets.length ? fleetItems : (myKeys.length ? '<p class="lp-empty">Nessuna flotta attiva.</p>' : ''));
   const rosterCount = myKeys.length + ' colonie · ' + fleets.length + ' flotte';
+  /* Alert sulla linguetta Roster: scarsità crit (rosso) / low (ambra). */
+  let rosterAlert = null;
+  myKeys.forEach(function (k) {
+    const sc = g.colonies[k] && g.colonies[k]._scar;
+    if (!sc) return;
+    ['met','en','food','water'].forEach(function (rk) {
+      const s = sc[rk] && sc[rk].state;
+      if (s === 'crit') rosterAlert = 'bad';
+      else if (s === 'low' && rosterAlert !== 'bad') rosterAlert = 'warn';
+    });
+  });
 
   /* ----- Navigazione (Galassia/Gruppo/Sistema/Pianeta) ----- */
   const navItems = [
@@ -9830,30 +9850,6 @@ function renderLeftPanel() {
     : '<li class="chronicle__entry chronicle__entry--system">Nessuna voce.</li>'
   ) + '</ul>';
 
-  /* Compone le sezioni. */
-  const collapsed = ORION.lpSectionCollapsed;
-  function sec(id, title, count, body, extraCls) {
-    const isCol = !!collapsed[id];
-    return '<section class="lp-section ' + (extraCls || '') + (isCol ? ' is-collapsed' : '') + '" data-section="' + id + '">' +
-      '<div class="lp-section__head" data-action="lp-toggle" data-id="' + id + '">' +
-        '<span class="lp-section__caret"></span>' +
-        '<span class="lp-section__title">' + title + '</span>' +
-        (count ? '<span class="lp-section__count">' + count + '</span>' : '') +
-      '</div>' +
-      '<div class="lp-section__body">' + body + '</div>' +
-    '</section>';
-  }
-
-  /* Titoli sezione: glifo SVG + testo separati per applicare la tinta tematica
-     CSS (.lp-section__glyph--*). Migrazione UI_GUIDE §3 strategia B: niente
-     più Unicode, ogni glifo è un'icona SVG da ORION.icons (PR-A). */
-  function secTitle(glyphCls, iconName, text) {
-    const icon = (ORION.icon && ORION.icon(iconName)) || '';
-    return '<span class="lp-section__glyph lp-section__glyph--' + glyphCls + ' ui-icon" aria-hidden="true">' + icon + '</span>' +
-           '<span class="lp-section__text">' + text + '</span>';
-  }
-
-  const chronCollapsed = !!ORION.chronicleCollapsed;
   /* Identità del popolo (decisione #65): banner cliccabile in testa → editor. */
   const emp = ORION.game && ORION.game.empire;
   const empHtml = '<button type="button" class="lp-empire" data-action="empire-edit" title="Rinomina il tuo popolo">' +
@@ -9907,24 +9903,56 @@ function renderLeftPanel() {
     }).join('') + '</ul>';
   }
 
-  host.innerHTML =
-    empHtml +
-    sec('roster',   secTitle('roster', 'roster',     'Roster'),         rosterCount, rosterBody) +
-    sec('nav',      secTitle('nav',    'galaxy',     'Navigazione'),    '',          '<nav class="lp-nav">' + navHtml + '</nav>') +
-    sec('launcher', secTitle('launch', 'settings',   'Sale e moduli'),  '',          '<div class="lp-launcher">' + launcherHtml + '</div>') +
-    (councilBody ? sec('council', secTitle('council', 'star', 'Consiglio'), (councilProposals ? '!' + councilProposals : ''), councilBody) : '') +
-    '<section class="lp-section lp-section--chron' + (chronCollapsed ? ' is-collapsed' : '') + '" data-section="chronicle">' +
-      '<div class="lp-section__head" data-action="lp-toggle-chron">' +
-        '<span class="lp-section__caret"></span>' +
-        '<span class="lp-section__title">' + secTitle('chron', 'chronicle', 'Cronaca') + '</span>' +
-        '<span class="lp-section__count">' + cron.length + '</span>' +
-      '</div>' +
-      '<div class="lp-section__body" data-bind="chronicle-host">' + cronHtml + '</div>' +
-    '</section>';
+  /* ----- Linguette a icone (stesso meccanismo/stile della dx) -----
+     Le 5 macro-sezioni diventano tab: una sola attiva per volta, niente
+     più scroll alto/basso per cambiare sezione. Riusa le classi
+     .planet-tabs/.planet-tab del pannello dx → stile identico (glow). */
+  const lpTabs = [
+    { id: 'roster',    iconName: 'roster',    tone: 'cyan',   label: 'Roster',        alert: rosterAlert },
+    { id: 'nav',       iconName: 'galaxy',    tone: 'violet', label: 'Navigazione',   alert: null },
+    { id: 'launcher',  iconName: 'settings',  tone: 'gold',   label: 'Sale e moduli', alert: (typeof dispatchPending === 'function' && dispatchPending()) ? 'info' : null }
+  ];
+  if (councilBody) {
+    lpTabs.push({ id: 'council', iconName: 'star', tone: 'amber', label: 'Consiglio', alert: councilProposals ? 'warn' : null });
+  }
+  lpTabs.push({ id: 'chronicle', iconName: 'chronicle', tone: 'green', label: 'Cronaca', alert: null });
+
+  /* Linguetta attiva: se 'council' ma il Consiglio non è costituito, fallback. */
+  let activeLp = ORION.lpTab;
+  if (!lpTabs.some(function (t) { return t.id === activeLp; })) activeLp = 'roster';
+  ORION.lpTab = activeLp;
+
+  const tabsHtml = '<nav class="planet-tabs lp-tabs" role="tablist">' +
+    lpTabs.map(function (t) {
+      const iconSvg = (ORION.icon && ORION.icon(t.iconName)) || '';
+      const isActive = (t.id === activeLp);
+      const alertCls = (t.alert && !isActive) ? ' has-alert has-alert--' + t.alert : '';
+      const iconHtml = '<span class="planet-tab__icon ui-icon planet-tab__icon--' + t.tone + '" aria-hidden="true">' + iconSvg + '</span>';
+      return '<button class="planet-tab' + (isActive ? ' is-active' : '') + alertCls + '" data-lp-tab="' + t.id + '" type="button"' +
+        ' title="' + escapeHtml(t.label) + '" aria-label="' + escapeHtml(t.label) + '">' + iconHtml + '</button>';
+    }).join('') +
+  '</nav>';
+
+  /* Corpo della sola sezione attiva. */
+  let bodyHtml = '';
+  if (activeLp === 'roster') {
+    bodyHtml = '<div class="lp-tab-body"><div class="lp-tab-body__count">' + rosterCount + '</div>' + rosterBody + '</div>';
+  } else if (activeLp === 'nav') {
+    bodyHtml = '<div class="lp-tab-body"><nav class="lp-nav">' + navHtml + '</nav></div>';
+  } else if (activeLp === 'launcher') {
+    bodyHtml = '<div class="lp-tab-body"><div class="lp-launcher">' + launcherHtml + '</div></div>';
+  } else if (activeLp === 'council') {
+    bodyHtml = '<div class="lp-tab-body">' + councilBody + '</div>';
+  } else if (activeLp === 'chronicle') {
+    bodyHtml = '<div class="lp-tab-body lp-tab-body--chron" data-bind="chronicle-host">' + cronHtml + '</div>';
+  }
+
+  host.innerHTML = empHtml + tabsHtml + bodyHtml;
 
   /* Mantieni `[data-bind="chronicle"]` valido per pushChronicle/restore:
      ri-tagghiamo l'UL come "chronicle" così le funzioni esistenti continuano
-     a funzionare senza modifiche. */
+     a funzionare senza modifiche (presente solo a tab Cronaca attiva; le
+     funzioni guardano `if (!log) return` → fonte di verità game.chronicle). */
   const ul = host.querySelector('.chronicle__log');
   if (ul) ul.setAttribute('data-bind', 'chronicle');
 
@@ -9932,12 +9960,10 @@ function renderLeftPanel() {
   const empBtn = host.querySelector('[data-action="empire-edit"]');
   if (empBtn) empBtn.addEventListener('click', openEmpireEditor);
 
-  /* Bind handlers — accordion: aprire una sezione collassa le altre. */
-  host.querySelectorAll('[data-action="lp-toggle"]').forEach(function (h) {
-    h.addEventListener('click', function () {
-      const id = h.dataset.id;
-      if (ORION.lpSectionCollapsed[id]) lpAccordionOpen(id);  // era chiusa → aprila sola
-      else ORION.lpSectionCollapsed[id] = true;               // era aperta → chiudila
+  /* Bind handlers — linguette: cambia ORION.lpTab e ridisegna. */
+  host.querySelectorAll('[data-lp-tab]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      ORION.lpTab = b.dataset.lpTab;
       saveUiPrefs();
       renderLeftPanel();
     });
@@ -9973,13 +9999,6 @@ function renderLeftPanel() {
   });
   host.querySelectorAll('[data-council-elevate]').forEach(function (b) {
     b.addEventListener('click', function () { openCouncilElevatePicker(b.dataset.councilElevate); });
-  });
-  const chronHead = host.querySelector('[data-action="lp-toggle-chron"]');
-  if (chronHead) chronHead.addEventListener('click', function () {
-    if (ORION.chronicleCollapsed) lpAccordionOpen('chronicle');
-    else ORION.chronicleCollapsed = true;
-    saveUiPrefs();
-    renderLeftPanel();
   });
   host.querySelectorAll('[data-view]').forEach(function (btn) {
     btn.addEventListener('click', function () {
