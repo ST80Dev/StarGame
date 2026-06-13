@@ -203,7 +203,19 @@ button { font-family: inherit; }
   text-transform: uppercase;
 }
 
-.resource-bar { display: flex; gap: 5px; flex: 0 1 auto; margin-right: auto; }
+.resource-bar {
+  display: flex;
+  gap: 5px;
+  flex: 0 1 auto;
+  margin-right: auto;
+  /* Cedevole: quando l'header si stringe, è la barra risorse a dare strada
+     (si comprime e all'occorrenza scorre) così i controlli del tempo non
+     finiscono mai fuori dal bordo destro. */
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.resource-bar::-webkit-scrollbar { display: none; }
 .resource {
   display: flex;
   align-items: center;
@@ -1431,6 +1443,9 @@ button { font-family: inherit; }
   border: 1px solid var(--c-border);
   box-shadow: none;
   backdrop-filter: none;
+  /* Ancorati a destra senza stringersi né traboccare oltre il bordo
+     dell'header: è la barra risorse a cedere lo spazio (vedi .resource-bar). */
+  flex: 0 0 auto;
 }
 .time-control--inline::before { display: none; }
 .time-control--inline .btn--mini {
