@@ -5566,7 +5566,23 @@ function renderFleetView(stage) {
     /* Card = solo riepilogo, ZERO bottoni (richiesta utente 2026-06-13).
        Click sulla card → Dettaglio flotta (pannello unico). */
     const FORM_LABEL = { aggressive: 'Aggressiva', balanced: 'Bilanciata', defensive: 'Difensiva' };
-    listHtml = '<ul class="fleet-list">' + g.fleets.map(function (f) {
+    /* Hop dalla colonia più vicina (BFS multi-sorgente sul grafo rotte). */
+    const homeDist = (function () {
+      const sys = g.galaxy.systems;
+      const dist = new Array(sys.length).fill(-1);
+      const q = [];
+      Object.keys(g.colonies).forEach(function (k) {
+        const c = g.colonies[k];
+        if (c && c.colonized && c.systemId >= 0 && dist[c.systemId] !== 0) { dist[c.systemId] = 0; q.push(c.systemId); }
+      });
+      let head = 0;
+      while (head < q.length) {
+        const u = q[head++]; const links = (sys[u] && sys[u].links) || [];
+        for (let i = 0; i < links.length; i++) { const v = links[i]; if (dist[v] < 0) { dist[v] = dist[u] + 1; q.push(v); } }
+      }
+      return dist;
+    })();
+    function cardHtml(f) {
       const counter = {};
       (f.ships || []).forEach(function (s) { counter[s.kind] = (counter[s.kind] || 0) + 1; });
       const counterHtml = Object.keys(counter).map(function (k) {
@@ -5587,6 +5603,10 @@ function renderFleetView(stage) {
       const popChip = popCap > 0
         ? '<span class="fleet-chip fleet-chip--pop" title="Coloni a bordo (livelli)">◉ ' + (f.popOnboard || 0) + '/' + popCap + '</span>'
         : '';
+      const hd = homeDist[f.location.systemId];
+      const distChip = (hd >= 0)
+        ? '<span class="fleet-chip fleet-chip--dist" title="Distanza dalla colonia più vicina">' + uiIcon('roster', 'amber') + ' ' + (hd === 0 ? 'a casa' : hd + ' hop') + '</span>'
+        : '';
       const viveriHtml = fleetViveriHtml(f);
       return '<li class="fleet-item fleet-item--card" data-fleet-id="' + escapeHtml(f.id) + '" tabindex="0" role="button" aria-label="Apri dettaglio ' + escapeHtml(f.name) + '">' +
         '<div class="fleet-item__head">' +
@@ -5600,13 +5620,35 @@ function renderFleetView(stage) {
         '</div>' +
         '<div class="fleet-item__meta">' + counterHtml +
           '<span class="fleet-chip" title="Equipaggio">' + uiIcon('forces', 'amber') + ' ' + (f.crew ? f.crew.length : 0) + '/' + (ORION.fleet ? ORION.fleet.fleetCrewRequired(f) : 0) + '</span>' +
+          distChip +
           '<span class="fleet-chip fleet-chip--form" title="Formazione">' + FORM_LABEL[formation] + '</span>' +
           offChip + popChip +
           '<span class="fleet-item__open" aria-hidden="true">' + uiIcon('chevronRight', 'soft') + '</span>' +
         '</div>' +
         viveriHtml + vetHtml +
       '</li>';
-    }).join('') + '</ul>';
+    }
+    /* Raggruppamento per gruppo stellare (sezioni collassabili). */
+    ORION._fleetGroupCollapsed = ORION._fleetGroupCollapsed || {};
+    const byGroup = {};
+    g.fleets.forEach(function (f) {
+      const cl = (g.galaxy.systems[f.location.systemId] || {}).cluster;
+      (byGroup[cl] = byGroup[cl] || []).push(f);
+    });
+    const groupIds = Object.keys(byGroup).sort(function (a, b) {
+      return byGroup[b].length - byGroup[a].length || Number(a) - Number(b);
+    });
+    listHtml = '<div class="fleet-groups">' + groupIds.map(function (cl) {
+      const grp = g.galaxy.groups[cl] || {};
+      const acr = grp.acronym ? ' <span class="name-tag">[' + escapeHtml(grp.acronym) + ']</span>' : '';
+      const collapsed = !!ORION._fleetGroupCollapsed[cl];
+      const head = '<button class="fleet-group__head" data-group-toggle="' + cl + '" type="button">' +
+        '<span class="fleet-group__caret">' + (collapsed ? '▸' : '▾') + '</span>' +
+        uiIcon('group', 'violet') + ' <strong>' + escapeHtml(grp.name || ('Gruppo ' + cl)) + '</strong>' + acr +
+        '<span class="fleet-group__count">' + byGroup[cl].length + '</span></button>';
+      const body = collapsed ? '' : '<ul class="fleet-list">' + byGroup[cl].map(cardHtml).join('') + '</ul>';
+      return '<section class="fleet-group">' + head + body + '</section>';
+    }).join('') + '</div>';
   }
 
   const canCreate = eligibleColonies.length > 0;
@@ -5637,6 +5679,15 @@ function renderFleetView(stage) {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
     });
   });
+  /* Toggle collasso dei gruppi stellari. */
+  stage.querySelectorAll('[data-group-toggle]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const cl = b.dataset.groupToggle;
+      ORION._fleetGroupCollapsed = ORION._fleetGroupCollapsed || {};
+      ORION._fleetGroupCollapsed[cl] = !ORION._fleetGroupCollapsed[cl];
+      renderFleetView(stage);
+    });
+  });
   /* Sezione Guerra (buildWarSection) — handler invariati. */
   stage.querySelectorAll('[data-action="siege-tribute"]').forEach(function (b) {
     b.addEventListener('click', function () { handleSiegeTribute(b.dataset.battle, stage); });
@@ -5651,7 +5702,7 @@ function renderFleetView(stage) {
     b.addEventListener('click', function () { handleEvacuate(b.dataset.colony, stage); });
   });
   stage.querySelectorAll('[data-action="war-recall"]').forEach(function (b) {
-    b.addEventListener('click', function () { handleRecallFleets(stage); });
+    b.addEventListener('click', function () { openRecallOverlay(stage); });
   });
 }
 
@@ -5730,9 +5781,9 @@ function buildWarSection(g) {
       uiIcon('sword', 'pink') + ' Ultimo report di battaglia ' + uiIcon('chevronRight', 'soft') +
     '</button>';
   }
-  /* Leva di recovery: richiamo flotte alla capitale (concentra la difesa). */
+  /* Leva di recovery: richiamo flotte MIRATO (colonia di raduno + ambito). */
   if ((g.fleets || []).length) {
-    html += ' <button class="btn btn--mini btn--with-icon" data-action="war-recall" type="button" title="Tutte le flotte rientrano alla colonia origine">' +
+    html += ' <button class="btn btn--mini btn--with-icon" data-action="war-recall" type="button" title="Richiama le flotte verso una colonia di raduno, entro N hop o N Impulsi">' +
       uiIcon('refresh', 'cyan') + ' Richiama flotte' +
     '</button>';
   }
@@ -5885,17 +5936,117 @@ function _doEvacuate(colonyKey, stage) {
 }
 
 /* Leva di recovery: richiama tutte le flotte alla colonia origine. */
-function handleRecallFleets(stage) {
+/* Richiamo flotte MIRATO (richiesta utente 2026-06-13). Sostituisce il
+   vecchio "return indiscriminato a tutti": scegli una colonia di raduno +
+   un ambito (Tutte / entro N hop / entro N Ι di viaggio) e richiama solo le
+   flotte che rientrano nel filtro. Recovery-friendly: niente fail-state. */
+function openRecallOverlay(stage) {
   const g = ORION.game;
-  let n = 0;
-  (g.fleets || []).forEach(function (f) {
-    if (f.location && f.location.status === 'docked') return;   // già a casa
-    const r = ORION.fleet.setOrder(g, f, { type: 'return' });
-    if (r.ok) n++;
+  const F = ORION.fleet;
+  if (!g || !F) return;
+  const colKeys = Object.keys(g.colonies).filter(function (k) {
+    const c = g.colonies[k]; return c && c.colonized && c.systemId >= 0;
   });
-  showToast(n ? (n + ' flotta/e in rientro alla base') : 'Nessuna flotta da richiamare');
-  persistGame(g);
-  renderFleetView(stage);
+  if (!colKeys.length) { showToast('Nessuna colonia di raduno'); return; }
+  if (!(g.fleets || []).length) { showToast('Nessuna flotta da richiamare'); return; }
+
+  const S = {
+    destKey: (function () {
+      if (ORION.capital) { for (let i = 0; i < colKeys.length; i++) if (ORION.capital.isCapital(g, colKeys[i])) return colKeys[i]; }
+      return colKeys[0];
+    })(),
+    scope: 'hops',  /* all | hops | imp */
+    n: 4
+  };
+  const host = ensureFleetOverlayHost('fleet-detail');
+  host.onclick = function (e) { if (e.target === host) close(); };
+  function close() { closeFleetOverlay(); if (stage) renderFleetView(stage); }
+  function sysNameOf(id) { const s = g.galaxy.systems[id]; return s ? s.name : '—'; }
+
+  function hopsTo(f, destSys) { const p = F.computePath(g.galaxy, f.location.systemId, destSys); return p ? p.length - 1 : -1; }
+  function impTo(f, destSys) {
+    const p = F.computePath(g.galaxy, f.location.systemId, destSys);
+    if (!p || p.length < 2) return 0;
+    const ms = F.fleetMinSpeed ? F.fleetMinSpeed(f) : 1;
+    let t = 0; for (let i = 0; i < p.length - 1; i++) t += F.tempoLeg(g.galaxy, p[i], p[i + 1], ms);
+    return Math.round(t);
+  }
+  function matches() {
+    const destSys = g.colonies[S.destKey].systemId;
+    return (g.fleets || []).filter(function (f) {
+      if (f.location.systemId === destSys) return false;  /* già a destinazione */
+      if (S.scope === 'all') return hopsTo(f, destSys) >= 0;
+      const h = hopsTo(f, destSys);
+      if (h < 0) return false;
+      return (S.scope === 'hops') ? (h <= S.n) : (impTo(f, destSys) <= S.n);
+    });
+  }
+  function render() {
+    const destSys = g.colonies[S.destKey].systemId;
+    const optsHtml = colKeys.map(function (k) {
+      const cap = (ORION.capital && ORION.capital.isCapital(g, k)) ? ' ★' : '';
+      return '<option value="' + escapeHtml(k) + '"' + (k === S.destKey ? ' selected' : '') + '>' +
+        escapeHtml(systemNameFromKey(g, k)) + cap + '</option>';
+    }).join('');
+    const matched = matches();
+    const list = matched.length
+      ? '<ul class="fdetail__dest-list">' + matched.map(function (f) {
+          const h = hopsTo(f, destSys);
+          return '<li class="fdetail__dest"><span class="fdetail__dest-name">' + escapeHtml(f.name) + '</span>' +
+            '<span class="fdetail__dest-meta">' + escapeHtml(sysNameOf(f.location.systemId)) + ' · ' +
+            (h >= 0 ? h + ' hop · ' + impTo(f, destSys) + ' ' + iU() : 'irraggiungibile') + '</span></li>';
+        }).join('') + '</ul>'
+      : '<p class="fdetail__empty">Nessuna flotta rientra nel filtro.</p>';
+    const seg = [['all', 'Tutte'], ['hops', 'Entro N hop'], ['imp', 'Entro N Ι']].map(function (s) {
+      return '<button class="fdetail__seg' + (S.scope === s[0] ? ' is-active' : '') + '" data-scope="' + s[0] + '" type="button">' + s[1] + '</button>';
+    }).join('');
+    const numRow = (S.scope === 'all') ? '' :
+      '<label class="fdetail__dwell">' + (S.scope === 'hops' ? 'Max hop' : 'Max ' + iU()) +
+      ' <input type="number" data-bind="recall-n" min="1" max="' + (S.scope === 'hops' ? 30 : 2000) + '" value="' + S.n + '"></label>';
+    const body =
+      '<div class="fdetail__sec"><div class="fdetail__sec-h">' + uiIcon('roster', 'amber') + ' Raduno verso</div>' +
+        '<select class="fdetail__select" data-bind="recall-dest">' + optsHtml + '</select></div>' +
+      '<div class="fdetail__sec"><div class="fdetail__sec-h">' + uiIcon('refresh', 'cyan') + ' Ambito</div>' +
+        '<div class="fdetail__seg-row">' + seg + '</div>' + numRow + '</div>' +
+      '<div class="fdetail__sec"><div class="fdetail__sec-h">' + uiIcon('fleet', 'cyan') + ' Anteprima' +
+        '<span class="fdetail__opt">' + matched.length + ' / ' + (g.fleets || []).length + '</span></div>' + list + '</div>';
+    const footer =
+      '<button class="btn btn--mini" data-action="fleet-overlay-close" type="button">Annulla</button>' +
+      '<button class="btn btn--mini btn--primary btn--with-icon" data-act="recall-go" type="button"' + (matched.length ? '' : ' disabled') + '>' +
+        uiIcon('refresh', 'cyan') + ' Richiama ' + matched.length + '</button>';
+    host.innerHTML = '<div class="fdetail__panel" role="document">' +
+      '<header class="fdetail__head"><div class="fdetail__title">' + uiIcon('fleet', 'cyan') + '<h2>Richiama flotte</h2></div>' +
+        '<button class="fdetail__x btn--icon-only" data-action="fleet-overlay-close" type="button" aria-label="Chiudi">' + uiIcon('close') + '</button></header>' +
+      '<div class="fdetail__body">' + body + '</div>' +
+      '<div class="fdetail__foot">' + footer + '</div></div>';
+    bind();
+    host.hidden = false;
+  }
+  function bind() {
+    host.querySelectorAll('[data-action="fleet-overlay-close"]').forEach(function (b) { b.addEventListener('click', close); });
+    const dest = host.querySelector('[data-bind="recall-dest"]');
+    if (dest) dest.addEventListener('change', function () { S.destKey = dest.value; render(); });
+    host.querySelectorAll('[data-scope]').forEach(function (b) { b.addEventListener('click', function () { S.scope = b.dataset.scope; render(); }); });
+    const num = host.querySelector('[data-bind="recall-n"]');
+    if (num) num.addEventListener('change', function () { S.n = Math.max(1, parseInt(num.value || '1', 10) || 1); render(); });
+    const go = host.querySelector('[data-act="recall-go"]');
+    if (go) go.addEventListener('click', doRecall);
+  }
+  function doRecall() {
+    const matched = matches();
+    if (!matched.length) return;
+    const destSys = g.colonies[S.destKey].systemId;
+    let n = 0;
+    matched.forEach(function (f) {
+      const ord = (f.ownerColonyKey === S.destKey) ? { type: 'return' } : { type: 'move', toSysId: destSys };
+      if (F.setOrder(g, f, ord).ok) n++;
+    });
+    pushChronicle(ORION.time.currentDS(g) + ' — Richiamo flotte: <strong>' + n + '</strong> in rotta verso <strong>' +
+      escapeHtml(systemNameFromKey(g, S.destKey)) + '</strong>.', 'planet');
+    persistGame(g);
+    close();
+  }
+  render();
 }
 
 /* M09 Fase B: schermata di fine partita (solo modalità gameOver). */
