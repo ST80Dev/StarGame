@@ -8034,8 +8034,8 @@ function initTimeControls() {
     if (act === 'play-toggle')      togglePlay();
     else if (act === 'play-faster') changeSpeed(+1);
     else if (act === 'play-slower') changeSpeed(-1);
-    else if (act === 'play-step')   { stopPlay(); runAdvance(1); }
-    else if (act === 'advance-to-event') { stopPlay(); runAdvance(null); }
+    else if (act === 'play-step')   { stopPlay(); manualAdvance(1); }
+    else if (act === 'advance-to-event') { stopPlay(); manualAdvance(null); }
   });
   /* Shortcuts globali (decisione #31): Space play/pause · → singolo Ι ·
      E prossimo evento. Ignorati su input/textarea.
@@ -8045,8 +8045,8 @@ function initTimeControls() {
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
     if (e.target.isContentEditable) return;
     if (e.key === ' ') { e.preventDefault(); togglePlay(); }
-    else if (e.key === 'ArrowRight') { e.preventDefault(); stopPlay(); runAdvance(1); }
-    else if (e.key === 'e' || e.key === 'E') { e.preventDefault(); stopPlay(); runAdvance(null); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); stopPlay(); manualAdvance(1); }
+    else if (e.key === 'e' || e.key === 'E') { e.preventDefault(); stopPlay(); manualAdvance(null); }
   });
   renderTimeControls();
   updateTimeControlsHint();
@@ -8093,6 +8093,17 @@ function playTick() {
     stopPlay();
     showEventOverlay(res.events);
   }
+}
+/* Avanzamento manuale (pulsante +1 Ι · → · "Prossimo evento" · E):
+   stesso loop di playTick ma SENZA il timer. Mostra l'overlay degli
+   eventi notevoli (decisione #31) anche quando si scorre a mano un
+   singolo Impulso → l'utente si accorge di cosa è successo in quell'Ι. */
+function manualAdvance(impulsi) {
+  const res = runAdvance(impulsi);
+  if (res && res.events && shouldAutoPause(res.events)) {
+    showEventOverlay(res.events);
+  }
+  return res;
 }
 function shouldAutoPause(events) {
   if (!events || !events.length) return false;
