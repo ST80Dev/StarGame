@@ -969,6 +969,28 @@
         'una flotta armata e usando <em>Attacca</em> sul suo sistema.</p>'
     },
     {
+      id: 'dispatches',
+      tag: 'M17 · Dispacci',
+      title: 'Dispacci & Missioni',
+      body:
+        '<p>La galassia ti propone <strong>incarichi</strong> ✉: opportunità che arrivano <em>col tempo</em> (rare e calme) da tre ' +
+        'fonti — le <strong>civiltà che hai contattato</strong>, il <strong>Sindacato Mekhari</strong> come intermediario, e ' +
+        '<strong>segnali anonimi</strong> dalla frontiera.</p>' +
+        '<p>Le offerte vivono nel pannello <strong>Dispacci</strong> (non bloccano il tempo): le <strong>accetti</strong> o le ' +
+        '<strong>rifiuti</strong> quando vuoi. Quattro tipi:</p>' +
+        '<ul>' +
+          '<li><strong>Taglia</strong> — sgomina un covo pirata: mandaci una flotta armata.</li>' +
+          '<li><strong>Soccorso</strong> — raggiungi con una flotta un sistema di frontiera.</li>' +
+          '<li><strong>Scorta</strong> — presidia un sistema per un po\' di tempo (tieni lì una flotta).</li>' +
+          '<li><strong>Rifornimento</strong> — sostieni un alleato mantenendo una flotta nel suo sistema.</li>' +
+        '</ul>' +
+        '<p>Non c\'è un verbo nuovo: gli incarichi si adempiono con le <strong>flotte che già hai</strong> — la missione osserva ' +
+        'ciò che fai. <strong>Completare</strong> dà risorse, crediti, reputazione e relazioni; <strong>abbandonare</strong> o ' +
+        'lasciar <strong>scadere</strong> dopo aver accettato costa qualche relazione. Rifiutare un\'offerta è quasi gratis.</p>' +
+        '<p>La <strong>Memoria Storica</strong> in fondo al pannello è il <em>diario permanente</em> del tuo popolo: prime colonie, ' +
+        'primi contatti, alleanze, svolte. Si scrive da sola e resta — la storia della tua partita.</p>'
+    },
+    {
       id: 'colonial-ship',
       tag: 'Colonizzazione',
       title: 'Pioniere coloniale: come si colonizza',

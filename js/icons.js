@@ -337,6 +337,13 @@
       '<path d="M12 8.8V5M12 19v-3.8"/>'
     ),
 
+    /* Dispatch — dispaccio/missione (M17): busta con onda di segnale. */
+    dispatch: svg(
+      '<rect x="3" y="5" width="18" height="13" rx="2"/>' +
+      '<path d="M3.5 6.5L12 12l8.5-5.5"/>' +
+      '<path d="M16 20.5a4 4 0 0 0 4-4" opacity="0.6"/>'
+    ),
+
     /* Book — libro (tutorial, indice schede). */
     book: svg(
       '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>' +

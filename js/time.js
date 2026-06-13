@@ -2246,6 +2246,14 @@
       game.research._lastRate = game.research._rateAccum || 0;
       root.ORION.research.tick(game, events);
     }
+    /* M17 Fase A (decisione #83): motore eventi / Dispacci & Missioni.
+       Genera offerte (rare/calme, deterministiche), traccia gli obiettivi
+       delle missioni attive sui verbi esistenti (covi sgominati, flotte
+       presenti) e ne risolve l'esito. La Memoria Storica viene registrata
+       in runAdvance (main.js) per ogni evento. */
+    if (root.ORION.dispatch && root.ORION.dispatch.tick) {
+      root.ORION.dispatch.tick(game, events);
+    }
   }
 
   /* M06.5 (decisione #27): scriptata della fase Insediamento.
@@ -2406,6 +2414,13 @@
     /* M16 (#81): stazione in costruzione/upgrade. */
     if (root.ORION.station && root.ORION.station.minBuildLeft) {
       const d = root.ORION.station.minBuildLeft(game);
+      if (d > 0 && d < best) best = d;
+    }
+    /* M17 (#83): scadenza più vicina di un incarico (offerta o deadline)
+       → il fast-forward si ferma prima che un'opportunità scada o una
+       missione fallisca silenziosamente. */
+    if (root.ORION.dispatch && root.ORION.dispatch.nextEventDelta) {
+      const d = root.ORION.dispatch.nextEventDelta(game);
       if (d > 0 && d < best) best = d;
     }
     /* M07: spedizioni in viaggio (outbound o returning) */
