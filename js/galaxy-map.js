@@ -377,7 +377,11 @@
        gruppo (click su regione / breadcrumb) le stelle sono piene. */
     nodeReveal() {
       if (this.activeGroupId >= 0) return 1;
-      return smoothstep(1.5, 2.7, this.scale / this.fitScale);
+      /* decisione #80 — la dissolvenza dei nodi si COMPLETA sulla soglia di
+         reset di activeGroupId (1.5×): così uscendo da un gruppo l'override
+         (=1) passa il testimone allo smoothstep (≈1 a 1.5×) senza scalino, e
+         i nodi sfumano gradualmente fino a 0 verso la galassia. */
+      return smoothstep(0.95, 1.5, this.scale / this.fitScale);
     }
 
     nodeRadius(parallax) {
@@ -909,7 +913,10 @@
         { x: g.maxX + pad, y: g.maxY + pad, z: g.maxZ || 0 },
         { x: g.cx,         y: g.cy,         z: g.cz   || 0 }
       ];
-      const cam = this._cameraForRotatedBounds(pts, 0.62, this.fitScale * 1.8);
+      /* decisione #80 — atterra un po' più "dentro" il gruppo (≥2.3×) così,
+         uscendo da un Sistema, ci sono alcuni passi di zoom-out a nodi pieni
+         prima che inizi la dissolvenza verso la galassia (niente scalino). */
+      const cam = this._cameraForRotatedBounds(pts, 0.62, this.fitScale * 2.3);
       this._animateTo(cam.s, cam.ox, cam.oy);
       this._emitContext(true);
     }
@@ -1935,14 +1942,19 @@
     }
 
     _label(ctx, p, text, r, strong, fade) {
-      ctx.font = (strong ? '700 ' : '600 ') + '12px "JetBrains Mono", ui-monospace, monospace';
+      /* decisione #80 — font dinamico: i nomi dei sistemi crescono man mano
+         che ci si avvicina (zoom dal livello Gruppo verso i Sistemi), come le
+         etichette dei corpi in zoom-in. Cap per non invadere lo schermo. */
+      const zoom = this.fitScale ? this.scale / this.fitScale : 1;
+      const fs = clamp(12 + (zoom - 1.5) * 2.4, 12, 22);
+      ctx.font = (strong ? '700 ' : '600 ') + fs.toFixed(1) + 'px "JetBrains Mono", ui-monospace, monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      const y = p.y + r + 5;
+      const y = p.y + r + Math.max(5, fs * 0.42);
       const a = (strong ? 1 : 0.88) * (fade == null ? 1 : fade);
       // stroke scuro al posto del solo shadowBlur: più contrasto sui campi nebulosa
       ctx.lineJoin = 'round';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = Math.max(3, fs * 0.22);
       ctx.strokeStyle = 'rgba(0,0,0,0.88)';
       ctx.strokeText(text, p.x, y);
       ctx.fillStyle = strong ? 'rgba(240,246,255,' + a + ')' : 'rgba(204,216,250,' + a + ')';
