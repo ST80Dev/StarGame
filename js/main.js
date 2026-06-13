@@ -5164,9 +5164,13 @@ function renderDispatchView(stage) {
       const rows = sites.map(function (s) {
         let info;
         if (s.kind === 'reliquie') {
-          info = s.explored ? '<span class="anom-row__done">esplorata</span>'
-            : (s.harvesting ? ('<span class="anom-row__busy">esplorazione ' + Math.round(100 * s.progress / ORION.anomaly.CFG.RELIC_HOLD) + '%</span>')
-              : '<span class="anom-row__idle">invia una flotta</span>');
+          if (s.explored) {
+            const lootStr = s.loot ? Object.keys(s.loot).map(function (r) { return resIcon(r) + Math.round(s.loot[r]); }).join(' · ') : '';
+            info = '<span class="anom-row__done">esplorata' + (lootStr ? ' · ' + lootStr : '') + '</span>';
+          } else {
+            info = s.harvesting ? ('<span class="anom-row__busy">esplorazione ' + Math.round(100 * s.progress / ORION.anomaly.CFG.RELIC_HOLD) + '%</span>')
+              : '<span class="anom-row__idle">invia una flotta</span>';
+          }
         } else {
           const pct = s.cap ? Math.round(100 * (s.reserve || 0) / s.cap) : 0;
           info = '<span class="anom-row__res">' + resIcon(s.res) + ' riserva ' + pct + '%</span>' +
@@ -5970,6 +5974,46 @@ function showCrisisModal(crisisId) {
       updateGlobalResourceHud();
     });
   });
+}
+
+/* M17 Fase C (#83): popup di resoconto a fine esplorazione di un'anomalia
+   (reliquia). Mette in PAUSA il gioco (stopPlay) e sintetizza le risorse
+   trovate + eventuali novità. Richiesta utente: game-pause + resoconto. */
+function showAnomalyRecapModal(events) {
+  const g = ORION.game;
+  if (!g || !events || !events.length) return;
+  if (document.querySelector('[data-anomaly-recap]')) return; // niente doppioni
+  if (typeof stopPlay === 'function') stopPlay();              // pausa il tempo
+
+  const rows = events.map(function (ev) {
+    const loot = ev.reward || {};
+    const lootStr = Object.keys(loot).map(function (r) { return resIcon(r) + Math.round(loot[r]); }).join(' · ') || '—';
+    return '<li class="recap-row">' +
+      '<span class="recap-row__site">Reliquie antiche · <strong>' + escapeHtml(ev.sysName || '—') + '</strong>' +
+        (ev.sysId >= 0 ? systemTagHtml(ev.sysId) : '') + '</span>' +
+      '<span class="recap-row__loot">' + lootStr + '</span>' +
+    '</li>';
+  }).join('');
+
+  const html =
+    '<div class="battle-modal anomaly-recap" data-anomaly-recap>' +
+      '<div class="battle-modal__panel">' +
+        '<header class="battle-modal__head"><h3>' + uiIcon('check', 'green') + ' Esplorazione completata</h3></header>' +
+        '<p class="battle-modal__text">Tracce di una civiltà perduta recuperate. Bottino portato alla colonia:</p>' +
+        '<ul class="recap-list">' + rows + '</ul>' +
+        '<p class="recap-note">La voce resta nella <strong>Memoria Storica</strong> e nel pannello <strong>Dispacci · Anomalie</strong>.</p>' +
+        '<div class="battle-modal__sides"><button class="btn btn--primary" data-anomaly-recap-close type="button">Riprendi</button></div>' +
+      '</div>' +
+    '</div>';
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  const node = wrap.firstChild;
+  document.body.appendChild(node);
+  function close() { if (node.parentNode) node.parentNode.removeChild(node); document.removeEventListener('keydown', onKey); }
+  function onKey(e) { if (e.key === 'Escape' || e.key === 'Enter') close(); }
+  document.addEventListener('keydown', onKey);
+  node.querySelector('[data-anomaly-recap-close]').addEventListener('click', close);
+  node.addEventListener('click', function (e) { if (e.target === node) close(); });
 }
 
 function handleSiegeRetreat(battleId, stage) {
@@ -7833,8 +7877,10 @@ const DEFAULT_AUTOPAUSE = {
   /* M17 Fase B (#83): contractor Mekhari risolto — notevole (covo sgominato). */
   'mekhari-contract-done': true,
   /* M17 Fase C (#83): crisi a scelte → ferma il tempo (serve decidere).
-     Reliquia trovata = notevole; giacimento esausto = atmosferico (OFF). */
-  'crisis-raised': true, 'crisis-lapsed': true, 'anomaly-relic-found': true, 'anomaly-depleted': false,
+     Reliquia trovata: la pausa + il resoconto li gestisce il popup dedicato
+     (showAnomalyRecapModal in runAdvance), quindi OFF qui per non duplicare
+     l'overlay generico. Giacimento esausto = atmosferico (OFF). */
+  'crisis-raised': true, 'crisis-lapsed': true, 'anomaly-relic-found': false, 'anomaly-depleted': false,
   /* Fase B (decisione #46): tappa intermedia raggiunta. Default OFF —
      non interrompiamo a ogni waypoint, può essere una rotta lunga. L'arrivo
      finale e la `route-complete` continuano a fermare il tempo. */
@@ -8392,6 +8438,7 @@ function runAdvance(impulsi) {
   if (after === before) return res;
 
   let crisisToOpen = null;
+  const relicRecap = [];
   if (res.events && res.events.length) {
     res.events.forEach(function (ev) {
       chronicleEvent(ev);
@@ -8399,10 +8446,13 @@ function runAdvance(impulsi) {
          (firsts + svolte) da ogni evento. Idempotente (seen-set). */
       if (ORION.dispatch && ORION.dispatch.recordMemoria) ORION.dispatch.recordMemoria(g, ev);
       if (ev.kind === 'crisis-raised') crisisToOpen = ev.crisisId;
+      if (ev.kind === 'anomaly-relic-found') relicRecap.push(ev);
     });
   }
   /* M17 Fase C: una crisi appena sollevata apre il modale a scelte. */
   if (crisisToOpen) showCrisisModal(crisisToOpen);
+  /* M17 Fase C: fine esplorazione anomalia → pausa + popup di resoconto. */
+  if (relicRecap.length) showAnomalyRecapModal(relicRecap);
   setHudDate(ORION.time.currentDS(g));
   /* La pulse marca lo "snap a fine batch" (decisione M05). In auto-advance
      a 1 Ι/tick farebbe lampeggiare a ogni step — invadente. La saltiamo
@@ -8999,7 +9049,9 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — Crisi <strong>' + escapeHtml(ev.title || '—') + '</strong> ignorata: prevale l\'inazione (' + escapeHtml(ev.choiceLabel || '') + ').', 'crit');
   } else if (ev.kind === 'anomaly-relic-found') {
     const sys = ORION.game.galaxy.systems[ev.sysId];
-    pushChronicle(ds + ' — Reliquie antiche esplorate su <strong>' + (sys ? sys.name : '—') + '</strong>: recuperata una cache di risorse.', 'system');
+    const loot = ev.reward || {};
+    const lootStr = Object.keys(loot).map(function (r) { return resIcon(r) + Math.round(loot[r]); }).join(' · ');
+    pushChronicle(ds + ' — Reliquie antiche esplorate su <strong>' + (sys ? sys.name : '—') + '</strong>: cache recuperata' + (lootStr ? ' (' + lootStr + ')' : '') + '.', 'system');
   } else if (ev.kind === 'anomaly-depleted') {
     const sys = ORION.game.galaxy.systems[ev.sysId];
     pushChronicle(ds + ' — Il giacimento su <strong>' + (sys ? sys.name : '—') + '</strong> è quasi esausto: si rigenererà col tempo.', 'system');

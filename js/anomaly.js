@@ -130,7 +130,12 @@
             if (col && col.stock) {
               Object.keys(CFG.RELIC_REWARD).forEach(function (r) { col.stock[r] = (col.stock[r] || 0) + CFG.RELIC_REWARD[r]; });
             }
-            events.push({ kind: 'anomaly-relic-found', sysId: site.sysId, impulso: game.timeImpulsi });
+            /* Salva il bottino sul sito (per il resoconto nella vista Dispacci)
+               e portalo nell'evento (per il popup di resoconto a fine esplorazione). */
+            site.loot = Object.assign({}, CFG.RELIC_REWARD);
+            const sysNm = (game.galaxy.systems[site.sysId] || {}).name || '—';
+            events.push({ kind: 'anomaly-relic-found', sysId: site.sysId, sysName: sysNm,
+              reward: Object.assign({}, CFG.RELIC_REWARD), colonyKey: colKey, impulso: game.timeImpulsi });
           }
         }
         continue;
@@ -175,7 +180,7 @@
       return {
         key: k, sysId: s.sysId, sysName: sys ? sys.name : '—', kind: s.kind,
         res: s.res || null, reserve: s.reserve, cap: s.cap,
-        explored: !!s.explored, progress: s.progress || 0,
+        explored: !!s.explored, progress: s.progress || 0, loot: s.loot || null,
         harvesting: !!playerFleetOrbitingAt(game, s.sysId)
       };
     });
