@@ -7001,3 +7001,31 @@ select.main-menu__input { cursor: pointer; }
 .hunter-row__eta { margin-left: auto; color: #cdb6ee; font-size: 0.76rem; }
 .hunter-row__na  { margin-left: auto; color: var(--c-text-faint); font-size: 0.74rem; }
 .hunter-row .btn { margin-left: auto; }
+
+/* M17 Fase C (#83) — crisi a scelte (modale) + anomalie esplorabili §17.3. */
+.crisis-modal .battle-modal__panel { border-color: rgba(224,96,96,0.5); max-width: 520px; }
+.crisis-choices { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.crisis-choice {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  text-align: left; padding: 10px 12px; white-space: normal; height: auto;
+}
+.crisis-choice__label { font-family: var(--font-display); font-size: 0.92rem; }
+.crisis-choice__desc { font-size: 0.78rem; color: var(--c-text-soft); }
+.crisis-modal__note { font-size: 0.74rem; color: var(--c-text-faint); margin: 4px 0 8px; }
+.crisis-modal__defer { align-self: flex-end; }
+.dispatch-card--crisis { border-left-color: var(--c-crit, #e06060); background: rgba(224,96,96,0.08); }
+
+.anom-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.anom-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 10px; border-radius: 7px; font-size: 0.84rem;
+  background: rgba(var(--c-surface-rgb) / 0.45); border-left: 2px solid var(--c-text-faint);
+}
+.anom-row--detriti  { border-left-color: #c8d2e4; }
+.anom-row--nebulosa { border-left-color: #b496e6; }
+.anom-row--reliquie { border-left-color: #80d0a0; }
+.anom-row__name { flex: 1; min-width: 0; }
+.anom-row__res { color: var(--c-text-soft); }
+.anom-row__busy { margin-left: auto; color: #80c8e6; font-size: 0.76rem; }
+.anom-row__idle { margin-left: auto; color: var(--c-text-faint); font-size: 0.76rem; }
+.anom-row__done { margin-left: auto; color: #a8e6c0; font-size: 0.76rem; }

@@ -398,6 +398,10 @@ function newGame(seed, opts) {
     dispatchMeta: { lastOfferAt: -1, offers: 0, completed: 0 },
     /* M17 Fase B (#83): contractor Mekhari (cacciatori di taglie). */
     contracts: [],
+    /* M17 Fase C (#83): crisi pendenti + meta soglie ICG + anomalie esplorabili. */
+    crises: [],
+    crisisMeta: { icgTier: 0 },
+    anomalies: {},
     /* Identità del popolo del giocatore (decisione #65): { prefix, proper }.
        Default derivato dalla colonia natale dopo colonizeHomePlanet se non
        passato dal menu. Persistito (schema 20). */
@@ -519,6 +523,9 @@ function newGame(seed, opts) {
       ORION.game.dispatchMeta = Object.assign({ lastOfferAt: -1, offers: 0, completed: 0 }, saved.dispatchMeta);
     }
     if (Array.isArray(saved.contracts)) ORION.game.contracts = saved.contracts.slice();
+    if (Array.isArray(saved.crises)) ORION.game.crises = saved.crises.slice();
+    if (saved.crisisMeta && typeof saved.crisisMeta === 'object') ORION.game.crisisMeta = Object.assign({ icgTier: 0 }, saved.crisisMeta);
+    if (saved.anomalies && typeof saved.anomalies === 'object') ORION.game.anomalies = Object.assign({}, saved.anomalies);
     /* M11 Fase B parziale: sistemi occupati (additivo, no migrazione). */
     if (saved.occupations && typeof saved.occupations === 'object') {
       ORION.game.occupations = Object.assign({}, saved.occupations);
@@ -595,6 +602,9 @@ function newGame(seed, opts) {
      della Memoria. Idempotente. */
   if (ORION.dispatch && ORION.dispatch.ensure) {
     ORION.dispatch.ensure(ORION.game);
+  }
+  if (ORION.anomaly && ORION.anomaly.ensure) {
+    ORION.anomaly.ensure(ORION.game);
   }
 
   setHudDate(ORION.time.currentDS(ORION.game));
@@ -1274,6 +1284,10 @@ function openSystem(id) {
 
   const disc = g.state.discovery[id];
   const system = ORION.system.generate(g.galaxy, id);
+
+  /* M17 Fase C (#83): aprire un sistema ESPLORATO ne registra le anomalie
+     come siti noti (raccolta ricorrente / reliquie) per la vista Dispacci. */
+  if (disc >= 2 && ORION.anomaly && ORION.anomaly.ensureSites) ORION.anomaly.ensureSites(g, id);
 
   g.state.selectedId = id;
   ORION.openSystemId = id;
@@ -4766,11 +4780,14 @@ function stationCostStr(c) {
    ===================================================================== */
 function dispatchPending() {
   const DP = ORION.dispatch, g = ORION.game;
-  return !!(DP && g && DP.pendingOffers(g).length);
+  if (!DP || !g) return false;
+  return !!(DP.pendingOffers(g).length || (DP.activeCrises && DP.activeCrises(g).length));
 }
 function dispatchLauncherSub() {
   const DP = ORION.dispatch, g = ORION.game;
   if (!DP || !g) return 'M17';
+  const cri = (DP.activeCrises ? DP.activeCrises(g) : []).length;
+  if (cri) return '⚠ ' + cri + (cri === 1 ? ' crisi' : ' crisi');
   const off = DP.pendingOffers(g).length;
   const act = DP.activeMissions(g).length;
   if (off) return off + (off === 1 ? ' nuovo' : ' nuovi');
@@ -4886,6 +4903,51 @@ function renderDispatchView(stage) {
       '</section>';
   }
 
+  /* M17 Fase C (#83): crisi in sospeso (rispondi → riapre il modale). */
+  const crises = DP.activeCrises ? DP.activeCrises(g) : [];
+  let crisisHtml = '';
+  if (crises.length) {
+    crisisHtml = '<section class="dispatch-sec"><h3 class="dispatch-sec__title">Crisi in sospeso</h3>' +
+      '<ul class="dispatch-list">' + crises.map(function (c) {
+        const dl = Math.max(0, (c.expiresAt || 0) - now);
+        return '<li class="dispatch-card dispatch-card--crisis is-boss">' +
+          '<div class="dispatch-card__head"><span class="dispatch-card__title">⚠ ' + escapeHtml(c.title) + '</span>' +
+          '<span class="dispatch-card__ttl">decidi entro ' + Math.ceil(dl) + ' ' + iU() + '</span></div>' +
+          '<div class="dispatch-card__desc">' + escapeHtml(c.body) + '</div>' +
+          '<div class="dispatch-card__actions"><button class="btn btn--mini btn--danger" data-crisis-open="' + c.id + '" type="button">Rispondi</button></div>' +
+        '</li>';
+      }).join('') + '</ul></section>';
+  }
+
+  /* M17 Fase C (#83): anomalie esplorabili note (§17.3). */
+  let anomHtml = '';
+  if (ORION.anomaly && ORION.anomaly.knownSites) {
+    const sites = ORION.anomaly.knownSites(g);
+    if (sites.length) {
+      if (ORION.tutorial) ORION.tutorial.fire('anomalies');
+      const KLAB = { detriti: 'Campo di detriti', nebulosa: 'Nebulosa', reliquie: 'Reliquie antiche' };
+      const rows = sites.map(function (s) {
+        let info;
+        if (s.kind === 'reliquie') {
+          info = s.explored ? '<span class="anom-row__done">esplorata</span>'
+            : (s.harvesting ? ('<span class="anom-row__busy">esplorazione ' + Math.round(100 * s.progress / ORION.anomaly.CFG.RELIC_HOLD) + '%</span>')
+              : '<span class="anom-row__idle">invia una flotta</span>');
+        } else {
+          const pct = s.cap ? Math.round(100 * (s.reserve || 0) / s.cap) : 0;
+          info = '<span class="anom-row__res">' + resIcon(s.res) + ' riserva ' + pct + '%</span>' +
+            (s.harvesting ? ' <span class="anom-row__busy">raccolta in corso</span>' : '');
+        }
+        return '<li class="anom-row anom-row--' + s.kind + '">' +
+          '<span class="anom-row__name">' + (KLAB[s.kind] || s.kind) + ' · ' + escapeHtml(s.sysName) + systemTagHtml(s.sysId) + '</span>' +
+          info + '</li>';
+      }).join('');
+      anomHtml = '<section class="dispatch-sec"><h3 class="dispatch-sec__title">Anomalie note · §17.3</h3>' +
+        '<ul class="anom-list">' + rows + '</ul>' +
+        '<p class="panel__note">Tieni una flotta in <strong>orbita</strong> in un sistema con un\'anomalia: i <strong>campi di detriti</strong> e le <strong>nebulose</strong> sono spot di <em>raccolta ricorrente</em> (la riserva cala e si rigenera quando te ne vai), le <strong>reliquie antiche</strong> danno una ricompensa una tantum.</p>' +
+      '</section>';
+    }
+  }
+
   const mem = (g.memoria || []);
   const memHtml = mem.length
     ? '<ul class="memoria-list">' + mem.slice(0, 60).map(function (e) {
@@ -4906,10 +4968,12 @@ function renderDispatchView(stage) {
         '<div class="market-summary__cell"><span class="market-summary__val">' + active.length + '</span><span class="market-summary__lbl">In corso</span></div>' +
         '<div class="market-summary__cell"><span class="market-summary__val">' + completed + '</span><span class="market-summary__lbl">Completati</span></div>' +
       '</div>' +
+      crisisHtml +
       '<section class="dispatch-sec"><h3 class="dispatch-sec__title">Incarichi disponibili</h3>' + offersHtml + '</section>' +
       '<section class="dispatch-sec"><h3 class="dispatch-sec__title">Incarichi in corso</h3>' + activeHtml + '</section>' +
       '<p class="panel__note">Gli incarichi si adempiono con le flotte che già hai: manda una squadra a sgominare un covo, a raggiungere o presidiare un sistema. Accettare è un impegno; abbandonare o lasciar scadere costa qualche relazione, completare ricompensa.</p>' +
       huntersHtml +
+      anomHtml +
       '<section class="dispatch-sec dispatch-sec--memoria"><h3 class="dispatch-sec__title">Memoria Storica</h3>' + memHtml + '</section>' +
     '</div>';
 
@@ -4933,6 +4997,9 @@ function renderDispatchView(stage) {
       DP.abandon(g, b.dataset.dispatchAbandon);
       persistGame(g); renderDispatchView(stage); renderLeftPanel();
     });
+  });
+  stage.querySelectorAll('[data-crisis-open]').forEach(function (b) {
+    b.addEventListener('click', function () { showCrisisModal(b.dataset.crisisOpen); });
   });
   stage.querySelectorAll('[data-hunt]').forEach(function (b) {
     b.addEventListener('click', function () {
@@ -5739,6 +5806,55 @@ function showDefeatModal() {
     if (node.parentNode) node.parentNode.removeChild(node);
     if (typeof stopTimerIfRunning === 'function') stopTimerIfRunning();
     if (typeof showMainMenu === 'function') showMainMenu('home');
+  });
+}
+
+/* M17 Fase C (#83): modale crisi a scelte (l'altra metà dell'ibrido).
+   Si apre su `crisis-raised` (auto-pausa) o dal pannello Dispacci. Ogni
+   scelta applica le conseguenze (minacce reali via M09 + effetti soft). */
+function showCrisisModal(crisisId) {
+  const g = ORION.game, DP = ORION.dispatch;
+  if (!g || !DP) return;
+  const c = (g.crises || []).filter(function (x) { return x.id === crisisId && x.status === 'pending'; })[0];
+  if (!c) return;
+  if (document.querySelector('[data-crisis-modal]')) return; // evita doppioni
+  if (ORION.tutorial) ORION.tutorial.fire('crises');
+  const ttl = (DP.CFG && DP.CFG.CRISIS_TTL) || 60;
+  const choicesHtml = c.choices.map(function (ch) {
+    return '<button class="btn crisis-choice" data-crisis-choice="' + ch.id + '" type="button">' +
+      '<span class="crisis-choice__label">' + escapeHtml(ch.label) + '</span>' +
+      '<span class="crisis-choice__desc">' + escapeHtml(ch.desc) + '</span>' +
+    '</button>';
+  }).join('');
+  const html =
+    '<div class="battle-modal crisis-modal" data-crisis-modal>' +
+      '<div class="battle-modal__panel">' +
+        '<header class="battle-modal__head"><h3>' + uiIcon('warning', 'pink') + ' ' + escapeHtml(c.title) + '</h3></header>' +
+        '<p class="battle-modal__text">' + escapeHtml(c.body) + '</p>' +
+        '<div class="crisis-choices">' + choicesHtml + '</div>' +
+        '<p class="crisis-modal__note">Decidi entro ~' + ttl + ' ' + iU() + ': altrimenti prevarrà l\'inazione. Puoi anche rimandare (✕) e rispondere dal pannello Dispacci.</p>' +
+        '<button class="btn btn--mini crisis-modal__defer" data-crisis-defer type="button">Rimanda</button>' +
+      '</div>' +
+    '</div>';
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  const node = wrap.firstChild;
+  document.body.appendChild(node);
+  function close() { if (node.parentNode) node.parentNode.removeChild(node); document.removeEventListener('keydown', onKey); }
+  function onKey(e) { if (e.key === 'Escape') close(); }
+  document.addEventListener('keydown', onKey);
+  node.querySelector('[data-crisis-defer]').addEventListener('click', close);
+  node.querySelectorAll('[data-crisis-choice]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const r = DP.resolveCrisis(g, crisisId, b.dataset.crisisChoice);
+      if (!r.ok) { showToast(r.reason || 'Non riuscito'); return; }
+      (r.events || []).forEach(function (ev) { chronicleEvent(ev); if (DP.recordMemoria) DP.recordMemoria(g, ev); });
+      pushChronicle(ORION.time.format(g.timeImpulsi) + ' — Crisi <strong>' + escapeHtml(c.title) + '</strong>: scelto "' + escapeHtml(r.label) + '".', 'civ');
+      persistGame(g); close();
+      renderLeftPanel();
+      if (ORION._currentView === 'dispatch') { const st = document.querySelector('[data-view-stage]'); if (st) renderDispatchView(st); }
+      updateGlobalResourceHud();
+    });
   });
 }
 
@@ -7646,6 +7762,9 @@ const DEFAULT_AUTOPAUSE = {
   'dispatch-expired': false, 'dispatch-void': false,
   /* M17 Fase B (#83): contractor Mekhari risolto — notevole (covo sgominato). */
   'mekhari-contract-done': true,
+  /* M17 Fase C (#83): crisi a scelte → ferma il tempo (serve decidere).
+     Reliquia trovata = notevole; giacimento esausto = atmosferico (OFF). */
+  'crisis-raised': true, 'crisis-lapsed': true, 'anomaly-relic-found': true, 'anomaly-depleted': false,
   /* Fase B (decisione #46): tappa intermedia raggiunta. Default OFF —
      non interrompiamo a ogni waypoint, può essere una rotta lunga. L'arrivo
      finale e la `route-complete` continuano a fermare il tempo. */
@@ -8055,6 +8174,10 @@ function showEventOverlay(events) {
     'dispatch-done': 'Incarico completato',
     'dispatch-failed': 'Incarico fallito',
     'mekhari-contract-done': 'Cacciatori Mekhari: covo sgominato',
+    'crisis-raised': 'Crisi galattica: decisione richiesta',
+    'crisis-lapsed': 'Crisi ignorata',
+    'anomaly-relic-found': 'Reliquia antica esplorata',
+    'anomaly-depleted': 'Giacimento quasi esausto',
     'fleet-leg-hop': 'Flotta: hop intermedio',
     'fleet-waypoint-reached': 'Flotta: tappa raggiunta',
     'garrison-threat-detected': 'Garrison: minaccia rilevata',
@@ -8184,14 +8307,18 @@ function runAdvance(impulsi) {
   const after = g.timeImpulsi || 0;
   if (after === before) return res;
 
+  let crisisToOpen = null;
   if (res.events && res.events.length) {
     res.events.forEach(function (ev) {
       chronicleEvent(ev);
       /* M17 (decisione #83): Memoria Storica — registra le milestone
          (firsts + svolte) da ogni evento. Idempotente (seen-set). */
       if (ORION.dispatch && ORION.dispatch.recordMemoria) ORION.dispatch.recordMemoria(g, ev);
+      if (ev.kind === 'crisis-raised') crisisToOpen = ev.crisisId;
     });
   }
+  /* M17 Fase C: una crisi appena sollevata apre il modale a scelte. */
+  if (crisisToOpen) showCrisisModal(crisisToOpen);
   setHudDate(ORION.time.currentDS(g));
   /* La pulse marca lo "snap a fine batch" (decisione M05). In auto-advance
      a 1 Ι/tick farebbe lampeggiare a ogni step — invadente. La saltiamo
@@ -8780,6 +8907,16 @@ function chronicleEvent(ev) {
     const sys = ORION.game.galaxy.systems[ev.sysId];
     const who = ev.boss && ev.name ? ('il covo-boss <strong>' + escapeHtml(ev.name) + '</strong>') : 'il covo pirata';
     pushChronicle(ds + ' — Cacciatori Mekhari hanno sgominato ' + who + ' su <strong>' + (sys ? sys.name : '—') + '</strong>.', 'civ');
+  } else if (ev.kind === 'crisis-raised') {
+    pushChronicle(ds + ' — <strong>Crisi galattica:</strong> ' + escapeHtml(ev.title || '—') + ' <span class="chronicle__hint">(pannello Dispacci · rispondi)</span>.', 'crit');
+  } else if (ev.kind === 'crisis-lapsed') {
+    pushChronicle(ds + ' — Crisi <strong>' + escapeHtml(ev.title || '—') + '</strong> ignorata: prevale l\'inazione (' + escapeHtml(ev.choiceLabel || '') + ').', 'crit');
+  } else if (ev.kind === 'anomaly-relic-found') {
+    const sys = ORION.game.galaxy.systems[ev.sysId];
+    pushChronicle(ds + ' — Reliquie antiche esplorate su <strong>' + (sys ? sys.name : '—') + '</strong>: recuperata una cache di risorse.', 'system');
+  } else if (ev.kind === 'anomaly-depleted') {
+    const sys = ORION.game.galaxy.systems[ev.sysId];
+    pushChronicle(ds + ' — Il giacimento su <strong>' + (sys ? sys.name : '—') + '</strong> è quasi esausto: si rigenererà col tempo.', 'system');
   } else if (ev.kind === 'empire-fallen') {
     if (ev.hard) {
       pushChronicle(ds + ' — <strong>La tua civiltà è caduta.</strong> Senza più colonie, l\'impero si dissolve negli annali galattici.', 'system');

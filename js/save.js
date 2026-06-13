@@ -238,7 +238,13 @@
         ? game.dispatchMeta : { lastOfferAt: -1, offers: 0, completed: 0 },
       /* M17 Fase B (#83): contractor Mekhari attivi. Additivo lazy, nessun
          bump di schema (resta 30) — i flag boss vivono in game.piracy.nests. */
-      contracts: Array.isArray(game.contracts) ? game.contracts : []
+      contracts: Array.isArray(game.contracts) ? game.contracts : [],
+      /* M17 Fase C (#83): crisi pendenti + meta soglie ICG + stato anomalie
+         esplorabili. Additivo lazy (nessun bump). Le ondate Sopravvissuto
+         vivono in eventSchedule (già serializzato sopra). */
+      crises: Array.isArray(game.crises) ? game.crises : [],
+      crisisMeta: (game.crisisMeta && typeof game.crisisMeta === 'object') ? game.crisisMeta : { icgTier: 0 },
+      anomalies: (game.anomalies && typeof game.anomalies === 'object') ? game.anomalies : {}
     };
   }
 

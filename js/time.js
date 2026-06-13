@@ -2254,6 +2254,11 @@
     if (root.ORION.dispatch && root.ORION.dispatch.tick) {
       root.ORION.dispatch.tick(game, events);
     }
+    /* M17 Fase C (#83): anomalie esplorabili §17.3 — raccolta ricorrente
+       (detriti/nebulosa) + reliquie one-time, mentre una flotta orbita. */
+    if (root.ORION.anomaly && root.ORION.anomaly.tick) {
+      root.ORION.anomaly.tick(game, events);
+    }
   }
 
   /* M06.5 (decisione #27): scriptata della fase Insediamento.
@@ -2421,6 +2426,10 @@
        missione fallisca silenziosamente. */
     if (root.ORION.dispatch && root.ORION.dispatch.nextEventDelta) {
       const d = root.ORION.dispatch.nextEventDelta(game);
+      if (d > 0 && d < best) best = d;
+    }
+    if (root.ORION.anomaly && root.ORION.anomaly.nextEventDelta) {
+      const d = root.ORION.anomaly.nextEventDelta(game);
       if (d > 0 && d < best) best = d;
     }
     /* M07: spedizioni in viaggio (outbound o returning) */

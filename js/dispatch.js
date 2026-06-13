@@ -51,7 +51,14 @@
     BOSS_DANGER_MIN: 0.55,// solo nei sistemi profondi/pericolosi
     BOSS_REWARD_MUL: 2.4, // ricompensa taglia-boss (premium, solo risorse/crediti)
     HUNT_BASE_CREDITS: 90,// costo base contractor (× livello, × boss)
-    HUNT_DURATION: 130    // Ι prima che i cacciatori sgominino il covo
+    HUNT_DURATION: 130,   // Ι prima che i cacciatori sgominino il covo
+    /* M17 Fase C (#83) — crisi galattiche + Sopravvissuto. */
+    CRISIS_ICG_TIERS: [40, 60, 80], // soglie ICG che innescano crisi galattiche
+    CRISIS_TTL: 60,       // Ι per decidere prima della conseguenza di default
+    CRISIS_THREAT_ETA: 35,// preavviso della minaccia spawnata (recovery #22)
+    SURV_FIRST: 3000,     // primo evento Sopravvissuto (calmo/tardivo)
+    SURV_GAP: 2500,       // distanza tra le ondate
+    SURV_WAVES: 6         // ondate programmate (poi M20/§19)
   };
 
   const BOSS_TITLES = ['Sciacallo', 'Falce', 'Artiglio', 'Vipera', 'Corsaro', 'Spettro', 'Lama', 'Avvoltoio'];
@@ -69,7 +76,24 @@
     }
     /* M17 Fase B (#83): contractor Mekhari attivi (auto-risolutivi). */
     if (!Array.isArray(game.contracts)) game.contracts = [];
+    /* M17 Fase C (#83): crisi pendenti + meta soglie ICG. */
+    if (!Array.isArray(game.crises)) game.crises = [];
+    if (!game.crisisMeta || typeof game.crisisMeta !== 'object') game.crisisMeta = { icgTier: 0 };
+    ensureSurvivorSchedule(game);
     rebuildMemoriaSeen(game);
+  }
+
+  /* Popola eventSchedule (gancio #23) con le ondate del Sopravvissuto §17,
+     se assenti. Sparse e tardive (calmo). Idempotente. */
+  function ensureSurvivorSchedule(game) {
+    if (!Array.isArray(game.eventSchedule)) game.eventSchedule = [];
+    if (game.eventSchedule.some(function (e) { return e && e.kind === 'survivor'; })) return;
+    for (let n = 1; n <= CFG.SURV_WAVES; n++) {
+      game.eventSchedule.push({
+        id: 'surv-' + n, kind: 'survivor',
+        at: CFG.SURV_FIRST + (n - 1) * CFG.SURV_GAP, sev: n, fired: false
+      });
+    }
   }
 
   /* M17 Fase B (#83): promozione deterministica di alcuni covi a BOSS
@@ -410,6 +434,10 @@
     ensure(game);
     ensureBosses(game);
     processContracts(game, events);
+    /* M17 Fase C: crisi (timeout default → poi nuovi inneschi). */
+    processCrisisTimeout(game, events);
+    maybeFireGalacticCrisis(game, events);
+    maybeFireSurvivorCrisis(game, events);
     const now = game.timeImpulsi || 0;
     /* Scadenza offerte non accettate (silenziosa). */
     for (let i = 0; i < game.missions.length; i++) {
@@ -452,6 +480,19 @@
     (game.contracts || []).forEach(function (c) {
       if (c.status === 'active' && c.resolveAt) {
         const d = c.resolveAt - now;
+        if (d > 0 && d < best) best = d;
+      }
+    });
+    /* M17 Fase C: crisi pendente (scadenza) + prossima ondata Sopravvissuto. */
+    (game.crises || []).forEach(function (c) {
+      if (c.status === 'pending' && c.expiresAt) {
+        const d = c.expiresAt - now;
+        if (d > 0 && d < best) best = d;
+      }
+    });
+    (game.eventSchedule || []).forEach(function (e) {
+      if (e && e.kind === 'survivor' && !e.fired && e.at) {
+        const d = e.at - now;
         if (d > 0 && d < best) best = d;
       }
     });
@@ -521,6 +562,185 @@
     if (changed) game.contracts = game.contracts.filter(function (c) { return c.status === 'active'; });
   }
 
+  /* ==================================================================
+     CRISI GALATTICHE + SOPRAVVISSUTO (decisione #83 Fase C)
+     Modale a scelte (l'altra metà dell'ibrido): un evento-crisi ferma il
+     tempo (auto-pausa) e presenta 2-3 scelte. Conseguenze = MINACCE REALI
+     (spawn di incursioni pirata via il motore M09) + effetti soft, sempre
+     recovery-friendly (#22: annunciate, graduali, mai a freddo).
+     ================================================================== */
+
+  /* Sistema di una colonia del giocatore su cui dirigere una minaccia
+     (capitale del gruppo natale, altrimenti la prima operativa). */
+  function threatTargetSys(game) {
+    const k = payColonyKey(game);
+    if (k && game.colonies[k]) return game.colonies[k].systemId;
+    return -1;
+  }
+
+  /* Spawna una minaccia pirata reale verso una colonia (riusa la pipeline
+     incursione→assedio di time.js/processIncursions). Recovery-friendly:
+     preavviso CRISIS_THREAT_ETA, una sola incursione per sistema. */
+  function spawnThreat(game, level, events) {
+    const sysId = threatTargetSys(game);
+    if (sysId < 0) return false;
+    if (!Array.isArray(game.incursions)) game.incursions = [];
+    if (game.incursions.some(function (x) { return x.targetSysId === sysId; })) return false;
+    const now = game.timeImpulsi || 0;
+    const id = (ORION.time && ORION.time.nextSeqId) ? ORION.time.nextSeqId(game, 'inc') : ('inc-crisis-' + now);
+    game.incursions.push({
+      id: id, kind: 'pirate', fromSysId: sysId, targetSysId: sysId,
+      targetColonyKey: null, targetStationId: null,
+      level: Math.max(1, level), eta: CFG.CRISIS_THREAT_ETA, launchedAt: now
+    });
+    events.push({
+      kind: 'incursion-inbound', incursionId: id, targetSysId: sysId,
+      eta: CFG.CRISIS_THREAT_ETA, impulso: now
+    });
+    return true;
+  }
+
+  /* Catalogo crisi — galattiche (per tier ICG) e Sopravvissuto (per ondata).
+     Ogni scelta è un descrittore di effetti applicato da applyCrisisChoice.
+     `def` = scelta di default applicata allo scadere (inazione). */
+  function galacticCrisis(sev) {
+    if (sev <= 1) {
+      return { title: 'Disordini di frontiera',
+        body: 'Bande e tumulti montano ai confini noti: la corruzione galattica cresce. Come rispondi?',
+        choices: [
+          { id: 'fortify', label: 'Rafforza le difese', desc: 'Spendi risorse, eviti la minaccia.', res: { met: -120, en: -60 }, reputation: 1 },
+          { id: 'ignore', label: 'Lascia correre', desc: 'Nessun costo ora, ma i predoni colpiranno.', threat: 1, icg: 3 }
+        ], defaultId: 'ignore' };
+    }
+    if (sev === 2) {
+      return { title: 'Coalizione di predoni',
+        body: 'Una coalizione di predoni si arma e punta i tuoi mondi. Le opzioni sul tavolo:',
+        choices: [
+          { id: 'tribute', label: 'Paga tributo', desc: 'Crediti e reputazione, ma li tieni a bada.', res: { met: -220 }, reputation: -3 },
+          { id: 'fight', label: 'Affrontali', desc: 'Niente costi: arriva un\'incursione, ma puoi vincerla.', threat: 2 },
+          { id: 'ignore', label: 'Ignora', desc: 'Rischio peggiore: incursione + corruzione su.', threat: 2, icg: 5 }
+        ], defaultId: 'ignore' };
+    }
+    return { title: 'Collasso incipiente',
+      body: 'La corruzione galattica è altissima: ondate ostili premono da ogni lato. Mobiliti l\'impero?',
+      choices: [
+        { id: 'mobilize', label: 'Mobilita l\'impero', desc: 'Spesa pesante, ma allenti la pressione.', res: { met: -280, en: -160 }, pressure: -0.25, reputation: 2 },
+        { id: 'endure', label: 'Resisti all\'urto', desc: 'Affronti un\'incursione grossa a mani nude.', threat: 3 }
+      ], defaultId: 'endure' };
+  }
+
+  function survivorCrisis(sev) {
+    return { title: 'Ondata di sopravvivenza ' + sev,
+      body: 'Un\'orda esterna converge sui tuoi mondi (ondata ' + sev + '). Più a lungo sopravvivi, più dura.',
+      choices: [
+        { id: 'entrench', label: 'Trincerati', desc: 'Spendi risorse per assorbire l\'urto.', res: { met: -100 * sev, en: -50 * sev }, pressure: 0 },
+        { id: 'face', label: 'Affronta l\'ondata', desc: 'Arriva un\'incursione (forza ' + sev + ').', threat: sev }
+      ], defaultId: 'face' };
+  }
+
+  function makeCrisis(game, scope, sev) {
+    const tpl = (scope === 'survivor') ? survivorCrisis(sev) : galacticCrisis(sev);
+    const now = game.timeImpulsi || 0;
+    const id = (ORION.time && ORION.time.nextSeqId) ? ORION.time.nextSeqId(game, 'crisis') : ('crisis-' + now);
+    return {
+      id: id, scope: scope, sev: sev, title: tpl.title, body: tpl.body,
+      choices: tpl.choices, defaultId: tpl.defaultId,
+      raisedAt: now, expiresAt: now + CFG.CRISIS_TTL, status: 'pending'
+    };
+  }
+
+  function hasPendingCrisis(game) {
+    return (game.crises || []).some(function (c) { return c.status === 'pending'; });
+  }
+
+  function applyCrisisChoice(game, crisis, choice, events) {
+    if (!choice) return;
+    if (choice.res) {
+      const k = payColonyKey(game);
+      const col = k && game.colonies[k];
+      if (col && col.stock) Object.keys(choice.res).forEach(function (r) {
+        col.stock[r] = Math.max(0, (col.stock[r] || 0) + choice.res[r]);
+      });
+    }
+    if (typeof choice.reputation === 'number') addReputation(game, choice.reputation);
+    if (typeof choice.icg === 'number' && typeof game.icg === 'number') {
+      game.icg = Math.max(0, Math.min(100, game.icg + choice.icg));
+    }
+    if (typeof choice.pressure === 'number' && game.warState) {
+      game.warState.pressure = Math.max(0, Math.min(1, (game.warState.pressure || 0) + choice.pressure));
+    }
+    if (typeof choice.threat === 'number' && choice.threat > 0) {
+      spawnThreat(game, choice.threat, events);
+    }
+  }
+
+  /* Innesco crisi galattiche a soglie ICG crescenti (escalation §19). */
+  function maybeFireGalacticCrisis(game, events) {
+    if (typeof game.icg !== 'number') return;
+    if (hasPendingCrisis(game)) return;
+    const tiers = CFG.CRISIS_ICG_TIERS;
+    const doneTier = game.crisisMeta.icgTier || 0;
+    for (let i = 0; i < tiers.length; i++) {
+      if (game.icg >= tiers[i] && doneTier < tiers[i]) {
+        game.crisisMeta.icgTier = tiers[i];
+        const c = makeCrisis(game, 'galactic', i + 1);
+        game.crises.push(c);
+        events.push({ kind: 'crisis-raised', crisisId: c.id, scope: 'galactic', title: c.title, impulso: game.timeImpulsi });
+        return;
+      }
+    }
+  }
+
+  /* Innesco ondate del Sopravvissuto da eventSchedule. */
+  function maybeFireSurvivorCrisis(game, events) {
+    if (hasPendingCrisis(game)) return;
+    const now = game.timeImpulsi || 0;
+    const sched = game.eventSchedule || [];
+    for (let i = 0; i < sched.length; i++) {
+      const e = sched[i];
+      if (e && e.kind === 'survivor' && !e.fired && now >= e.at) {
+        e.fired = true;
+        const c = makeCrisis(game, 'survivor', e.sev || 1);
+        game.crises.push(c);
+        events.push({ kind: 'crisis-raised', crisisId: c.id, scope: 'survivor', title: c.title, impulso: now });
+        return;
+      }
+    }
+  }
+
+  /* Scadenza: applica la scelta di default (inazione) se il giocatore non
+     ha deciso entro CRISIS_TTL. Mai bloccante. */
+  function processCrisisTimeout(game, events) {
+    const now = game.timeImpulsi || 0;
+    let changed = false;
+    (game.crises || []).forEach(function (c) {
+      if (c.status !== 'pending' || now <= c.expiresAt) return;
+      const choice = c.choices.filter(function (x) { return x.id === c.defaultId; })[0] || c.choices[c.choices.length - 1];
+      applyCrisisChoice(game, c, choice, events);
+      c.status = 'lapsed';
+      changed = true;
+      events.push({ kind: 'crisis-lapsed', crisisId: c.id, title: c.title, choiceLabel: choice.label, impulso: now });
+    });
+    if (changed) game.crises = game.crises.filter(function (c) { return c.status === 'pending'; });
+  }
+
+  /* Azione del giocatore: risolve una crisi con la scelta scelta. */
+  function resolveCrisis(game, crisisId, choiceId) {
+    const c = (game.crises || []).filter(function (x) { return x.id === crisisId && x.status === 'pending'; })[0];
+    if (!c) return { ok: false, reason: 'Crisi non disponibile' };
+    const choice = c.choices.filter(function (x) { return x.id === choiceId; })[0];
+    if (!choice) return { ok: false, reason: 'Scelta non valida' };
+    const evs = [];
+    applyCrisisChoice(game, c, choice, evs);
+    c.status = 'resolved';
+    game.crises = game.crises.filter(function (x) { return x.status === 'pending'; });
+    return { ok: true, label: choice.label, events: evs };
+  }
+
+  function activeCrises(game) {
+    return (game.crises || []).filter(function (c) { return c.status === 'pending'; });
+  }
+
   /* ------------------------------------------------------------------
      AZIONI DEL GIOCATORE
      ------------------------------------------------------------------ */
@@ -574,6 +794,8 @@
     'commander-promoted':{ first: true,  mod: 'figure', text: function () { return 'Prima figura nominata emerge dalle file dell\'Impero.'; } },
     'station-built':     { first: true,  mod: 'planet', text: function () { return 'Prima stazione spaziale eretta.'; } },
     'dispatch-done':     { first: true,  mod: 'civ',    text: function () { return 'Primo incarico portato a termine.'; } },
+    'anomaly-relic-found': { first: true, mod: 'ok',     text: function () { return 'Prima reliquia antica esplorata: tracce di una civiltà perduta.'; } },
+    'crisis-raised':     { first: true,  mod: 'crit',   text: function (ev) { return 'Prima crisi galattica: ' + (ev.title || '—') + '.'; } },
     /* Svolte maggiori — non "firsts" (ogni occorrenza è storia). */
     'colony-conquered':  { first: false, mod: 'crit',   text: function (ev) { return 'Una colonia è stata conquistata dal nemico.'; } },
     'colony-razed':      { first: false, mod: 'crit',   text: function (ev) { return 'Una colonia è stata rasa al suolo.'; } },
@@ -631,6 +853,8 @@
     knownNestsDetailed: knownNestsDetailed,
     huntQuote: huntQuote,
     hireHunter: hireHunter,
+    activeCrises: activeCrises,
+    resolveCrisis: resolveCrisis,
     payColonyKey: payColonyKey,
     playerFleetAt: playerFleetAt
   };

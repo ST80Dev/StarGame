@@ -1005,6 +1005,38 @@
         '<strong>completa</strong> e incassi anche quella ricompensa.</p>'
     },
     {
+      id: 'crises',
+      tag: 'M17 · Crisi',
+      title: 'Crisi galattiche & Sopravvissuto',
+      body:
+        '<p>Quando la <strong>corruzione galattica (ICG)</strong> sale oltre certe soglie — o quando monta un\'<strong>ondata del ' +
+        'Sopravvissuto</strong> — scoppia una <strong>crisi</strong>: il tempo si ferma e ti viene chiesta una <strong>scelta</strong> ' +
+        '(2-3 opzioni, ognuna con conseguenze).</p>' +
+        '<ul>' +
+          '<li>Spendere risorse per <strong>prevenire</strong> la minaccia,</li>' +
+          '<li><strong>affrontarla</strong> (arriva un\'incursione reale che sai gestire col combattimento),</li>' +
+          '<li>o <strong>ignorarla</strong> (di solito l\'esito peggiore).</li>' +
+        '</ul>' +
+        '<p>Le minacce sono <strong>vere</strong> (incursioni via il motore di combattimento) ma sempre <strong>annunciate e ' +
+        'recuperabili</strong>: hai il tempo di reagire. Puoi <em>rimandare</em> la decisione e rispondere dal pannello Dispacci; ' +
+        'se non scegli entro il tempo, prevale l\'inazione. Più a lungo sopravvivi, più dure si fanno le ondate.</p>'
+    },
+    {
+      id: 'anomalies',
+      tag: 'M17 · Anomalie',
+      title: 'Anomalie spaziali',
+      body:
+        '<p>Esplorando i sistemi scopri <strong>anomalie</strong> §17.3 con cui interagire tenendo una <strong>flotta in orbita</strong>:</p>' +
+        '<ul>' +
+          '<li><strong>Campi di detriti</strong> (metalli) e <strong>nebulose</strong> (energia) sono <strong>spot di raccolta ' +
+          'ricorrente</strong>: la flotta presente preleva risorse: la riserva cala ma <em>non si esaurisce del tutto</em> e si ' +
+          '<strong>rigenera</strong> quando te ne vai — ci torni periodicamente.</li>' +
+          '<li>Le <strong>reliquie antiche</strong> sono siti <strong>una tantum</strong>: presidiale per un po\' con una flotta → ' +
+          'recuperi una cache di risorse (e una voce nella Memoria Storica).</li>' +
+        '</ul>' +
+        '<p>Le trovi elencate nel pannello <strong>Dispacci</strong> man mano che esplori i sistemi.</p>'
+    },
+    {
       id: 'colonial-ship',
       tag: 'Colonizzazione',
       title: 'Pioniere coloniale: come si colonizza',
