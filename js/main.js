@@ -334,6 +334,8 @@ function newGame(seed, opts) {
     expeditions: [],
     /* M08 Fase A (decisione #42): flotte mobili. */
     fleets: [],
+    /* M16 (decisione #81): stazioni spaziali (entità top-level). */
+    stations: [],
     /* Comandanti a livello Impero (decisione utente 2026-06-11): pool idle.
        Quelli assegnati vivono su fleet.officers[] (M15 multi-slot). */
     commanders: [],
@@ -428,6 +430,8 @@ function newGame(seed, opts) {
     if (saved.eventSchedule) ORION.game.eventSchedule = saved.eventSchedule;
     if (Array.isArray(saved.expeditions)) ORION.game.expeditions = saved.expeditions.slice();
     if (Array.isArray(saved.fleets)) ORION.game.fleets = saved.fleets.slice();
+    /* M16 (decisione #81): stazioni spaziali (entità top-level). */
+    if (Array.isArray(saved.stations)) ORION.game.stations = saved.stations.slice();
     if (Array.isArray(saved.commanders)) ORION.game.commanders = saved.commanders.slice();
     /* M14 Fase A (#75): converte le figure legacy (specialization → role) e
        riallinea i rank labels. Idempotente — no-op se già in formato #75. */
@@ -787,6 +791,18 @@ function renderView(stage, view) {
     if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
     if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
     renderMarketView(stage);
+    return;
+  }
+
+  // M16 (decisione #81): vista "Stazioni" — avamposti logistico-militari.
+  // Costruzione remota da colonia, lista stazioni con livello/serbatoio/
+  // difesa/stato rifornimento, upgrade/smantella. Read+azione, no Canvas.
+  if (view === 'stations') {
+    if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; } if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
+    if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
+    if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
+    if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
+    renderStationsView(stage);
     return;
   }
 
@@ -4514,6 +4530,235 @@ function renderMarketView(stage) {
   });
 }
 
+/* =====================================================================
+   M16 (decisione #81) — Vista "Stazioni" spaziali.
+   ===================================================================== */
+function stationLauncherSub() {
+  const g = ORION.game, ST = ORION.station;
+  if (!g || !ST) return 'M16';
+  const list = ST.listOf(g);
+  if (!list.length) return 'nessuna';
+  const building = list.filter(function (s) { return s.phase === 'building'; }).length;
+  return list.length + (building ? (' · ' + building + ' in opera') : '');
+}
+
+function stationSupplyMeta(state) {
+  if (state === 'isolated') return { cls: 'crit', label: 'isolata' };
+  if (state === 'low') return { cls: 'warn', label: 'a corto' };
+  return { cls: 'ok', label: 'rifornita' };
+}
+
+function renderStationsView(stage) {
+  if (!stage) return;
+  const g = ORION.game, ST = ORION.station;
+  if (!g || !ST) return;
+  if (ORION.tutorial) ORION.tutorial.fire('stations');
+
+  const list = ST.listOf(g);
+  const operational = list.filter(function (s) { return s.phase === 'operational'; }).length;
+  const building = list.filter(function (s) { return s.phase === 'building'; }).length;
+
+  function sysTag(id) { return systemTagHtml(id); }
+  function sysName(id) { const s = g.galaxy.systems[id]; return s ? s.name : '—'; }
+
+  let listHtml;
+  if (list.length) {
+    listHtml = '<ul class="station-list">' + list.map(function (st) {
+      const lvl = Math.max(0, st.level);
+      const cap = ST.supplyCap(Math.max(1, lvl));
+      const supFrac = cap > 0 ? Math.max(0, Math.min(1, (st.supply || 0) / cap)) : 0;
+      const sup = stationSupplyMeta(st.supplyState);
+      const def = ST.defenseStats(st);
+      const hpFrac = def.maxHp > 0 ? Math.max(0, Math.min(1, def.hp / def.maxHp)) : 0;
+
+      let body;
+      if (st.phase === 'building') {
+        const prog = st.buildTotal > 0 ? Math.max(0, Math.min(1, 1 - (st.buildLeft || 0) / st.buildTotal)) : 0;
+        const verb = (st.level === 0) ? 'Costruzione' : 'Potenziamento a lvl ' + (st.level + 1);
+        body =
+          '<div class="station-build">' + verb + ' · ' + Math.ceil(st.buildLeft || 0) + ' ' + iU() + ' rimanenti' +
+            '<div class="station-bar"><div class="station-bar__fill station-bar__fill--build" style="width:' + Math.round(prog * 100) + '%"></div></div>' +
+          '</div>' +
+          '<button class="btn btn--mini btn--danger" data-action="station-cancel" data-id="' + st.id + '" type="button">Annulla</button>';
+      } else {
+        const upg = ST.canUpgrade(g, st);
+        const upgBtn = (st.level >= ST.CFG.MAX_LEVEL)
+          ? '<span class="station-maxed">livello massimo</span>'
+          : '<button class="btn btn--mini btn--enter" data-action="station-upgrade" data-id="' + st.id + '"' +
+              (upg.ok ? '' : ' disabled') + ' type="button" title="' + (upg.ok ? ('Costo ' + stationCostStr(upg.cost) + ' · ' + upg.time + ' ' + iU()) : escapeHtml(upg.reason || '')) + '">+ Espandi</button>';
+        body =
+          '<div class="station-stats">' +
+            '<div class="station-stat">' +
+              '<span class="station-stat__lbl">Serbatoio</span>' +
+              '<div class="station-bar"><div class="station-bar__fill station-bar__fill--' + sup.cls + '" style="width:' + Math.round(supFrac * 100) + '%"></div></div>' +
+              '<span class="station-stat__val is-' + sup.cls + '">' + Math.round(st.supply || 0) + ' / ' + cap + ' · ' + sup.label + '</span>' +
+            '</div>' +
+            '<div class="station-stat">' +
+              '<span class="station-stat__lbl">Corazza</span>' +
+              '<div class="station-bar"><div class="station-bar__fill station-bar__fill--hp" style="width:' + Math.round(hpFrac * 100) + '%"></div></div>' +
+              '<span class="station-stat__val">' + def.hp + ' / ' + def.maxHp + ' · ⚔ ' + def.fp + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="station-actions">' + upgBtn +
+            '<button class="btn btn--mini btn--danger" data-action="station-demolish" data-id="' + st.id + '" type="button">Smantella</button>' +
+          '</div>';
+      }
+
+      return '<li class="station-item">' +
+        '<div class="station-item__head">' +
+          '<span class="station-item__name">' + escapeHtml(st.name) + ' <span class="station-item__sys">' + sysName(st.systemId) + sysTag(st.systemId) + '</span></span>' +
+          '<span class="station-item__lvl">' + (st.level > 0 ? ('lvl ' + st.level) : 'in opera') + '</span>' +
+        '</div>' +
+        body +
+      '</li>';
+    }).join('') + '</ul>';
+  } else {
+    listHtml = '<p class="panel__note">Nessuna stazione. Costruisci un avamposto in un sistema esplorato vicino a una tua colonia: rifornisce le flotte in territorio profondo (#69) e fortifica il sistema.</p>';
+  }
+
+  /* Almeno una colonia operativa può fondare? */
+  const canFound = myColonyKeys().some(function (k) {
+    const c = g.colonies[k]; return c && c.colonized && c.phase !== 'settling';
+  });
+
+  stage.innerHTML =
+    '<div class="fleet-view station-view">' +
+      '<header class="fleet-view__head">' +
+        '<h2 class="fleet-view__title">Stazioni spaziali <span class="fleet-view__sub">M16 · Avamposti</span></h2>' +
+      '</header>' +
+      '<div class="market-summary">' +
+        '<div class="market-summary__cell"><span class="market-summary__val">' + operational + '</span><span class="market-summary__lbl">Operative</span></div>' +
+        '<div class="market-summary__cell"><span class="market-summary__val">' + building + '</span><span class="market-summary__lbl">In costruzione</span></div>' +
+        '<div class="market-summary__cell"><span class="market-summary__val">' + ST.CFG.BUILD_RANGE + '</span><span class="market-summary__lbl">Raggio (salti)</span></div>' +
+      '</div>' +
+      '<button class="btn btn--enter station-view__new" data-action="station-new" type="button"' + (canFound ? '' : ' disabled') + '>' +
+        '+ Costruisci stazione</button>' +
+      listHtml +
+      '<p class="panel__note">Una stazione si costruisce <em>a distanza</em> da una tua colonia (max ' + ST.CFG.BUILD_RANGE + ' salti) e cresce di livello come una struttura: ogni modulo aggiunge corazza, fuoco difensivo e capacità del serbatoio. La <em>linea di rifornimento</em> dalla colonia riempie il serbatoio; se isolata le funzioni degradano (mai distrutta da sé). Le flotte si riforniscono qui in territorio profondo.</p>' +
+    '</div>';
+
+  const newBtn = stage.querySelector('[data-action="station-new"]');
+  if (newBtn && !newBtn.disabled) newBtn.addEventListener('click', function () { openStationBuildPicker(stage); });
+  stage.querySelectorAll('[data-action="station-upgrade"]').forEach(function (b) {
+    if (b.disabled) return;
+    b.addEventListener('click', function () {
+      const st = ST.stationById(g, b.dataset.id);
+      const r = ST.upgrade(g, st);
+      if (!r.ok) { showToast(r.reason || 'Potenziamento rifiutato'); return; }
+      persistGame(g); renderStationsView(stage); updateGlobalResourceHud();
+    });
+  });
+  stage.querySelectorAll('[data-action="station-demolish"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const st = ST.stationById(g, b.dataset.id);
+      if (!confirm('Smantellare ' + (st ? st.name : 'la stazione') + '? Rimborso 50% del costo del livello corrente.')) return;
+      ST.demolish(g, b.dataset.id);
+      persistGame(g); renderStationsView(stage); updateGlobalResourceHud();
+    });
+  });
+  stage.querySelectorAll('[data-action="station-cancel"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      ST.cancelBuild(g, b.dataset.id);
+      persistGame(g); renderStationsView(stage); updateGlobalResourceHud();
+    });
+  });
+}
+
+function stationCostStr(c) {
+  return Object.keys(c).map(function (k) { return resIcon(k) + c[k]; }).join(' · ');
+}
+
+/* Overlay di costruzione: scegli la colonia fondatrice + il sistema target
+   (esplorato, entro raggio, senza stazione), poi conferma. */
+function openStationBuildPicker(stage) {
+  const g = ORION.game, ST = ORION.station;
+  if (!g || !ST) return;
+  const mine = myColonyKeys().filter(function (k) {
+    const c = g.colonies[k]; return c && c.colonized && c.phase !== 'settling';
+  });
+  if (!mine.length) { showToast('Nessuna colonia operativa'); return; }
+  if (!ORION.stationBuildColony || mine.indexOf(ORION.stationBuildColony) < 0) ORION.stationBuildColony = mine[0];
+
+  const ov = document.createElement('div');
+  ov.className = 'fleet-create-overlay';
+  function close() { ov.remove(); document.removeEventListener('keydown', onKey); }
+  function onKey(e) { if (e.key === 'Escape') close(); }
+
+  function render() {
+    const colKey = ORION.stationBuildColony;
+    const colony = g.colonies[colKey];
+    const colOpts = mine.map(function (k) {
+      return '<option value="' + k + '"' + (k === colKey ? ' selected' : '') + '>' + colonyNameFromKey(k) + '</option>';
+    }).join('');
+
+    /* Candidati: sistemi esplorati entro raggio, senza stazione. */
+    const disc = g.state.discovery;
+    const EXP = ORION.galaxy.DISCOVERY.EXPLORED;
+    const cands = [];
+    for (let id = 0; id < (g.galaxy.systems.length || 0); id++) {
+      if (id === colony.systemId) continue;
+      if (disc[id] < EXP) continue;
+      if (ST.stationAt(g, id)) continue;
+      const hops = ST.hopsBetween(g.galaxy, colony.systemId, id);
+      if (hops > ST.CFG.BUILD_RANGE) continue;
+      cands.push({ id: id, hops: hops });
+    }
+    cands.sort(function (a, b) { return a.hops - b.hops; });
+
+    const cost = ST.stepCost(1), time = ST.stepTime(1);
+    const payable = cost && Object.keys(cost).every(function (k) { return (colony.stock[k] || 0) >= cost[k]; });
+
+    let candHtml;
+    if (cands.length) {
+      candHtml = '<ul class="station-cand-list">' + cands.map(function (c) {
+        const s = g.galaxy.systems[c.id];
+        const occ = ST.stationAt(g, c.id);
+        return '<li class="station-cand">' +
+          '<span class="station-cand__name">' + (s ? s.name : '—') + systemTagHtml(c.id) + '</span>' +
+          '<span class="station-cand__hops">' + c.hops + ' salti</span>' +
+          '<button class="btn btn--mini btn--enter" data-build="' + c.id + '"' + (payable ? '' : ' disabled') + ' type="button">Costruisci</button>' +
+        '</li>';
+      }).join('') + '</ul>';
+    } else {
+      candHtml = '<p class="panel__note">Nessun sistema esplorato libero entro ' + ST.CFG.BUILD_RANGE + ' salti da questa colonia. Esplora di più o scegli un\'altra colonia fondatrice.</p>';
+    }
+
+    ov.innerHTML =
+      '<div class="fleet-create-overlay__panel">' +
+        '<header class="fleet-create-overlay__head">' +
+          '<h3>Costruisci stazione</h3>' +
+          '<button class="btn btn--mini" data-close type="button">✕</button>' +
+        '</header>' +
+        '<label class="fleet-field"><span>Colonia fondatrice</span>' +
+          '<select class="fleet-row__select" data-bind="station-colony">' + colOpts + '</select></label>' +
+        '<p class="sysinfo__sub">Costo ' + stationCostStr(cost) + ' · ' + time + ' ' + iU() +
+          (payable ? '' : ' <span class="is-crit">(risorse insufficienti)</span>') + '</p>' +
+        '<p class="sysinfo__sub">Sistemi raggiungibili</p>' +
+        candHtml +
+      '</div>';
+
+    const sel = ov.querySelector('[data-bind="station-colony"]');
+    if (sel) sel.addEventListener('change', function () { ORION.stationBuildColony = this.value; render(); });
+    ov.querySelector('[data-close]').addEventListener('click', close);
+    ov.querySelectorAll('[data-build]').forEach(function (b) {
+      if (b.disabled) return;
+      b.addEventListener('click', function () {
+        const targetId = Number(b.dataset.build);
+        const r = ST.build(g, ORION.stationBuildColony, targetId);
+        if (!r.ok) { showToast(r.reason || 'Costruzione rifiutata'); return; }
+        const sName = g.galaxy.systems[targetId] ? g.galaxy.systems[targetId].name : 'sistema';
+        pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione di una <strong>stazione</strong> in ' + escapeHtml(sName) + '.', 'fleet');
+        persistGame(g); close(); renderStationsView(stage); updateGlobalResourceHud();
+      });
+    });
+  }
+
+  render();
+  document.body.appendChild(ov);
+  document.addEventListener('keydown', onKey);
+  ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+}
+
 /* Pannello del mercato grigio Mekhari (§15.5 b). Visibile solo se i Mekhari
    sono stati contattati. Compra risorse base per una colonia pagando dalla
    Tesoreria (qualunque valuta) a sovrapprezzo + costo reputazione. */
@@ -7097,6 +7342,11 @@ const DEFAULT_AUTOPAUSE = {
   /* M15 — varo di una nave capitale: evento notevole (auto-pausa ON). Le
      navi piccole restano silenziose (ship-built non listata = OFF). */
   'capital-built': true,
+  /* M16 (decisione #81): stazioni spaziali. Costruzione/potenziamento e
+     attacco/distruzione sono notevoli (ON); l'isolamento è un nudge a
+     rifornire (ON); il rifornimento ripristinato è buona notizia (OFF). */
+  'station-built': true, 'station-upgraded': true, 'station-attacked': true,
+  'station-destroyed': true, 'station-isolated': true, 'station-resupplied': false,
   /* Decisione #69: viveri. L'avviso e l'esaurimento auto-pausano (finestra
      per reagire); il rifornimento no (è una buona notizia di routine). */
   'fleet-supply-low': true, 'fleet-supply-critical': true, 'fleet-resupplied': false,
@@ -7493,6 +7743,12 @@ function showEventOverlay(events) {
     'fleet-discovery': 'Flotta: sistema esplorato',
     'fleet-launched': 'Flotta: salto iperspaziale',
     'capital-built': 'Nave capitale varata',
+    'station-built': 'Stazione completata',
+    'station-upgraded': 'Stazione potenziata',
+    'station-attacked': 'Stazione sotto attacco',
+    'station-destroyed': 'Stazione distrutta',
+    'station-isolated': 'Stazione isolata',
+    'station-resupplied': 'Stazione rifornita',
     'fleet-supply-low': 'Flotta: viveri in esaurimento',
     'fleet-supply-critical': 'Flotta: viveri esauriti',
     'fleet-resupplied': 'Flotta rifornita',
@@ -7719,6 +7975,27 @@ function chronicleEvent(ev) {
     const isAdm = sk === 'ammiraglia';
     pushChronicle(ds + ' — ' + (isAdm ? '★ ' : '') + 'La <strong>' + escapeHtml(scls.name) + '</strong> esce dai bacini di ' + pname + ptag + (isAdm ? ' — la nave ammiraglia della civiltà.' : '.'), 'planet');
     if (ORION.tutorial) ORION.tutorial.fire('capital-ships');
+  } else if (ev.kind === 'station-built' || ev.kind === 'station-upgraded' ||
+             ev.kind === 'station-attacked' || ev.kind === 'station-destroyed' ||
+             ev.kind === 'station-isolated' || ev.kind === 'station-resupplied') {
+    const sName = (ev.systemId != null && ORION.game.galaxy.systems[ev.systemId])
+      ? ORION.game.galaxy.systems[ev.systemId].name : '—';
+    const where = '<strong>' + escapeHtml(ev.name || 'Stazione') + '</strong> in ' + escapeHtml(sName) + (ev.systemId != null ? systemTagHtml(ev.systemId) : '');
+    if (ev.kind === 'station-built') {
+      pushChronicle(ds + ' — ' + where + ' è operativa: rifornisce le flotte e fortifica il sistema.', 'fleet');
+      if (ORION.tutorial) ORION.tutorial.fire('stations');
+    } else if (ev.kind === 'station-upgraded') {
+      pushChronicle(ds + ' — ' + where + ' potenziata a <strong>livello ' + (ev.level || '?') + '</strong>.', 'fleet');
+    } else if (ev.kind === 'station-attacked') {
+      const enemy = ev.enemyKind === 'ai' ? 'una forza ostile' : 'i predoni';
+      pushChronicle(ds + ' — ' + where + (ev.won ? ' respinge ' + enemy + '.' : ' è sotto attacco da ' + enemy + '!'), 'system');
+    } else if (ev.kind === 'station-destroyed') {
+      pushChronicle(ds + ' — ' + where + ' è stata <strong>distrutta</strong>. Si potrà ricostruire.', 'system');
+    } else if (ev.kind === 'station-isolated') {
+      pushChronicle(ds + ' — ' + where + ' è <strong>isolata</strong>: serbatoio a secco, funzioni ridotte. Riavvicina una colonia o rifornisci.', 'system');
+    } else {
+      pushChronicle(ds + ' — ' + where + ' di nuovo rifornita.', 'fleet');
+    }
   } else if (ev.kind === 'crew-formed') {
     pushChronicle(ds + ' — Nuovo <strong>equipaggio esploratore</strong> brevettato dall\'Accademia di ' + pname + ptag + '.', 'planet');
   } else if (ev.kind === 'mercantile-built') {
@@ -8684,6 +8961,11 @@ function renderLeftPanel() {
       '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('market') + '</span>' +
       '<span>Mercato</span>' +
       '<span class="lp-launcher__sub">' + marketLauncherSub() + '</span>' +
+    '</button>' +
+    '<button class="lp-launcher__btn' + (currentView === 'stations' ? ' is-active' : '') + '" data-view="stations" type="button">' +
+      '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('station') + '</span>' +
+      '<span>Stazioni</span>' +
+      '<span class="lp-launcher__sub">' + stationLauncherSub() + '</span>' +
     '</button>';
 
   /* ----- Cronaca (collassabile) -----

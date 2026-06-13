@@ -55,7 +55,7 @@
      DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
      nuovo gioco la preserva e una recovery best-effort prova a dedurla
      da colonie/flotte/spedizioni/cronaca. */
-  const SCHEMA_VERSION = 27;
+  const SCHEMA_VERSION = 28;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -218,7 +218,10 @@
          Identità dei 3 consiglieri + cooldown/ultimo consiglio. Piccolo, si
          persiste intero. ORION.council.ensure() al load completa eventuali
          campi mancanti (idempotente). */
-      council: (game.council && typeof game.council === 'object') ? game.council : null
+      council: (game.council && typeof game.council === 'object') ? game.council : null,
+      /* M16 (decisione #81): stazioni spaziali. Entità top-level (vivono in
+         un sistema, non in una colonia). Si persistono intere. */
+      stations: Array.isArray(game.stations) ? game.stations : []
     };
   }
 
@@ -647,6 +650,13 @@
         });
       }
       payload.schema = 27;
+    }
+    /* v27 → v28 (M16 — stazioni spaziali, decisione #81): nuovo array
+       top-level game.stations[]. Lazy: i save vecchi caricano con 0
+       stazioni, nessun'altra conversione. */
+    if ((payload.schema || 27) < 28) {
+      if (!Array.isArray(payload.stations)) payload.stations = [];
+      payload.schema = 28;
     }
     return payload;
   }
