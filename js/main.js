@@ -3771,7 +3771,14 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
   }
 
   const canOrganize = ships >= 1 && crews.length >= 1;
-  const reachable = ORION.expedition.reachableTargets(g.galaxy, g.state, colony.systemId);
+  /* Decisione #76: lista target multi-hop attraverso lo spazio esplorato
+     (BFS della nebbia di guerra), non più la sola adiacenza a 1 hop di M07.
+     `visibleDestinations(includeDetected:true, includeExplored:false)` ritorna
+     SOLO i sistemi DETECTED raggiungibili attraverso corridoi EXPLORED — la
+     frontiera vera, che cresce man mano che esplori. Coerente col Fleet
+     Wizard (stessa fonte). */
+  const reachable = ORION.fleet.visibleDestinations(g.galaxy, g.state, colony.systemId,
+    { includeDetected: true, includeExplored: false });
   const hasTargets = reachable.length > 0;
 
   /* Anomalie §17.3 raggiungibili (decisione di sessione: esplorazione
@@ -3923,12 +3930,44 @@ function doSurveyAnomaly(colony, targetSystemId) {
   updatePlanetUI();
 }
 
-function openExpeditionPicker(colony) {
+/* Decisione #76: stima del tempo di viaggio (sola andata) verso un sistema,
+   sommando ORION.fleet.tempoLeg lungo il percorso BFS reale. minSpeed 1.1 =
+   velocità della nave coloniale/esploratore "Pioniere". È un'indicazione: a
+   runtime i modificatori (Comandante Navigatore, deriva viveri, iperguida)
+   possono variare leggermente il valore. */
+function estimateExpeditionDuration(galaxy, fromSysId, targetSysId) {
+  if (!ORION.fleet || !ORION.fleet.computePath) return 0;
+  const path = ORION.fleet.computePath(galaxy, fromSysId, targetSysId);
+  if (!path || path.length < 2) return 0;
+  let t = 0;
+  for (let i = 0; i < path.length - 1; i++) {
+    t += ORION.fleet.tempoLeg(galaxy, path[i], path[i + 1], 1.1);
+  }
+  return t;
+}
+
+function openExpeditionPicker(colony, opts) {
+  opts = opts || {};
   const g = ORION.game;
-  const reachable = ORION.expedition.reachableTargets(g.galaxy, g.state, colony.systemId);
+  /* Decisione #76: target multi-hop attraverso lo spazio esplorato (frontiera
+     DETECTED), non più solo l'adiacenza a 1 hop. Stessa fonte del Fleet Wizard. */
+  const reachable = ORION.fleet.visibleDestinations(g.galaxy, g.state, colony.systemId,
+    { includeDetected: true, includeExplored: false });
   const ships = (colony.ships && colony.ships.explorer) || 0;
   const crews = (colony.crews && colony.crews.explorer) || [];
-  const crewXp = crews.length ? (crews[0].xp || 0) : 0;
+  /* Equipaggi ordinati per esperienza decrescente (il veterano in testa). */
+  const crewsSorted = crews.slice().sort(function (a, b) { return (b.xp || 0) - (a.xp || 0); });
+
+  /* Decisione #76: l'utente sceglie QUALE equipaggio mandare (per esperienza),
+     non più "il primo in lista". Selezione persistita tra i re-render. */
+  let selectedCrewId = opts.selectedCrewId;
+  if (selectedCrewId == null || !crews.some(function (c) { return c.id === selectedCrewId; })) {
+    selectedCrewId = crewsSorted.length ? crewsSorted[0].id : null;
+  }
+  const selCrew = crews.filter(function (c) { return c.id === selectedCrewId; })[0] || null;
+  const crewXp = selCrew ? (selCrew.xp || 0) : 0;
+  /* Default ON: rientro alla base dopo aver esplorato (modello explore). */
+  const returnHome = opts.returnHome !== false;
 
   let host = document.querySelector('[data-bind="exp-picker"]');
   if (!host) {
@@ -3941,30 +3980,50 @@ function openExpeditionPicker(colony) {
     document.body.appendChild(host);
   }
 
-  const cards = reachable.map(function (sid) {
+  /* ----- Selettore equipaggio (chip cliccabili per esperienza) ----- */
+  let crewChips;
+  if (!crewsSorted.length) {
+    crewChips = '<p class="panel__note">Nessun equipaggio disponibile: formane uno nell\'<em>Accademia militare</em>.</p>';
+  } else {
+    crewChips = '<div class="exp-crew-select" role="radiogroup" aria-label="Scegli equipaggio">' +
+      crewsSorted.map(function (c) {
+        const xp = c.xp || 0;
+        const enr = ORION.expedition.enrichmentForXp(xp);
+        const sel = c.id === selectedCrewId;
+        return '<button class="exp-crew-chip' + (sel ? ' is-selected' : '') + '" type="button"' +
+          ' role="radio" aria-checked="' + (sel ? 'true' : 'false') + '"' +
+          ' data-action="exp-crew-pick" data-crew="' + escapeHtml(String(c.id)) + '"' +
+          ' title="' + escapeHtml(enr.label) + ' · xp ' + xp + '">' +
+          '<span class="exp-crew-chip__rank">' + escapeHtml(enr.label) + '</span>' +
+          '<span class="exp-crew-chip__xp">xp ' + xp + '</span>' +
+        '</button>';
+      }).join('') +
+    '</div>';
+  }
+
+  const cards = reachable.map(function (d) {
+    const sid = d.sysId;
     const sys = g.galaxy.systems[sid];
     const acr = regionAcronymFor(sid);
     const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
-    const dur = ORION.expedition.computeDuration(g.galaxy, sid, crewXp);
+    const oneWay = estimateExpeditionDuration(g.galaxy, colony.systemId, sid);
+    const dur = returnHome ? oneWay * 2 : oneWay;
+    const durLabel = returnHome ? (dur + ' ' + iU() + ' (a/r)') : (oneWay + ' ' + iU() + ' (sola andata)');
     const chance = ORION.expedition.accidentChance(g.galaxy, sid, crewXp, g);
-    const dangerN = ORION.expedition.dangerNorm(g.galaxy, sid);
     const dangerTier = sys.dangerTier || ORION.galaxy.dangerTier(sys.danger);
-    const DISCOVERY = ORION.galaxy.DISCOVERY;
-    const disc = g.state.discovery[sid];
-    const discLabel = disc >= DISCOVERY.DETECTED ? 'rilevato' : 'ignoto';
-    const nameLabel = disc >= DISCOVERY.DETECTED ? sys.name : 'Sistema ignoto';
     return '<div class="expedition-card">' +
       '<div class="expedition-card__head">' +
-        '<span class="expedition-card__name">' + escapeHtml(nameLabel) + tag + '</span>' +
+        '<span class="expedition-card__name">' + escapeHtml(sys.name) + tag + '</span>' +
         '<span class="danger-badge tier--' + dangerTier + '">' + sys.danger + ' · ' + dangerTier + '</span>' +
       '</div>' +
       '<dl class="save-card__meta">' +
-        '<div><dt>Stato</dt><dd>' + discLabel + '</dd></div>' +
-        '<div><dt>Durata viaggio</dt><dd>' + dur + ' ' + iU() + ' (a/r)</dd></div>' +
+        '<div><dt>Distanza</dt><dd>' + d.hops + ' salti</dd></div>' +
+        '<div><dt>Durata viaggio</dt><dd>' + durLabel + '</dd></div>' +
         '<div><dt>Rischio incidente</dt><dd>' + Math.round(chance * 100) + '%</dd></div>' +
       '</dl>' +
       '<div class="expedition-card__actions">' +
-        '<button class="btn btn--mini btn--primary btn--with-icon" data-action="exp-launch" data-sys="' + sid + '" type="button">' +
+        '<button class="btn btn--mini btn--primary btn--with-icon" data-action="exp-launch" data-sys="' + sid + '" type="button"' +
+          (selectedCrewId == null ? ' disabled title="Serve un equipaggio"' : '') + '>' +
           '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('send')) || '') + '</span> Invia' +
         '</button>' +
       '</div>' +
@@ -3980,21 +4039,40 @@ function openExpeditionPicker(colony) {
         '</button>' +
       '</header>' +
       '<p class="panel__note">Scafi disponibili: <strong>' + ships + '</strong> · ' +
-        'Equipaggi: <strong>' + crews.length + '</strong>. Verrà impegnato il primo equipaggio in lista (' +
-        (crews.length ? 'xp ' + (crews[0].xp || 0) : 'nessuno') + ').</p>' +
+        'Equipaggi: <strong>' + crews.length + '</strong>. Scegli l\'equipaggio da impegnare:</p>' +
+      crewChips +
+      '<label class="exp-return-opt">' +
+        '<input type="checkbox" data-action="exp-return-toggle"' + (returnHome ? ' checked' : '') + '> ' +
+        'Rientra alla base dopo aver esplorato' +
+        '<small> (togli la spunta per restare in orbita al target)</small>' +
+      '</label>' +
       '<div class="expedition-pick-overlay__grid">' + cards + '</div>' +
     '</div>';
   host.hidden = false;
 
+  /* Stato corrente preservato tra i re-render. */
+  function reopen(next) {
+    openExpeditionPicker(colony, {
+      selectedCrewId: (next && 'selectedCrewId' in next) ? next.selectedCrewId : selectedCrewId,
+      returnHome: (next && 'returnHome' in next) ? next.returnHome : returnHome
+    });
+  }
+
   host.addEventListener('click', function (e) {
-    if (e.target === host || e.target.matches('[data-action="exp-pick-close"]')) {
+    if (e.target === host || e.target.closest('[data-action="exp-pick-close"]')) {
       closeExpeditionPicker();
     }
   });
+  host.querySelectorAll('[data-action="exp-crew-pick"]').forEach(function (b) {
+    b.addEventListener('click', function () { reopen({ selectedCrewId: b.dataset.crew }); });
+  });
+  const retToggle = host.querySelector('[data-action="exp-return-toggle"]');
+  if (retToggle) retToggle.addEventListener('change', function () { reopen({ returnHome: retToggle.checked }); });
   host.querySelectorAll('[data-action="exp-launch"]').forEach(function (b) {
+    if (b.disabled) return;
     b.addEventListener('click', function () {
       const sid = Number(b.dataset.sys);
-      doLaunchExpedition(colony, sid);
+      doLaunchExpedition(colony, sid, { returnHome: returnHome, crewId: selectedCrewId });
     });
   });
 }
@@ -4004,12 +4082,14 @@ function closeExpeditionPicker() {
   if (host) { host.hidden = true; host.innerHTML = ''; }
 }
 
-function doLaunchExpedition(colony, targetSystemId) {
+function doLaunchExpedition(colony, targetSystemId, opts) {
+  opts = opts || {};
+  const returnHome = opts.returnHome !== false;   // default ON (modello explore)
   const g = ORION.game;
   const key = colony.systemId + ':' + colony.bodyKey;
   /* Decisione #60: lancio come flotta con ordine explore (sostituisce
      ORION.expedition.launch). Crea una flotta dedicata, assegna 1 scafo
-     esploratore e 1 equipaggio dal pool della colonia, poi setOrder explore. */
+     esploratore e l'equipaggio SCELTO (#76), poi setOrder. */
   if (!ORION.fleet || !ORION.fleet.createFleet) {
     /* Fallback estremo: nessun modulo flotta caricato. */
     showToast('Modulo flotta non disponibile'); return;
@@ -4020,21 +4100,34 @@ function doLaunchExpedition(colony, targetSystemId) {
     ? colony.crews.explorer.length : 0;
   if (shipsAvail < 1) { showToast('Nessuno scafo esploratore disponibile'); return; }
   if (crewsAvail < 1) { showToast('Nessun equipaggio esploratore disponibile'); return; }
-  /* Crea flotta + assegna 1 scafo + 1 crew. */
+  /* Crea flotta + assegna 1 scafo + l'equipaggio scelto (per id, #76);
+     fallback al primo in lista se l'id non è indicato/non più disponibile. */
   const cf = ORION.fleet.createFleet(g, key, 'Esplorazione');
   if (!cf.ok) { showToast(cf.reason || 'Creazione flotta fallita'); return; }
   const fleet = cf.fleet;
   const as = ORION.fleet.assignShips(g, fleet, key, 'explorer', 1);
   if (!as.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(as.reason || 'Assegnazione nave fallita'); return; }
-  const ac = ORION.fleet.assignCrew(g, fleet, key, 1);
+  let ac = null;
+  if (opts.crewId != null && ORION.fleet.assignCrewById) {
+    ac = ORION.fleet.assignCrewById(g, fleet, key, opts.crewId);
+  }
+  if (!ac || !ac.ok) ac = ORION.fleet.assignCrew(g, fleet, key, 1);
   if (!ac.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(ac.reason || 'Assegnazione equipaggio fallita'); return; }
-  const so = ORION.fleet.setOrder(g, fleet, { type: 'explore', toSysId: targetSystemId });
+  /* returnHome ON → ordine explore (auto-return). OFF → move-route con la
+     singola tappa + exploreEach=true + returnHome=false: rivela il target e
+     RESTA in orbita. Stesso pattern del Fleet Wizard (#46/#76). */
+  const order = returnHome
+    ? { type: 'explore', toSysId: targetSystemId }
+    : { type: 'move-route', waypoints: [targetSystemId], dwell: [0], exploreEach: true, returnHome: false };
+  const so = ORION.fleet.setOrder(g, fleet, order);
   if (!so.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(so.reason || 'Ordine esplorazione rifiutato'); return; }
   const sys = g.galaxy.systems[targetSystemId];
   const acr = regionAcronymFor(targetSystemId);
   const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
+  const enr = ORION.expedition.enrichmentForXp((fleet.crew[0] && fleet.crew[0].xp) || 0);
   pushChronicle(ORION.time.currentDS(g) + ' — Spedizione partita verso <strong>' +
     (sys ? sys.name : 'sistema ignoto') + '</strong>' + tag +
+    ' · equipaggio ' + enr.label +
     ' · salto iperspaziale, durata stimata ' + (fleet.etaImpulsi || 0) + ' ' + iU() + '.', 'explore');
   if (ORION.tutorial) ORION.tutorial.fire('expedition-launch');
   closeExpeditionPicker();
