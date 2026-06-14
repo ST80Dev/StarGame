@@ -486,9 +486,22 @@
           routeFrom = pa; routeTo = pb;
         } else {
           let bk = f.location.bodyKey;
-          if (bk == null && f.location.status === 'docked' && f.ownerColonyKey != null) {
+          /* Se la flotta non ha un corpo esplicito (orbita generica del
+             sistema), mostrala VICINO alla colonia anziché al centro/stella
+             (richiesta utente 2026-06-14): prima la colonia d'origine se è
+             in questo sistema, poi una qualunque mia colonia del sistema. */
+          if (bk == null && f.ownerColonyKey != null) {
             const parts = String(f.ownerColonyKey).split(':');
             if (parts.length === 2 && parseInt(parts[0], 10) === sysId) bk = parts[1];
+          }
+          if (bk == null && game.colonies) {
+            for (const ck in game.colonies) {
+              const c = game.colonies[ck];
+              if (c && c.colonized && c.systemId === sysId) {
+                const p2 = String(ck).split(':');
+                if (p2.length === 2) { bk = p2[1]; break; }
+              }
+            }
           }
           const b = bk != null ? findBody(bk) : null;
           wpos = b ? this.bodyWorldPos(b) : { x: 0, y: 0 };

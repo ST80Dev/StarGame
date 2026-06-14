@@ -10026,11 +10026,12 @@ function renderLeftPanel() {
   host.querySelectorAll('[data-action="roster-fleet"]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       const sid = Number(btn.dataset.sys);
-      /* Click su una flotta → vedila sulla mappa, a livello di gruppo
-         stellare (richiesta utente 2026-06-14). Imposta la selezione e
-         inquadra il gruppo del suo sistema; il marker resta evidenziato. */
+      /* Click su una flotta → vedila sulla mappa, allo zoom di gruppo
+         stellare ma con la FLOTTA AL CENTRO schermo (richiesta utente
+         2026-06-14), non il baricentro del gruppo. */
       if (sid >= 0 && ORION.game && ORION.game.state) ORION.game.state.selectedId = sid;
       navigateView('group');
+      if (sid >= 0 && ORION.map && ORION.map.focusSystemCentered) ORION.map.focusSystemCentered(sid);
     });
   });
 }
