@@ -6205,6 +6205,23 @@ select.main-menu__input { cursor: pointer; }
   border: 1px solid rgba(240, 130, 150, 0.35);
   border-radius: var(--radius-sm, 5px);
 }
+.lp-fleet-group { margin-bottom: 8px; }
+.lp-fleet-group__h {
+  display: flex; align-items: center; gap: 5px;
+  margin: 0 0 4px;
+  padding-bottom: 3px;
+  font-size: 0.76rem;
+  color: var(--c-text-faint, #98a3c8);
+  border-bottom: 1px solid var(--c-border-soft, rgba(255, 255, 255, 0.08));
+}
+.lp-fleet-group__h strong { color: var(--c-violet, #b89cff); font-weight: 600; }
+.lp-fleet-group__n {
+  margin-left: auto;
+  font-family: var(--font-data, monospace);
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgb(var(--c-surface-rgb) / 0.6);
+}
 .lp-launcher__btn {
   display: flex; align-items: center; gap: 9px;
   width: 100%;

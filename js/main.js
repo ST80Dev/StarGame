@@ -9677,7 +9677,7 @@ function renderLeftPanel() {
     '</button>';
   }).join('');
 
-  const fleetItems = fleets.map(function (f) {
+  function fleetItemHtml(f) {
     const sysId = (f.location && f.location.systemId >= 0) ? f.location.systemId : -1;
     const sysName = sysId >= 0 ? g.galaxy.systems[sysId].name : '—';
     const status = (f.location && f.location.status) || 'idle';
@@ -9689,7 +9689,28 @@ function renderLeftPanel() {
       '<span class="lp-item__name"><strong>' + escapeHtml(f.name) + '</strong> <span class="lp-item__sub">in ' + escapeHtml(sysName) + '</span></span>' +
       '<span class="lp-item__badges"><span class="lp-item__badge lp-item__badge--' + cls + '">' + statusLbl + '</span></span>' +
     '</button>';
-  }).join('');
+  }
+  const fleetItems = fleets.map(fleetItemHtml).join('');
+  /* Riepilogo flotte raggruppate per gruppo stellare (specchio sintetico
+     della vista centrale) per la linguetta dedicata "Flotte". */
+  function fleetGroupedHtml() {
+    const byG = {};
+    fleets.forEach(function (f) {
+      const cl = (g.galaxy.systems[f.location.systemId] || {}).cluster;
+      (byG[cl] = byG[cl] || []).push(f);
+    });
+    const ids = Object.keys(byG).sort(function (a, b) { return byG[b].length - byG[a].length || Number(a) - Number(b); });
+    return ids.map(function (cl) {
+      const grp = g.galaxy.groups[cl] || {};
+      const acr = grp.acronym ? ' <span class="name-tag">[' + escapeHtml(grp.acronym) + ']</span>' : '';
+      return '<div class="lp-fleet-group">' +
+        '<div class="lp-fleet-group__h">' + uiIcon('group', 'violet') +
+          ' <strong>' + escapeHtml(grp.name || ('Gruppo ' + cl)) + '</strong>' + acr +
+          '<span class="lp-fleet-group__n">' + byG[cl].length + '</span></div>' +
+        byG[cl].map(fleetItemHtml).join('') +
+      '</div>';
+    }).join('');
+  }
 
   const rosterBody =
     (myKeys.length ? colItems : '<p class="lp-empty">Nessuna colonia operativa.</p>') +
@@ -9845,7 +9866,7 @@ function renderLeftPanel() {
     (warThreats
       ? '<div class="lp-fleet-war">' + uiIcon('warning', 'pink') + ' ' + warThreats + ' minaccia' + (warThreats === 1 ? '' : '/e') + ' in corso — apri la vista per gestirle</div>'
       : '') +
-    (fleets.length ? fleetItems : '<p class="lp-empty">Nessuna flotta attiva. Crea una flotta da un Hangar.</p>');
+    (fleets.length ? fleetGroupedHtml() : '<p class="lp-empty">Nessuna flotta attiva. Crea una flotta da un Hangar.</p>');
 
   const lpTabs = [
     { id: 'roster',    iconName: 'roster',    tone: 'cyan',   label: 'Roster',        alert: rosterAlert },
