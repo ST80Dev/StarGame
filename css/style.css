@@ -5431,13 +5431,18 @@ select.main-menu__input { cursor: pointer; }
   align-items: center;
   gap: 6px;
   font-family: var(--font-display, sans-serif);
-  font-size: 0.74rem;
-  letter-spacing: 0.04em;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--c-text-faint, #98a3c8);
-  margin-bottom: 6px;
+  color: var(--c-text, #e9ecf6);
+  margin-bottom: 7px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--c-border-soft, rgba(255, 255, 255, 0.1));
 }
-.fdetail__sec-h .fdetail__toggle { margin-left: auto; text-transform: none; }
+.fdetail__sec-h .fdetail__toggle { margin-left: auto; text-transform: none; font-weight: 600; }
+.fdetail__sec--ord.is-editing { border-color: rgba(47, 230, 224, 0.4); }
+.fdetail__crew-pick { margin-top: 6px; }
 .fdetail__opt {
   font-family: var(--font-data, monospace);
   text-transform: none;
