@@ -954,6 +954,36 @@
       this._animateTo(cam.s, cam.ox, cam.oy);
     }
 
+    /* Centra la camera su un SISTEMA mantenendo lo zoom di GRUPPO: vista
+       gruppo stellare ma con il sistema (e la flotta) al CENTRO schermo,
+       non il baricentro del gruppo (richiesta utente 2026-06-14). */
+    focusSystemCentered(id) {
+      const s = this.galaxy.systems[id];
+      if (!s) return;
+      this.activeGroupId = s.cluster;
+      this.state.selectedId = id;
+      let scale = this.fitScale * 2.3;
+      const g = this._groupById(s.cluster);
+      if (g) {
+        const pad = 0.03;
+        const pts = [
+          { x: g.minX - pad, y: g.minY - pad, z: g.minZ || 0 },
+          { x: g.maxX + pad, y: g.minY - pad, z: g.minZ || 0 },
+          { x: g.minX - pad, y: g.maxY + pad, z: g.maxZ || 0 },
+          { x: g.maxX + pad, y: g.maxY + pad, z: g.maxZ || 0 },
+          { x: g.cx, y: g.cy, z: g.cz || 0 }
+        ];
+        scale = this._cameraForRotatedBounds(pts, 0.62, this.fitScale * 2.3).s;
+      }
+      /* offset tale che il punto proiettato del sistema cada al centro schermo */
+      const r = this.orient.rotate(s.x - 0.5, s.y - 0.5, s.z || 0);
+      const persp = VIEWER_D / Math.max(0.4, VIEWER_D - r.z);
+      const ox = this.cssW / 2 - r.x * persp * scale - scale * 0.5;
+      const oy = this.cssH / 2 - r.y * persp * scale - scale * 0.5;
+      this._animateTo(scale, ox, oy);
+      this._emitContext(true);
+    }
+
     selectSystem(id) {
       this.state.selectedId = id;
       this.activeGroupId = this.galaxy.systems[id].cluster;
