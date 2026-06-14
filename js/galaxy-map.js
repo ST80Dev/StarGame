@@ -440,12 +440,30 @@
     /* M08 polish (decisione #61): posizione schermo di un marker flotta.
        Riproduce la geometria di `_drawFleets` (interpolazione in transito
        + offset deterministico statico) → hit-test e render concordano. */
+    /* Decisione utente: una flotta che opera INTRA-sistema presso una TUA
+       colonia (in orbita / docked / traversata intra) NON si vede sulla
+       mappa galassia — si gestisce nella vista Sistema. Restano visibili le
+       flotte in viaggio TRA sistemi e quelle in sistemi senza tua colonia. */
+    _fleetHiddenOnGalaxy(game, f) {
+      if (!game || !f || !f.location) return false;
+      const interTransit = f.location.status === 'in-transit'
+        && Array.isArray(f.route) && f.routeIdx + 1 < f.route.length;
+      if (interTransit) return false;
+      const cols = game.colonies || {};
+      const sys = f.location.systemId;
+      for (const k in cols) {
+        const c = cols[k];
+        if (c && c.colonized && c.systemId === sys) return true;
+      }
+      return false;
+    }
     _fleetScreenPos(f) {
       const g = this.galaxy;
       if (!f || !f.location) return null;
       const curSysId = f.location.systemId;
       const curSys = g.systems[curSysId];
       if (!curSys) return null;
+      if (this._fleetHiddenOnGalaxy(root.ORION && root.ORION.game, f)) return null;
       const inTransit = f.location.status === 'in-transit'
                     && Array.isArray(f.route) && f.routeIdx + 1 < f.route.length;
       if (inTransit) {
@@ -1671,6 +1689,9 @@
         for (let i = 0; i < game.fleets.length; i++) {
           const f = game.fleets[i];
           if (!f || !f.location) continue;
+          /* Decisione utente: niente flotte intra-sistema presso una tua
+             colonia sulla mappa galassia (si vedono nella vista Sistema). */
+          if (this._fleetHiddenOnGalaxy(game, f)) continue;
           const fSelected = (selectedFleetId && f.id === selectedFleetId);
           /* skip se non è il turno giusto */
           if (selectedFleetId) {
