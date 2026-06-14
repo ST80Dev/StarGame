@@ -6194,6 +6194,17 @@ select.main-menu__input { cursor: pointer; }
 
 /* --- Launcher buttons (Diplomazia / Ricerca / Mercato) --- */
 .lp-launcher { display: flex; flex-direction: column; gap: 5px; }
+.lp-launcher--single { margin-bottom: 8px; }
+.lp-fleet-war {
+  display: flex; align-items: center; gap: 6px;
+  margin: 0 0 8px;
+  padding: 6px 9px;
+  font-size: 0.78rem;
+  color: var(--c-bad, #f08296);
+  background: rgba(240, 130, 150, 0.1);
+  border: 1px solid rgba(240, 130, 150, 0.35);
+  border-radius: var(--radius-sm, 5px);
+}
 .lp-launcher__btn {
   display: flex; align-items: center; gap: 9px;
   width: 100%;

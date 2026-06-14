@@ -9734,11 +9734,6 @@ function renderLeftPanel() {
       '<span>Destino</span>' +
       '<span class="lp-launcher__sub">' + escapeHtml(vFocusSub) + '</span>' +
     '</button>' +
-    '<button class="lp-launcher__btn' + (currentView === 'fleet' ? ' is-active' : '') + '" data-view="fleet" type="button">' +
-      '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('fleet') + '</span>' +
-      '<span>Flotte</span>' +
-      '<span class="lp-launcher__sub">' + fleets.length + '</span>' +
-    '</button>' +
     '<button class="lp-launcher__btn' + (currentView === 'civ' ? ' is-active' : '') + '" data-view="civ" type="button">' +
       '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('diplomacy') + '</span>' +
       '<span>Diplomazia</span>' +
@@ -9835,9 +9830,27 @@ function renderLeftPanel() {
      Le 5 macro-sezioni diventano tab: una sola attiva per volta, niente
      più scroll alto/basso per cambiare sezione. Riusa le classi
      .planet-tabs/.planet-tab del pannello dx → stile identico (glow). */
+  /* Flotte come SEZIONE dedicata, fuori da "Sale e moduli" (richiesta utente
+     2026-06-13): linguetta propria con launcher alla vista + roster flotte
+     cliccabili + avviso minacce di guerra. */
+  const warThreats = ((g.incursions || []).length) + ((g.battles || []).filter(function (b) { return b.status === 'active'; }).length);
+  const fleetTabBody =
+    '<div class="lp-launcher lp-launcher--single">' +
+      '<button class="lp-launcher__btn' + (currentView === 'fleet' ? ' is-active' : '') + '" data-view="fleet" type="button">' +
+        '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('fleet') + '</span>' +
+        '<span>Flotte e guerra</span>' +
+        '<span class="lp-launcher__sub">' + fleets.length + (warThreats ? ' · ⚠' + warThreats : '') + '</span>' +
+      '</button>' +
+    '</div>' +
+    (warThreats
+      ? '<div class="lp-fleet-war">' + uiIcon('warning', 'pink') + ' ' + warThreats + ' minaccia' + (warThreats === 1 ? '' : '/e') + ' in corso — apri la vista per gestirle</div>'
+      : '') +
+    (fleets.length ? fleetItems : '<p class="lp-empty">Nessuna flotta attiva. Crea una flotta da un Hangar.</p>');
+
   const lpTabs = [
     { id: 'roster',    iconName: 'roster',    tone: 'cyan',   label: 'Roster',        alert: rosterAlert },
     { id: 'nav',       iconName: 'galaxy',    tone: 'violet', label: 'Navigazione',   alert: null },
+    { id: 'fleet',     iconName: 'fleet',     tone: 'cyan',   label: 'Flotte',        alert: warThreats ? 'bad' : null },
     { id: 'launcher',  iconName: 'settings',  tone: 'gold',   label: 'Sale e moduli', alert: (typeof dispatchPending === 'function' && dispatchPending()) ? 'info' : null }
   ];
   if (councilBody) {
@@ -9867,6 +9880,8 @@ function renderLeftPanel() {
     bodyHtml = '<div class="lp-tab-body"><div class="lp-tab-body__count">' + rosterCount + '</div>' + rosterBody + '</div>';
   } else if (activeLp === 'nav') {
     bodyHtml = '<div class="lp-tab-body"><nav class="lp-nav">' + navHtml + '</nav></div>';
+  } else if (activeLp === 'fleet') {
+    bodyHtml = '<div class="lp-tab-body">' + fleetTabBody + '</div>';
   } else if (activeLp === 'launcher') {
     bodyHtml = '<div class="lp-tab-body"><div class="lp-launcher">' + launcherHtml + '</div></div>';
   } else if (activeLp === 'council') {
