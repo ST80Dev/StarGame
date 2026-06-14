@@ -455,6 +455,78 @@
       this._drawStars(ctx, star);
       this._drawBodies(ctx, star);
       if (this.revealed()) this._drawAnomalyMarkers(ctx);
+      this._drawFleets(ctx);
+    }
+
+    /* Decisione utente: flotte del giocatore DENTRO questo sistema. Disegna
+       il marker accanto al corpo orbitato (location.bodyKey), e per uno
+       spostamento intra-sistema (location.intra) interpola la posizione lungo
+       la tratta corpo→corpo con la linea tratteggiata — allineato alla grafica
+       dei viaggi inter-sistema della mappa galassia. */
+    _drawFleets(ctx) {
+      const game = root.ORION && root.ORION.game;
+      if (!game || !Array.isArray(game.fleets) || !game.fleets.length || !this.system) return;
+      const sysId = this.system.id;
+      const SY = root.ORION.system;
+      const findBody = (k) => (SY && SY.findBody) ? SY.findBody(this.system, k) : null;
+      for (let i = 0; i < game.fleets.length; i++) {
+        const f = game.fleets[i];
+        if (!f || !f.location || f.location.systemId !== sysId) continue;
+        let wpos = null, routeFrom = null, routeTo = null;
+        const intra = f.location.intra;
+        if (intra) {
+          const a = intra.fromBodyKey != null ? findBody(intra.fromBodyKey) : null;
+          const b = intra.toBodyKey != null ? findBody(intra.toBodyKey) : null;
+          const pa = a ? this.bodyWorldPos(a) : { x: 0, y: 0 };
+          const pb = b ? this.bodyWorldPos(b) : { x: 0, y: 0 };
+          const total = intra.totalI || 1;
+          const eta = Math.max(0, f.etaImpulsi || 0);
+          const t = total > 0 ? Math.max(0, Math.min(1, 1 - eta / total)) : 1;
+          wpos = { x: pa.x + (pb.x - pa.x) * t, y: pa.y + (pb.y - pa.y) * t };
+          routeFrom = pa; routeTo = pb;
+        } else {
+          let bk = f.location.bodyKey;
+          if (bk == null && f.location.status === 'docked' && f.ownerColonyKey != null) {
+            const parts = String(f.ownerColonyKey).split(':');
+            if (parts.length === 2 && parseInt(parts[0], 10) === sysId) bk = parts[1];
+          }
+          const b = bk != null ? findBody(bk) : null;
+          wpos = b ? this.bodyWorldPos(b) : { x: 0, y: 0 };
+        }
+        const p = this.worldToScreen(wpos.x, wpos.y);
+        /* Linea tratteggiata della traversata intra-sistema. */
+        if (routeFrom && routeTo) {
+          const sa = this.worldToScreen(routeFrom.x, routeFrom.y);
+          const sb = this.worldToScreen(routeTo.x, routeTo.y);
+          ctx.save();
+          ctx.strokeStyle = 'rgba(120,200,240,0.5)';
+          ctx.lineWidth = 1.2; ctx.setLineDash([4, 4]);
+          ctx.beginPath(); ctx.moveTo(sa.x, sa.y); ctx.lineTo(sb.x, sb.y); ctx.stroke();
+          ctx.restore();
+        }
+        /* Offset deterministico dal corpo (non sovrapporsi al pianeta). */
+        let h = 0; const id = f.id || ('f' + i);
+        for (let c = 0; c < id.length; c++) h = (h * 31 + id.charCodeAt(c)) | 0;
+        h = Math.abs(h);
+        const ang = intra ? 0 : (h % 360) * Math.PI / 180;
+        const off = intra ? 0 : 13;
+        const mx = p.x + Math.cos(ang) * off, my = p.y + Math.sin(ang) * off;
+        const st = f.location.status;
+        const col = (st === 'in-transit') ? '#7fd0f0' : (st === 'docked') ? '#9fd0a8' : '#f0d670';
+        ctx.save();
+        ctx.fillStyle = col;
+        ctx.strokeStyle = 'rgba(8,12,24,0.85)'; ctx.lineWidth = 1.5;
+        const r = 5;
+        ctx.beginPath();
+        ctx.moveTo(mx, my - r); ctx.lineTo(mx + r, my);
+        ctx.lineTo(mx, my + r); ctx.lineTo(mx - r, my); ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = 'rgba(222,236,255,0.92)';
+        ctx.font = '10px system-ui, sans-serif';
+        ctx.textBaseline = 'middle';
+        ctx.fillText((f.name || '').slice(0, 14), mx + r + 3, my);
+        ctx.restore();
+      }
     }
 
     _drawDust(ctx) {

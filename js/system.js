@@ -635,10 +635,50 @@
     return null;
   }
 
+  /* Posizione-mondo di un corpo (centrata sulla stella 0,0). Le lune
+     orbitano relative al genitore. Sorgente unica della geometria
+     intra-sistema (riusata da fleet.js, system-view.js, main.js). */
+  function bodyWorldPos(system, body) {
+    if (!body) return { x: 0, y: 0 };
+    if (body.parentKey) {
+      const parent = findBody(system, body.parentKey);
+      const p = parent ? bodyWorldPos(system, parent) : { x: 0, y: 0 };
+      return {
+        x: p.x + Math.cos(body.angle) * (body.moonOrbit || 0),
+        y: p.y + Math.sin(body.angle) * (body.moonOrbit || 0)
+      };
+    }
+    return {
+      x: Math.cos(body.angle) * (body.orbit || 0),
+      y: Math.sin(body.angle) * (body.orbit || 0)
+    };
+  }
+
+  /* Distanza fittizia in Ι tra due corpi dello stesso sistema (spostamento
+     intra-sistema, decisione utente "viaggio reale"). Euclidea × INTRA_FACTOR
+     (allineato al placeholder GDD §13, base 4-12 Ι). fromKey/toKey null → la
+     stella (centro). Stesso corpo o distanza nulla → 0 (istantaneo). */
+  const INTRA_FACTOR = 6;
+  function intraImpulsi(system, fromKey, toKey) {
+    if (!system) return 0;
+    if (fromKey != null && toKey != null && fromKey === toKey) return 0;
+    const a = fromKey != null ? findBody(system, fromKey) : null;
+    const b = toKey != null ? findBody(system, toKey) : null;
+    const pa = bodyWorldPos(system, a);
+    const pb = bodyWorldPos(system, b);
+    const dx = pb.x - pa.x, dy = pb.y - pa.y;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    if (d <= 0) return 0;
+    return Math.max(1, Math.round(d * INTRA_FACTOR));
+  }
+
   root.ORION = root.ORION || {};
   root.ORION.system = {
     generate: generate,
     findBody: findBody,
+    bodyWorldPos: bodyWorldPos,
+    intraImpulsi: intraImpulsi,
+    INTRA_FACTOR: INTRA_FACTOR,
     BODY_TYPES: BODY_TYPES,
     PRIME_TYPES: PRIME_TYPES,
     STAR_PHYS: STAR_PHYS,

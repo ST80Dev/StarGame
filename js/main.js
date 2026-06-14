@@ -2637,7 +2637,10 @@ function openColonizePicker(planet) {
     const info = colonizeCostInfo(g, planet, f);
     const orbit = 10;
     const minSpeed = F.fleetMinSpeed(f);
-    const travelEst = intra ? 0 : hops * F.tempoLeg(g.galaxy, f.location.systemId, planet.systemId, minSpeed);
+    /* Decisione utente: l'intra-sistema ora ha un viaggio reale corpo→corpo. */
+    const travelEst = intra
+      ? (F.intraTravelI ? F.intraTravelI(g, f, planet.bodyKey) : 0)
+      : hops * F.tempoLeg(g.galaxy, f.location.systemId, planet.systemId, minSpeed);
     /* Decisione #66 (refinement): foundation = colCost.impulsi pieno (dipende
        da grandezza+ostilità del pianeta, NON dal viaggio). Travel e orbit
        sono additivi. */
@@ -8616,6 +8619,9 @@ function runAdvance(impulsi) {
   sampleEmpireTelemetry();
   updateGlobalResourceHud();
   if (ORION.openPlanetKey) updatePlanetUI();
+  /* Decisione utente: ridisegna la vista Sistema così i marker flotta
+     (incl. spostamenti intra-sistema) si muovono col tempo. */
+  if (ORION.systemView && ORION.systemView.requestRender) ORION.systemView.requestRender();
   updateTimeControlsHint();
   persistGame(g);
   /* Rilancia l'animazione DS dal tick corrente (ricomincia da Ι appena maturato) */

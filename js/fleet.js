@@ -766,16 +766,23 @@
       if (!fleetHasGunsLocal(fleet)) return { ok: false, reason: 'La flotta è disarmata (nessuna potenza di fuoco)' };
       const bodyKey = (order.bodyKey != null) ? String(order.bodyKey) : null;
       const currentSys = fleet.location.systemId;
-      /* Intra-sistema: zero viaggio, ingaggia subito al prossimo tick. */
+      /* Intra-sistema: traversata corpo→corpo (se distante), poi ingaggio.
+         attackTarget viene impostato all'ARRIVO (processSkirmishes salta le
+         flotte in-transit). */
       if (to === currentSys) {
         fleet.orders = { type: 'attack', toSysId: to, bodyKey: bodyKey };
-        fleet.route = [currentSys];
-        fleet.routeIdx = 0;
-        fleet.location.status = 'orbiting';
-        if (bodyKey) fleet.location.bodyKey = bodyKey;
-        fleet.attackTarget = to;
-        fleet.attackBodyKey = bodyKey;
-        fleet.etaImpulsi = 0;
+        const intraI = bodyKey != null ? intraTravelI(game, fleet, bodyKey) : 0;
+        if (intraI > 0) {
+          beginIntraTransit(game, fleet, bodyKey, intraI);
+        } else {
+          fleet.route = [currentSys];
+          fleet.routeIdx = 0;
+          fleet.location.status = 'orbiting';
+          if (bodyKey) fleet.location.bodyKey = bodyKey;
+          fleet.attackTarget = to;
+          fleet.attackBodyKey = bodyKey;
+          fleet.etaImpulsi = 0;
+        }
         return { ok: true };
       }
       const path = computePath(game.galaxy, currentSys, to);
@@ -807,11 +814,17 @@
       const baseOrder = { type: 'garrison', toSysId: to, bodyKey: bodyKey };
       if (to === currentSys) {
         fleet.orders = baseOrder;
-        fleet.route = [currentSys];
-        fleet.routeIdx = 0;
-        fleet.location.status = 'orbiting';
-        fleet.location.bodyKey = bodyKey;
-        fleet.etaImpulsi = 0;
+        /* Intra-sistema: traversata corpo→corpo (se distante), poi osserva. */
+        const intraI = intraTravelI(game, fleet, bodyKey);
+        if (intraI > 0) {
+          beginIntraTransit(game, fleet, bodyKey, intraI);
+        } else {
+          fleet.route = [currentSys];
+          fleet.routeIdx = 0;
+          fleet.location.status = 'orbiting';
+          fleet.location.bodyKey = bodyKey;
+          fleet.etaImpulsi = 0;
+        }
         return { ok: true };
       }
       const path = computePath(game.galaxy, currentSys, to);
@@ -890,20 +903,24 @@
         fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
         return { ok: true };
       }
-      /* Intra-sistema: salta travel, parte dall'orbit. */
-      fleet.orders = {
-        type: 'colonize',
-        toSysId: to,
-        bodyKey: bodyKey,
-        phase: 'orbit',
-        phaseLeft: orbitI,
-        orbitI: orbitI,
-        foundationI: foundationI
-      };
-      fleet.route = [currentSys];
-      fleet.routeIdx = 0;
-      fleet.location.status = 'orbiting';
-      fleet.etaImpulsi = 0;
+      /* Intra-sistema: traversata corpo→corpo (se distante), poi orbit. */
+      const intraI = intraTravelI(game, fleet, bodyKey);
+      if (intraI > 0) {
+        fleet.orders = {
+          type: 'colonize', toSysId: to, bodyKey: bodyKey,
+          phase: 'travel-intra', orbitI: orbitI, foundationI: foundationI
+        };
+        beginIntraTransit(game, fleet, bodyKey, intraI);
+      } else {
+        fleet.orders = {
+          type: 'colonize', toSysId: to, bodyKey: bodyKey,
+          phase: 'orbit', phaseLeft: orbitI, orbitI: orbitI, foundationI: foundationI
+        };
+        fleet.route = [currentSys];
+        fleet.routeIdx = 0;
+        fleet.location.status = 'orbiting';
+        fleet.etaImpulsi = 0;
+      }
       return { ok: true };
     }
 
@@ -1415,6 +1432,78 @@
   }
 
   /* ------------------------------------------------------------------
+     Spostamento INTRA-sistema (decisione utente "viaggio reale").
+     Quando un ordine intra-sistema (colonize/garrison/attack) ha un corpo
+     target diverso da quello corrente, la flotta NON si riposiziona più
+     all'istante: percorre una distanza fittizia in Ι (ORION.system.intraImpulsi)
+     restando `in-transit` con `location.intra = {fromBodyKey, toBodyKey,
+     totalI}`. All'arrivo applica la continuazione dell'ordine (orbit per
+     colonize, ingaggio per attack, osservazione per garrison).
+     Lazy/additivo su fleet.location → nessun bump di schema.
+     ------------------------------------------------------------------ */
+  function fleetCurrentBodyKey(game, fleet) {
+    if (fleet.location && fleet.location.bodyKey != null) return fleet.location.bodyKey;
+    /* docked alla colonia origine → il corpo della colonia. */
+    if (fleet.location && fleet.location.status === 'docked' && fleet.ownerColonyKey != null) {
+      const parts = String(fleet.ownerColonyKey).split(':');
+      if (parts.length === 2 && parseInt(parts[0], 10) === fleet.location.systemId) return parts[1];
+    }
+    return null;   // orbita generica del sistema → la stella (centro)
+  }
+  function intraTravelI(game, fleet, toBodyKey) {
+    if (!ORION.system || !ORION.system.intraImpulsi || !ORION.system.generate) return 0;
+    const sys = ORION.system.generate(game.galaxy, fleet.location.systemId);
+    const fromBk = fleetCurrentBodyKey(game, fleet);
+    return ORION.system.intraImpulsi(sys, fromBk, toBodyKey);
+  }
+  function beginIntraTransit(game, fleet, toBodyKey, intraI) {
+    const sysId = fleet.location.systemId;
+    fleet.location.intra = {
+      systemId: sysId,
+      fromBodyKey: fleetCurrentBodyKey(game, fleet),
+      toBodyKey: toBodyKey,
+      totalI: intraI
+    };
+    fleet.location.status = 'in-transit';
+    fleet.route = [sysId];
+    fleet.routeIdx = 0;
+    fleet.etaImpulsi = intraI;
+  }
+  function arriveIntra(game, fleet, events) {
+    const intra = fleet.location.intra;
+    const order = fleet.orders || {};
+    const sysId = fleet.location.systemId;
+    const toBk = (intra && intra.toBodyKey != null) ? intra.toBodyKey :
+                 (order.bodyKey != null ? order.bodyKey : null);
+    fleet.location.bodyKey = toBk;
+    fleet.location.intra = null;
+    fleet.location.status = 'orbiting';
+    fleet.etaImpulsi = 0;
+    fleet.route = [sysId];
+    fleet.routeIdx = 0;
+    events.push({
+      kind: 'fleet-arrived',
+      fleetId: fleet.id, fleetName: fleet.name,
+      systemId: sysId, bodyKey: toBk,
+      impulso: game.timeImpulsi
+    });
+    if (order.type === 'colonize') {
+      order.phase = 'orbit';
+      order.phaseLeft = order.orbitI || COLONIZE_ORBIT_DURATION;
+      events.push({
+        kind: 'fleet-colonize-orbit',
+        fleetId: fleet.id, fleetName: fleet.name,
+        systemId: sysId, bodyKey: toBk,
+        impulso: game.timeImpulsi
+      });
+    } else if (order.type === 'attack') {
+      fleet.attackTarget = sysId;
+      fleet.attackBodyKey = toBk;
+    }
+    /* garrison/survey: resta orbiting, l'ordine prosegue attivo. */
+  }
+
+  /* ------------------------------------------------------------------
      tick — 1 Impulso. Decrementa etaImpulsi se in transito; alla fine
      del leg avanza al prossimo sistema e gestisce arrivo/return/patrol.
      ------------------------------------------------------------------ */
@@ -1448,6 +1537,15 @@
     if (fleet.location.status === 'orbiting' && fleet.orders.type === 'colonize' &&
         (fleet.orders.phase === 'orbit' || fleet.orders.phase === 'foundation')) {
       tickColonizePhase(game, fleet, events);
+      return;
+    }
+
+    /* Spostamento INTRA-sistema (decisione utente): countdown della
+       traversata corpo→corpo; all'arrivo applica la continuazione dell'ordine. */
+    if (fleet.location.status === 'in-transit' && fleet.location.intra) {
+      fleet.etaImpulsi = (fleet.etaImpulsi || 0) - 1;
+      if (fleet.etaImpulsi > 0) return;
+      arriveIntra(game, fleet, events);
       return;
     }
 
@@ -2164,6 +2262,9 @@
     loadViveriAtPort: loadViveriAtPort,
     routeImpulsi: routeImpulsi,
     viveriNextEventDelta: viveriNextEventDelta,
+    /* Spostamento intra-sistema (decisione utente): stima Ι corpo→corpo. */
+    intraTravelI: intraTravelI,
+    fleetCurrentBodyKey: fleetCurrentBodyKey,
     isFriendlyPortAt: isFriendlyPortAt,
     payablePortAt: payablePortAt,
     supplyOutlook: supplyOutlook,
