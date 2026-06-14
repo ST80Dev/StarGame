@@ -9996,10 +9996,11 @@ function renderLeftPanel() {
   host.querySelectorAll('[data-action="roster-fleet"]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       const sid = Number(btn.dataset.sys);
-      navigateView('fleet');
-      /* Anche se la mappa non è visibile, conserviamo la selezione: utile
-         al prossimo ritorno. */
-      if (ORION.game && ORION.game.state && sid >= 0) ORION.game.state.selectedId = sid;
+      /* Click su una flotta → vedila sulla mappa, a livello di gruppo
+         stellare (richiesta utente 2026-06-14). Imposta la selezione e
+         inquadra il gruppo del suo sistema; il marker resta evidenziato. */
+      if (sid >= 0 && ORION.game && ORION.game.state) ORION.game.state.selectedId = sid;
+      navigateView('group');
     });
   });
 }
@@ -10840,8 +10841,9 @@ function openFleetInfoPopup(fleetId, screenX, screenY) {
       (orderInfo.eta != null ? '<div><dt>Arrivo in</dt><dd>' + orderInfo.eta + ' Ι</dd></div>' : '') +
     '</dl>' +
     '<div class="fleet-info-popup__actions">' +
-      '<button class="btn btn--mini" data-action="fleet-info-wizard" type="button">📋 Wizard ordini</button>' +
-      '<button class="btn btn--mini btn--primary" data-action="fleet-info-pick" type="button">🎯 Scegli rotta da mappa</button>' +
+      '<button class="btn btn--mini btn--primary btn--with-icon" data-action="fleet-info-detail" type="button">' + uiIcon('settings', 'cyan') + ' Dettaglio</button>' +
+      '<button class="btn btn--mini btn--with-icon" data-action="fleet-info-wizard" type="button">' + uiIcon('fleet', 'cyan') + ' Ordini</button>' +
+      '<button class="btn btn--mini btn--with-icon" data-action="fleet-info-pick" type="button">' + uiIcon('pin', 'cyan') + ' Rotta da mappa</button>' +
     '</div>';
 
   document.body.appendChild(node);
@@ -10860,6 +10862,10 @@ function openFleetInfoPopup(fleetId, screenX, screenY) {
 
   /* Handlers */
   node.querySelector('[data-action="fleet-info-close"]').addEventListener('click', closeFleetInfoPopup);
+  node.querySelector('[data-action="fleet-info-detail"]').addEventListener('click', function () {
+    closeFleetInfoPopup();
+    openFleetDetail(fleetId);
+  });
   node.querySelector('[data-action="fleet-info-wizard"]').addEventListener('click', function () {
     closeFleetInfoPopup();
     openFleetDetail(fleetId, { orders: true });
