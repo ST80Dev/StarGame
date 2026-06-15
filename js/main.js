@@ -10063,15 +10063,26 @@ function chronicleEvent(ev) {
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
   } else if (ev.kind === 'incursion-inbound') {
     /* Preavviso (recovery-friendly #22): l'incursione arriva fra ETA Ι.
-       Fase B: può essere un'incursione AI di conquista (più grave). */
-    const cn = colonyNameFromKey(ev.targetColonyKey);
+       Fase B: può essere un'incursione AI di conquista (più grave).
+       Bug fix 2026-06-15 (feedback utente "in arrivo a ___"): quando il
+       bersaglio è una stazione (M16 Fase B #82), `targetColonyKey` è null
+       e colonyNameFromKey ritorna '—'. Riusiamo siegeTargetName che già
+       gestisce entrambi i casi (mappiamo i campi su quelli che si aspetta). */
+    const tn = siegeTargetName({
+      stationId: ev.targetStationId,
+      colonyKey: ev.targetColonyKey,
+      systemId: ev.targetSysId
+    });
     const tag = ev.targetSysId >= 0 ? bodyTagHtml(ev.targetSysId) : '';
     const who = (ev.attackerKind === 'ai')
       ? ('Forza d\'invasione di <strong>' + escapeHtml(ev.civName || 'una civiltà') + '</strong>')
       : '<strong>Incursione pirata</strong>';
-    pushChronicle(ds + ' — ' + who + ' in rotta verso ' + cn + tag +
+    pushChronicle(ds + ' — ' + who + ' in rotta verso ' + tn + tag +
       ' · arrivo stimato fra <strong>' + ev.eta + ' ' + iU() + '</strong>. Prepara le difese.', 'system');
     if (ORION.tutorial) ORION.tutorial.fire(ev.attackerKind === 'ai' ? 'siege' : 'combat');
+    /* Richiedi un re-render della mappa: il marker pulsante sul bersaglio
+       deve apparire subito, non al prossimo tick. */
+    if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
   } else if (ev.kind === 'siege-begin') {
     const cn = siegeTargetName(ev);
     const tag = ev.systemId >= 0 ? bodyTagHtml(ev.systemId) : '';
