@@ -165,6 +165,17 @@
   const TRAVEL_MIN = 40;
   const TRAVEL_MAX = 80;
 
+  /* Esperienza da viaggio (ricalibrazione 2026-06-15, emenda #39/#43/#71).
+     L'equipaggio matura per SERVIZIO: ogni TRAVEL_XP_EVERY Ι effettivamente
+     trascorsi in volo (qualunque ordine: move/attack/colonize/return/rotta/
+     pattuglia/explore) → +1 xp. Così i viaggi semplici contano, non solo le
+     esplorazioni a/r. Anti-farm: è ancorato al TEMPO reale di volo (la spola
+     A→B non bara più del tempo che costa). Un hop dura 40-80 Ι → ~1-1.5 hop
+     per xp; promozione a Comandante (xp 10, #71) ≈ 800 Ι di servizio. I bonus
+     "speciali" (combattimento vinto, esplorazione completata) restano in
+     aggiunta. Tarabile in M20. */
+  const TRAVEL_XP_EVERY = 80;
+
   /* Decisione #66: durata costante della fase orbit (scout/setup atterraggio)
      dell'ordine `colonize`. La fase foundation usa il countdown già definito
      in §6.2 dal pianeta (colCost.impulsi), passato come `foundationI`. */
@@ -1647,6 +1658,7 @@
     /* Spostamento INTRA-sistema (decisione utente): countdown della
        traversata corpo→corpo; all'arrivo applica la continuazione dell'ordine. */
     if (fleet.location.status === 'in-transit' && fleet.location.intra) {
+      accrueTravelXp(game, fleet, events);
       fleet.etaImpulsi = (fleet.etaImpulsi || 0) - 1;
       if (fleet.etaImpulsi > 0) return;
       arriveIntra(game, fleet, events);
@@ -1658,6 +1670,7 @@
          sono gestiti immediatamente da setOrder o dal completamento del leg. */
       return;
     }
+    accrueTravelXp(game, fleet, events);
     fleet.etaImpulsi = (fleet.etaImpulsi || 0) - 1;
     if (fleet.etaImpulsi > 0) return;
 
@@ -1819,6 +1832,16 @@
         systemId: arrivedAt,
         impulso: game.timeImpulsi
       });
+      /* Bonus "speciale" (ricalibrazione 2026-06-15, richiesta utente):
+         l'esplorazione si premia al MOMENTO DELLA SCOPERTA (raggiunto +
+         rivelato il target), CON O SENZA ritorno. Niente doppio conteggio:
+         il rientro non riassegna più questo +1 (vedi handler `return`).
+         awardCrewXp tiene il servizio 'travel' → ruolo Ingegnere alla
+         promozione, coerente col vecchio roleHint 'ingegnere'. */
+      if (!fleet._exploreRewarded) {
+        fleet._exploreRewarded = true;
+        awardCrewXp(game, fleet, 1, events, 'travel');
+      }
       /* Decisione #60: usura base del viaggio (come expedition.js):
          +8% + danger*10% sulla nave esploratrice all'arrivo. */
       const ship = fleet.ships && fleet.ships[0];
@@ -1881,8 +1904,10 @@
         const ship = fleet.ships[0];
         const crew = fleet.crew[0];
         const shipLost = !!(ship && ship.wear >= 100);
-        /* xp +1 al crew (sempre, anche con incidente non critico). */
-        if (crew) crew.xp = (crew.xp || 0) + 1;
+        /* xp dell'esplorazione già assegnato all'ARRIVO (scoperta), con o
+           senza ritorno (ricalibrazione 2026-06-15) → niente +1 qui, era
+           doppio conteggio. Il viaggio di rientro matura già via
+           accrueTravelXp tick-per-tick. */
         /* Identità STABILE: il crew conserva il proprio id (e quindi il
            callsign) per tutta la vita — niente più rinomina al rientro, che
            faceva "saltare" il codice dello stesso equipaggio (fix naming). */
@@ -2166,24 +2191,19 @@
           }
         }
       }
-      /* Servizio (decisione utente 2026-06-11): rotta lunga (≥3 tappe)
-         conclusa → l'equipaggio matura. Anti-farm: le rotte brevi (1-2
-         tappe) non danno xp. */
-      if (order.waypoints && order.waypoints.length >= 3) {
-        awardCrewXp(game, fleet, 1, events, 'travel');
-      }
+      /* Ricalibrazione 2026-06-15: l'xp di una rotta a tappe matura ora dal
+         TEMPO di volo (accrueTravelXp tick-per-tick) — una rotta lunga
+         accumula naturalmente più xp. Rimosso il bonus-milestone a fine
+         rotta (era un surrogato del viaggio, ora ridondante). */
       finishCompound(game, fleet, events, 'route-complete');
       return;
     }
 
     if (order.type === 'patrol-loop') {
       order.loopIdx = (order.loopIdx + 1) % order.loop.length;
-      /* Servizio: giro completo di pattuglia su ≥3 sistemi → +1 xp.
-         Anti-farm: il ping-pong a 2 sistemi non matura; un giro a 3+
-         sistemi costa ≥120 Ι, quindi la crescita è lenta (servizio). */
-      if (order.loopIdx === 0 && order.loop.length >= 3) {
-        awardCrewXp(game, fleet, 1, events, 'tactical');
-      }
+      /* Ricalibrazione 2026-06-15: l'xp della pattuglia matura dal TEMPO di
+         volo (accrueTravelXp, taggato 'tactical' → Stratega). Rimosso il
+         bonus a fine-giro: ora pattugliare a lungo paga continuamente. */
       const next = order.loop[order.loopIdx];
       const path = computePath(game.galaxy, fleet.location.systemId, next);
       if (path && path.length > 1) {
@@ -2248,6 +2268,27 @@
           });
         }
       }
+    }
+  }
+
+  /* Esperienza da viaggio (ricalibrazione 2026-06-15): accumula gli Ι
+     trascorsi in volo sulla flotta; ogni TRAVEL_XP_EVERY → +1 xp a tutto
+     l'equipaggio (via awardCrewXp, che gestisce svc/ranghi/promozione).
+     Chiamata a ogni tick in cui la flotta è in-transit (1 Ι di volo).
+     `_travelI` persiste nel save (game.fleets serializzato wholesale) →
+     l'accumulo parziale non si azzera a save/load. */
+  function accrueTravelXp(game, fleet, events) {
+    if (!fleet || !Array.isArray(fleet.crew) || !fleet.crew.length) return;
+    fleet._travelI = (fleet._travelI || 0) + 1;
+    if (fleet._travelI < TRAVEL_XP_EVERY) return;
+    /* Tag del servizio (#75 emergenza-ruolo): pattugliare → 'tactical'
+       (Stratega), il resto del volo → 'travel' (Ingegnere). Il combattimento
+       resta separato (awardCrewXp 'combat' da time.js → Comandante). */
+    const ot = fleet.orders && fleet.orders.type;
+    const kind = (ot === 'patrol' || ot === 'patrol-loop') ? 'tactical' : 'travel';
+    while (fleet._travelI >= TRAVEL_XP_EVERY) {
+      fleet._travelI -= TRAVEL_XP_EVERY;
+      awardCrewXp(game, fleet, 1, events, kind);
     }
   }
 
