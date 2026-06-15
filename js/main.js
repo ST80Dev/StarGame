@@ -1388,6 +1388,9 @@ function openSystem(id) {
     discovery: disc,
     onSelectBody: (key) => updateSystemUI(system, key),
     onActivateBody: (key) => openPlanet(id, key),
+    /* Click su marker flotta in vista sistema → stesso popup info delle
+       flotte interstellari (richiesta utente 2026-06-15). */
+    onFleetClick: (fleetId, cx, cy) => openFleetInfoPopup(fleetId, cx, cy),
     onExit: () => {
       const cluster = g.galaxy.systems[id].cluster;
       closeSystem();

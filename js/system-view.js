@@ -52,6 +52,8 @@
       this.onSelectBody = null;
       this.onActivateBody = null;
       this.onExit = null;
+      this.onFleetClick = null;        // click su marker flotta (vista sistema)
+      this._fleetHit = [];             // posizioni marker flotta per l'hit-test
       this._navCdUntil = 0;            // decisione #80: cooldown tra livelli
 
       this.scale = 1;
@@ -87,6 +89,7 @@
       this.onSelectBody = opts.onSelectBody || null;
       this.onActivateBody = opts.onActivateBody || null;
       this.onExit = opts.onExit || null;
+      this.onFleetClick = opts.onFleetClick || null;
 
       container.innerHTML = '';
       const canvas = document.createElement('canvas');
@@ -294,7 +297,25 @@
       }
       if (this.pointers.size < 2) this.lastPinchDist = 0;
       if (this.pointers.size === 0) this.dragging = false;
-      if (!wasDrag) this._handleClick(p.x, p.y);
+      if (!wasDrag) {
+        /* Click su un marker flotta → popup info (come sulla mappa galassia).
+           Ha priorità sulla selezione del corpo. */
+        const fid = this.pickFleet(p.x, p.y);
+        if (fid != null && this.onFleetClick) { this.onFleetClick(fid, e.clientX, e.clientY); return; }
+        this._handleClick(p.x, p.y);
+      }
+    }
+
+    /* Hit-test dei marker flotta (posizioni memorizzate in _drawFleets). */
+    pickFleet(sx, sy) {
+      const hits = this._fleetHit || [];
+      let best = null, bestD = 12 * 12;
+      for (let i = 0; i < hits.length; i++) {
+        const dx = hits[i].x - sx, dy = hits[i].y - sy;
+        const d = dx * dx + dy * dy;
+        if (d < bestD) { bestD = d; best = hits[i].id; }
+      }
+      return best;
     }
 
     _handleClick(sx, sy) {
@@ -464,6 +485,7 @@
        la tratta corpo→corpo con la linea tratteggiata — allineato alla grafica
        dei viaggi inter-sistema della mappa galassia. */
     _drawFleets(ctx) {
+      this._fleetHit = [];
       const game = root.ORION && root.ORION.game;
       if (!game || !Array.isArray(game.fleets) || !game.fleets.length || !this.system) return;
       const sysId = this.system.id;
@@ -568,6 +590,7 @@
           ctx.beginPath(); ctx.moveTo(routeFrom.x, routeFrom.y); ctx.lineTo(routeTo.x, routeTo.y); ctx.stroke();
           ctx.restore();
         }
+        this._fleetHit.push({ id: f.id, x: mx, y: my });
         const st = f.location.status;
         const col = (st === 'in-transit') ? '#7fd0f0' : (st === 'docked') ? '#9fd0a8' : '#f0d670';
         ctx.save();
