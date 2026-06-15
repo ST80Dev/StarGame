@@ -7443,6 +7443,20 @@ const FLEET_CALLSIGNS = {
   'garrison': 'Sentinella',
   'survey': 'Vedetta'
 };
+/* Pool secondario (decisione utente 2026-06-15): un secondo nome per scopo,
+   proposto come DEFAULT quando l'utente rinomina manualmente. Così è "guidato
+   a creare un nuovo nome+numero libero per quell'ordine" (ridefinizione
+   manuale tipica dopo un cambio missione). */
+const FLEET_CALLSIGNS_ALT = {
+  'explore': 'Pellegrino',
+  'move': 'Carovana',
+  'attack': 'Lupo',
+  'colonize': 'Avanguardia',
+  'patrol': 'Bastione',
+  'patrol-loop': 'Bastione',
+  'garrison': 'Bastione',
+  'survey': 'Bussola'
+};
 /* Numero progressivo per quel callsign: max suffisso numerico tra le flotte
    esistenti col prefisso "<Base> ", +1. Robusto a rinomine manuali (chi
    ribattezza "Segugio 1" → "Mia Flotta" lascia un buco, la successiva sarà
@@ -7473,6 +7487,23 @@ function maybeAutoRenameFleet(g, fleet, order) {
   if (!fleet || !isDefaultFleetName(fleet.name)) return;
   const nm = orderDerivedFleetName(g, order);
   if (nm) fleet.name = nm.slice(0, 40);
+}
+/* Suggerimento di rinomina manuale (decisione utente 2026-06-15): propone il
+   pool ALT del tipo di ordine corrente + primo numero libero. È solo un
+   default pre-popolato nell'input ✎ — l'utente è libero di modificare. Per
+   ordini idle/return o sconosciuti restituisce null (l'input resta sul nome
+   corrente). */
+function suggestedRenameFor(g, fleet) {
+  const order = fleet && fleet.orders;
+  if (!order || !order.type || order.type === 'idle' || order.type === 'return') return null;
+  let base = null;
+  if (order.type === 'move-route') {
+    base = order.exploreEach ? FLEET_CALLSIGNS_ALT['explore'] : FLEET_CALLSIGNS_ALT['move'];
+  } else {
+    base = FLEET_CALLSIGNS_ALT[order.type] || null;
+  }
+  if (!base) return null;
+  return base + ' ' + nextProgressiveFor(g, base);
 }
 
 /* =====================================================================
@@ -7866,10 +7897,20 @@ function openFleetDetail(fleetId, opts) {
      editabile dall'utente. */
   function secRename() {
     if (!D.renaming) return '';
+    /* Decisione utente 2026-06-15: pre-popola l'input con il SECONDO nome
+       del pool dell'ordine corrente + primo numero libero — così la rinomina
+       manuale è guidata verso "altro nome per quello scopo, numero nuovo".
+       Se l'ordine non mappa (idle/return), resta il nome corrente. */
+    const suggest = suggestedRenameFor(g, fleet);
+    const initial = suggest || fleet.name;
+    const hint = suggest
+      ? '<p class="fdetail__hint fdetail__rename-hint">Suggerito per l’ordine corrente — modifica liberamente.</p>'
+      : '';
     return '<div class="fdetail__sec fdetail__rename">' +
-      '<input class="fdetail__input" type="text" data-bind="rename-input" value="' + escapeHtml(fleet.name) + '" maxlength="40" aria-label="Nome flotta">' +
+      '<input class="fdetail__input" type="text" data-bind="rename-input" value="' + escapeHtml(initial) + '" maxlength="40" aria-label="Nome flotta">' +
       '<button class="btn btn--mini btn--primary" data-act="rename-save" type="button">Rinomina</button>' +
       '<button class="btn btn--mini" data-act="rename-cancel" type="button">Annulla</button>' +
+      hint +
     '</div>';
   }
 

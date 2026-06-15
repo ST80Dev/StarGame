@@ -5621,6 +5621,7 @@ select.main-menu__input { cursor: pointer; }
 .fdetail__rename-btn:hover { color: var(--c-accent, #7fdfff); }
 .fdetail__rename { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .fdetail__rename .fdetail__input { flex: 1 1 140px; }
+.fdetail__rename-hint { flex-basis: 100%; margin: 0; }
 
 /* Gestione flotte in volo (#88) */
 .fmanage__row {
