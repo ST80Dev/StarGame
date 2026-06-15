@@ -5881,7 +5881,8 @@ function renderFleetView(stage) {
           '<span class="fleet-status fleet-status--' + statusCls + '">' + status + '</span>' +
         '</div>' +
         '<div class="fleet-item__row">' +
-          '<span class="fleet-item__loc">' + uiIcon('system', 'amber') + ' <strong>' + escapeHtml(sysName(f.location.systemId)) + '</strong>' + sysTag + '</span>' +
+          '<span class="fleet-item__loc">' + uiIcon('system', 'amber') + ' <strong>' + escapeHtml(sysName(f.location.systemId)) + '</strong>' + sysTag +
+            (function () { const bn = fleetBodyName(g, f); return bn ? ' <span class="fleet-item__body">· ' + escapeHtml(bn) + '</span>' : ''; })() + '</span>' +
           '<span class="fleet-item__order">' + escapeHtml(orderLabel(f)) + '</span>' +
         '</div>' +
         '<div class="fleet-item__meta">' + counterHtml +
@@ -7203,6 +7204,23 @@ function systemNameFromKey(g, key) {
   return sys ? sys.name : ('Sistema ' + sid);
 }
 
+/* Nome del corpo celeste su cui si trova la flotta (#88 follow-up): la
+   posizione precisa oltre al sistema. Ritorna null se la flotta è in orbita
+   generica del sistema (nessun corpo specifico) o è in viaggio (il bodyKey
+   sarebbe quello di partenza, fuorviante). */
+function fleetBodyName(g, fleet) {
+  if (!fleet || !fleet.location || fleet.location.status === 'in-transit') return null;
+  if (!ORION.fleet || !ORION.fleet.fleetCurrentBodyKey) return null;
+  if (!ORION.system || !ORION.system.generate || !ORION.system.findBody) return null;
+  const sysId = fleet.location.systemId;
+  if (sysId == null || sysId < 0) return null;
+  const bk = ORION.fleet.fleetCurrentBodyKey(g, fleet);
+  if (bk == null) return null;
+  let sys; try { sys = ORION.system.generate(g.galaxy, sysId); } catch (e) { return null; }
+  const b = sys ? ORION.system.findBody(sys, bk) : null;
+  return b ? b.name : null;
+}
+
 /* Icona della classe nave (catalogo §12.1) con tinta flotta. */
 function fleetShipIcon(kind) {
   const nm = 'ship' + kind.charAt(0).toUpperCase() + kind.slice(1);
@@ -7639,9 +7657,11 @@ function openFleetDetail(fleetId, opts) {
     const statusCls = loc.status || 'idle';
     const renBtn = D.renaming ? '' :
       '<button class="fdetail__rename-btn" data-act="rename-toggle" type="button" title="Rinomina flotta" aria-label="Rinomina flotta">✎</button>';
+    const bn = fleetBodyName(g, fleet);
+    const bodyHtml = bn ? ' <span class="fdetail__pos-body">· ' + escapeHtml(bn) + '</span>' : '';
     return '<div class="fdetail__pos">' +
       '<div class="fdetail__pos-main">' + uiIcon('system', 'amber') +
-        ' in <strong>' + escapeHtml(sysName(loc.systemId)) + '</strong> ' + tag +
+        ' in <strong>' + escapeHtml(sysName(loc.systemId)) + '</strong> ' + tag + bodyHtml +
         ' <span class="fleet-status fleet-status--' + statusCls + '">' + statusLabel(fleet) + '</span>' + renBtn + '</div>' +
       '<div class="fdetail__pos-sub">' + uiIcon('roster', 'amber') + ' da ' +
         escapeHtml(systemNameFromKey(g, fleet.ownerColonyKey)) + '</div>' +
@@ -7770,8 +7790,9 @@ function openFleetDetail(fleetId, opts) {
       }
     }
     return '<div class="fdetail__sum">' + chips +
+      '<button class="btn btn--mini" data-act="ord-cancel" type="button">Annulla</button>' +
       '<button class="btn btn--mini btn--primary btn--with-icon" data-act="ord-confirm" type="button">' +
-        uiIcon('check', 'cyan') + ' Impartisci</button></div>';
+        uiIcon('check', 'cyan') + ' Conferma ordine</button></div>';
   }
 
   /* ----- Composizione (navi + equipaggio) ----- */
@@ -7999,6 +8020,14 @@ function openFleetDetail(fleetId, opts) {
         /* Annulla → mantiene l'ordine corrente e ridisabilita i pulsanti. */
         D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: true, exploreEach: false } };
       }
+      render();
+    });
+    /* Annulla esplicito (#88 follow-up): chiude il builder senza cambiare
+       l'ordine corrente. Coppia chiara con "Conferma ordine". */
+    const ordCancel = host.querySelector('[data-act="ord-cancel"]');
+    if (ordCancel) ordCancel.addEventListener('click', function () {
+      D.ordOpen = false;
+      D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: true, exploreEach: false } };
       render();
     });
     host.querySelectorAll('[data-trip]').forEach(function (b) {
