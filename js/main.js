@@ -7849,31 +7849,34 @@ function openFleetDetail(fleetId, opts) {
     const isExplore = (tt === 'explore');
     const isHold = (tt === 'hold');
     const isMulti = (tt === 'move-route' || tt === 'patrol-loop' || tt === 'patrol');
-    /* Sosta = vai a un QUALSIASI sistema visibile raggiungibile (esplorato o
-       sulla frontiera) e resta in orbita in attesa. Esplora = solo frontiera.
-       Gli altri = solo sistemi già esplorati. */
-    const dests = ORION.fleet.visibleDestinations(g.galaxy, g.state, fleet.location.systemId, {
-      includeDetected: isExplore || isHold,
-      includeExplored: !isExplore || isHold
-    });
-    let h = isMulti ? renderWaypoints() : '';
-    /* Per Sosta: opzione "Resta qui" se la flotta è già a un sistema. */
-    let stayRow = '';
+    /* Sosta = "resta dove sei". Se la flotta è ferma, NON è un selettore di
+       sistema: si conferma e basta (sistema attuale già preselezionato dal
+       click sull'ordine). Solo se è IN VIAGGIO mostra dove fermarsi.
+       Per parcheggiare ALTROVE si usa "Trasferisci" (arriva e resta in orbita). */
     if (isHold && fleet.location.status !== 'in-transit') {
       const cur = fleet.location.systemId;
-      const active = (D.ord.target === cur);
-      stayRow = '<li class="fdetail__dest' + (active ? ' is-selected' : '') + '">' +
-        '<span class="fdetail__dest-name">📍 Resta qui · ' + escapeHtml(sysName(cur)) + '</span>' +
-        '<span class="fdetail__dest-meta">sistema attuale</span>' +
-        '<button class="btn btn--mini' + (active ? ' is-active' : '') + '" data-pick-target="' + cur + '" type="button">' +
-          (active ? '✓' : 'scegli') + '</button></li>';
+      return '<p class="fdetail__hint">' + uiIcon('info', 'soft') +
+        ' La flotta <strong>resta in orbita</strong> a <strong>' + escapeHtml(sysName(cur)) + '</strong> ' +
+        'in attesa (utile per radunare più flotte e poi <strong>fonderle</strong>). ' +
+        'Per fermarti a un <em>altro</em> sistema usa <em>Trasferisci</em>.</p>' +
+        '<ul class="fdetail__dest-list"><li class="fdetail__dest is-selected">' +
+          '<span class="fdetail__dest-name">📍 Resta qui · ' + escapeHtml(sysName(cur)) + '</span>' +
+          '<span class="fdetail__dest-meta">sistema attuale</span>' +
+          '<button class="btn btn--mini is-active" data-pick-target="' + cur + '" type="button">✓</button>' +
+        '</li></ul>';
     }
+    /* Esplora = solo frontiera. Trasferisci/multi/Sosta-in-viaggio = sistemi
+       già esplorati (per la Sosta in viaggio: dove fermarsi). */
+    const dests = ORION.fleet.visibleDestinations(g.galaxy, g.state, fleet.location.systemId, {
+      includeDetected: isExplore,
+      includeExplored: !isExplore
+    });
+    let h = isMulti ? renderWaypoints() : '';
     if (isHold) {
       h += '<p class="fdetail__hint">' + uiIcon('info', 'soft') +
-        ' Manda la flotta a un sistema (o lasciala dov’è) e resta in orbita <strong>in attesa</strong> — ' +
-        'utile per radunare più flotte nello stesso punto e poi <strong>fonderle</strong>.</p>';
+        ' La flotta è in viaggio: scegli a quale sistema fermarsi e restare in orbita.</p>';
     }
-    if (!dests.length && !stayRow) {
+    if (!dests.length) {
       return h + '<p class="fdetail__empty">' +
         (isExplore ? 'Nessun sistema rilevato sulla frontiera.' : 'Nessun sistema raggiungibile.') + '</p>';
     }
@@ -7892,7 +7895,7 @@ function openFleetDetail(fleetId, opts) {
         '<span class="fdetail__dest-meta">' + d.hops + ' hop · <span class="danger-badge tier--' + tier + '">' + s.danger + '</span></span>' +
         act + '</li>';
     }).join('');
-    h += '<ul class="fdetail__dest-list">' + stayRow + rows + '</ul>';
+    h += '<ul class="fdetail__dest-list">' + rows + '</ul>';
     if (isMulti) h += '<label class="fdetail__dwell">Sosta nuove tappe <input type="number" data-bind="next-dwell" min="0" max="200" value="0"> ' + iU() + '</label>';
     return h;
   }
@@ -8203,6 +8206,11 @@ function openFleetDetail(fleetId, opts) {
     host.querySelectorAll('[data-trip]').forEach(function (b) {
       b.addEventListener('click', function () {
         D.ord.tripType = b.dataset.trip; D.ord.target = null; D.ord.waypoints = [];
+        /* Sosta su flotta ferma = "resta qui": preseleziona il sistema
+           attuale → conferma in un click, niente scelta di sistema (#89 fix). */
+        if (b.dataset.trip === 'hold' && fleet.location.status !== 'in-transit') {
+          D.ord.target = fleet.location.systemId;
+        }
         render();
       });
     });
