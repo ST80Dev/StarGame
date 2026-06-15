@@ -5910,7 +5910,7 @@ function renderFleetView(stage) {
   function orderLabel(f) {
     const o = f && f.orders;
     if (!o) return 'idle';
-    if (o.type === 'idle') return 'in attesa';
+    if (o.type === 'idle') return (f.location && f.location.status === 'orbiting') ? '⏸ in sosta' : 'in attesa';
     if (o.type === 'move') return 'rotta verso ' + sysName(o.toSysId);
     if (o.type === 'attack') return '⚔ attacco a ' + sysName(o.toSysId);
     if (o.type === 'explore') return 'esplorazione di ' + sysName(o.toSysId);
@@ -7630,7 +7630,10 @@ function openFleetDetail(fleetId, opts) {
   }
   function orderLabel(f) {
     const o = f && f.orders;
-    if (!o || o.type === 'idle') return 'in attesa di ordini';
+    if (!o || o.type === 'idle') {
+      if (f && f.location && f.location.status === 'orbiting') return '⏸ in sosta a ' + sysName(f.location.systemId);
+      return 'in attesa di ordini';
+    }
     if (o.type === 'move') return 'rotta → ' + sysName(o.toSysId);
     if (o.type === 'attack') return 'attacco → ' + sysName(o.toSysId);
     if (o.type === 'explore') return 'esplorazione → ' + sysName(o.toSysId);
@@ -7829,6 +7832,7 @@ function openFleetDetail(fleetId, opts) {
     const TRIPS = [
       { id: 'explore', ic: 'system', lab: 'Esplora' },
       { id: 'transfer', ic: 'fleet', lab: 'Trasferisci' },
+      { id: 'hold', ic: 'pin', lab: '⏸ Sosta' },
       { id: 'patrol', ic: 'refresh', lab: 'Pattuglia A↔B' },
       { id: 'patrol-loop', ic: 'refresh', lab: 'Ciclica' },
       { id: 'move-route', ic: 'fleet', lab: 'Rotta a tappe' },
@@ -7858,14 +7862,35 @@ function openFleetDetail(fleetId, opts) {
   }
   function renderDestArea(tt) {
     const isExplore = (tt === 'explore');
+    const isHold = (tt === 'hold');
     const isMulti = (tt === 'move-route' || tt === 'patrol-loop' || tt === 'patrol');
+    /* Sosta = vai a un QUALSIASI sistema visibile raggiungibile (esplorato o
+       sulla frontiera) e resta in orbita in attesa. Esplora = solo frontiera.
+       Gli altri = solo sistemi già esplorati. */
     const dests = ORION.fleet.visibleDestinations(g.galaxy, g.state, fleet.location.systemId, {
-      includeDetected: isExplore, includeExplored: !isExplore
+      includeDetected: isExplore || isHold,
+      includeExplored: !isExplore || isHold
     });
     let h = isMulti ? renderWaypoints() : '';
-    if (!dests.length) {
+    /* Per Sosta: opzione "Resta qui" se la flotta è già a un sistema. */
+    let stayRow = '';
+    if (isHold && fleet.location.status !== 'in-transit') {
+      const cur = fleet.location.systemId;
+      const active = (D.ord.target === cur);
+      stayRow = '<li class="fdetail__dest' + (active ? ' is-selected' : '') + '">' +
+        '<span class="fdetail__dest-name">📍 Resta qui · ' + escapeHtml(sysName(cur)) + '</span>' +
+        '<span class="fdetail__dest-meta">sistema attuale</span>' +
+        '<button class="btn btn--mini' + (active ? ' is-active' : '') + '" data-pick-target="' + cur + '" type="button">' +
+          (active ? '✓' : 'scegli') + '</button></li>';
+    }
+    if (isHold) {
+      h += '<p class="fdetail__hint">' + uiIcon('info', 'soft') +
+        ' Manda la flotta a un sistema (o lasciala dov’è) e resta in orbita <strong>in attesa</strong> — ' +
+        'utile per radunare più flotte nello stesso punto e poi <strong>fonderle</strong>.</p>';
+    }
+    if (!dests.length && !stayRow) {
       return h + '<p class="fdetail__empty">' +
-        (isExplore ? 'Nessun sistema rilevato sulla frontiera.' : 'Nessun sistema esplorato raggiungibile.') + '</p>';
+        (isExplore ? 'Nessun sistema rilevato sulla frontiera.' : 'Nessun sistema raggiungibile.') + '</p>';
     }
     const rows = dests.map(function (d) {
       const s = g.galaxy.systems[d.sysId];
@@ -7882,13 +7907,14 @@ function openFleetDetail(fleetId, opts) {
         '<span class="fdetail__dest-meta">' + d.hops + ' hop · <span class="danger-badge tier--' + tier + '">' + s.danger + '</span></span>' +
         act + '</li>';
     }).join('');
-    h += '<ul class="fdetail__dest-list">' + rows + '</ul>';
+    h += '<ul class="fdetail__dest-list">' + stayRow + rows + '</ul>';
     if (isMulti) h += '<label class="fdetail__dwell">Sosta nuove tappe <input type="number" data-bind="next-dwell" min="0" max="200" value="0"> ' + iU() + '</label>';
     return h;
   }
   function renderOrdOpts(tt) {
     if (tt === 'explore') {
-      return '<label class="fdetail__check"><input type="checkbox" data-bind="opt-return"' + (D.ord.opt.returnHome ? ' checked' : '') + '> Rientra dopo aver esplorato</label>';
+      return '<label class="fdetail__check"><input type="checkbox" data-bind="opt-return"' + (D.ord.opt.returnHome ? ' checked' : '') + '> Rientra dopo aver esplorato</label>' +
+        '<p class="fdetail__hint">Deseleziona per <strong>restare in orbita</strong> al sistema esplorato (in sosta).</p>';
     }
     if (tt === 'move-route') {
       return '<label class="fdetail__check"><input type="checkbox" data-bind="opt-explore-each"' + (D.ord.opt.exploreEach ? ' checked' : '') + '> Esplora ogni tappa</label>' +
@@ -7904,6 +7930,13 @@ function openFleetDetail(fleetId, opts) {
       return { type: 'move-route', waypoints: [o.target], dwell: [0], exploreEach: true, returnHome: false };
     }
     if (o.tripType === 'transfer') return o.target != null ? { type: 'move', toSysId: o.target } : null;
+    if (o.tripType === 'hold') {
+      if (o.target == null) return null;
+      /* "Resta qui" sul sistema attuale = nessun viaggio → idle (parcheggio).
+         Altrimenti raggiungi il sistema e parcheggia (move arriva in orbita). */
+      if (o.target === fleet.location.systemId && fleet.location.status !== 'in-transit') return { type: 'idle' };
+      return { type: 'move', toSysId: o.target };
+    }
     if (o.tripType === 'patrol') return o.waypoints.length >= 2 ? { type: 'patrol', sysA: o.waypoints[0].sysId, sysB: o.waypoints[1].sysId } : null;
     if (o.tripType === 'patrol-loop') return o.waypoints.length >= 2 ? { type: 'patrol-loop', loop: o.waypoints.map(function (w) { return w.sysId; }), dwell: o.waypoints.map(function (w) { return w.dwell; }) } : null;
     if (o.tripType === 'move-route') return o.waypoints.length ? { type: 'move-route', waypoints: o.waypoints.map(function (w) { return w.sysId; }), dwell: o.waypoints.map(function (w) { return w.dwell; }), exploreEach: o.opt.exploreEach, returnHome: o.opt.returnHome } : null;
@@ -7915,8 +7948,17 @@ function openFleetDetail(fleetId, opts) {
     if (!order) {
       const need = (tt === 'move-route') ? 'almeno una tappa'
         : (tt === 'patrol' || tt === 'patrol-loop') ? 'almeno 2 sistemi'
+        : (tt === 'hold') ? 'una destinazione (o "Resta qui")'
         : 'una destinazione';
       return '<p class="fdetail__hint">Scegli ' + need + '.</p>';
+    }
+    /* "Resta qui" (idle): nessun viaggio → niente check equipaggio/viveri. */
+    if (order.type === 'idle') {
+      return '<div class="fdetail__sum">' +
+        '<span class="fdetail__sumchip is-ok">⏸ resta in orbita qui</span>' +
+        '<button class="btn btn--mini" data-act="ord-cancel" type="button">Annulla</button>' +
+        '<button class="btn btn--mini btn--primary btn--with-icon" data-act="ord-confirm" type="button">' +
+          uiIcon('check', 'cyan') + ' Conferma ordine</button></div>';
     }
     const crewOk = fleet.crew.length >= ORION.fleet.fleetCrewRequired(fleet);
     let chips = '<span class="fdetail__sumchip ' + (crewOk ? 'is-ok' : 'is-warn') + '">' +
@@ -11786,7 +11828,10 @@ function describeFleetOrder(g, fleet) {
   const sysName = function (id) { const s = g.galaxy.systems[id]; return s ? s.name : '—'; };
   const inTransit = fleet.location && fleet.location.status === 'in-transit';
   const eta = inTransit ? (fleet.etaImpulsi | 0) : null;
-  if (o.type === 'idle' || !o.type) return { label: '<em>in attesa</em>', eta: eta };
+  if (o.type === 'idle' || !o.type) {
+    if (fleet.location && fleet.location.status === 'orbiting') return { label: '⏸ <em>in sosta</em>', eta: eta };
+    return { label: '<em>in attesa</em>', eta: eta };
+  }
   if (o.type === 'move')    return { label: 'rotta verso ' + escapeHtml(sysName(o.toSysId)),    eta: eta };
   if (o.type === 'explore') return { label: 'esplorazione di ' + escapeHtml(sysName(o.toSysId)), eta: eta };
   if (o.type === 'survey')  return { label: '✦ anomalia di ' + escapeHtml(sysName(o.toSysId)),   eta: eta };

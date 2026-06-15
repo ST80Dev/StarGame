@@ -1126,6 +1126,11 @@
           '<li><strong>Opzioni finali</strong>: per esplorazione e rotta a tappe puoi decidere se rientrare alla base, ' +
             'se esplorare ogni tappa, e quanto sostare in orbita per nodo.</li>' +
         '</ol>' +
+        '<p><strong>⏸ Sosta:</strong> per <em>fermare una flotta a un sistema e tenerla in attesa</em> (utile per radunare ' +
+        'più flotte nello stesso punto e poi <strong>fonderle</strong>), usa l\'ordine <em>Sosta</em>: scegli un sistema ' +
+        '(anche sulla frontiera) o «Resta qui», e la flotta resta in orbita finché non le dai un nuovo ordine. ' +
+        'Un\'esplorazione con «Rientra» deselezionato fa lo stesso a destinazione. Le flotte insieme si fondono dalla ' +
+        '<strong>Gestione flotte in volo</strong>.</p>' +
         '<p>Lontano da casa la flotta consuma <strong>viveri</strong> (vedi la scheda dedicata): ' +
         'opera intorno al tuo territorio quasi gratis, ma una rotta lunga nel vuoto va pianificata coi rifornimenti. ' +
         'I rifugi presso popoli terzi (recupero/rifornimento) si ampliano con <strong>M11/M16</strong>.</p>' +
