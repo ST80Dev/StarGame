@@ -7371,7 +7371,12 @@ function maybeAutoRenameFleet(g, fleet, order) {
 function openFleetManageInFlight() {
   const g = ORION.game;
   if (!g || !Array.isArray(g.fleets)) return;
-  const host = ensureFleetOverlayHost('fleet-manage');
+  /* Usa la classe `fleet-detail` (stesso stile overlay full-screen +
+     gestione `[hidden]` di .fleet-create-overlay/.fleet-wizard/.fleet-detail
+     in css/style.css). Una classe a sé `fleet-manage` non aveva regole CSS
+     → l'host esisteva nel DOM ma non era visibile (fix PR #205 → segnalato
+     dall'utente: "Gestione flotte non attiva nulla"). */
+  const host = ensureFleetOverlayHost('fleet-detail');
   host.onclick = function (e) { if (e.target === host) close(); };
   const M = { keep: {}, selected: {}, rendezSys: '' };
 
