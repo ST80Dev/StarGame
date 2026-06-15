@@ -6737,6 +6737,48 @@ select.main-menu__input { cursor: pointer; }
 .colonize-pick__pop label { display: inline-flex; align-items: center; gap: 6px; }
 .colonize-pick__pop input[type="range"] { flex: 1; min-width: 120px; accent-color: var(--c-accent, #60c4de); }
 .colonize-pick__pop strong { color: var(--c-accent, #60c4de); }
+/* Fix (C) sessione 2026-06-09: chip "Già a bordo" + "Totale alla colonia"
+   per il picker che ora rispetta i coloni preesistenti sulla flotta. */
+.colonize-pick__already {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 1px 8px; border-radius: 4px;
+  background: rgba(240, 216, 160, 0.12); border: 1px solid rgba(240, 216, 160, 0.35);
+  color: #f0d8a0; font-weight: 500;
+}
+.colonize-pick__total {
+  font-size: 0.74rem; color: var(--c-text-faint);
+  flex-basis: 100%;
+}
+/* Fix (B): costo extra coloni (provviste viaggio) mostrato sotto lo slider. */
+.colonize-pick__colonist-cost { flex-basis: 100%; min-height: 1.1em; }
+.colonize-pick__colonist-note {
+  font-size: 0.72rem; color: var(--c-text-faint);
+  font-style: italic;
+}
+.colonize-pick__colonist-note strong { color: var(--c-text); font-weight: 600; }
+/* Quick path (sessione 2026-06-15): card "Crea spedizione coloniale" per
+   colonie con Pioniere in hangar + 4 crew pronti. Si distingue visivamente
+   dalle flotte già esistenti con accento ciano + badge "🆕". */
+.colonize-pick__section-label {
+  margin: 8px 12px 4px; padding: 0;
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--c-text-faint); text-transform: uppercase;
+}
+.colonize-pick__section-label--create { margin-top: 12px; }
+.colonize-pick__card--create {
+  border: 1px dashed rgba(96, 196, 222, 0.4);
+  border-radius: 6px;
+  margin: 4px 8px;
+  background: rgba(96, 196, 222, 0.06);
+}
+.colonize-pick__card--create .attack-pick__name {
+  color: var(--c-accent, #60c4de);
+}
+.colonize-pick__new-badge {
+  display: inline-block;
+  font-size: 0.84rem;
+  margin-right: 4px;
+}
 
 /* M09 — Comandante assegnato alla flotta (#43/#49) */
 .fleet-item__cmd {

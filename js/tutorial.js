@@ -221,9 +221,9 @@
         '<p>La crescita si ferma in <strong>plateau</strong> quando produzione = consumo. Più fattorie/impianti idrici alzano ' +
         'il tetto sostenibile, oppure (futuro) rifornimenti via rotte commerciali.</p>' +
         '<p><strong>Bonus Diaspora ⚡</strong> — quando imbarchi coloni su una nave Pioniere (vedi <em>Pioniere coloniale</em>), ' +
-        'la colonia di partenza riceve <strong>×2 crescita pop per 60 <span class="ds-unit">Ι</span></strong>: i livelli ceduti ' +
-        'vengono recuperati rapidamente, le infrastrutture restano. È la leva pensata per <em>seminare</em> nuove colonie senza ' +
-        'svuotare la sorgente.</p>'
+        'la colonia di partenza riceve <strong>×1.5 crescita pop per 60 <span class="ds-unit">Ι</span></strong>: una parte dei ' +
+        'livelli ceduti viene recuperata, ma SENTI la perdita (il recupero copre il 20-30% del livello in quel periodo). ' +
+        'È una <em>leva strategica</em>, non un free-pass: imbarcare costa anche provviste extra (cibo+acqua per il viaggio).</p>'
     },
     {
       id: 'waste',
@@ -1074,7 +1074,12 @@
       body:
         '<p>Per fondare una nuova colonia ti serve una <strong>nave coloniale Pioniere ◉</strong> (la tua casa iniziale è ' +
         'auto-colonizzata, ma da qui in poi ogni colonia parte da una nave). L\'azione "Colonizza" sui pianeti liberi apre un ' +
-        'selettore di flotta: scegli quella con un Pioniere a bordo, equipaggio sufficiente e risorse.</p>' +
+        'selettore con due tipi di opzioni:</p>' +
+        '<ul>' +
+          '<li><strong>Flotte coloniali pronte</strong> — flotte che hai già assemblato e che hanno almeno un Pioniere + equipaggio.</li>' +
+          '<li><strong>🆕 Crea spedizione coloniale</strong> — se in una colonia hai un Pioniere in hangar + 4 equipaggi pronti (ma non li hai ancora messi in una flotta), il picker te lo propone direttamente: <em>un click crea la flotta, le assegna nave e crew, e la fa partire</em>.</li>' +
+        '</ul>' +
+        '<p>Quindi non serve costruire prima la flotta dal pannello Flotte: se hai gli ingredienti, il picker fa tutto al volo.</p>' +
         '<p>Il Pioniere è <strong>multi-uso e riusabile</strong>: non viene consumato all\'atterraggio, è riparabile come ogni ' +
         'nave, e a fine missione resta in orbita pronto per una nuova destinazione. Costa <strong>80 met · 40 en · 10 food · ' +
         '10 water</strong>, si costruisce all\'Hangar lvl 1, build time 25 Ι, equipaggio 4 (presi dall\'array esploratori).</p>' +
@@ -1083,10 +1088,14 @@
         'ingegneri, agricoltori, leader civili che bootstrappano la nuova colonia. Una colonia nata con 2 livelli (invece di 1) ' +
         'comincia subito a produrre meglio e ha più margine di crescita.</p>' +
         '<p>Nel selettore "Colonizza", uno <strong>slider</strong> ti fa scegliere quanti livelli imbarcare (0-2). La sorgente ' +
-        'mantiene sempre almeno 1 livello (non puoi svuotarla del tutto).</p>' +
-        '<p><strong>Bonus Diaspora:</strong> la colonia di partenza riceve <strong>×2 crescita demografica per 60 Ι</strong> ' +
-        'dopo l\'imbarco. La popolazione cala visibilmente a partenza, ma le infrastrutture restano e i livelli persi vengono ' +
-        'recuperati rapidamente (la migrazione interna riempie i vuoti).</p>' +
+        'mantiene sempre almeno 1 livello (non puoi svuotarla del tutto). Se avevi già imbarcato coloni via <em>Gestisci navi/eq.</em> ' +
+        '(per esempio per un trasferimento colony-to-colony) il picker li RISPETTA: lo slider è solo per l\'imbarco AGGIUNTIVO.</p>' +
+        '<p><strong>Costo coloni — provviste viaggio:</strong> ogni livello di pop a bordo richiede <strong>+30 cibo + 15 acqua</strong> ' +
+        '(consumati al setOrder dalla colonia origine). Razionale: i pionieri mangiano per settimane di viaggio iperspaziale + ' +
+        'bootstrap dell\'avamposto. Imbarcare 2 livelli costa quindi 60 cibo + 30 acqua extra rispetto a una colonizzazione "cold".</p>' +
+        '<p><strong>Bonus Diaspora:</strong> la colonia di partenza riceve <strong>×1.5 crescita demografica per 60 Ι</strong> ' +
+        'dopo l\'imbarco. Compensa parzialmente la perdita (~20-30% del livello in 60 Ι): SENTI la cessione, ma non sei punito. ' +
+        'È una leva strategica vera, non una scorciatoia gratuita.</p>' +
         '<p>La colonizzazione avviene in <strong>3 fasi indipendenti</strong>:</p>' +
         '<ul>' +
           '<li><strong>Travel</strong> — viaggio iperspaziale, dipende solo dalla <em>distanza</em> (intra-sistema: skip). M13 iperguida lo ridurrà ×3/×8/×20.</li>' +

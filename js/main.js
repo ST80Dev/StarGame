@@ -2583,9 +2583,52 @@ function colonizeCapableFleets(g, planet) {
   return out;
 }
 
+/* Decisione "Quick path" (sessione 2026-06-15): identifica le colonie che
+   hanno gli ingredienti per ASSEMBLARE al volo una flotta coloniale
+   diretta al pianeta target (1 Pioniere in hangar + 4 crew in accademia
+   + path BFS al sistema target). Risponde alla confusione UX segnalata
+   dall'utente: "ho Pioniere + 4 crew ma cliccando Colonizza mi dice che
+   non ho nave coloniale" → il picker considerava solo le flotte già
+   esistenti. Recovery-friendly: nessuna risorsa consumata finché
+   l'utente non conferma. */
+function colonizeCreatableColonies(g, planet) {
+  const out = [];
+  const F = ORION.fleet;
+  if (!F) return out;
+  const targetSys = planet.systemId;
+  const COLONIAL_CREW_NEED = 4;  /* crew richiesto per la classe coloniale */
+  Object.keys(g.colonies || {}).forEach(function (ck) {
+    const c = g.colonies[ck];
+    if (!c || !c.colonized || c.phase === 'settling') return;
+    if (!c.ships || (c.ships.coloniale || 0) < 1) return;
+    const crewPool = (c.crews && c.crews.explorer) || [];
+    if (crewPool.length < COLONIAL_CREW_NEED) return;
+    /* Path BFS dalla colonia origine al sistema target (incluso intra). */
+    let path = null;
+    let hops = 0;
+    if (c.systemId === targetSys) {
+      path = [targetSys];
+      hops = 0;
+    } else {
+      path = F.computePath(g.galaxy, c.systemId, targetSys);
+      if (!path) return;
+      hops = path.length - 1;
+    }
+    out.push({ colonyKey: ck, colony: c, sysId: c.systemId, hops: hops, path: path });
+  });
+  return out;
+}
+
 /* Costo colonizzazione effettivo + check fondi sulla colonia origine
    della flotta (non più solo home base). */
-function colonizeCostInfo(g, planet, fleet) {
+/* Costo extra per coloni a bordo (decisione bilanciamento sessione 2026-06-09,
+   fix B): ogni livello di pop trasportato sulla nave coloniale consuma
+   provviste per il viaggio + setup. Razionale narrativo: i pionieri mangiano
+   e bevono durante settimane di viaggio iperspaziale + bootstrap dell'avamposto.
+   Tarato per far sentire il costo dell'imbarco senza renderlo proibitivo. */
+const COLONIST_COST_PER_LEVEL = { food: 30, water: 15 };
+
+function colonizeCostInfo(g, planet, fleet, loadPop) {
   const cost = planet.colCost;
   const homeColony = g.colonies[g.homePlanetKey];
   const homeInTrouble = !!(homeColony && homeColony._scar &&
@@ -2594,11 +2637,23 @@ function colonizeCostInfo(g, planet, fleet) {
      Per coerenza con il flusso legacy, il check è sulla home (non sulla
      colonia origine della flotta). */
   const mul = (homeInTrouble || (g.colonies[planet.systemId + ':' + planet.bodyKey] || {}).isHomeBase) ? 1 : 5;
+  /* Fix B: i coloni considerati per il costo sono quelli effettivamente
+     a bordo + quelli che il picker sta per imbarcare ora (additivo).
+     Se loadPop è undefined, il chiamante non ha ancora deciso → 0. */
+  const onboardNow = (fleet && fleet.popOnboard) || 0;
+  const extraLoad = (typeof loadPop === 'number') ? Math.max(0, loadPop | 0) : 0;
+  const colonistTotal = onboardNow + extraLoad;
+  const colonistCost = {
+    met:   0,
+    en:    0,
+    water: COLONIST_COST_PER_LEVEL.water * colonistTotal,
+    food:  COLONIST_COST_PER_LEVEL.food * colonistTotal
+  };
   const totalCost = {
     met:   Math.round(cost.met   * mul),
     en:    Math.round(cost.en    * mul),
-    water: Math.round(cost.water * mul),
-    food:  Math.round(cost.food  * mul)
+    water: Math.round(cost.water * mul) + colonistCost.water,
+    food:  Math.round(cost.food  * mul) + colonistCost.food
   };
   /* Le risorse vengono prese dalla colonia origine della flotta. */
   const payerKey = fleet ? fleet.ownerColonyKey : g.homePlanetKey;
@@ -2609,7 +2664,12 @@ function colonizeCostInfo(g, planet, fleet) {
     (stock.en    || 0) >= totalCost.en    &&
     (stock.water || 0) >= totalCost.water &&
     (stock.food  || 0) >= totalCost.food;
-  return { totalCost: totalCost, mul: mul, homeInTrouble: homeInTrouble, payerKey: payerKey, payer: payer, canPay: canPay, baseImpulsi: cost.impulsi };
+  return {
+    totalCost: totalCost, mul: mul, homeInTrouble: homeInTrouble,
+    payerKey: payerKey, payer: payer, canPay: canPay,
+    baseImpulsi: cost.impulsi,
+    colonistCost: colonistCost, colonistTotal: colonistTotal
+  };
 }
 
 function openColonizePicker(planet) {
@@ -2617,11 +2677,21 @@ function openColonizePicker(planet) {
   const F = ORION.fleet;
   if (!g || !F) return;
   const fleets = colonizeCapableFleets(g, planet);
-  if (!fleets.length) {
-    /* Spiega perché: nessuna nave coloniale o nessuna raggiungibile. */
-    const anyColonial = (g.fleets || []).some(function (f) { return f && F.fleetHasColonial(f); });
-    if (!anyColonial) {
+  /* Quick path (sessione 2026-06-15): colonie che possono assemblare al volo
+     una flotta coloniale. Se ho già un Pioniere in hangar + 4 crew, non serve
+     andare al pannello flotte: il picker mostra direttamente l'opzione. */
+  const creatable = colonizeCreatableColonies(g, planet);
+  if (!fleets.length && !creatable.length) {
+    /* Spiega perché. Diagnostica completa: hangar/crew/raggiungibilità. */
+    const anyColonialShip = Object.keys(g.colonies || {}).some(function (ck) {
+      const c = g.colonies[ck];
+      return c && c.ships && (c.ships.coloniale || 0) > 0;
+    });
+    const anyColonialInFleet = (g.fleets || []).some(function (f) { return f && F.fleetHasColonial(f); });
+    if (!anyColonialShip && !anyColonialInFleet) {
       showToast('Nessuna nave coloniale: costruisci un Pioniere all\'Hangar');
+    } else if (anyColonialShip && !anyColonialInFleet) {
+      showToast('Pioniere disponibile ma manca equipaggio (servono 4 esploratori dall\'Accademia)');
     } else {
       showToast('Nessuna flotta coloniale può raggiungere il sistema');
     }
@@ -2634,7 +2704,16 @@ function openColonizePicker(planet) {
     const intra = (f.location.systemId === planet.systemId);
     const path = intra ? [planet.systemId] : F.computePath(g.galaxy, f.location.systemId, planet.systemId);
     const hops = path ? path.length - 1 : 0;
-    const info = colonizeCostInfo(g, planet, f);
+    /* Costo iniziale calcolato col defaultLoad (anticipo del costo coloni B). */
+    const popCargoCap = F.fleetPopCargoCap ? F.fleetPopCargoCap(f) : 0;
+    const onboardNow = f.popOnboard || 0;
+    const _info0 = colonizeCostInfo(g, planet, f, 0);
+    const srcPop = (_info0.payer && _info0.payer.pop && _info0.payer.pop.total) || 0;
+    const roomOnShip = Math.max(0, popCargoCap - onboardNow);
+    const srcAvailable = Math.max(0, srcPop - 1);
+    const maxLoad = Math.min(roomOnShip, srcAvailable);
+    const defaultLoad = onboardNow > 0 ? 0 : Math.min(maxLoad, popCargoCap);
+    const info = colonizeCostInfo(g, planet, f, defaultLoad);
     const orbit = 10;
     const minSpeed = F.fleetMinSpeed(f);
     /* Decisione utente: l'intra-sistema ora ha un viaggio reale corpo→corpo. */
@@ -2648,13 +2727,26 @@ function openColonizePicker(planet) {
     const cost = info.totalCost;
     const payerName = colonyNameFromKey(info.payerKey);
     const costHtml = (info.canPay ? '' : '<span class="colonize-pick__warn">Risorse insufficienti</span>');
-    /* Decisione #66 estensione: capienza coloni della flotta + suggerimento
-       default. Suggeriamo popCargo se la sorgente ha ≥ popCargo+1 livelli
-       (per non svuotare la sorgente). Altrimenti il massimo trasferibile. */
-    const popCargoCap = F.fleetPopCargoCap ? F.fleetPopCargoCap(f) : 0;
-    const srcPop = (info.payer && info.payer.pop && info.payer.pop.total) || 0;
-    const maxLoad = Math.max(0, Math.min(popCargoCap, srcPop - 1));
-    const defaultLoad = Math.min(maxLoad, popCargoCap);
+    /* Estratto del costo extra coloni per UI esplicita. */
+    const cExtra = info.colonistCost;
+    const colonistTotal = info.colonistTotal;
+    const colonistCostNote = colonistTotal > 0
+      ? '<span class="colonize-pick__colonist-note">+ provviste viaggio per ' + colonistTotal + ' coloni: <strong>' + cExtra.food + ' ' + resGlyph('food') + ' · ' + cExtra.water + ' ' + resGlyph('water') + '</strong></span>'
+      : '';
+    /* Decisione #66 estensione + Fix (C) sessione 2026-06-09: il picker RISPETTA
+       i coloni già a bordo (imbarcati via Manage overlay). Lo slider rappresenta
+       l'imbarco AGGIUNTIVO, non il totale a bordo. Variabili popCargoCap/onboardNow/
+       maxLoad/defaultLoad sono già state calcolate sopra per il costo info. */
+    const totalLabel = '<strong data-pop-total="' + escapeHtml(f.id) + '">' + (onboardNow + defaultLoad) + '</strong> / ' + popCargoCap;
+    const alreadyTxt = onboardNow > 0
+      ? '<span class="colonize-pick__already">Già a bordo: <strong>' + onboardNow + '</strong>' +
+          (maxLoad > 0 ? ' · imbarca ora: <strong data-pop-out="' + escapeHtml(f.id) + '">' + defaultLoad + '</strong>' : '') +
+        '</span>'
+      : '<label>Coloni a bordo: <strong data-pop-out="' + escapeHtml(f.id) + '">' + defaultLoad + '</strong> / ' + popCargoCap + '</label>';
+    const sliderDisabled = (maxLoad === 0);
+    const warnTxt = (maxLoad === 0 && onboardNow === 0)
+      ? '<span class="colonize-pick__warn">Sorgente troppo piccola per imbarcare</span>'
+      : '';
     return '<div class="colonize-pick__card" data-fleet-row="' + escapeHtml(f.id) + '">' +
       '<button class="attack-pick__row" data-fleet="' + escapeHtml(f.id) + '"' + (info.canPay ? '' : ' disabled') + ' type="button">' +
         '<span class="attack-pick__name">' + escapeHtml(f.name) + '</span>' +
@@ -2669,12 +2761,67 @@ function openColonizePicker(planet) {
       '</button>' +
       (popCargoCap > 0 ?
         '<div class="colonize-pick__pop">' +
-          '<label>Coloni a bordo: <strong data-pop-out="' + escapeHtml(f.id) + '">' + defaultLoad + '</strong> / ' + popCargoCap + '</label>' +
-          '<input type="range" min="0" max="' + maxLoad + '" step="1" value="' + defaultLoad + '" data-pop-input="' + escapeHtml(f.id) + '"' + (maxLoad === 0 ? ' disabled' : '') + '>' +
-          (maxLoad === 0 ? '<span class="colonize-pick__warn">Sorgente troppo piccola per imbarcare</span>' : '') +
+          alreadyTxt +
+          (onboardNow > 0 ? '<span class="colonize-pick__total">Totale alla colonia: ' + totalLabel + '</span>' : '') +
+          '<input type="range" min="0" max="' + maxLoad + '" step="1" value="' + defaultLoad + '" data-pop-input="' + escapeHtml(f.id) + '" data-pop-onboard="' + onboardNow + '"' + (sliderDisabled ? ' disabled' : '') + '>' +
+          warnTxt +
+          (colonistTotal > 0 ? '<span class="colonize-pick__colonist-cost" data-colonist-cost="' + escapeHtml(f.id) + '">' + colonistCostNote + '</span>' : '<span class="colonize-pick__colonist-cost" data-colonist-cost="' + escapeHtml(f.id) + '"></span>') +
         '</div>'
         : ''
       ) +
+    '</div>';
+  }).join('');
+
+  /* Quick path (sessione 2026-06-15): card "Crea spedizione coloniale" per
+     ogni colonia con Pioniere in hangar + 4 crew + path al sistema target.
+     Un click → createFleet + assignShips coloniale + assignCrew 4 + doColonize. */
+  const COLONIAL_CARGO = 2;
+  const COLONIAL_CREW_NEED = 4;
+  const createRows = creatable.map(function (c) {
+    const ck = c.colonyKey;
+    const cname = colonyNameFromKey(ck);
+    const intra = (c.sysId === planet.systemId);
+    /* Stima viaggio: serve la velocità della nave coloniale. */
+    const colonialClass = F.getClass('coloniale');
+    const speed = colonialClass ? colonialClass.speed : 0.8;
+    const travelEst = intra ? 0 : c.hops * F.tempoLeg(g.galaxy, c.sysId, planet.systemId, speed);
+    /* Mock fleet per il calcolo costo (popOnboard=0, ownerColonyKey=ck). */
+    const mockFleet = { id: '__mock__', ownerColonyKey: ck, popOnboard: 0, ships: [{ kind: 'coloniale', hp: 70 }], crew: [], location: { systemId: c.sysId, status: 'docked' } };
+    const srcPop = (c.colony.pop && c.colony.pop.total) || 0;
+    const maxLoadC = Math.max(0, Math.min(COLONIAL_CARGO, srcPop - 1));
+    const defaultLoadC = maxLoadC;
+    const infoC = colonizeCostInfo(g, planet, mockFleet, defaultLoadC);
+    const orbit = 10;
+    const totalI = travelEst + orbit + Math.max(20, infoC.baseImpulsi);
+    const costC = infoC.totalCost;
+    const canPayC = infoC.canPay;
+    const cExtraC = infoC.colonistCost;
+    const colonistTotalC = infoC.colonistTotal;
+    const dataId = 'create-' + ck;
+    const colonistNoteC = colonistTotalC > 0
+      ? '<span class="colonize-pick__colonist-note">+ provviste viaggio per ' + colonistTotalC + ' coloni: <strong>' + cExtraC.food + ' ' + resGlyph('food') + ' · ' + cExtraC.water + ' ' + resGlyph('water') + '</strong></span>'
+      : '';
+    const popHtmlC = '<div class="colonize-pick__pop">' +
+      '<label>Coloni a bordo: <strong data-pop-out="' + escapeHtml(dataId) + '">' + defaultLoadC + '</strong> / ' + COLONIAL_CARGO + '</label>' +
+      '<input type="range" min="0" max="' + maxLoadC + '" step="1" value="' + defaultLoadC + '" data-pop-input="' + escapeHtml(dataId) + '" data-pop-onboard="0"' + (maxLoadC === 0 ? ' disabled' : '') + '>' +
+      (maxLoadC === 0 ? '<span class="colonize-pick__warn">Sorgente troppo piccola per imbarcare</span>' : '') +
+      '<span class="colonize-pick__colonist-cost" data-colonist-cost="' + escapeHtml(dataId) + '">' + colonistNoteC + '</span>' +
+    '</div>';
+    return '<div class="colonize-pick__card colonize-pick__card--create" data-create-row="' + escapeHtml(ck) + '">' +
+      '<button class="attack-pick__row" data-create-fleet="' + escapeHtml(ck) + '"' + (canPayC ? '' : ' disabled') + ' type="button">' +
+        '<span class="attack-pick__name">' +
+          '<span class="colonize-pick__new-badge">🆕</span> Spedizione coloniale da <strong>' + escapeHtml(cname) + '</strong>' +
+        '</span>' +
+        '<span class="attack-pick__meta">' +
+          '1 Pioniere · ' + COLONIAL_CREW_NEED + ' equipaggi · ' +
+          (intra ? 'intra-sistema' : c.hops + ' salti') +
+          ' · ~' + totalI + ' ' + iU() +
+          ' (' + costC.met + ' ' + resGlyph('met') + ' · ' + costC.en + ' ' + resGlyph('en') +
+          ' · ' + costC.water + ' ' + resGlyph('water') + ' · ' + costC.food + ' ' + resGlyph('food') + ')' +
+          (canPayC ? '' : ' · <span class="colonize-pick__warn">Risorse insufficienti</span>') +
+        '</span>' +
+      '</button>' +
+      popHtmlC +
     '</div>';
   }).join('');
   const html =
@@ -2689,8 +2836,13 @@ function openColonizePicker(planet) {
           '</button></header>' +
         '<p class="attack-overlay__sub">Destinazione: <strong>' + escapeHtml(planet.name) + '</strong>' +
           (sys ? ' nel sistema ' + escapeHtml(sys.name) : '') +
-          ' · scegli una flotta con una nave coloniale Pioniere.</p>' +
-        '<div class="attack-pick__list">' + rows + '</div>' +
+          ' · scegli una flotta esistente o crea al volo una spedizione coloniale.</p>' +
+        '<div class="attack-pick__list">' +
+          (fleets.length > 0 ? '<p class="colonize-pick__section-label">Flotte coloniali pronte</p>' + rows : '') +
+          (creatable.length > 0
+            ? (fleets.length > 0 ? '<p class="colonize-pick__section-label colonize-pick__section-label--create">Oppure crea al volo</p>' : '') + createRows
+            : '') +
+        '</div>' +
         '<p class="attack-overlay__hint">La nave coloniale viaggia, orbita per il setup, poi atterra come avamposto. La flotta resta in orbita al termine.</p>' +
       '</div>' +
     '</div>';
@@ -2701,12 +2853,30 @@ function openColonizePicker(planet) {
   function close() { if (node.parentNode) node.parentNode.removeChild(node); }
   node.querySelector('[data-colonize-close]').addEventListener('click', close);
   node.addEventListener('click', function (e) { if (e.target === node) close(); });
-  /* Live update del label "Coloni a bordo: N" mentre l'utente muove lo slider. */
+  /* Live update del label "Coloni a bordo: N" mentre l'utente muove lo slider.
+     Fix (C): se c'è onboard preesistente, aggiorna anche il totale visualizzato.
+     Fix (B): ricalcola e mostra il costo extra coloni (food/water) live. */
   node.querySelectorAll('[data-pop-input]').forEach(function (inp) {
     inp.addEventListener('input', function () {
       const fid = inp.getAttribute('data-pop-input');
+      const onboard = parseInt(inp.getAttribute('data-pop-onboard'), 10) || 0;
       const out = node.querySelector('[data-pop-out="' + fid + '"]');
-      if (out) out.textContent = inp.value;
+      const tot = node.querySelector('[data-pop-total="' + fid + '"]');
+      const val = parseInt(inp.value, 10) || 0;
+      if (out) out.textContent = String(val);
+      if (tot) tot.textContent = String(onboard + val) + ' / ' + tot.textContent.split('/')[1].trim();
+      /* Ricalcola costo extra coloni (B). */
+      const noteHost = node.querySelector('[data-colonist-cost="' + fid + '"]');
+      if (noteHost) {
+        const colonistTot = onboard + val;
+        if (colonistTot > 0) {
+          const food = COLONIST_COST_PER_LEVEL.food * colonistTot;
+          const water = COLONIST_COST_PER_LEVEL.water * colonistTot;
+          noteHost.innerHTML = '<span class="colonize-pick__colonist-note">+ provviste viaggio per ' + colonistTot + ' coloni: <strong>' + food + ' ' + resGlyph('food') + ' · ' + water + ' ' + resGlyph('water') + '</strong></span>';
+        } else {
+          noteHost.innerHTML = '';
+        }
+      }
     });
   });
   node.querySelectorAll('[data-fleet]').forEach(function (b) {
@@ -2720,6 +2890,71 @@ function openColonizePicker(planet) {
       close();
     });
   });
+  /* Quick path: assembla flotta coloniale al volo da una colonia con
+     Pioniere + 4 crew, poi imposta l'ordine colonize.
+     Recovery-friendly: se assignShips o assignCrew falliscono per qualsiasi
+     ragione, la flotta appena creata viene dissolta (rollback). */
+  node.querySelectorAll('[data-create-fleet]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const ck = b.dataset.createFleet;
+      const inp = node.querySelector('[data-pop-input="create-' + ck + '"]');
+      const loadPop = inp ? parseInt(inp.value, 10) || 0 : 0;
+      runQuickColonize(planet, ck, loadPop);
+      close();
+    });
+  });
+}
+
+/* Quick path: crea flotta + assegna 1 coloniale + 4 crew + setOrder colonize.
+   Usato dal picker quando l'utente non ha una flotta coloniale pronta ma
+   ha gli ingredienti in hangar/accademia. */
+function runQuickColonize(planet, colonyKey, loadPop) {
+  const g = ORION.game;
+  const F = ORION.fleet;
+  if (!g || !F) return;
+  const colony = g.colonies && g.colonies[colonyKey];
+  if (!colony) { showToast('Colonia origine non valida'); return; }
+  const COLONIAL_CREW_NEED = 4;
+  /* Pre-check: hangar + crew ancora disponibili (potrebbero essere stati
+     consumati da un'altra azione tra il render del picker e il click). */
+  if (!colony.ships || (colony.ships.coloniale || 0) < 1) {
+    showToast('Pioniere non più disponibile in hangar');
+    return;
+  }
+  const crewPool = (colony.crews && colony.crews.explorer) || [];
+  if (crewPool.length < COLONIAL_CREW_NEED) {
+    showToast('Equipaggio insufficiente in accademia');
+    return;
+  }
+  /* Nome scelto contestualmente: "Pioniere → [Pianeta]" è leggibile e si
+     distingue dai "Squadrone N" generici. */
+  const fleetName = 'Pioniere → ' + planet.name;
+  const cr = F.createFleet(g, colonyKey, fleetName);
+  if (!cr.ok) { showToast('Creazione flotta: ' + (cr.reason || 'errore')); return; }
+  const newFleet = cr.fleet;
+  if (!newFleet) { showToast('Errore interno: flotta non creata'); return; }
+  /* Assegna 1 coloniale. */
+  const aShip = F.assignShips(g, newFleet, colonyKey, 'coloniale', 1);
+  if (!aShip.ok) {
+    F.dissolveFleet(g, newFleet);
+    showToast('Assegnazione Pioniere: ' + (aShip.reason || 'errore'));
+    return;
+  }
+  /* Assegna 4 crew. */
+  const aCrew = F.assignCrew(g, newFleet, colonyKey, COLONIAL_CREW_NEED);
+  if (!aCrew.ok) {
+    F.dissolveFleet(g, newFleet);
+    showToast('Assegnazione equipaggio: ' + (aCrew.reason || 'errore'));
+    return;
+  }
+  /* Cronaca: ha creato una nuova spedizione. */
+  pushChronicle(ORION.time.currentDS(g) + ' — Nuova <strong>' + escapeHtml(fleetName) +
+    '</strong> assemblata su ' + escapeHtml(colonyNameFromKey(colonyKey)) + '.', 'planet');
+  /* doColonize fa il resto (costo + embarkPop + setOrder).
+     Se doColonize fallisce internamente (es. risorse insufficienti, ordine
+     rifiutato) la flotta resta assemblata ma idle in orbita della colonia —
+     recovery-friendly: l'utente può poi mandarla manualmente. */
+  doColonize(planet, newFleet, loadPop);
 }
 
 /* Esegue la colonizzazione: deduce il costo, imposta l'ordine `colonize`
@@ -2732,12 +2967,19 @@ function doColonize(planet, fleet, loadPop) {
   const colKey = planet.systemId + ':' + planet.bodyKey;
   const colony = g.colonies[colKey];
   if (!colony || colony.colonized || colony.colonizing) return;
-  const info = colonizeCostInfo(g, planet, fleet);
-  if (!info.canPay) { showToast('Risorse insufficienti'); return; }
-  /* Decisione #66 estensione: imbarco coloni sulla nave (default popCargo
-     se la sorgente ne ha abbastanza). loadPop=0 → fondazione cold (1 livello). */
+  /* Fix (C) sessione 2026-06-09: loadPop dal picker rappresenta l'imbarco
+     AGGIUNTIVO. La pop già a bordo (fleet.popOnboard) NON viene re-imbarcata
+     né re-sottratta dalla colonia. Il costo coloni (B) considera SOMMA dei
+     livelli totali a bordo (già + nuovi), perché tutti consumano provviste. */
   const cap = F.fleetPopCargoCap ? F.fleetPopCargoCap(fleet) : 0;
-  const reqLoad = (typeof loadPop === 'number') ? Math.max(0, Math.min(cap, loadPop | 0)) : 0;
+  const onboardNow = fleet.popOnboard || 0;
+  const roomOnShip = Math.max(0, cap - onboardNow);
+  const reqLoad = (typeof loadPop === 'number') ? Math.max(0, Math.min(roomOnShip, loadPop | 0)) : 0;
+  /* Costo info ricalcolato con loadPop effettivo (decisione B: provviste extra). */
+  const info = colonizeCostInfo(g, planet, fleet, reqLoad);
+  if (!info.canPay) { showToast('Risorse insufficienti'); return; }
+  /* Imbarco SOLO della quota aggiuntiva. Se 0 e la flotta ha già coloni a bordo,
+     nessun imbarco viene chiamato → nessuna nuova Diaspora attivata. */
   if (reqLoad > 0) {
     const embarkRes = F.embarkPop(g, fleet, info.payerKey, reqLoad);
     if (!embarkRes.ok) {
@@ -2777,6 +3019,27 @@ function doColonize(planet, fleet, loadPop) {
     ['met', 'en', 'water', 'food'].forEach(function (k) {
       info.payer.stock[k] = (info.payer.stock[k] || 0) + info.totalCost[k];
     });
+    /* Fix rollback completo sessione 2026-06-09: se abbiamo imbarcato coloni
+       in questo doColonize (reqLoad > 0), embarkPop ha già sottratto la pop
+       dalla colonia origine + attivato la Diaspora. Se setOrder fallisce,
+       quei side-effects vanno annullati: pop torna alla sorgente, Diaspora
+       rimossa (era stata appena creata da embarkPop in questo flusso).
+       NB: i coloni preesistenti (onboardNow) restano sulla flotta — quelli
+       erano stati imbarcati in precedenza via Manage, NON è il nostro flusso
+       da rollbackare. */
+    if (reqLoad > 0 && info.payer && info.payer.pop) {
+      const popCap = info.payer.pop.cap || 0;
+      const room = Math.max(0, popCap - (info.payer.pop.total || 0));
+      const back = Math.min(reqLoad, room);
+      info.payer.pop.total = (info.payer.pop.total || 0) + back;
+      fleet.popOnboard = Math.max(0, (fleet.popOnboard || 0) - reqLoad);
+      /* La Diaspora era stata creata/rinnovata da embarkPop nel flusso corrente
+         (startedAt === g.timeImpulsi). La rimuoviamo solo se è "fresca" — così
+         non eliminiamo una Diaspora preesistente legittima. */
+      if (info.payer.diaspora && info.payer.diaspora.startedAt === (g.timeImpulsi || 0)) {
+        info.payer.diaspora = null;
+      }
+    }
     fleet._colonizePaidCost = null;
     showToast(r.reason || 'Ordine rifiutato');
     return;
