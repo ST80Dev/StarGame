@@ -623,7 +623,7 @@
         'in modo <strong>passivo</strong> (niente microgestione): le configuri una volta e restano attive.</p>' +
         '<p><strong>Cosa le limita:</strong> il <em>Mercato</em> §10 dà il numero massimo di rotte e il throughput totale ' +
         '(sommati su tutte le tue colonie); il <em>mercantile</em> assegnato determina quanto lontano arriva (in salti) e ' +
-        'quanto trasporta (cargo). La rotta si interrompe da sola se la sorgente esaurisce la risorsa o se il transito ' +
+        'quanto trasporta (cargo). La rotta si interrompe da sola se la sorgente esaurisce la risorsa o se la rotta ' +
         'diventa ostile, e riparte appena le condizioni tornano.</p>' +
         '<p><strong>Uso chiave (early):</strong> porta cibo/acqua dai mondi-giardino ai mondi-fabbrica → sblocca la ' +
         '<em>saturazione del tetto di popolazione</em> (i grandi mondi raggiungono il cap pieno solo con import).</p>' +

@@ -4421,7 +4421,7 @@ function tradeResLabel(k) {
 }
 function tradeRouteStatusMeta(status) {
   if (status === 'interrupted-source') return { label: 'sorgente esaurita', cls: 'warn' };
-  if (status === 'interrupted-route')  return { label: 'transito ostile', cls: 'crit' };
+  if (status === 'interrupted-route')  return { label: 'rotta ostile', cls: 'crit' };
   return { label: 'attiva', cls: 'ok' };
 }
 
@@ -9424,7 +9424,7 @@ function chronicleEvent(ev) {
   } else if (ev.kind === 'mercantile-promoted') {
     pushChronicle(ds + ' — Un mercantile del consorzio sale al rango <strong>' + escapeHtml(ev.rank) + '</strong> dopo le rotte percorse.', 'planet');
   } else if (ev.kind === 'trade-route-interrupted') {
-    const why = ev.reason === 'interrupted-route' ? 'transito ostile' : 'sorgente esaurita';
+    const why = ev.reason === 'interrupted-route' ? 'rotta ostile' : 'sorgente esaurita';
     pushChronicle(ds + ' — Rotta ' + colonyNameFromKey(ev.src) + ' → ' + colonyNameFromKey(ev.dst) + ' <strong>interrotta</strong> (' + why + ').', 'system');
   } else if (ev.kind === 'trade-route-resumed') {
     pushChronicle(ds + ' — Rotta ' + colonyNameFromKey(ev.src) + ' → ' + colonyNameFromKey(ev.dst) + ' di nuovo <strong>operativa</strong>.', 'system');
@@ -10372,7 +10372,7 @@ function renderLeftPanel() {
     const sysId = (f.location && f.location.systemId >= 0) ? f.location.systemId : -1;
     const sysName = sysId >= 0 ? g.galaxy.systems[sysId].name : '—';
     const status = (f.location && f.location.status) || 'idle';
-    const statusLbl = status === 'docked' ? 'attracco' : status === 'in-transit' ? 'transito' : 'orbita';
+    const statusLbl = status === 'docked' ? 'attracco' : status === 'in-transit' ? 'viaggio' : 'orbita';
     const cls = status === 'docked' ? 'ok' : status === 'in-transit' ? 'info' : 'warn';
     const fleetIcon = (ORION.icon && ORION.icon('fleet')) || '';
     return '<button class="lp-item lp-item--fleet" data-action="roster-fleet" data-id="' + escapeHtml(f.id) + '" data-sys="' + sysId + '" type="button">' +
