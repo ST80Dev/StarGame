@@ -4862,7 +4862,9 @@ function openRoutePicker(colony) {
       const c = g.colonies[k];
       if (!c || !c.colonized) return false;
       const hops = T.routeHopCount(g, srcKey, k);
-      return hops > 0 && hops <= maxHops;
+      /* hops === 0 = colonia nello stesso sistema (intra-sistema): rotta
+         legittima e a costo nullo. Solo hops < 0 = irraggiungibile. */
+      return hops >= 0 && hops <= maxHops;
     });
   }
 
@@ -4890,7 +4892,7 @@ function openRoutePicker(colony) {
       return '<div class="route-dest-card">' +
         '<div class="route-dest-card__head">' +
           '<span class="route-dest-card__name">' + colonyNameFromKey(k) + '</span>' +
-          '<span class="route-dest-card__hops">' + hops + ' salti</span>' +
+          '<span class="route-dest-card__hops">' + (hops === 0 ? 'stesso sistema' : (hops + ' salti')) + '</span>' +
         '</div>' +
         '<p class="route-dest-card__meta">' + tradeResLabel(resource) + ' in loco: ' + stock + '</p>' +
         '<button class="btn btn--mini btn--primary" data-action="route-do" data-dst="' + k + '" type="button">Apri rotta</button>' +
