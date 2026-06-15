@@ -1056,6 +1056,10 @@
            M08 polish (decisione #61): drag&drop dal canvas per ordinare. */
         this._drawFleets(ctx, reveal);
         if (this._fleetPicker) this._drawFleetPickerOverlay(ctx, reveal);
+        /* Bug fix 2026-06-15 (feedback utente "nella mappa non si vede
+           alcun simbolo"): incursioni/raider in arrivo non avevano marker.
+           Disegnato sopra a tutto (sono minacce attive). */
+        this._drawIncursions(ctx, reveal);
       }
 
       this._emitContext(false);
@@ -1535,6 +1539,95 @@
         ctx.fillText('☠', p.x, p.y - (r + 9));
       }
       ctx.restore();
+    }
+
+    /* Bug fix 2026-06-15 (feedback utente "nella mappa non si vede alcun
+       simbolo"): le incursioni in arrivo (game.incursions) e i raider in
+       caccia non avevano alcun feedback visivo. Disegnato qui:
+       (a) ☠ pulsante ROSSO sul SISTEMA bersaglio (tua colonia/stazione
+           o tua flotta esposta): sempre visibile a prescindere dalla
+           nebbia di guerra (è il TUO sistema/flotta, sai dov'è);
+       (b) linea tratteggiata rossa from→target (l'origine è il covo,
+           solo se DETECTED — altrimenti origine sconosciuta);
+       (c) etichetta "ETA Ι" sotto al bersaglio.
+       Tutto sopra agli altri marker per chiarezza di minaccia. */
+    _drawIncursions(ctx, reveal) {
+      const game = root.ORION && root.ORION.game;
+      if (!game || !Array.isArray(game.incursions) || !game.incursions.length) return;
+      const g = this.galaxy;
+      const disc = this.state.discovery;
+      const DET = DISCOVERY.DETECTED;
+      /* Pulse 1.6s deterministico (rispetta reduced-motion senza extra: il
+         valore è derivato dal tempo reale, non da uno stato di gioco). */
+      const phase = (performance.now() % 1600) / 1600;
+      const pulse = 0.55 + 0.45 * Math.abs(Math.sin(phase * Math.PI * 2));
+      const targets = new Set();
+      ctx.save();
+      ctx.globalAlpha = reveal;
+      for (let i = 0; i < game.incursions.length; i++) {
+        const inc = game.incursions[i];
+        if (!inc) continue;
+        /* Bersaglio: colonia/stazione (`targetSysId`) OPPURE flotta del
+           giocatore (`pirate-raider`, location dalla flotta). */
+        let tgtSys = inc.targetSysId;
+        if (tgtSys == null || tgtSys < 0) {
+          if (inc.targetFleetId && Array.isArray(game.fleets)) {
+            const f = game.fleets.filter(function (x) { return x.id === inc.targetFleetId; })[0];
+            if (f && f.location) tgtSys = f.location.systemId;
+          }
+        }
+        if (tgtSys == null || tgtSys < 0) continue;
+        const sys = g.systems[tgtSys];
+        if (!sys) continue;
+        const p = this.project(sys.x, sys.y, sys.z || 0);
+        if (p.x < -40 || p.x > this.cssW + 40 || p.y < -40 || p.y > this.cssH + 40) continue;
+        targets.add(tgtSys);
+        const r = this.nodeRadius(p.parallax);
+        /* Linea tratteggiata dal covo (se noto e DETECTED) al bersaglio. */
+        if (inc.fromSysId != null && inc.fromSysId >= 0 && disc[inc.fromSysId] >= DET) {
+          const sys2 = g.systems[inc.fromSysId];
+          if (sys2) {
+            const p2 = this.project(sys2.x, sys2.y, sys2.z || 0);
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 90, 90, ' + (0.35 + 0.35 * pulse).toFixed(3) + ')';
+            ctx.lineWidth = 1.2;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(p2.x, p2.y);
+            ctx.lineTo(p.x, p.y);
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
+        /* ☠ pulsante sopra il bersaglio + alone esterno. */
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 90, 90, ' + (0.55 + 0.45 * pulse).toFixed(3) + ')';
+        ctx.font = Math.max(13, r + 9) + 'px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('☠', p.x, p.y - (r + 11));
+        /* Anello pulsante */
+        ctx.strokeStyle = 'rgba(255, 90, 90, ' + (0.20 + 0.35 * pulse).toFixed(3) + ')';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r + 7 + 3 * pulse, 0, Math.PI * 2);
+        ctx.stroke();
+        /* Etichetta ETA Ι sotto al bersaglio (sintetica). inc.eta viene
+           decrementato ad ogni Impulso da time.js → processIncursions,
+           quindi è già il countdown corrente. */
+        if (typeof inc.eta === 'number' && inc.eta > 0) {
+          ctx.fillStyle = 'rgba(255, 200, 200, 0.95)';
+          ctx.font = '10px monospace';
+          ctx.fillText('☠ ' + Math.max(0, inc.eta | 0) + ' Ι', p.x, p.y + r + 12);
+        }
+        ctx.restore();
+      }
+      ctx.restore();
+      /* Mantieni il loop di render attivo finché c'è almeno una minaccia
+         (il pulse altrimenti si congela). */
+      if (targets.size > 0 && typeof this.requestRender === 'function') {
+        this.requestRender();
+      }
     }
 
     /* M16 (decisione #81): marker delle tue stazioni spaziali. Sono tue →
