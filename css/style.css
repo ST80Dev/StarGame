@@ -4392,6 +4392,14 @@ select.main-menu__input { cursor: pointer; }
    sfarfallare mentre il numero scorre. Il tetto è secondario (asintoto). */
 .pop-anim { font-variant-numeric: tabular-nums; }
 .pop-ceiling { color: var(--c-text-soft); font-weight: 500; }
+/* Feedback utente 2026-06-15: indicatore "N col." nell'HUD popolazione
+   per chiarire che il valore aggrega tutte le colonie dell'impero. */
+.pop-colony-count {
+  color: var(--c-text-faint);
+  font-size: 0.78em;
+  font-weight: 500;
+  font-style: italic;
+}
 .deck-pop__total-pct {
   font-family: var(--font-data, inherit);
   font-size: 0.74rem;
