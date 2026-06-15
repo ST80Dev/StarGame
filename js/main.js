@@ -746,6 +746,7 @@ function updateGlobalResourceHud() {
   const totals = { met: 0, en: 0, food: 0, water: 0 };
   let totalUnits = 0;
   let totalCap = 0;
+  let colonyCount = 0;
   if (ORION.game && ORION.game.colonies) {
     Object.keys(ORION.game.colonies).forEach(function (k) {
       const c = ORION.game.colonies[k];
@@ -759,6 +760,7 @@ function updateGlobalResourceHud() {
       const cap = (c.pop && c.pop.cap) || 0;
       totalUnits += units;
       totalCap += cap;
+      colonyCount++;
     });
   }
   const setVal = function (key, v) {
@@ -771,9 +773,17 @@ function updateGlobalResourceHud() {
   setVal('acqua', totals.water);
   const popEl = document.querySelector('[data-bind="popolazione"]');
   if (popEl) {
-    /* HUD aggregato: somma livelli / cap d'impero. Refactor 2026-06-09. */
+    /* HUD aggregato: somma livelli / cap d'impero. Refactor 2026-06-09.
+       Feedback utente 2026-06-15: il display era poco esplicito come
+       "aggregato". Ora la riga mostra "X / Y · N col." se ≥2 colonie,
+       per chiarire visivamente che è la somma d'impero (non la sola
+       capitale). Con 1 colonia il contatore è omesso (ridondante). */
+    const colonyTag = colonyCount >= 2
+      ? '<span class="pop-colony-count" title="' + colonyCount + ' colonie operative"> · ' + colonyCount + ' col.</span>'
+      : '';
     popEl.innerHTML = popAnimSpan('hud:pop', totalUnits) +
-      '<span class="pop-ceiling"> / ' + totalCap + '</span>';
+      '<span class="pop-ceiling"> / ' + totalCap + '</span>' +
+      colonyTag;
     ensurePopAnim();
   }
   updateGlobalIndicesHud();
