@@ -852,7 +852,12 @@
       body:
         '<p>Per fondare una nuova colonia ti serve una <strong>nave coloniale Pioniere ◉</strong> (la tua casa iniziale è ' +
         'auto-colonizzata, ma da qui in poi ogni colonia parte da una nave). L\'azione "Colonizza" sui pianeti liberi apre un ' +
-        'selettore di flotta: scegli quella con un Pioniere a bordo, equipaggio sufficiente e risorse.</p>' +
+        'selettore con due tipi di opzioni:</p>' +
+        '<ul>' +
+          '<li><strong>Flotte coloniali pronte</strong> — flotte che hai già assemblato e che hanno almeno un Pioniere + equipaggio.</li>' +
+          '<li><strong>🆕 Crea spedizione coloniale</strong> — se in una colonia hai un Pioniere in hangar + 4 equipaggi pronti (ma non li hai ancora messi in una flotta), il picker te lo propone direttamente: <em>un click crea la flotta, le assegna nave e crew, e la fa partire</em>.</li>' +
+        '</ul>' +
+        '<p>Quindi non serve costruire prima la flotta dal pannello Flotte: se hai gli ingredienti, il picker fa tutto al volo.</p>' +
         '<p>Il Pioniere è <strong>multi-uso e riusabile</strong>: non viene consumato all\'atterraggio, è riparabile come ogni ' +
         'nave, e a fine missione resta in orbita pronto per una nuova destinazione. Costa <strong>80 met · 40 en · 10 food · ' +
         '10 water</strong>, si costruisce all\'Hangar lvl 1, build time 25 Ι, equipaggio 4 (presi dall\'array esploratori).</p>' +

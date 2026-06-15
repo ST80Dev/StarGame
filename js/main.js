@@ -2252,6 +2252,42 @@ function colonizeCapableFleets(g, planet) {
   return out;
 }
 
+/* Decisione "Quick path" (sessione 2026-06-15): identifica le colonie che
+   hanno gli ingredienti per ASSEMBLARE al volo una flotta coloniale
+   diretta al pianeta target (1 Pioniere in hangar + 4 crew in accademia
+   + path BFS al sistema target). Risponde alla confusione UX segnalata
+   dall'utente: "ho Pioniere + 4 crew ma cliccando Colonizza mi dice che
+   non ho nave coloniale" → il picker considerava solo le flotte già
+   esistenti. Recovery-friendly: nessuna risorsa consumata finché
+   l'utente non conferma. */
+function colonizeCreatableColonies(g, planet) {
+  const out = [];
+  const F = ORION.fleet;
+  if (!F) return out;
+  const targetSys = planet.systemId;
+  const COLONIAL_CREW_NEED = 4;  /* crew richiesto per la classe coloniale */
+  Object.keys(g.colonies || {}).forEach(function (ck) {
+    const c = g.colonies[ck];
+    if (!c || !c.colonized || c.phase === 'settling') return;
+    if (!c.ships || (c.ships.coloniale || 0) < 1) return;
+    const crewPool = (c.crews && c.crews.explorer) || [];
+    if (crewPool.length < COLONIAL_CREW_NEED) return;
+    /* Path BFS dalla colonia origine al sistema target (incluso intra). */
+    let path = null;
+    let hops = 0;
+    if (c.systemId === targetSys) {
+      path = [targetSys];
+      hops = 0;
+    } else {
+      path = F.computePath(g.galaxy, c.systemId, targetSys);
+      if (!path) return;
+      hops = path.length - 1;
+    }
+    out.push({ colonyKey: ck, colony: c, sysId: c.systemId, hops: hops, path: path });
+  });
+  return out;
+}
+
 /* Costo colonizzazione effettivo + check fondi sulla colonia origine
    della flotta (non più solo home base). */
 /* Costo extra per coloni a bordo (decisione bilanciamento sessione 2026-06-09,
@@ -2310,11 +2346,21 @@ function openColonizePicker(planet) {
   const F = ORION.fleet;
   if (!g || !F) return;
   const fleets = colonizeCapableFleets(g, planet);
-  if (!fleets.length) {
-    /* Spiega perché: nessuna nave coloniale o nessuna raggiungibile. */
-    const anyColonial = (g.fleets || []).some(function (f) { return f && F.fleetHasColonial(f); });
-    if (!anyColonial) {
+  /* Quick path (sessione 2026-06-15): colonie che possono assemblare al volo
+     una flotta coloniale. Se ho già un Pioniere in hangar + 4 crew, non serve
+     andare al pannello flotte: il picker mostra direttamente l'opzione. */
+  const creatable = colonizeCreatableColonies(g, planet);
+  if (!fleets.length && !creatable.length) {
+    /* Spiega perché. Diagnostica completa: hangar/crew/raggiungibilità. */
+    const anyColonialShip = Object.keys(g.colonies || {}).some(function (ck) {
+      const c = g.colonies[ck];
+      return c && c.ships && (c.ships.coloniale || 0) > 0;
+    });
+    const anyColonialInFleet = (g.fleets || []).some(function (f) { return f && F.fleetHasColonial(f); });
+    if (!anyColonialShip && !anyColonialInFleet) {
       showToast('Nessuna nave coloniale: costruisci un Pioniere all\'Hangar');
+    } else if (anyColonialShip && !anyColonialInFleet) {
+      showToast('Pioniere disponibile ma manca equipaggio (servono 4 esploratori dall\'Accademia)');
     } else {
       showToast('Nessuna flotta coloniale può raggiungere il sistema');
     }
@@ -2391,6 +2437,59 @@ function openColonizePicker(planet) {
       ) +
     '</div>';
   }).join('');
+
+  /* Quick path (sessione 2026-06-15): card "Crea spedizione coloniale" per
+     ogni colonia con Pioniere in hangar + 4 crew + path al sistema target.
+     Un click → createFleet + assignShips coloniale + assignCrew 4 + doColonize. */
+  const COLONIAL_CARGO = 2;
+  const COLONIAL_CREW_NEED = 4;
+  const createRows = creatable.map(function (c) {
+    const ck = c.colonyKey;
+    const cname = colonyNameFromKey(ck);
+    const intra = (c.sysId === planet.systemId);
+    /* Stima viaggio: serve la velocità della nave coloniale. */
+    const colonialClass = F.getClass('coloniale');
+    const speed = colonialClass ? colonialClass.speed : 0.8;
+    const travelEst = intra ? 0 : c.hops * F.tempoLeg(g.galaxy, c.sysId, planet.systemId, speed);
+    /* Mock fleet per il calcolo costo (popOnboard=0, ownerColonyKey=ck). */
+    const mockFleet = { id: '__mock__', ownerColonyKey: ck, popOnboard: 0, ships: [{ kind: 'coloniale', hp: 70 }], crew: [], location: { systemId: c.sysId, status: 'docked' } };
+    const srcPop = (c.colony.pop && c.colony.pop.total) || 0;
+    const maxLoadC = Math.max(0, Math.min(COLONIAL_CARGO, srcPop - 1));
+    const defaultLoadC = maxLoadC;
+    const infoC = colonizeCostInfo(g, planet, mockFleet, defaultLoadC);
+    const orbit = 10;
+    const totalI = travelEst + orbit + Math.max(20, infoC.baseImpulsi);
+    const costC = infoC.totalCost;
+    const canPayC = infoC.canPay;
+    const cExtraC = infoC.colonistCost;
+    const colonistTotalC = infoC.colonistTotal;
+    const dataId = 'create-' + ck;
+    const colonistNoteC = colonistTotalC > 0
+      ? '<span class="colonize-pick__colonist-note">+ provviste viaggio per ' + colonistTotalC + ' coloni: <strong>' + cExtraC.food + ' ' + resGlyph('food') + ' · ' + cExtraC.water + ' ' + resGlyph('water') + '</strong></span>'
+      : '';
+    const popHtmlC = '<div class="colonize-pick__pop">' +
+      '<label>Coloni a bordo: <strong data-pop-out="' + escapeHtml(dataId) + '">' + defaultLoadC + '</strong> / ' + COLONIAL_CARGO + '</label>' +
+      '<input type="range" min="0" max="' + maxLoadC + '" step="1" value="' + defaultLoadC + '" data-pop-input="' + escapeHtml(dataId) + '" data-pop-onboard="0"' + (maxLoadC === 0 ? ' disabled' : '') + '>' +
+      (maxLoadC === 0 ? '<span class="colonize-pick__warn">Sorgente troppo piccola per imbarcare</span>' : '') +
+      '<span class="colonize-pick__colonist-cost" data-colonist-cost="' + escapeHtml(dataId) + '">' + colonistNoteC + '</span>' +
+    '</div>';
+    return '<div class="colonize-pick__card colonize-pick__card--create" data-create-row="' + escapeHtml(ck) + '">' +
+      '<button class="attack-pick__row" data-create-fleet="' + escapeHtml(ck) + '"' + (canPayC ? '' : ' disabled') + ' type="button">' +
+        '<span class="attack-pick__name">' +
+          '<span class="colonize-pick__new-badge">🆕</span> Spedizione coloniale da <strong>' + escapeHtml(cname) + '</strong>' +
+        '</span>' +
+        '<span class="attack-pick__meta">' +
+          '1 Pioniere · ' + COLONIAL_CREW_NEED + ' equipaggi · ' +
+          (intra ? 'intra-sistema' : c.hops + ' salti') +
+          ' · ~' + totalI + ' ' + iU() +
+          ' (' + costC.met + ' ' + resGlyph('met') + ' · ' + costC.en + ' ' + resGlyph('en') +
+          ' · ' + costC.water + ' ' + resGlyph('water') + ' · ' + costC.food + ' ' + resGlyph('food') + ')' +
+          (canPayC ? '' : ' · <span class="colonize-pick__warn">Risorse insufficienti</span>') +
+        '</span>' +
+      '</button>' +
+      popHtmlC +
+    '</div>';
+  }).join('');
   const html =
     '<div class="attack-overlay" data-colonize-overlay>' +
       '<div class="attack-overlay__panel">' +
@@ -2403,8 +2502,13 @@ function openColonizePicker(planet) {
           '</button></header>' +
         '<p class="attack-overlay__sub">Destinazione: <strong>' + escapeHtml(planet.name) + '</strong>' +
           (sys ? ' nel sistema ' + escapeHtml(sys.name) : '') +
-          ' · scegli una flotta con una nave coloniale Pioniere.</p>' +
-        '<div class="attack-pick__list">' + rows + '</div>' +
+          ' · scegli una flotta esistente o crea al volo una spedizione coloniale.</p>' +
+        '<div class="attack-pick__list">' +
+          (fleets.length > 0 ? '<p class="colonize-pick__section-label">Flotte coloniali pronte</p>' + rows : '') +
+          (creatable.length > 0
+            ? (fleets.length > 0 ? '<p class="colonize-pick__section-label colonize-pick__section-label--create">Oppure crea al volo</p>' : '') + createRows
+            : '') +
+        '</div>' +
         '<p class="attack-overlay__hint">La nave coloniale viaggia, orbita per il setup, poi atterra come avamposto. La flotta resta in orbita al termine.</p>' +
       '</div>' +
     '</div>';
@@ -2452,6 +2556,71 @@ function openColonizePicker(planet) {
       close();
     });
   });
+  /* Quick path: assembla flotta coloniale al volo da una colonia con
+     Pioniere + 4 crew, poi imposta l'ordine colonize.
+     Recovery-friendly: se assignShips o assignCrew falliscono per qualsiasi
+     ragione, la flotta appena creata viene dissolta (rollback). */
+  node.querySelectorAll('[data-create-fleet]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const ck = b.dataset.createFleet;
+      const inp = node.querySelector('[data-pop-input="create-' + ck + '"]');
+      const loadPop = inp ? parseInt(inp.value, 10) || 0 : 0;
+      runQuickColonize(planet, ck, loadPop);
+      close();
+    });
+  });
+}
+
+/* Quick path: crea flotta + assegna 1 coloniale + 4 crew + setOrder colonize.
+   Usato dal picker quando l'utente non ha una flotta coloniale pronta ma
+   ha gli ingredienti in hangar/accademia. */
+function runQuickColonize(planet, colonyKey, loadPop) {
+  const g = ORION.game;
+  const F = ORION.fleet;
+  if (!g || !F) return;
+  const colony = g.colonies && g.colonies[colonyKey];
+  if (!colony) { showToast('Colonia origine non valida'); return; }
+  const COLONIAL_CREW_NEED = 4;
+  /* Pre-check: hangar + crew ancora disponibili (potrebbero essere stati
+     consumati da un'altra azione tra il render del picker e il click). */
+  if (!colony.ships || (colony.ships.coloniale || 0) < 1) {
+    showToast('Pioniere non più disponibile in hangar');
+    return;
+  }
+  const crewPool = (colony.crews && colony.crews.explorer) || [];
+  if (crewPool.length < COLONIAL_CREW_NEED) {
+    showToast('Equipaggio insufficiente in accademia');
+    return;
+  }
+  /* Nome scelto contestualmente: "Pioniere → [Pianeta]" è leggibile e si
+     distingue dai "Squadrone N" generici. */
+  const fleetName = 'Pioniere → ' + planet.name;
+  const cr = F.createFleet(g, colonyKey, fleetName);
+  if (!cr.ok) { showToast('Creazione flotta: ' + (cr.reason || 'errore')); return; }
+  const newFleet = cr.fleet;
+  if (!newFleet) { showToast('Errore interno: flotta non creata'); return; }
+  /* Assegna 1 coloniale. */
+  const aShip = F.assignShips(g, newFleet, colonyKey, 'coloniale', 1);
+  if (!aShip.ok) {
+    F.dissolveFleet(g, newFleet);
+    showToast('Assegnazione Pioniere: ' + (aShip.reason || 'errore'));
+    return;
+  }
+  /* Assegna 4 crew. */
+  const aCrew = F.assignCrew(g, newFleet, colonyKey, COLONIAL_CREW_NEED);
+  if (!aCrew.ok) {
+    F.dissolveFleet(g, newFleet);
+    showToast('Assegnazione equipaggio: ' + (aCrew.reason || 'errore'));
+    return;
+  }
+  /* Cronaca: ha creato una nuova spedizione. */
+  pushChronicle(ORION.time.currentDS(g) + ' — Nuova <strong>' + escapeHtml(fleetName) +
+    '</strong> assemblata su ' + escapeHtml(colonyNameFromKey(colonyKey)) + '.', 'planet');
+  /* doColonize fa il resto (costo + embarkPop + setOrder).
+     Se doColonize fallisce internamente (es. risorse insufficienti, ordine
+     rifiutato) la flotta resta assemblata ma idle in orbita della colonia —
+     recovery-friendly: l'utente può poi mandarla manualmente. */
+  doColonize(planet, newFleet, loadPop);
 }
 
 /* Esegue la colonizzazione: deduce il costo, imposta l'ordine `colonize`
