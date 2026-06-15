@@ -469,61 +469,105 @@
       const sysId = this.system.id;
       const SY = root.ORION.system;
       const findBody = (k) => (SY && SY.findBody) ? SY.findBody(this.system, k) : null;
+      const hash01 = (id) => {
+        let h = 0; const s = String(id || '');
+        for (let c = 0; c < s.length; c++) h = (h * 31 + s.charCodeAt(c)) | 0;
+        return (Math.abs(h) % 1000) / 1000;
+      };
+      /* Orbita più esterna del sistema → raggio di "vagabondaggio" per le
+         flotte senza colonia (in giro per il sistema, mai sulla stella). */
+      let maxOrbit = 0.12;
+      for (let i = 0; i < this.system.bodies.length; i++) {
+        const o = this.system.bodies[i].orbit || 0; if (o > maxOrbit) maxOrbit = o;
+      }
+
+      /* 1ª passata: risolvi l'ancora (corpo / loiter / intra) di ogni flotta
+         nel sistema e conta quante condividono la stessa ancora, così da
+         distribuirle su un anellino senza sovrapporle (selezionabili). */
+      const entries = [];
       for (let i = 0; i < game.fleets.length; i++) {
         const f = game.fleets[i];
         if (!f || !f.location || f.location.systemId !== sysId) continue;
-        let wpos = null, routeFrom = null, routeTo = null;
-        const intra = f.location.intra;
-        if (intra) {
-          const a = intra.fromBodyKey != null ? findBody(intra.fromBodyKey) : null;
-          const b = intra.toBodyKey != null ? findBody(intra.toBodyKey) : null;
-          const pa = a ? this.bodyWorldPos(a) : { x: 0, y: 0 };
-          const pb = b ? this.bodyWorldPos(b) : { x: 0, y: 0 };
-          const total = intra.totalI || 1;
-          const eta = Math.max(0, f.etaImpulsi || 0);
-          const t = total > 0 ? Math.max(0, Math.min(1, 1 - eta / total)) : 1;
-          wpos = { x: pa.x + (pb.x - pa.x) * t, y: pa.y + (pb.y - pa.y) * t };
-          routeFrom = pa; routeTo = pb;
-        } else {
+        const intra = f.location.intra || null;
+        let anchorKey = null;
+        if (!intra) {
           let bk = f.location.bodyKey;
-          /* Se la flotta non ha un corpo esplicito (orbita generica del
-             sistema), mostrala VICINO alla colonia anziché al centro/stella
-             (richiesta utente 2026-06-14): prima la colonia d'origine se è
-             in questo sistema, poi una qualunque mia colonia del sistema. */
-          if (bk == null && f.ownerColonyKey != null) {
-            const parts = String(f.ownerColonyKey).split(':');
-            if (parts.length === 2 && parseInt(parts[0], 10) === sysId) bk = parts[1];
-          }
-          if (bk == null && game.colonies) {
-            for (const ck in game.colonies) {
-              const c = game.colonies[ck];
-              if (c && c.colonized && c.systemId === sysId) {
-                const p2 = String(ck).split(':');
-                if (p2.length === 2) { bk = p2[1]; break; }
+          const o = f.orders || {};
+          /* Corpo bersaglio in QUESTO sistema (garrison/attacco/colonizzazione
+             portano un bodyKey): la flotta è lì sopra. */
+          if (bk == null && o.bodyKey != null && (o.toSysId == null || o.toSysId === sysId)) bk = o.bodyKey;
+          /* "Parcheggiata" = attraccata oppure senza un compito attivo (idle).
+             SOLO in questo caso la ancoriamo alla colonia. Una flotta che
+             esplora / viaggia / fa ricognizione NON va messa sul pianeta
+             (richiesta utente 2026-06-15): resta "in giro per il sistema". */
+          const parked = (f.location.status === 'docked') || !o.type || o.type === 'idle';
+          if (bk == null && parked) {
+            if (f.ownerColonyKey != null) {
+              const parts = String(f.ownerColonyKey).split(':');
+              if (parts.length === 2 && parseInt(parts[0], 10) === sysId) bk = parts[1];
+            }
+            if (bk == null && game.colonies) {
+              for (const ck in game.colonies) {
+                const c = game.colonies[ck];
+                if (c && c.colonized && c.systemId === sysId) {
+                  const p2 = String(ck).split(':');
+                  if (p2.length === 2) { bk = p2[1]; break; }
+                }
               }
             }
           }
-          const b = bk != null ? findBody(bk) : null;
-          wpos = b ? this.bodyWorldPos(b) : { x: 0, y: 0 };
+          anchorKey = bk; /* null → loiter (in giro per il sistema) */
         }
-        const p = this.worldToScreen(wpos.x, wpos.y);
+        entries.push({ f, intra, anchorKey });
+      }
+      const groupKey = (e) => e.intra ? ('__i' + e.f.id) : (e.anchorKey == null ? '__loiter' : e.anchorKey);
+      const count = {}, idxMap = {};
+      entries.forEach((e) => { const k = groupKey(e); count[k] = (count[k] || 0) + 1; });
+
+      for (let i = 0; i < entries.length; i++) {
+        const e = entries[i]; const f = e.f;
+        let mx, my, routeFrom = null, routeTo = null;
+        const k = groupKey(e);
+        const n = count[k];
+        const idx = (idxMap[k] = (idxMap[k] || 0)); idxMap[k]++;
+        if (e.intra) {
+          const a = e.intra.fromBodyKey != null ? findBody(e.intra.fromBodyKey) : null;
+          const b = e.intra.toBodyKey != null ? findBody(e.intra.toBodyKey) : null;
+          const pa = a ? this.bodyWorldPos(a) : { x: 0, y: 0 };
+          const pb = b ? this.bodyWorldPos(b) : { x: 0, y: 0 };
+          const total = e.intra.totalI || 1;
+          const t = total > 0 ? Math.max(0, Math.min(1, 1 - Math.max(0, f.etaImpulsi || 0) / total)) : 1;
+          const w = { x: pa.x + (pb.x - pa.x) * t, y: pa.y + (pb.y - pa.y) * t };
+          const p = this.worldToScreen(w.x, w.y);
+          mx = p.x; my = p.y;
+          routeFrom = this.worldToScreen(pa.x, pa.y); routeTo = this.worldToScreen(pb.x, pb.y);
+        } else if (e.anchorKey != null) {
+          /* A fianco del corpo: anellino appena fuori dal disco, distribuito
+             se più flotte condividono lo stesso corpo. */
+          const b = findBody(e.anchorKey);
+          const w = b ? this.bodyWorldPos(b) : { x: 0, y: 0 };
+          const p = this.worldToScreen(w.x, w.y);
+          const br = Math.max(b ? this._screenRadius(b) : 5, 5);
+          const ang = hash01(e.anchorKey) * Math.PI * 2 + (n > 1 ? idx * (Math.PI * 2 / n) : 0);
+          const rr = br + 16;
+          mx = p.x + Math.cos(ang) * rr; my = p.y + Math.sin(ang) * rr;
+        } else {
+          /* "In giro per il sistema": punto deterministico su un'orbita media,
+             scattered per flotta (e distribuito se più d'una). */
+          const frac = 0.5 + 0.4 * hash01('r' + f.id);
+          const ang = hash01('a' + f.id) * Math.PI * 2 + (n > 1 ? idx * (Math.PI * 2 / n) : 0);
+          const lr = maxOrbit * frac;
+          const p = this.worldToScreen(Math.cos(ang) * lr, Math.sin(ang) * lr);
+          mx = p.x; my = p.y;
+        }
         /* Linea tratteggiata della traversata intra-sistema. */
         if (routeFrom && routeTo) {
-          const sa = this.worldToScreen(routeFrom.x, routeFrom.y);
-          const sb = this.worldToScreen(routeTo.x, routeTo.y);
           ctx.save();
           ctx.strokeStyle = 'rgba(120,200,240,0.5)';
           ctx.lineWidth = 1.2; ctx.setLineDash([4, 4]);
-          ctx.beginPath(); ctx.moveTo(sa.x, sa.y); ctx.lineTo(sb.x, sb.y); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(routeFrom.x, routeFrom.y); ctx.lineTo(routeTo.x, routeTo.y); ctx.stroke();
           ctx.restore();
         }
-        /* Offset deterministico dal corpo (non sovrapporsi al pianeta). */
-        let h = 0; const id = f.id || ('f' + i);
-        for (let c = 0; c < id.length; c++) h = (h * 31 + id.charCodeAt(c)) | 0;
-        h = Math.abs(h);
-        const ang = intra ? 0 : (h % 360) * Math.PI / 180;
-        const off = intra ? 0 : 13;
-        const mx = p.x + Math.cos(ang) * off, my = p.y + Math.sin(ang) * off;
         const st = f.location.status;
         const col = (st === 'in-transit') ? '#7fd0f0' : (st === 'docked') ? '#9fd0a8' : '#f0d670';
         ctx.save();
