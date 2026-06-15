@@ -131,21 +131,45 @@
   function pickSeats(galaxy, def, want, taken, rng) {
     const groups = galaxy.groups || [];
     if (def.distribution === 'concentrated') {
-      /* sede + satelliti adiacenti — scegli un gruppo del Nucleo/Colonie
-         per i Phaerion (custodi → vicini ai centri civilizzati). */
-      const goodGroups = groups.filter(function (g) {
+      /* sede + satelliti adiacenti — preferisci gruppi del Nucleo/Colonie
+         per i Phaerion (custodi → vicini ai centri civilizzati), con
+         fallback su qualunque gruppo non-home se necessario.
+         Bug fix: itera l'intero pool ordinato per id e prendi il PRIMO
+         gruppo che offra almeno 1 sistema libero, invece di sceglierne uno
+         a caso e arrendersi se è già taken (vedi decisione del 2026-06-15
+         — Phaerion non veniva mai spawnato quando il gruppo del Nucleo
+         scelto era saturo dalle 4 civ-emp regolari). */
+      const primary = groups.filter(function (g) {
         return g.id !== galaxy.homeGroupId && (g.tier === 'nucleo' || g.tier === 'colonie');
       });
-      const pool = goodGroups.length ? goodGroups : groups.filter(function (g) { return g.id !== galaxy.homeGroupId; });
+      const secondary = groups.filter(function (g) {
+        return g.id !== galaxy.homeGroupId && !(g.tier === 'nucleo' || g.tier === 'colonie');
+      });
+      /* Pool ordinato (deterministico #5): prima Nucleo/Colonie, poi
+         altri non-home. Consumiamo l'rng UNA volta come "punto di partenza"
+         del pool primario per dare varietà tra seed, poi roteiamo. */
+      const primSorted = primary.slice().sort(function (a, b) { return a.id - b.id; });
+      const secSorted = secondary.slice().sort(function (a, b) { return a.id - b.id; });
+      const startPrim = primSorted.length ? rng.int(0, primSorted.length - 1) : 0;
+      const primRotated = primSorted.length
+        ? primSorted.slice(startPrim).concat(primSorted.slice(0, startPrim))
+        : [];
+      const pool = primRotated.concat(secSorted);
       if (!pool.length) return [];
-      pool.sort(function (a, b) { return a.id - b.id; });
-      const gp = pool[rng.int(0, pool.length - 1)];
-      const members = (gp.members || []).slice().sort(function (a, b) { return a - b; });
-      const out = [];
-      for (let i = 0; i < members.length && out.length < want; i++) {
-        if (!taken.has(members[i])) out.push(members[i]);
+      for (let p = 0; p < pool.length; p++) {
+        const gp = pool[p];
+        const members = (gp.members || []).slice().sort(function (a, b) { return a - b; });
+        const candidate = [];
+        for (let i = 0; i < members.length && candidate.length < want; i++) {
+          if (!taken.has(members[i])) candidate.push(members[i]);
+        }
+        /* Almeno 1 sistema libero basta: meglio Phaerion ridotto che non
+           Phaerion (decisione #22 recovery-friendly: la presenza delle 4
+           Costanti è garantita dal design, non sacrificiamo sull'altare
+           del sizeRange minimo). */
+        if (candidate.length >= 1) return candidate;
       }
-      return out;
+      return [];
     }
     /* sparse: 1 hub per cluster, gruppi diversi. */
     const pool = groups.filter(function (g) { return g.id !== galaxy.homeGroupId; })

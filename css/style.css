@@ -5995,6 +5995,36 @@ select.main-menu__input { cursor: pointer; }
   border: 1px solid var(--c-border-soft);
   border-radius: var(--radius-sm);
 }
+/* Segmented control "Importanti / Tutto" sopra la lista (feedback utente
+   2026-06-15): silenzia gli eventi di routine. UI minimale, riusa la
+   palette dei semantici (UI_GUIDE §7) e lo stile delle linguette. */
+.chron-filter {
+  display: flex; gap: 4px;
+  margin: 2px 4px 8px 4px;
+}
+.chron-filter__btn {
+  flex: 1;
+  background: rgb(var(--c-surface-rgb) / 0.5);
+  color: var(--c-text-soft);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  font-family: inherit;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+.chron-filter__btn:hover {
+  background: rgb(var(--c-surface-rgb) / 0.75);
+  color: var(--c-text);
+}
+.chron-filter__btn.is-active {
+  background: rgb(var(--c-surface-rgb) / 0.9);
+  color: var(--c-accent);
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 1px rgba(127, 208, 230, 0.18);
+}
 .lp-tab-body--chron .chronicle__log {
   display: flex; flex-direction: column; gap: 5px;
   margin: 0; padding: 0 4px; list-style: none;
