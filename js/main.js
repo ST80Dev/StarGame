@@ -3908,15 +3908,6 @@ function renderCantieriSection(colony, planet) {
         ((F.portMaintenance && F.portMaintenance(ORION.game, colony) > 0)
           ? '<span class="cantieri-cap" title="Manutenzione/riparazione delle navi al porto: riserva + flotte ferme qui (occupare un attracco consuma metalli). Le flotte in viaggio pagano la riserva di viaggio.">Manutenzione <strong>−' + F.portMaintenance(ORION.game, colony).toFixed(2) + ' ' + resIcon('met') + '/' + iU() + '</strong></span>'
           : '') +
-        (function () {
-          /* Razioni equipaggio al porto (2026-06-15): drain cibo/acqua per crews
-             idle + crews di flotte parcheggiate. Solo operational. */
-          const EXP = ORION.expedition;
-          if (!EXP || !EXP.crewPortConsumption || colony.phase === 'settling') return '';
-          const cp = EXP.crewPortConsumption(ORION.game, colony);
-          if (!cp || cp.crews <= 0) return '';
-          return '<span class="cantieri-cap" title="Razioni cibo/acqua per equipaggi NON in viaggio: idle a terra + crews di flotte ferme qui. Le flotte in viaggio non pagano (riserva di viaggio).">Razioni <strong>' + cp.crews + ' eq.</strong> · <strong>−' + cp.food.toFixed(2) + ' ' + resIcon('food') + '</strong> · <strong>−' + cp.water.toFixed(2) + ' ' + resIcon('water') + '</strong> / ' + iU() + '</span>';
-        })() +
         techHtml +
       '</div>' +
       shipReserveBox(colony, classes);
@@ -4004,6 +3995,16 @@ function renderCantieriSection(colony, planet) {
       '</div>' +
       '<div class="cantieri-row__caps">' +
         '<span class="cantieri-cap' + trainCls + '" title="Equipaggi in addestramento contemporaneo, abilitati dal livello dell\'Accademia">Addestramenti <strong>' + activeCrew + ' / ' + trainSlots + '</strong></span>' +
+        (function () {
+          /* Razioni equipaggio al porto (2026-06-15): drain cibo/acqua per crews
+             idle sulla colonia. Le flotte in viaggio o ferme qui non contano:
+             i loro crews mangiano dai viveri di flotta (#69). */
+          const EXP = ORION.expedition;
+          if (!EXP || !EXP.crewPortConsumption || colony.phase === 'settling') return '';
+          const cp = EXP.crewPortConsumption(ORION.game, colony);
+          if (!cp || cp.crews <= 0) return '';
+          return '<span class="cantieri-cap" title="Razioni cibo/acqua per equipaggi idle sulla colonia. Gli equipaggi in missione mangiano dai viveri di flotta.">Razioni <strong>' + cp.crews + ' eq.</strong> · <strong>−' + cp.food.toFixed(2) + ' ' + resIcon('food') + '</strong> · <strong>−' + cp.water.toFixed(2) + ' ' + resIcon('water') + '</strong> / ' + iU() + '</span>';
+        })() +
       '</div>';
     /* Roster per-equipaggio: a riposo (assegnabili) + in missione. */
     if (totalCrews) {

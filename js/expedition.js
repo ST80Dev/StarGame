@@ -678,28 +678,20 @@
      EXPORT
      ------------------------------------------------------------------ */
   /* Razioni equipaggio al porto (decisione 2026-06-15, speculare a #74
-     fleet.portMaintenance per i metalli): ogni equipaggio NON in viaggio drena
-     cibo+acqua sulla colonia di sosta. Conta: (a) equipaggi idle in
-     colony.crews.explorer (#39) + (b) crews di flotte parcheggiate (docked/
-     orbiting nel sistema della colonia, NON in-transit — quelle hanno la
-     riserva di viaggio #74). Stesso loophole closure di portMaintenance.
-     Rate per equipaggio/Ι in time.CFG (CREW_PORT_FOOD/CREW_PORT_WATER). */
+     fleet.portMaintenance per i metalli, ma con una differenza chiave): conta
+     SOLO gli equipaggi idle in colony.crews.explorer (#39). I crews delle
+     flotte parcheggiate nel sistema NON contano — quei crews mangiano dai
+     viveri della flotta (#69), già pagati alla colonia in fase di top-up.
+     Doppio-contarli (come si fa con i metalli in portMaintenance) sarebbe
+     punitivo e mostrerebbe drenaggi misteriosi sulle colonie-snodo dove
+     transitano flotte altrui. Rate per equipaggio/Ι in time.CFG. */
   function crewPortConsumption(game, colony) {
-    if (!colony) return { food: 0, water: 0 };
+    if (!colony) return { food: 0, water: 0, crews: 0 };
     const T = root.ORION && root.ORION.time;
-    if (!T || !T.CFG) return { food: 0, water: 0 };
+    if (!T || !T.CFG) return { food: 0, water: 0, crews: 0 };
     let crews = 0;
     if (colony.crews && Array.isArray(colony.crews.explorer)) {
-      crews += colony.crews.explorer.length;
-    }
-    const sys = colony.systemId;
-    if (game && Array.isArray(game.fleets) && sys != null) {
-      game.fleets.forEach(function (f) {
-        if (!f || !f.location || f.location.systemId !== sys) return;
-        const st = f.location.status;
-        if (st !== 'docked' && st !== 'orbiting') return;   // in-transit = in viaggio
-        if (Array.isArray(f.crew)) crews += f.crew.length;
-      });
+      crews = colony.crews.explorer.length;
     }
     return {
       food:  crews * (T.CFG.CREW_PORT_FOOD  || 0),
