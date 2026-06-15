@@ -1112,6 +1112,18 @@
       fleet.orders = { type: 'return' };
       fleet.route = path;
       fleet.routeIdx = 0;
+      /* Flotta GIÀ nel sistema della colonia origine (rotta a 0 leg):
+         ormeggia subito. Senza questo, startNextLeg lascia la flotta
+         'orbiting' con ETA 0 e la logica d'arrivo (che fa 'docked') non
+         viene mai eseguita → "Rientra" sembra non avere effetto e la
+         flotta resta in orbita (bug segnalato 2026-06-15). */
+      if (path.length <= 1) {
+        fleet.location.status = 'docked';
+        fleet.location.bodyKey = null;
+        fleet.location.intra = null;
+        fleet.etaImpulsi = 0;
+        return { ok: true };
+      }
       fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
       return { ok: true };
     }
