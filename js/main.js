@@ -5791,7 +5791,7 @@ function renderFleetView(stage) {
   function fleetStatusLabel(f) {
     if (!f || !f.location) return '—';
     if (f.location.status === 'docked') return 'all\'attracco';
-    if (f.location.status === 'in-transit') return 'in transito (ETA ' + (f.etaImpulsi | 0) + ' ' + iU() + ')';
+    if (f.location.status === 'in-transit') return 'in viaggio (arrivo in ' + (f.etaImpulsi | 0) + ' ' + iU() + ')';
     return 'in orbita';
   }
   function orderLabel(f) {
@@ -7335,7 +7335,7 @@ function openFleetManageInFlight() {
     const flChecks = fleets.map(function (f) {
       const checked = M.selected[f.id] ? ' checked' : '';
       const loc = (f.location && f.location.status === 'in-transit')
-        ? ('in transito · ' + (f.etaImpulsi | 0) + ' ' + iU())
+        ? ('in viaggio · ' + (f.etaImpulsi | 0) + ' ' + iU())
         : ('in ' + escapeHtml(sysName(f.location.systemId)));
       return '<label class="fmanage__check"><input type="checkbox" data-sel="' + escapeHtml(f.id) + '"' + checked + '> ' +
         '<strong>' + escapeHtml(f.name) + '</strong> <span class="fmanage__loc">' + loc + '</span></label>';
@@ -7464,7 +7464,7 @@ function openFleetDetail(fleetId, opts) {
   function statusLabel(f) {
     const loc = f && f.location; if (!loc) return '—';
     if (loc.status === 'docked') return 'all’attracco';
-    if (loc.status === 'in-transit') return 'in transito · ' + (f.etaImpulsi | 0) + ' ' + iU();
+    if (loc.status === 'in-transit') return 'in viaggio · ' + (f.etaImpulsi | 0) + ' ' + iU();
     return 'in orbita';
   }
   function orderLabel(f) {
@@ -11479,7 +11479,7 @@ function openFleetInfoPopup(fleetId, screenX, screenY) {
   /* Posizione corrente */
   const posSys = g.galaxy.systems[fleet.location.systemId];
   const posStatus = fleet.location.status === 'docked' ? 'all\'attracco'
-                  : fleet.location.status === 'in-transit' ? 'in transito'
+                  : fleet.location.status === 'in-transit' ? 'in viaggio'
                   : 'in orbita';
 
   node.innerHTML =
