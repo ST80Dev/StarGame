@@ -62,6 +62,73 @@ ORION.lpSectionCollapsed = { roster: false, nav: true, launcher: true, council: 
    uiprefs (è una scelta d'interfaccia, non stato di gioco). */
 ORION.lpTab = 'roster';
 
+/* Filtro cronaca (feedback utente 2026-06-15): la cronaca era affollata
+   da eventi di routine (build/varo/lancio/mercantili/governatore/insediamento
+   ecc.). 'important' = default, silenzia il rumore e mantiene solo eventi
+   strategici (combattimento, diplomazia, civ, dispacci, figure, crisi,
+   capitali, milestone). 'all' = comportamento storico. Persistita in
+   uiprefs (UI_GUIDE §9 — non stato di gioco). Le voci silenziate NON
+   entrano in game.chronicle: cambiare filtro a metà partita scarta il
+   pregresso filtrato (mostra solo quanto già accumulato). */
+ORION.chronicleFilter = 'important';
+
+/* Set dei kind "rumore": eventi di routine/atmosferici che NON valgono
+   un'interruzione della cronaca. Tutto ciò che NON è qui è considerato
+   importante (default-deny lato rumore = comportamento conservativo:
+   se un kind nuovo nasce e non è classificato, finisce in "important"
+   per sicurezza, e si valuta in revisione). Allineato alla logica dei
+   DEFAULT_AUTOPAUSE OFF (decisione #31) ma con classificazione separata. */
+const CHRONICLE_NOISE_KINDS = new Set([
+  /* Costruzione/produzione routine. */
+  'build-done', 'ship-built', 'crew-formed', 'mercantile-built', 'mercantile-promoted',
+  /* Insediamento (4 voci per ogni nuova colonia → rumore). */
+  'settle-stage',
+  /* Coda governatore Tier 2 (azioni automatiche, log nel pannello dedicato). */
+  'gov-build-started', 'gov-expand-started', 'gov-asset-started',
+  /* Segnalazioni Tier 1 (le opportunità e i preventivi sono UI, non eventi). */
+  'gov-queue-empty', 'gov-slots-idle', 'gov-pop-near-cap', 'gov-supply-falling', 'gov-veterans-idle',
+  /* Capitale: il varo è importante, il subentro graduale no. */
+  'capital-decommissioned', 'capital-transition-end',
+  /* Figure: l'emersione è importante, il rank-up no. */
+  'commander-ranked', 'colony-figure-ranked',
+  /* Consiglio: solo i consigli (non proposte/atti) sono atmosferici. */
+  'council-advice',
+  /* Flotte: hop e waypoint sono rumore; arrivo a destinazione resta importante. */
+  'fleet-launched', 'fleet-leg-hop', 'fleet-route-complete', 'fleet-waypoint-reached',
+  'fleet-discovery',
+  /* Colonizzazione: orbit/foundation sono fasi intermedie; colony-done resta. */
+  'fleet-colonize-orbit', 'fleet-colonize-foundation',
+  /* Spedizioni: lancio è azione utente, dock-overflow è informativo. */
+  'expedition-launch', 'expedition-dock-overflow',
+  /* Commercio routine: la rotta interrotta/ripresa non è strategica
+     (vive nella tab Rotte). */
+  'trade-route-interrupted', 'trade-route-resumed', 'trade-route-closed',
+  'trade-raid', 'trade-mercantile-lost',
+  'agreement-suspended', 'agreement-resumed', 'agreement-ended',
+  'waste-deal-closed',
+  /* Coesione/federazioni: stato derivato, atmosferico. */
+  'cohesion-attack-backlash', 'system-cohesion-formed', 'system-cohesion-broken',
+  /* Assedio round-per-round: l'inizio e la fine sono importanti; i round in mezzo no. */
+  'siege-round',
+  /* Rifornimento flotta: il drop a low/critical è importante, il top-up no. */
+  'fleet-resupplied',
+  /* Recovery di scarsità/rifiuti: la crisi è importante, il rientro no. */
+  'scarcity-recover', 'waste-recover',
+  /* Diplomazia automatica: scadenza tregua silenziosa, expirations dispacci. */
+  'diplo-truce-expired', 'dispatch-expired', 'dispatch-void', 'diplo-offer-expired',
+  /* Anomalie esaurite: l'evento "trovata" è importante, l'esaurimento no. */
+  'anomaly-depleted',
+  /* Stazione upgrade è informativo (la costruzione e gli attacchi restano). */
+  'station-upgraded', 'station-resupplied',
+  /* Raider che svanisce senza colpire: atmosferico. */
+  'raider-fizzle'
+]);
+
+/* Helper: l'evento è rumore? Letto da chronicleEvent prima di pushChronicle. */
+function isChronicleNoise(ev) {
+  return ev && ev.kind && CHRONICLE_NOISE_KINDS.has(ev.kind);
+}
+
 /* Sezioni dell'accordion Plancia d'Impero (la cronaca è gestita a parte).
    Tenuta come unica fonte così aggiungere una sezione non rompe il toggle
    (bug #78: 'council' mancava qui → non si riapriva più). */
@@ -108,6 +175,11 @@ function loadUiPrefs() {
     }
     if (d.empireDeckOpen != null) ORION.empireDeckOpen = !!d.empireDeckOpen;
     if (typeof d.lpTab === 'string') ORION.lpTab = d.lpTab;
+    /* Filtro cronaca: 'important' (default) silenzia il rumore di routine
+       — solo eventi strategici/notevoli. 'all' mostra tutto come storico. */
+    if (d.chronicleFilter === 'all' || d.chronicleFilter === 'important') {
+      ORION.chronicleFilter = d.chronicleFilter;
+    }
     /* La pin si recupera per partita (chiave seed-aware), perché un
        seed diverso → colonie diverse → il pin vecchio non è valido. */
   } catch (_) { /* niente */ }
@@ -120,7 +192,8 @@ function saveUiPrefs() {
       chronicleCollapsed: ORION.chronicleCollapsed,
       lpSectionCollapsed: ORION.lpSectionCollapsed,
       empireDeckOpen: ORION.empireDeckOpen,
-      lpTab: ORION.lpTab
+      lpTab: ORION.lpTab,
+      chronicleFilter: ORION.chronicleFilter
     }));
   } catch (_) { /* niente */ }
 }
@@ -9317,6 +9390,16 @@ function runAdvance(impulsi) {
 }
 
 function chronicleEvent(ev) {
+  /* Filtro rumore (feedback utente 2026-06-15): in modalità 'important'
+     gli eventi di routine (build, varo navi, lancio flotta, hop, mercantili,
+     governatore, insediamento, recovery, ecc.) non entrano in cronaca.
+     Decisione conservativa: l'evento viene scartato PRIMA di formattarsi —
+     non finisce neanche in game.chronicle (che è la fonte di verità per il
+     replay). Conseguenze positive: cronaca leggibile + risparmio sui 40
+     slot del cap. Conseguenza accettata: cambiando filtro a metà partita
+     non si recupera il pregresso silenziato (è UI, non storia: chi vuole
+     tutto deve scegliere 'all' prima). */
+  if (ORION.chronicleFilter === 'important' && isChronicleNoise(ev)) return;
   const ds = ORION.time.format(ev.impulso);
   const pname = (ev.planet && ev.planet.name) || '—';
   // Decisione #26: aggiungiamo il tag di appartenenza accanto al nome
@@ -10477,7 +10560,23 @@ function renderLeftPanel() {
      così che pushChronicle/restoreChronicleDom funzionino anche quando
      la lista è vuota al boot. */
   const cron = (g.chronicle || []).slice(0, 40);
-  const cronHtml = '<ul class="chronicle__log">' + (cron.length
+  /* Filtro cronaca (feedback utente 2026-06-15): segmented control
+     "Importanti / Tutto" — il filtro vive a livello di ingresso
+     (chronicleEvent), quindi qui mostriamo SEMPRE tutto quanto già
+     accumulato in game.chronicle; il toggle determina cosa entrerà
+     d'ora in poi. Nessun re-filter del DOM = niente sorprese (le voci
+     già accettate restano). */
+  const cf = ORION.chronicleFilter || 'important';
+  const filterHtml =
+    '<div class="chron-filter" role="tablist" aria-label="Filtro cronaca">' +
+      '<button class="chron-filter__btn' + (cf === 'important' ? ' is-active' : '') + '" ' +
+        'data-chron-filter="important" type="button" ' +
+        'title="Solo eventi strategici (combattimento, diplomazia, civiltà, dispacci, figure, crisi, milestone). Nasconde build/varo/lancio/governatore/insediamento.">Importanti</button>' +
+      '<button class="chron-filter__btn' + (cf === 'all' ? ' is-active' : '') + '" ' +
+        'data-chron-filter="all" type="button" ' +
+        'title="Mostra ogni evento, incluse le voci di routine.">Tutto</button>' +
+    '</div>';
+  const cronHtml = filterHtml + '<ul class="chronicle__log">' + (cron.length
     ? cron.map(function (e) {
         const mod = e.mod ? ' chronicle__entry--' + e.mod : '';
         return '<li class="chronicle__entry' + mod + '">' + e.html + '</li>';
@@ -10610,6 +10709,18 @@ function renderLeftPanel() {
      funzioni guardano `if (!log) return` → fonte di verità game.chronicle). */
   const ul = host.querySelector('.chronicle__log');
   if (ul) ul.setAttribute('data-bind', 'chronicle');
+
+  /* Filtro cronaca (feedback utente 2026-06-15): bind segmented control. */
+  host.querySelectorAll('[data-chron-filter]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const v = b.dataset.chronFilter;
+      if (v !== 'important' && v !== 'all') return;
+      if (ORION.chronicleFilter === v) return;
+      ORION.chronicleFilter = v;
+      saveUiPrefs();
+      renderLeftPanel();
+    });
+  });
 
   /* Identità popolo: click sul banner → editor (decisione #65). */
   const empBtn = host.querySelector('[data-action="empire-edit"]');
