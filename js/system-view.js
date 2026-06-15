@@ -510,6 +510,13 @@
       for (let i = 0; i < game.fleets.length; i++) {
         const f = game.fleets[i];
         if (!f || !f.location || f.location.systemId !== sysId) continue;
+        /* Flotta in viaggio INTERSTELLARE (in-transit senza `intra`): durante
+           il leg `location.systemId` resta sul sistema di partenza fino
+           all'arrivo, quindi senza questo filtro comparirebbe (in loiter)
+           nella vista del sistema d'origine pur essendo già "in viaggio"
+           sulla mappa galassia → doppione (richiesta utente 2026-06-15).
+           Le traversate intra-sistema (con `location.intra`) restano. */
+        if (f.location.status === 'in-transit' && !f.location.intra) continue;
         const intra = f.location.intra || null;
         let anchorKey = null;
         if (!intra) {
