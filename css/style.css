@@ -7136,6 +7136,11 @@ select.main-menu__input { cursor: pointer; }
   border: 1px solid rgba(255,255,255,0.14); border-radius: 5px; padding: 4px 6px; font: inherit;
 }
 .route-picker__rate { font-size: 0.78rem; color: var(--c-text-dim); margin-left: auto; }
+.route-picker__field--rate { flex-direction: row; align-items: center; gap: 6px; }
+.route-picker__field--rate input[type="range"] { flex: 1; min-width: 90px; accent-color: var(--c-accent); }
+.route-picker__field--rate strong { color: var(--c-text); font-variant-numeric: tabular-nums; min-width: 2.2em; text-align: right; }
+.route-item__rate-input { width: 78px; vertical-align: middle; accent-color: var(--c-accent); }
+.route-item__res strong { color: var(--c-text); font-variant-numeric: tabular-nums; }
 .route-dest-card {
   padding: 9px 11px; border-radius: 8px;
   background: rgba(240, 214, 112, 0.05); border: 1px solid rgba(240, 214, 112, 0.2);

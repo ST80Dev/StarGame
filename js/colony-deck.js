@@ -304,13 +304,19 @@
       const pf = (ORION.time && ORION.time.productionFactors)
         ? ORION.time.productionFactors(ORION.game, colony)
         : { prodMul: 1, popFood: 0, popWater: 0, crewFood: 0, crewWater: 0 };
+      /* Flusso rotte commerciali nel saldo (decisione utente 2026-06-15):
+         + in entrata, − in uscita. */
+      const colKey = colony.systemId + ':' + colony.bodyKey;
+      const tradeNet = (ORION.trade && ORION.trade.colonyTradeFlow)
+        ? ORION.trade.colonyTradeFlow(ORION.game, colKey)
+        : { met: 0, en: 0, food: 0, water: 0 };
 
       let html = '<aside class="deck-resources" aria-label="Risorse della colonia">';
       keys.forEach(function (k) {
         const stock = colony.stock[k] || 0;
         const popDrain = k === 'food' ? pf.popFood : k === 'water' ? pf.popWater : 0;
         const crewDrain = k === 'food' ? (pf.crewFood || 0) : k === 'water' ? (pf.crewWater || 0) : 0;
-        const net = (out.rates[k] || 0) * pf.prodMul - (out.upkeep[k] || 0) - popDrain - crewDrain;
+        const net = (out.rates[k] || 0) * pf.prodMul - (out.upkeep[k] || 0) - popDrain - crewDrain + (tradeNet[k] || 0);
         const state = scar && scar[k] ? scar[k].state : 'ok';
         const stateCls = state === 'crit' ? ' is-crit' : state === 'low' ? ' is-low' : '';
         const stateLabel = state === 'crit' ? 'critica' : state === 'low' ? 'allerta' : 'ok';

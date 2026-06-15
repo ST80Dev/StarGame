@@ -496,6 +496,50 @@
     return { ok: true };
   }
 
+  /* Flusso EFFETTIVO per rotta in questo Impulso, replicando l'allocazione di
+     processRoutes (stesso ordine per id, stesso budget di throughput condiviso).
+     Read-only: NON muta nulla. Serve alla UI per mostrare il saldo commercio
+     reale (es. con throughput 8 e due rotte da 6: la prima ottiene 6, la
+     seconda 2 — il giocatore VEDE perché una risorsa non sale). */
+  function effectiveFlows(game) {
+    const cols = (game && game.colonies) || {};
+    const ordered = activeRoutes(game).filter(function (r) {
+      return r && r.status === 'active';
+    }).sort(function (a, b) { return a.id < b.id ? -1 : (a.id > b.id ? 1 : 0); });
+    let budget = marketCapacity(game).throughput;
+    const out = {};
+    for (let i = 0; i < ordered.length; i++) {
+      const route = ordered[i];
+      const src = cols[route.src];
+      const merc = src && findMercantile(src, route.mercId);
+      const cargoCap = merc ? mercantileCargo(merc) : 0;
+      const avail = src ? resStock(src, route.resource) : 0;
+      let flow = Math.min(route.rate, cargoCap, budget, avail);
+      flow = Math.max(0, Math.round(flow * 10) / 10);
+      out[route.id] = flow;
+      budget -= flow;
+    }
+    return out;
+  }
+
+  /* Saldo commercio netto per risorsa di una colonia (read-only):
+     + in entrata (è destinazione), − in uscita (è sorgente), usando i flussi
+     effettivi. Consumato dal saldo produzione in UI (tab Risorse, deck). */
+  function colonyTradeFlow(game, colonyKey) {
+    const net = { met: 0, en: 0, food: 0, water: 0 };
+    const flows = effectiveFlows(game);
+    const all = activeRoutes(game);
+    for (let i = 0; i < all.length; i++) {
+      const r = all[i];
+      const f = flows[r.id] || 0;
+      if (f <= 0) continue;
+      if (net[r.resource] == null) continue;   // ignora 'waste' ecc.
+      if (r.src === colonyKey) net[r.resource] -= f;
+      if (r.dst === colonyKey) net[r.resource] += f;
+    }
+    return net;
+  }
+
   /* ------------------------------------------------------------------
      processRoutes — 1 Impulso. Sposta le risorse lungo le rotte attive
      entro il budget di throughput del Mercato; matura l'xp dei mercantili;
@@ -873,6 +917,8 @@
     findRoute: findRoute,
     cancelRoute: cancelRoute,
     setRouteRate: setRouteRate,
+    effectiveFlows: effectiveFlows,
+    colonyTradeFlow: colonyTradeFlow,
     processRoutes: processRoutes,
     minQueueDuration: minQueueDuration
   };

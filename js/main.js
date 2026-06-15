@@ -4675,11 +4675,20 @@ function renderPlanetRotteTab(host, planet, colony) {
           threatHtml = ' · <span class="route-item__threat is-' + lvl + '" title="Rischio razzia pirata sul percorso">☠ ' + Math.round(th * 100) + '%</span>';
         }
       }
+      /* Modifica inline del flusso (solo rotte uscenti): slider 1..cargo. */
+      let rateCtrl = '<span class="route-item__res">' + resIcon(r.resource) + ' ' + r.rate + '/' + iU() + '</span>';
+      if (outbound) {
+        const oMerc = T.findMercantile(colony, r.mercId);
+        const oMax = oMerc ? T.mercantileCargo(oMerc) : r.rate;
+        rateCtrl = '<span class="route-item__res">' + resIcon(r.resource) +
+          ' <input type="range" class="route-item__rate-input" min="1" max="' + oMax + '" step="0.5" value="' + r.rate + '" data-action="route-rate" data-rid="' + r.id + '" title="Flusso per Impulso (max cargo ' + oMax + ')">' +
+          ' <strong data-rate-out="' + r.id + '">' + r.rate + '</strong>/' + iU() + '</span>';
+      }
       return '<li class="route-item">' +
         '<div class="route-item__head">' +
           '<span class="route-item__dir">' + dir + '</span>' +
           '<span class="route-item__peer">' + colonyNameFromKey(otherKey) + '</span>' +
-          '<span class="route-item__res">' + resIcon(r.resource) + ' ' + r.rate + '/' + iU() + '</span>' +
+          rateCtrl +
           '<span class="route-item__status is-' + meta.cls + '">' + meta.label + '</span>' +
         '</div>' +
         '<div class="route-item__foot">' +
@@ -4739,6 +4748,13 @@ function renderPlanetRotteTab(host, planet, colony) {
   });
   host.querySelectorAll('[data-action="route-cancel"]').forEach(function (b) {
     b.addEventListener('click', function () { doCancelRoute(b.dataset.rid); });
+  });
+  host.querySelectorAll('[data-action="route-rate"]').forEach(function (s) {
+    s.addEventListener('input', function () {
+      const out = host.querySelector('[data-rate-out="' + s.dataset.rid + '"]');
+      if (out) out.textContent = String(parseFloat(s.value) || 1);
+    });
+    s.addEventListener('change', function () { doSetRouteRate(s.dataset.rid, parseFloat(s.value) || 1); });
   });
   host.querySelectorAll('[data-action="bank-sell"]').forEach(function (b) {
     b.addEventListener('click', function () { doBankTrade(colony, 'sell', b.dataset.res); });
@@ -4836,6 +4852,18 @@ function doCancelRoute(routeId) {
   });
 }
 
+/* Modifica del flusso (rate Z) di una rotta attiva. Niente confirm: è una
+   leva da regolare al volo secondo i bisogni (decisione utente 2026-06-15).
+   Il motore (setRouteRate) clampa a [1, cargo del mercantile]. */
+function doSetRouteRate(routeId, rate) {
+  const g = ORION.game;
+  const r = ORION.trade.setRouteRate(g, routeId, rate);
+  if (!r.ok) { showToast(r.reason || 'Rate rifiutato'); return; }
+  persistGame(g);
+  updatePlanetUI();
+  if (ORION._currentView === 'market') renderView(document.querySelector('[data-view-stage]'), 'market');
+}
+
 /* Overlay creazione rotta: destinazione (colonia raggiungibile) + risorsa
    + mercantile + rate. */
 function openRoutePicker(colony) {
@@ -4850,6 +4878,7 @@ function openRoutePicker(colony) {
   /* Stato di selezione locale all'overlay. */
   let mercId = idle[0].id;
   let resource = 'food';
+  let rate = null;   /* null = usa il massimo del cargo del mercantile */
 
   let host = document.querySelector('[data-bind="route-picker"]');
   if (!host) {
@@ -4881,6 +4910,8 @@ function openRoutePicker(colony) {
   function render() {
     const merc = T.findMercantile(colony, mercId);
     const maxRate = merc ? T.mercantileCargo(merc) : 1;
+    /* rate scelto dall'utente, default = cargo max; clampato al cargo corrente. */
+    const curRate = Math.max(1, Math.min(rate == null ? maxRate : rate, maxRate));
     const dests = destinations();
     const mercOpts = idle.map(function (m) {
       const t = T.getTier(m.tier) || {};
@@ -4920,20 +4951,29 @@ function openRoutePicker(colony) {
         '<div class="route-picker__controls">' +
           '<label class="route-picker__field">Mercantile <select data-bind="route-merc">' + mercOpts + '</select></label>' +
           '<label class="route-picker__field">Risorsa <select data-bind="route-res">' + resOpts + '</select></label>' +
-          '<span class="route-picker__rate">Flusso max: <strong>' + maxRate + '</strong> ' + iU() + '</span>' +
+          '<label class="route-picker__field route-picker__field--rate">Flusso: ' +
+            '<input type="range" min="1" max="' + maxRate + '" step="0.5" value="' + curRate + '" data-bind="route-rate">' +
+            '<strong data-bind="route-rate-out">' + curRate + '</strong> / ' + iU() +
+          '</label>' +
         '</div>' +
         '<div class="expedition-pick-overlay__grid">' + destCards + '</div>' +
-        '<p class="panel__note">Il flusso parte al massimo del cargo del mercantile (regolabile poi cancellando e ricreando la rotta). Si interrompe da solo se la sorgente esaurisce la risorsa.</p>' +
+        '<p class="panel__note">Imposta il flusso per Impulso (max = cargo del mercantile ' + maxRate + '/' + iU() + '; per andare oltre serve un mercantile di livello superiore). Regolabile anche dopo, dalla rotta attiva. Si interrompe da solo se la sorgente esaurisce la risorsa o se il throughput del Mercato è saturo.</p>' +
       '</div>';
 
     host.querySelector('[data-bind="route-merc"]').addEventListener('change', function () {
-      mercId = this.value; render();
+      mercId = this.value; rate = null; render();   /* nuovo cargo → ricalibra default */
     });
     host.querySelector('[data-bind="route-res"]').addEventListener('change', function () {
       resource = this.value; render();
     });
+    const rateInp = host.querySelector('[data-bind="route-rate"]');
+    if (rateInp) rateInp.addEventListener('input', function () {
+      rate = parseFloat(this.value) || 1;
+      const outEl = host.querySelector('[data-bind="route-rate-out"]');
+      if (outEl) outEl.textContent = String(rate);
+    });
     host.querySelectorAll('[data-action="route-do"]').forEach(function (b) {
-      b.addEventListener('click', function () { doCreateRoute(srcKey, b.dataset.dst, resource, mercId); });
+      b.addEventListener('click', function () { doCreateRoute(srcKey, b.dataset.dst, resource, mercId, curRate); });
     });
     host.querySelector('[data-action="route-pick-close"]').addEventListener('click', closeRoutePicker);
   }
@@ -4946,9 +4986,9 @@ function closeRoutePicker() {
   const host = document.querySelector('[data-bind="route-picker"]');
   if (host) { host.hidden = true; host.innerHTML = ''; }
 }
-function doCreateRoute(srcKey, dstKey, resource, mercId) {
+function doCreateRoute(srcKey, dstKey, resource, mercId, rate) {
   const g = ORION.game;
-  const r = ORION.trade.createRoute(g, srcKey, dstKey, resource, null, mercId);
+  const r = ORION.trade.createRoute(g, srcKey, dstKey, resource, (rate != null ? rate : null), mercId);
   if (!r.ok) { showToast(r.reason || 'Rotta rifiutata'); return; }
   pushChronicle(ORION.time.currentDS(g) + ' — Nuova rotta commerciale: ' +
     colonyNameFromKey(srcKey) + ' → ' + colonyNameFromKey(dstKey) +
@@ -8585,16 +8625,26 @@ function rateGrid(rates, upkeep, colony) {
   const pf = (ORION.time && ORION.time.productionFactors)
     ? ORION.time.productionFactors(ORION.game, colony)
     : { prodMul: 1, popFood: 0, popWater: 0, crewFood: 0, crewWater: 0 };
+  /* Decisione utente (2026-06-15): il flusso delle rotte commerciali deve
+     pesare nel saldo. + in entrata sulla destinazione, − in uscita sulla
+     sorgente (flussi EFFETTIVI, conteggiano il budget di throughput). */
+  const colKey = colony.systemId + ':' + colony.bodyKey;
+  const tradeNet = (ORION.trade && ORION.trade.colonyTradeFlow)
+    ? ORION.trade.colonyTradeFlow(ORION.game, colKey)
+    : { met: 0, en: 0, food: 0, water: 0 };
   const items = [];
   ['met', 'en', 'food', 'water'].forEach(function (k) {
     const r = (rates[k] || 0) * pf.prodMul; const u = upkeep[k] || 0;
     const popDrain = k === 'food' ? pf.popFood : k === 'water' ? pf.popWater : 0;
     const crewDrain = k === 'food' ? (pf.crewFood || 0) : k === 'water' ? (pf.crewWater || 0) : 0;
-    const net = r - u - popDrain - crewDrain;
-    if (!(r || u || popDrain || crewDrain)) return;
+    const trade = tradeNet[k] || 0;   // + entrata, − uscita
+    const net = r - u - popDrain - crewDrain + trade;
+    if (!(r || u || popDrain || crewDrain || trade)) return;
     let aux = '+' + fmtAbs(r) + ' prod / −' + fmtAbs(u) + ' uso';
     if (popDrain > 0) aux += ' / −' + fmtAbs(popDrain) + ' pop';
     if (crewDrain > 0) aux += ' / −' + fmtAbs(crewDrain) + ' razioni';
+    if (trade > 0) aux += ' / +' + fmtAbs(trade) + ' commercio';
+    else if (trade < 0) aux += ' / −' + fmtAbs(trade) + ' commercio';
     items.push(row(resLabel(k), '<span class="rate ' + (net >= 0 ? 'rate--pos' : 'rate--neg') + '">' + fmtNet(net) + '</span> / ' + iU() + ' <span class="rate-aux">(' + aux + ')</span>'));
   });
   if (rates.research) items.push(row('Ricerca', '<span class="rate rate--pos">+' + (Math.round(rates.research * 100) / 100) + '</span> / ' + iU()));
