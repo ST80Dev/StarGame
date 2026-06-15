@@ -1314,9 +1314,13 @@
     }
     return false;
   }
-  /* La flotta è a un porto amico? */
+  /* La flotta è a un porto amico? Una flotta IN VIAGGIO non lo è mai: durante
+     un leg `location.systemId` resta sul nodo di partenza (aggiornato solo a
+     fine leg) — senza questo guard l'andata da una colonia risulterebbe
+     "sempre a un porto" e i viveri non si consumerebbero mai (#69 fix). */
   function fleetAtFriendlyPort(game, fleet) {
     if (!fleet || !fleet.location) return false;
+    if (fleet.location.status === 'in-transit') return false;
     return isFriendlyPortAt(game, fleet.location.systemId);
   }
   /* AI in PACE (non alleata, non in guerra) nel sistema indicato — porto dove
