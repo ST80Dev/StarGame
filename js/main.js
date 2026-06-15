@@ -6546,11 +6546,23 @@ function renderCivView(stage) {
     head += '</div>';
 
     let body = '';
-    /* SPOTTED — minimo: nome + sigla regione. */
+    /* SPOTTED — minimo: nome + sigla regione + nudge per il contatto. */
     if (rank >= KNOWLEDGE.spotted && rank < KNOWLEDGE.contacted) {
+      /* Trova un loro sistema noto al giocatore (DETECTED+) per il bottone
+         "Mostra sulla mappa". Nudge "early-game pacing" 2026-06-15: senza
+         un appiglio visivo il "sistema da esplorare" resta opaco. */
+      const knownSys = (c.systems || []).filter(function (sid) {
+        const d = g.state && g.state.discovery ? g.state.discovery[sid] : 0;
+        return d != null && d >= 1; /* DETECTED+ */
+      });
+      const focusBtn = knownSys.length
+        ? '<button type="button" class="civ-card__focus" data-action="civ-focus" data-sys="' + knownSys[0] +
+            '" title="Apri la mappa galassia centrata su uno dei loro sistemi">📍 Mostra sulla mappa</button>'
+        : '';
       body = '<div class="civ-card__row"><span class="civ-card__k">Regione</span><span>' +
         escapeHtml(seat.name || '—') + '</span></div>' +
-        '<p class="panel__note civ-card__hint">Hai avvistato un loro sistema. Avvicinati con la diplomazia o uno scontro per ottenere un <strong>dossier completo</strong>.</p>';
+        '<p class="panel__note civ-card__hint">Hai avvistato un loro sistema. <strong>Esplora un loro sistema</strong> con una spedizione/flotta per stabilire un <strong>contatto formale</strong> — solo allora ottieni dossier completo, diplomazia, accordi.</p>' +
+        (focusBtn ? '<div class="civ-card__actions">' + focusBtn + '</div>' : '');
     }
     /* UNKNOWN (solo 4 Costanti): mostra ruolo + hint contatto. */
     if (rank < KNOWLEDGE.spotted && factionDef) {
@@ -6835,6 +6847,19 @@ function renderCivView(stage) {
     });
   }
   /* M11 Fase B parziale: rilascio occupazione sistema. */
+  /* Nudge "early-game pacing" 2026-06-15: dalle card SPOTTED, click su
+     "📍 Mostra sulla mappa" porta alla mappa galassia centrata su un loro
+     sistema già DETECTED dal giocatore — appiglio visivo per chi non sa
+     dove vada a "esplorare un loro sistema". */
+  stage.querySelectorAll('[data-action="civ-focus"]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const sid = Number(btn.dataset.sys);
+      if (!Number.isFinite(sid) || sid < 0) return;
+      if (g.state) g.state.selectedId = sid;
+      navigateView('group');
+      if (ORION.map && ORION.map.focusSystemCentered) ORION.map.focusSystemCentered(sid);
+    });
+  });
   stage.querySelectorAll('[data-action="occ-release"]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       const sid = Number(btn.dataset.sys);
@@ -9656,8 +9681,10 @@ function chronicleEvent(ev) {
   } else if (ev.kind === 'civ-spotted') {
     /* M10 Fase B punto 2 (decisione #52 §13.10): "Avvistata" — esplori un
        loro sistema, ma nessun atto formale è ancora avvenuto. La vista
-       Civiltà ⬡ mostra solo nome + sigla regione fino al contatto vero. */
-    pushChronicle(ds + ' — Civiltà <strong>' + escapeHtml(ev.civName) + '</strong> avvistata nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">dossier minimo nella vista Civiltà ⬡</span>.', 'civ');
+       Civiltà ⬡ mostra solo nome + sigla regione fino al contatto vero.
+       Nudge "early-game pacing" 2026-06-15: aggiunto suggerimento esplicito
+       su come passare a contatto formale (esplora un loro sistema). */
+    pushChronicle(ds + ' — Civiltà <strong>' + escapeHtml(ev.civName) + '</strong> avvistata nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">esplora un loro sistema per il contatto formale (dossier completo nella vista Civiltà ⬡)</span>.', 'civ');
   } else if (ev.kind === 'civ-expand') {
     /* Voce di cronaca "da lontano": effetto senza svelare la mappa. */
     pushChronicle(ds + ' — Voci dal/dalla ' + escapeHtml(ev.regionLabel) + ': <strong>' + escapeHtml(ev.civName) + '</strong> ha annesso un nuovo sistema.', 'civ');
@@ -9871,8 +9898,14 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName) + '</strong> rifornita presso <strong>' +
       (sys ? sys.name : '—') + '</strong>: viveri al massimo, deriva rientrata.', 'system');
   } else if (ev.kind === 'dispatch-offered') {
+    /* Courtship 2026-06-15: se è la prima offerta in "modalità premurosa",
+       lo evidenziamo per far capire al giocatore che il sistema esiste
+       (altrimenti potrebbe ignorarla pensando sia rumore). */
+    const courtshipHint = ev.courtship
+      ? ' <span class="chronicle__hint">(primo segnale dalla galassia — il sistema Dispacci è attivo)</span>'
+      : ' <span class="chronicle__hint">(pannello Dispacci ✉)</span>';
     pushChronicle(ds + ' — Nuovo incarico da <strong>' + escapeHtml(ev.sourceName || '—') + '</strong>: ' +
-      escapeHtml(ev.title || '') + ' <span class="chronicle__hint">(pannello Dispacci ✉)</span>.', 'civ');
+      escapeHtml(ev.title || '') + courtshipHint + '.', 'civ');
   } else if (ev.kind === 'dispatch-done') {
     pushChronicle(ds + ' — Incarico completato: <strong>' + escapeHtml(ev.title || '') + '</strong> · ricompensa riscossa.', 'civ');
   } else if (ev.kind === 'dispatch-failed') {

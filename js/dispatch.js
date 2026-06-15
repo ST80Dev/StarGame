@@ -58,7 +58,18 @@
     CRISIS_THREAT_ETA: 35,// preavviso della minaccia spawnata (recovery #22)
     SURV_FIRST: 3000,     // primo evento Sopravvissuto (calmo/tardivo)
     SURV_GAP: 2500,       // distanza tra le ondate
-    SURV_WAVES: 6         // ondate programmate (poi M20/§19)
+    SURV_WAVES: 6,        // ondate programmate (poi M20/§19)
+    /* Courtship mode (feedback utente 2026-06-15, decisione "early-game pacing"):
+       se il giocatore non ha MAI visto un'offerta entro COURTSHIP_TRIGGER_I,
+       il dispatcher entra in modalità "corteggiamento" — soglie più morbide
+       per garantire che almeno una offerta arrivi, così l'utente *scopre*
+       che il sistema esiste. Decade automaticamente al primo offered o al
+       primo accepted (whichever first). Non modifica il design "calma"
+       (decisione #52): è un correttivo per chi è in stallo, non un boost
+       permanente. */
+    COURTSHIP_TRIGGER_I: 1500, // se 0 offerte mai a questo Ι → on
+    COURTSHIP_CHANCE_MUL: 2.0, // moltiplicatore CHANCE (clamp 0.8)
+    COURTSHIP_COOLDOWN_MUL: 0.5 // moltiplicatore COOLDOWN
   };
 
   const BOSS_TITLES = ['Sciacallo', 'Falce', 'Artiglio', 'Vipera', 'Corsaro', 'Spettro', 'Lama', 'Avvoltoio'];
@@ -72,7 +83,11 @@
     if (!Array.isArray(game.missions)) game.missions = [];
     if (!Array.isArray(game.memoria)) game.memoria = [];
     if (!game.dispatchMeta || typeof game.dispatchMeta !== 'object') {
-      game.dispatchMeta = { lastOfferAt: -1, offers: 0, completed: 0 };
+      game.dispatchMeta = { lastOfferAt: -1, offers: 0, completed: 0, accepted: 0 };
+    } else if (typeof game.dispatchMeta.accepted !== 'number') {
+      /* Save di pre-feedback-2026-06-15: campo accepted assente. Lazy-init,
+         additivo, niente migrazione di schema. */
+      game.dispatchMeta.accepted = 0;
     }
     /* M17 Fase B (#83): contractor Mekhari attivi (auto-risolutivi). */
     if (!Array.isArray(game.contracts)) game.contracts = [];
@@ -328,25 +343,46 @@
     return null;
   }
 
+  /* Courtship: il giocatore non ha mai visto un'offerta dopo
+     COURTSHIP_TRIGGER_I → il dispatcher diventa più "premuroso" finché
+     non ne arriva almeno una (poi torna al ritmo standard). Decisione
+     "early-game pacing" 2026-06-15. */
+  function isCourtship(game) {
+    const meta = game.dispatchMeta;
+    if (!meta) return false;
+    const now = game.timeImpulsi || 0;
+    return now >= CFG.COURTSHIP_TRIGGER_I &&
+           (meta.offers || 0) === 0 &&
+           (meta.accepted || 0) === 0;
+  }
+
   function attemptGenerate(game, events) {
     const meta = game.dispatchMeta;
     const now = game.timeImpulsi || 0;
-    if (now < CFG.WARMUP_I) return;
+    const courtship = isCourtship(game);
+    /* In courtship saltiamo il vincolo di WARMUP (siamo molto oltre).
+       Mantieniamo il rate di tentativo per non rompere il determinismo
+       sul tick allineato. */
+    if (!courtship && now < CFG.WARMUP_I) return;
     if (now % CFG.GEN_EVERY !== 0) return;
-    if (meta.lastOfferAt >= 0 && (now - meta.lastOfferAt) < CFG.GEN_COOLDOWN) return;
+    const cooldown = courtship ? Math.max(50, Math.round(CFG.GEN_COOLDOWN * CFG.COURTSHIP_COOLDOWN_MUL)) : CFG.GEN_COOLDOWN;
+    if (meta.lastOfferAt >= 0 && (now - meta.lastOfferAt) < cooldown) return;
     const open = game.missions.filter(function (m) { return m.status === 'offered' || m.status === 'active'; }).length;
     if (open >= CFG.MAX_OPEN) return;
     const elig = eligibleTypes(game);
     if (!elig.length) return;
     const rng = ORION.rng.makeRng(game.seed + ':dispatch:' + now);
-    if (!rng.chance(CFG.GEN_CHANCE)) return;
+    const chance = courtship ? Math.min(0.8, CFG.GEN_CHANCE * CFG.COURTSHIP_CHANCE_MUL) : CFG.GEN_CHANCE;
+    if (!rng.chance(chance)) return;
     const type = rng.pick(elig);
     const m = buildMission(game, type, rng, now);
     if (!m) return;
     game.missions.push(m);
     meta.lastOfferAt = now;
     meta.offers = (meta.offers || 0) + 1;
-    events.push({ kind: 'dispatch-offered', missionId: m.id, title: m.title, sourceName: m.sourceName, mtype: m.type, impulso: now });
+    /* Annotazione courtship per la cronaca: il primo offered ne è esce. */
+    if (courtship) m.fromCourtship = true;
+    events.push({ kind: 'dispatch-offered', missionId: m.id, title: m.title, sourceName: m.sourceName, mtype: m.type, impulso: now, courtship: !!courtship });
   }
 
   /* ------------------------------------------------------------------
@@ -756,6 +792,10 @@
     m.acceptedAt = now;
     m.deadline = now + CFG.DEADLINE;
     m.progress = { holdLeft: m.holdI || 0 };
+    /* Courtship tracking: il primo accept conferma che l'utente sa giocare
+       il sistema → niente più "modalità premurosa" anche se in futuro
+       restasse senza offerte in finestra. */
+    if (game.dispatchMeta) game.dispatchMeta.accepted = (game.dispatchMeta.accepted || 0) + 1;
     return { ok: true };
   }
 
@@ -856,6 +896,7 @@
     activeCrises: activeCrises,
     resolveCrisis: resolveCrisis,
     payColonyKey: payColonyKey,
-    playerFleetAt: playerFleetAt
+    playerFleetAt: playerFleetAt,
+    isCourtship: isCourtship
   };
 })(typeof window !== 'undefined' ? window : this);

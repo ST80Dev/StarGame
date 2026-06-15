@@ -6993,6 +6993,30 @@ select.main-menu__input { cursor: pointer; }
 }
 .civ-card__hint { margin: 4px 0 0; font-size: 0.78rem; }
 .civ-card__chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 3px 0 5px; }
+/* Nudge "early-game pacing" 2026-06-15: bottone "📍 Mostra sulla mappa"
+   sulle card civ SPOTTED. Stile leggero (non azione strategica), accento
+   ambra come gli hint contestuali. */
+.civ-card__actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.civ-card__focus {
+  font-family: inherit;
+  font-size: 0.78rem;
+  background: rgb(var(--c-surface-rgb) / 0.7);
+  color: var(--c-accent-warm);
+  border: 1px solid rgba(240, 214, 112, 0.35);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms;
+}
+.civ-card__focus:hover {
+  background: rgb(var(--c-surface-rgb) / 0.9);
+  border-color: rgba(240, 214, 112, 0.6);
+}
 
 /* Sezione fissa "Le Quattro Costanti" — sempre presente. */
 .civ-constants {
