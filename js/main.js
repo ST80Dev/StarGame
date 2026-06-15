@@ -3061,10 +3061,9 @@ function runQuickColonize(planet, colonyKey, loadPop) {
     showToast('Equipaggio insufficiente in accademia');
     return;
   }
-  /* Nome scelto contestualmente: "Pioniere → [Pianeta]" è leggibile e si
-     distingue dai "Squadrone N" generici. */
-  const fleetName = 'Pioniere → ' + planet.name;
-  const cr = F.createFleet(g, colonyKey, fleetName);
+  /* Niente nome esplicito: lo riceverà al setOrder('colonize') sotto come
+     callsign progressivo "Pioniere N" (decisione utente 2026-06-15). */
+  const cr = F.createFleet(g, colonyKey, null);
   if (!cr.ok) { showToast('Creazione flotta: ' + (cr.reason || 'errore')); return; }
   const newFleet = cr.fleet;
   if (!newFleet) { showToast('Errore interno: flotta non creata'); return; }
@@ -3179,6 +3178,8 @@ function doColonize(planet, fleet, loadPop) {
     showToast(r.reason || 'Ordine rifiutato');
     return;
   }
+  /* Callsign d'esordio "Pioniere N" se ancora "Squadrone N" default. */
+  maybeAutoRenameFleet(g, fleet, { type: 'colonize', toSysId: planet.systemId });
   pushChronicle(ORION.time.currentDS(g) + ' — Spedizione coloniale <strong>' + escapeHtml(fleet.name) +
     '</strong> in viaggio verso <strong>' + escapeHtml(planet.name) + '</strong>' + bodyTagHtml(planet.systemId) +
     (intra ? ' (rotta intra-sistema)' : ' (' + (r.path ? r.path.length - 1 : 1) + ' salti)') + '.', 'planet');
@@ -4331,7 +4332,9 @@ function doSurveyAnomaly(colony, targetSystemId, anomalyKind) {
   const crewsAvail = (colony.crews && Array.isArray(colony.crews.explorer)) ? colony.crews.explorer.length : 0;
   if (shipsAvail < 1) { showToast('Nessuno scafo esploratore disponibile'); return; }
   if (crewsAvail < 1) { showToast('Nessun equipaggio esploratore disponibile'); return; }
-  const cf = ORION.fleet.createFleet(g, key, 'Ricognizione');
+  /* Niente nome esplicito: lo riceverà al setOrder('explore') sotto, come
+     callsign progressivo "Segugio N" (decisione utente 2026-06-15). */
+  const cf = ORION.fleet.createFleet(g, key, null);
   if (!cf.ok) { showToast(cf.reason || 'Creazione flotta fallita'); return; }
   const fleet = cf.fleet;
   const as = ORION.fleet.assignShips(g, fleet, key, 'explorer', 1);
@@ -4340,6 +4343,8 @@ function doSurveyAnomaly(colony, targetSystemId, anomalyKind) {
   if (!ac.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(ac.reason || 'Assegnazione equipaggio fallita'); return; }
   const so = ORION.fleet.setOrder(g, fleet, { type: 'survey', toSysId: targetSystemId, anomalyKind: anomalyKind || null });
   if (!so.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(so.reason || 'Ordine ricognizione rifiutato'); return; }
+  /* Callsign d'esordio "Vedetta N". */
+  maybeAutoRenameFleet(g, fleet, { type: 'survey', toSysId: targetSystemId });
   const sys = g.galaxy.systems[targetSystemId];
   const acr = regionAcronymFor(targetSystemId);
   const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
@@ -4524,7 +4529,9 @@ function doLaunchExpedition(colony, targetSystemId, opts) {
   if (crewsAvail < 1) { showToast('Nessun equipaggio esploratore disponibile'); return; }
   /* Crea flotta + assegna 1 scafo + l'equipaggio scelto (per id, #76);
      fallback al primo in lista se l'id non è indicato/non più disponibile. */
-  const cf = ORION.fleet.createFleet(g, key, 'Esplorazione');
+  /* Niente nome esplicito: lo riceverà al setOrder('explore') come
+     callsign progressivo "Segugio N" (decisione utente 2026-06-15). */
+  const cf = ORION.fleet.createFleet(g, key, null);
   if (!cf.ok) { showToast(cf.reason || 'Creazione flotta fallita'); return; }
   const fleet = cf.fleet;
   const as = ORION.fleet.assignShips(g, fleet, key, 'explorer', 1);
@@ -4543,6 +4550,8 @@ function doLaunchExpedition(colony, targetSystemId, opts) {
     : { type: 'move-route', waypoints: [targetSystemId], dwell: [0], exploreEach: true, returnHome: false };
   const so = ORION.fleet.setOrder(g, fleet, order);
   if (!so.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(so.reason || 'Ordine esplorazione rifiutato'); return; }
+  /* Callsign d'esordio "Segugio N". */
+  maybeAutoRenameFleet(g, fleet, order);
   const sys = g.galaxy.systems[targetSystemId];
   const acr = regionAcronymFor(targetSystemId);
   const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
@@ -7419,31 +7428,82 @@ function fleetShipIcon(kind) {
    neutro "Squadrone N" → un nome scelto a mano dall'utente non viene mai
    toccato. Sempre rinominabile dal dettaglio flotta.
    ===================================================================== */
+/* Callsign per scopo (decisione utente 2026-06-15, sostituisce i nomi
+   descrittivi "Esplorazione → X"): un sostantivo militare/scenografico per
+   tipo di ordine + numero progressivo. L'identità resta stabile anche se la
+   flotta cambia ordine successivamente (callsign d'esordio). Sempre
+   rinominabile a mano dal dettaglio (✎). */
+const FLEET_CALLSIGNS = {
+  'explore': 'Segugio',
+  'move': 'Convoglio',
+  'attack': 'Lama',
+  'colonize': 'Pioniere',
+  'patrol': 'Sentinella',
+  'patrol-loop': 'Sentinella',
+  'garrison': 'Sentinella',
+  'survey': 'Vedetta'
+};
+/* Pool secondario (decisione utente 2026-06-15): un secondo nome per scopo,
+   proposto come DEFAULT quando l'utente rinomina manualmente. Così è "guidato
+   a creare un nuovo nome+numero libero per quell'ordine" (ridefinizione
+   manuale tipica dopo un cambio missione). */
+const FLEET_CALLSIGNS_ALT = {
+  'explore': 'Pellegrino',
+  'move': 'Carovana',
+  'attack': 'Lupo',
+  'colonize': 'Avanguardia',
+  'patrol': 'Bastione',
+  'patrol-loop': 'Bastione',
+  'garrison': 'Bastione',
+  'survey': 'Bussola'
+};
+/* Numero progressivo per quel callsign: max suffisso numerico tra le flotte
+   esistenti col prefisso "<Base> ", +1. Robusto a rinomine manuali (chi
+   ribattezza "Segugio 1" → "Mia Flotta" lascia un buco, la successiva sarà
+   "Segugio N+1"). */
+function nextProgressiveFor(g, base) {
+  const re = new RegExp('^' + base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+(\\d+)$');
+  let max = 0;
+  (g.fleets || []).forEach(function (f) {
+    const m = re.exec(f.name || '');
+    if (m) { const n = parseInt(m[1], 10); if (n > max) max = n; }
+  });
+  return max + 1;
+}
 function orderDerivedFleetName(g, order) {
   if (!order || !order.type) return null;
-  function sn(id) { const s = g.galaxy.systems[id]; return s ? s.name : '—'; }
-  switch (order.type) {
-    case 'explore': return 'Esplorazione → ' + sn(order.toSysId);
-    case 'move': return 'Trasferimento → ' + sn(order.toSysId);
-    case 'attack': return 'Attacco → ' + sn(order.toSysId);
-    case 'colonize': return 'Colonizzazione → ' + sn(order.toSysId);
-    case 'survey': return 'Anomalia → ' + sn(order.toSysId);
-    case 'return': return 'Rientro';
-    case 'patrol': return 'Pattuglia';
-    case 'patrol-loop': return 'Pattuglia ciclica';
-    case 'move-route': {
-      const wp = order.waypoints || [];
-      const last = wp.length ? sn(wp[wp.length - 1]) : '';
-      return (order.exploreEach ? 'Esplorazione → ' : 'Rotta → ') + last;
-    }
-    default: return null;
+  let base = null;
+  if (order.type === 'move-route') {
+    /* esplora-ogni-tappa → Segugio; rotta cargo/movimento → Convoglio */
+    base = order.exploreEach ? 'Segugio' : 'Convoglio';
+  } else {
+    base = FLEET_CALLSIGNS[order.type] || null;
   }
+  if (!base) return null;   // 'return' e tipi sconosciuti → nessun ribattesimo
+  return base + ' ' + nextProgressiveFor(g, base);
 }
 function isDefaultFleetName(name) { return /^Squadrone\s+\d+$/.test(name || ''); }
 function maybeAutoRenameFleet(g, fleet, order) {
   if (!fleet || !isDefaultFleetName(fleet.name)) return;
   const nm = orderDerivedFleetName(g, order);
   if (nm) fleet.name = nm.slice(0, 40);
+}
+/* Suggerimento di rinomina manuale (decisione utente 2026-06-15): propone il
+   pool ALT del tipo di ordine corrente + primo numero libero. È solo un
+   default pre-popolato nell'input ✎ — l'utente è libero di modificare. Per
+   ordini idle/return o sconosciuti restituisce null (l'input resta sul nome
+   corrente). */
+function suggestedRenameFor(g, fleet) {
+  const order = fleet && fleet.orders;
+  if (!order || !order.type || order.type === 'idle' || order.type === 'return') return null;
+  let base = null;
+  if (order.type === 'move-route') {
+    base = order.exploreEach ? FLEET_CALLSIGNS_ALT['explore'] : FLEET_CALLSIGNS_ALT['move'];
+  } else {
+    base = FLEET_CALLSIGNS_ALT[order.type] || null;
+  }
+  if (!base) return null;
+  return base + ' ' + nextProgressiveFor(g, base);
 }
 
 /* =====================================================================
@@ -7837,10 +7897,20 @@ function openFleetDetail(fleetId, opts) {
      editabile dall'utente. */
   function secRename() {
     if (!D.renaming) return '';
+    /* Decisione utente 2026-06-15: pre-popola l'input con il SECONDO nome
+       del pool dell'ordine corrente + primo numero libero — così la rinomina
+       manuale è guidata verso "altro nome per quello scopo, numero nuovo".
+       Se l'ordine non mappa (idle/return), resta il nome corrente. */
+    const suggest = suggestedRenameFor(g, fleet);
+    const initial = suggest || fleet.name;
+    const hint = suggest
+      ? '<p class="fdetail__hint fdetail__rename-hint">Suggerito per l’ordine corrente — modifica liberamente.</p>'
+      : '';
     return '<div class="fdetail__sec fdetail__rename">' +
-      '<input class="fdetail__input" type="text" data-bind="rename-input" value="' + escapeHtml(fleet.name) + '" maxlength="40" aria-label="Nome flotta">' +
+      '<input class="fdetail__input" type="text" data-bind="rename-input" value="' + escapeHtml(initial) + '" maxlength="40" aria-label="Nome flotta">' +
       '<button class="btn btn--mini btn--primary" data-act="rename-save" type="button">Rinomina</button>' +
       '<button class="btn btn--mini" data-act="rename-cancel" type="button">Annulla</button>' +
+      hint +
     '</div>';
   }
 
