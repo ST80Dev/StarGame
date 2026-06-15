@@ -65,6 +65,17 @@
        Il consumo si applica solo in fase `operational` (non durante settling). */
     POP_FOOD_PER_UNIT:  2.5,    // cibo consumato per unità di pop / Impulso (decisione #38: ritarato sul modello a moduli)
     POP_WATER_PER_UNIT: 2.0,    // acqua consumata per unità di pop / Impulso
+    /* Razioni equipaggio AL PORTO (decisione 2026-06-15, speculare a #74
+       manutenzione metalli): ogni equipaggio NON in viaggio drena cibo+acqua
+       sulla colonia di sosta. "Non in viaggio" = idle in colony.crews.explorer
+       + crews di flotte docked/orbiting nel sistema della colonia (in-transit
+       esclusi: hanno la riserva di viaggio #74). Solo in fase operational.
+       Per-equipaggio: razione superiore alla pop per-capita (squadre specializzate
+       ben nutrite) ma totale piccolo (pochi crews vs milioni di abitanti).
+       Dimezzato su feedback utente per non azzerare il netto in early game
+       quando 6-10 crews rientrano simultaneamente. */
+    CREW_PORT_FOOD:   0.20,     // cibo per equipaggio al porto / Impulso
+    CREW_PORT_WATER:  0.15,     // acqua per equipaggio al porto / Impulso
     /* Decisione #45 emenda v3: gating della crescita pop per RUNWAY (Ι che
        le scorte coprono al ritmo attuale di consumo), non per stato assoluto
        del magazzino. Soglie scelte per coerenza con POP_FAMINE_AFTER (30 Ι):
@@ -642,14 +653,21 @@
        dispiegate non pagano qui (riserva di viaggio a 4 risorse, viveri). */
     const F = root.ORION && root.ORION.fleet;
     const shipMetMaint = (F && F.portMaintenance) ? F.portMaintenance(game, colony) : 0;
+    /* Razioni equipaggio al porto (decisione 2026-06-15): drain cibo/acqua
+       sulla colonia per crews idle + crews di flotte parcheggiate. Solo
+       operational (durante settling, decisione #27, gli equipaggi non sono
+       ancora a regime). */
+    const E = root.ORION && root.ORION.expedition;
+    const crewPort = (E && E.crewPortConsumption && colony.phase !== 'settling')
+      ? E.crewPortConsumption(game, colony) : { food: 0, water: 0 };
     const net = {};
     ['met', 'en', 'food', 'water'].forEach(function (k) {
       const r = (out.rates[k] || 0) * malus * wMalus * warM * settling;
       const u = out.upkeep[k] || 0;
       let n = r - u;
       if (k === 'met')   n -= shipMetMaint;
-      if (k === 'food')  n -= popFoodDemand;
-      if (k === 'water') n -= popWaterDemand;
+      if (k === 'food')  n -= popFoodDemand  + crewPort.food;
+      if (k === 'water') n -= popWaterDemand + crewPort.water;
       net[k] = n;
       stock[k] = (stock[k] || 0) + net[k];
       if (stock[k] < 0) stock[k] = 0;     // i negativi diventano "carestia"
@@ -2574,11 +2592,18 @@
     const st = (colony.phase === 'settling') ? 0.5 : 1.0;
     const op = colony.phase !== 'settling';
     const pop = (colony.pop && colony.pop.total) || 0;
+    /* Razioni equipaggio al porto (2026-06-15): drain di cibo/acqua per crews
+       parcheggiati (idle + flotte ferme), specchio di popFood/popWater. */
+    const E = root.ORION && root.ORION.expedition;
+    const crewPort = (op && E && E.crewPortConsumption)
+      ? E.crewPortConsumption(game, colony) : { food: 0, water: 0 };
     return {
       prodMul: sc * wa * wr * st,
       settling: st, scarcity: sc, waste: wa, war: wr,
       popFood:  op ? pop * CFG.POP_FOOD_PER_UNIT  : 0,
-      popWater: op ? pop * CFG.POP_WATER_PER_UNIT : 0
+      popWater: op ? pop * CFG.POP_WATER_PER_UNIT : 0,
+      crewFood:  crewPort.food,
+      crewWater: crewPort.water
     };
   }
 

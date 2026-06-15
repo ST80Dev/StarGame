@@ -3908,6 +3908,15 @@ function renderCantieriSection(colony, planet) {
         ((F.portMaintenance && F.portMaintenance(ORION.game, colony) > 0)
           ? '<span class="cantieri-cap" title="Manutenzione/riparazione delle navi al porto: riserva + flotte ferme qui (occupare un attracco consuma metalli). Le flotte in viaggio pagano la riserva di viaggio.">Manutenzione <strong>−' + F.portMaintenance(ORION.game, colony).toFixed(2) + ' ' + resIcon('met') + '/' + iU() + '</strong></span>'
           : '') +
+        (function () {
+          /* Razioni equipaggio al porto (2026-06-15): drain cibo/acqua per crews
+             idle + crews di flotte parcheggiate. Solo operational. */
+          const EXP = ORION.expedition;
+          if (!EXP || !EXP.crewPortConsumption || colony.phase === 'settling') return '';
+          const cp = EXP.crewPortConsumption(ORION.game, colony);
+          if (!cp || cp.crews <= 0) return '';
+          return '<span class="cantieri-cap" title="Razioni cibo/acqua per equipaggi NON in viaggio: idle a terra + crews di flotte ferme qui. Le flotte in viaggio non pagano (riserva di viaggio).">Razioni <strong>' + cp.crews + ' eq.</strong> · <strong>−' + cp.food.toFixed(2) + ' ' + resIcon('food') + '</strong> · <strong>−' + cp.water.toFixed(2) + ' ' + resIcon('water') + '</strong> / ' + iU() + '</span>';
+        })() +
         techHtml +
       '</div>' +
       shipReserveBox(colony, classes);
@@ -8562,15 +8571,17 @@ function rateGrid(rates, upkeep, colony) {
      realtà era 5.98×0.5 ≈ 2.99 (e netto ≈ 0 con upkeep 3). */
   const pf = (ORION.time && ORION.time.productionFactors)
     ? ORION.time.productionFactors(ORION.game, colony)
-    : { prodMul: 1, popFood: 0, popWater: 0 };
+    : { prodMul: 1, popFood: 0, popWater: 0, crewFood: 0, crewWater: 0 };
   const items = [];
   ['met', 'en', 'food', 'water'].forEach(function (k) {
     const r = (rates[k] || 0) * pf.prodMul; const u = upkeep[k] || 0;
     const popDrain = k === 'food' ? pf.popFood : k === 'water' ? pf.popWater : 0;
-    const net = r - u - popDrain;
-    if (!(r || u || popDrain)) return;
+    const crewDrain = k === 'food' ? (pf.crewFood || 0) : k === 'water' ? (pf.crewWater || 0) : 0;
+    const net = r - u - popDrain - crewDrain;
+    if (!(r || u || popDrain || crewDrain)) return;
     let aux = '+' + fmtAbs(r) + ' prod / −' + fmtAbs(u) + ' uso';
     if (popDrain > 0) aux += ' / −' + fmtAbs(popDrain) + ' pop';
+    if (crewDrain > 0) aux += ' / −' + fmtAbs(crewDrain) + ' razioni';
     items.push(row(resLabel(k), '<span class="rate ' + (net >= 0 ? 'rate--pos' : 'rate--neg') + '">' + fmtNet(net) + '</span> / ' + iU() + ' <span class="rate-aux">(' + aux + ')</span>'));
   });
   if (rates.research) items.push(row('Ricerca', '<span class="rate rate--pos">+' + (Math.round(rates.research * 100) / 100) + '</span> / ' + iU()));
@@ -10388,12 +10399,13 @@ function buildEmpireState() {
     const out = ORION.planet.structureOutput(c, planet, g);
     const pf = (ORION.time && ORION.time.productionFactors)
       ? ORION.time.productionFactors(g, c)
-      : { prodMul: 1, popFood: 0, popWater: 0 };
+      : { prodMul: 1, popFood: 0, popWater: 0, crewFood: 0, crewWater: 0 };
     let stockTotal = 0, stockNet = 0;
     ['met', 'en', 'food', 'water'].forEach(function (rk) {
       stockTotal += (c.stock[rk] || 0);
-      const drain = rk === 'food' ? pf.popFood : rk === 'water' ? pf.popWater : 0;
-      stockNet += (out.rates[rk] || 0) * pf.prodMul - (out.upkeep[rk] || 0) - drain;
+      const popDrain = rk === 'food' ? pf.popFood : rk === 'water' ? pf.popWater : 0;
+      const crewDrain = rk === 'food' ? (pf.crewFood || 0) : rk === 'water' ? (pf.crewWater || 0) : 0;
+      stockNet += (out.rates[rk] || 0) * pf.prodMul - (out.upkeep[rk] || 0) - popDrain - crewDrain;
     });
 
     const tel = (ORION._empireTel && ORION._empireTel[k]) || { pop: [], morale: [], stock: [] };
