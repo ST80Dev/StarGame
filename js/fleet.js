@@ -944,7 +944,11 @@
       const sys = game.galaxy.systems[to];
       if (!sys) return { ok: false, reason: 'Sistema target inesistente' };
       const currentSys = fleet.location.systemId;
-      const baseOrder = { type: 'survey', toSysId: to };
+      /* Decisione di sessione: la ricognizione è mirata a UNA anomalia
+         specifica (sistema + tipo). Una flotta sui detriti NON drena anche
+         la nebulosa dello stesso sistema. `anomalyKind` ∈ detriti/nebulosa/
+         reliquie. */
+      const baseOrder = { type: 'survey', toSysId: to, anomalyKind: order.anomalyKind || null };
       if (to === currentSys) {
         fleet.orders = baseOrder;
         fleet.route = [currentSys];

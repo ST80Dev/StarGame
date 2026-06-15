@@ -1509,9 +1509,18 @@ function renderSystemInteriorPanel(title, content, system, disc) {
     }).join('');
     detail = '<p class="sysinfo__sub">Corpi celesti</p><div class="sys-list">' + chips + '</div>';
     if (system.anomalies.length) {
-      detail += '<p class="sysinfo__sub">Anomalie</p><ul class="anomaly-list">' +
-        system.anomalies.map((a) => '<li class="anomaly-item anomaly--' + a.kind + '" title="' + a.desc + '">' + a.label + '</li>').join('') +
-        '</ul>';
+      /* Aggrega per tipo: un sistema può avere più anomalie grezze dello stesso
+         tipo, ma è UN solo sito di ricognizione per tipo (vedi anomaly.js,
+         chiave canonica sysId:kind) → niente righe doppie. Lo stato/azione vive
+         nella tab Esplorazione della colonia ("Anomalie raggiungibili"). */
+      const seen = {};
+      const items = [];
+      system.anomalies.forEach(function (a) {
+        if (seen[a.kind]) return;
+        seen[a.kind] = true;
+        items.push('<li class="anomaly-item anomaly--' + a.kind + '" title="' + a.desc + '">' + a.label + '</li>');
+      });
+      detail += '<p class="sysinfo__sub">Anomalie</p><ul class="anomaly-list">' + items.join('') + '</ul>';
     }
   } else {
     detail = '<p class="panel__note">Sistema rilevato ma non scansionato: <strong>' + bodyCount +
@@ -4207,7 +4216,7 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
         '<div class="expedition-item__bars">' +
           '<span class="xp-chip" title="Stato del sito">' + stateTxt + '</span>' +
           (s.harvesting ? '<span class="xp-chip" title="Flotta presente">✦ in raccolta</span>' : '') +
-          '<button class="btn btn--mini btn--primary" data-action="anom-send" data-sys="' + s.sysId + '" type="button"' +
+          '<button class="btn btn--mini btn--primary" data-action="anom-send" data-sys="' + s.sysId + '" data-kind="' + s.kind + '" type="button"' +
             (canSend ? '' : ' disabled') + ' title="' + sendTitle + '">Invia flotta</button>' +
         '</div>' +
       '</li>';
@@ -4243,7 +4252,7 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
   const btn = host.querySelector('[data-action="exp-organize"]');
   if (btn && !btn.disabled) btn.addEventListener('click', function () { openExpeditionPicker(colony); });
   host.querySelectorAll('[data-action="anom-send"]').forEach(function (b) {
-    b.addEventListener('click', function () { doSurveyAnomaly(colony, Number(b.dataset.sys)); });
+    b.addEventListener('click', function () { doSurveyAnomaly(colony, Number(b.dataset.sys), b.dataset.kind); });
   });
 }
 
@@ -4278,6 +4287,8 @@ function reachableAnomaliesFor(colony) {
     }
   }
   Object.keys(hops).forEach(function (sid) { ORION.anomaly.ensureSites(g, Number(sid)); });
+  /* knownSites ritorna UN sito per (sistema, tipo) — chiave canonica in
+     anomaly.js → niente doppioni. */
   const sites = ORION.anomaly.knownSites(g).filter(function (s) {
     if (hops[s.sysId] == null) return false;
     if (s.kind === 'reliquie') return !s.explored;   // esaurite: non mostrare
@@ -4292,7 +4303,7 @@ function reachableAnomaliesFor(colony) {
    sistema di un'anomalia con ordine `survey`: arriva e RESTA a
    raccogliere/esplorare. Stesso pattern di doLaunchExpedition (decisione
    #60), ma l'ordine non rientra. */
-function doSurveyAnomaly(colony, targetSystemId) {
+function doSurveyAnomaly(colony, targetSystemId, anomalyKind) {
   const g = ORION.game;
   const key = colony.systemId + ':' + colony.bodyKey;
   if (!ORION.fleet || !ORION.fleet.createFleet) { showToast('Modulo flotta non disponibile'); return; }
@@ -4307,7 +4318,7 @@ function doSurveyAnomaly(colony, targetSystemId) {
   if (!as.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(as.reason || 'Assegnazione nave fallita'); return; }
   const ac = ORION.fleet.assignCrew(g, fleet, key, 1);
   if (!ac.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(ac.reason || 'Assegnazione equipaggio fallita'); return; }
-  const so = ORION.fleet.setOrder(g, fleet, { type: 'survey', toSysId: targetSystemId });
+  const so = ORION.fleet.setOrder(g, fleet, { type: 'survey', toSysId: targetSystemId, anomalyKind: anomalyKind || null });
   if (!so.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(so.reason || 'Ordine ricognizione rifiutato'); return; }
   const sys = g.galaxy.systems[targetSystemId];
   const acr = regionAcronymFor(targetSystemId);
@@ -5536,38 +5547,10 @@ function renderDispatchView(stage) {
       }).join('') + '</ul></section>';
   }
 
-  /* M17 Fase C (#83): anomalie esplorabili note (§17.3). */
-  let anomHtml = '';
-  if (ORION.anomaly && ORION.anomaly.knownSites) {
-    const sites = ORION.anomaly.knownSites(g);
-    if (sites.length) {
-      if (ORION.tutorial) ORION.tutorial.fire('anomalies');
-      const KLAB = { detriti: 'Campo di detriti', nebulosa: 'Nebulosa', reliquie: 'Reliquie antiche' };
-      const rows = sites.map(function (s) {
-        let info;
-        if (s.kind === 'reliquie') {
-          if (s.explored) {
-            const lootStr = s.loot ? Object.keys(s.loot).map(function (r) { return resIcon(r) + Math.round(s.loot[r]); }).join(' · ') : '';
-            info = '<span class="anom-row__done">esplorata' + (lootStr ? ' · ' + lootStr : '') + '</span>';
-          } else {
-            info = s.harvesting ? ('<span class="anom-row__busy">esplorazione ' + Math.round(100 * s.progress / ORION.anomaly.CFG.RELIC_HOLD) + '%</span>')
-              : '<span class="anom-row__idle">invia una flotta</span>';
-          }
-        } else {
-          const pct = s.cap ? Math.round(100 * (s.reserve || 0) / s.cap) : 0;
-          info = '<span class="anom-row__res">' + resIcon(s.res) + ' riserva ' + pct + '%</span>' +
-            (s.harvesting ? ' <span class="anom-row__busy">raccolta in corso</span>' : '');
-        }
-        return '<li class="anom-row anom-row--' + s.kind + '">' +
-          '<span class="anom-row__name">' + (KLAB[s.kind] || s.kind) + ' · ' + escapeHtml(s.sysName) + systemTagHtml(s.sysId) + '</span>' +
-          info + '</li>';
-      }).join('');
-      anomHtml = '<section class="dispatch-sec"><h3 class="dispatch-sec__title">Anomalie note · §17.3</h3>' +
-        '<ul class="anom-list">' + rows + '</ul>' +
-        '<p class="panel__note">Tieni una flotta in <strong>orbita</strong> in un sistema con un\'anomalia: i <strong>campi di detriti</strong> e le <strong>nebulose</strong> sono spot di <em>raccolta ricorrente</em> (la riserva cala e si rigenera quando te ne vai), le <strong>reliquie antiche</strong> danno una ricompensa una tantum.</p>' +
-      '</section>';
-    }
-  }
+  /* M17 Fase C (#83): le anomalie esplorabili §17.3 NON vivono più qui
+     (erano "scomode" e ridondanti). Stanno ora dove sono pertinenti: la
+     scheda del Sistema (stato/riserva, contestuale all'ispezione) e la tab
+     Esplorazione della colonia ("Anomalie raggiungibili" + Invia flotta). */
 
   const mem = (g.memoria || []);
   const memHtml = mem.length
@@ -5594,7 +5577,6 @@ function renderDispatchView(stage) {
       '<section class="dispatch-sec"><h3 class="dispatch-sec__title">Incarichi in corso</h3>' + activeHtml + '</section>' +
       '<p class="panel__note">Gli incarichi si adempiono con le flotte che già hai: manda una squadra a sgominare un covo, a raggiungere o presidiare un sistema. Accettare è un impegno; abbandonare o lasciar scadere costa qualche relazione, completare ricompensa.</p>' +
       huntersHtml +
-      anomHtml +
       '<section class="dispatch-sec dispatch-sec--memoria"><h3 class="dispatch-sec__title">Memoria Storica</h3>' + memHtml + '</section>' +
     '</div>';
 

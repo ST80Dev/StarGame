@@ -52,11 +52,47 @@
        sistema ogni tick). Ricostruito al load — i siti veri vivono in
        game.anomalies (persistito). */
     if (!game._anomScanned) game._anomScanned = {};
+    /* Migrazione/dedup una-tantum per sessione: i save vecchi possono avere
+       più entry per la STESSA anomalia (la chiave era basata su `a.seed`, che
+       poteva variare tra generazioni dello stesso sistema → doppioni drenati
+       da una sola flotta). Normalizziamo alla chiave canonica `sysId:kind`. */
+    if (!game._anomNorm) { normalizeAnomalies(game); game._anomNorm = true; }
+  }
+
+  /* Chiave canonica di un sito: UNA entità per (sistema, tipo). Una flotta
+     in orbita raccoglie/esplora quel tipo nel sistema — avere più "copie"
+     della stessa anomalia non avrebbe senso (decisione di sessione). */
+  function siteKey(sysId, kind) { return sysId + ':' + kind; }
+
+  /* Rifonde game.anomalies sulle chiavi canoniche, unendo eventuali doppioni
+     (tiene lo stato più "avanzato": riserva minima per la raccolta, esplorata/
+     progresso massimo per le reliquie). Idempotente: già-canonico → invariato. */
+  function normalizeAnomalies(game) {
+    const old = game.anomalies || {};
+    const next = {};
+    Object.keys(old).forEach(function (k) {
+      const s = old[k];
+      if (!s || s.sysId == null || !s.kind) return;
+      const ck = siteKey(s.sysId, s.kind);
+      const e = next[ck];
+      if (!e) { next[ck] = s; return; }
+      if (s.kind === 'reliquie') {
+        e.explored = e.explored || s.explored;
+        e.progress = Math.max(e.progress || 0, s.progress || 0);
+        if (s.loot) e.loot = s.loot;
+      } else {
+        if (s.reserve != null) e.reserve = Math.min(e.reserve != null ? e.reserve : Infinity, s.reserve);
+        e.lowFlag = e.lowFlag || s.lowFlag;
+      }
+    });
+    game.anomalies = next;
   }
 
   /* Registra i siti di un sistema in game.anomalies (idempotente).
      Chiamata quando una flotta orbita lì o quando il giocatore apre il
-     sistema. Genera il sistema dal seed (deterministico) una sola volta. */
+     sistema. Genera il sistema dal seed (deterministico) una sola volta.
+     UNA entità per (sistema, tipo): più anomalie dello stesso tipo nello
+     stesso sistema confluiscono in un solo sito (chiave canonica). */
   function ensureSites(game, sysId) {
     ensure(game);
     if (game._anomScanned[sysId]) return;
@@ -64,26 +100,33 @@
     if (!(ORION.system && ORION.system.generate)) return;
     const sys = ORION.system.generate(game.galaxy, sysId);
     const anoms = (sys && sys.anomalies) || [];
-    for (let i = 0; i < anoms.length; i++) {
-      const a = anoms[i];
-      const def = KINDS[a.kind];
-      if (!def) continue;
-      const key = a.seed || (sysId + ':a' + i);
-      if (game.anomalies[key]) continue;
+    const kinds = {};
+    for (let i = 0; i < anoms.length; i++) { if (KINDS[anoms[i].kind]) kinds[anoms[i].kind] = true; }
+    Object.keys(kinds).forEach(function (kind) {
+      const def = KINDS[kind];
+      const key = siteKey(sysId, kind);
+      if (game.anomalies[key]) return;
       if (def.relic) {
         game.anomalies[key] = { sysId: sysId, kind: 'reliquie', explored: false, progress: 0 };
       } else {
-        game.anomalies[key] = { sysId: sysId, kind: a.kind, res: def.res, cap: def.cap, reserve: def.cap, lowFlag: false };
+        game.anomalies[key] = { sysId: sysId, kind: kind, res: def.res, cap: def.cap, reserve: def.cap, lowFlag: false };
       }
-    }
+    });
   }
 
-  function playerFleetOrbitingAt(game, sysId) {
+  /* Flotta presente nel sistema, a prescindere dall'ordine (uso generico). */
+  /* Flotta che sta facendo RICOGNIZIONE su QUESTO sito specifico (sistema +
+     tipo): ordine `survey` con anomalyKind corrispondente, presente in orbita.
+     Così una flotta mandata sui detriti raccoglie SOLO i detriti, non la
+     nebulosa dello stesso sistema (decisione di sessione). */
+  function fleetSurveyingSite(game, sysId, kind) {
     const fl = game.fleets || [];
     for (let i = 0; i < fl.length; i++) {
       const f = fl[i];
-      if (f && f.location && f.location.systemId === sysId &&
-          (f.location.status === 'orbiting' || f.location.status === 'docked')) return f;
+      if (!f || !f.location || f.location.systemId !== sysId) continue;
+      if (f.location.status !== 'orbiting' && f.location.status !== 'docked') continue;
+      const o = f.orders;
+      if (o && o.type === 'survey' && o.anomalyKind === kind) return f;
     }
     return null;
   }
@@ -118,7 +161,9 @@
     const keys = Object.keys(game.anomalies);
     for (let i = 0; i < keys.length; i++) {
       const site = game.anomalies[keys[i]];
-      const fleet = playerFleetOrbitingAt(game, site.sysId);
+      /* Solo una flotta che sta facendo ricognizione SU QUESTO sito (sistema
+         + tipo) lo raccoglie/esplora — non basta orbitare nel sistema. */
+      const fleet = fleetSurveyingSite(game, site.sysId, site.kind);
       if (site.kind === 'reliquie') {
         if (site.explored) continue;
         if (fleet) {
@@ -163,7 +208,7 @@
     let best = Infinity;
     Object.keys(game.anomalies).forEach(function (k) {
       const s = game.anomalies[k];
-      if (s.kind === 'reliquie' && !s.explored && playerFleetOrbitingAt(game, s.sysId)) {
+      if (s.kind === 'reliquie' && !s.explored && fleetSurveyingSite(game, s.sysId, s.kind)) {
         const d = CFG.RELIC_HOLD - (s.progress || 0);
         if (d > 0 && d < best) best = d;
       }
@@ -181,7 +226,7 @@
         key: k, sysId: s.sysId, sysName: sys ? sys.name : '—', kind: s.kind,
         res: s.res || null, reserve: s.reserve, cap: s.cap,
         explored: !!s.explored, progress: s.progress || 0, loot: s.loot || null,
-        harvesting: !!playerFleetOrbitingAt(game, s.sysId)
+        harvesting: !!fleetSurveyingSite(game, s.sysId, s.kind)
       };
     });
   }

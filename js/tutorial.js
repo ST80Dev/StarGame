@@ -1055,17 +1055,19 @@
       tag: 'M17 · Anomalie',
       title: 'Anomalie spaziali',
       body:
-        '<p>Esplorando i sistemi scopri <strong>anomalie</strong> §17.3 con cui interagire tenendo una <strong>flotta in orbita</strong>:</p>' +
+        '<p>Esplorando i sistemi scopri <strong>anomalie</strong> §17.3. Dalla tab <strong>Esplorazione</strong> della colonia ' +
+        '("Anomalie raggiungibili") mandi una flotta in <strong>ricognizione su una anomalia specifica</strong>: la flotta ' +
+        'raggiunge il sistema e <strong>resta sul posto</strong> a sfruttare <em>quel</em> sito.</p>' +
         '<ul>' +
           '<li><strong>Campi di detriti</strong> (metalli) e <strong>nebulose</strong> (energia) sono <strong>spot di raccolta ' +
-          'ricorrente</strong>: la flotta presente preleva risorse: la riserva cala ma <em>non si esaurisce del tutto</em> e si ' +
-          '<strong>rigenera</strong> quando te ne vai — ci torni periodicamente.</li>' +
-          '<li>Le <strong>reliquie antiche</strong> sono siti <strong>una tantum</strong>: presidiale per un po\' con una flotta → ' +
-          'recuperi una cache di risorse (e una voce nella Memoria Storica).</li>' +
+          'ricorrente</strong>: la riserva cala mentre raccogli ma <em>non si esaurisce del tutto</em> e si <strong>rigenera</strong> ' +
+          'quando la flotta se ne va — ci torni periodicamente.</li>' +
+          '<li>Le <strong>reliquie antiche</strong> sono siti <strong>una tantum</strong>: presidiale per un po\' → recuperi una ' +
+          'cache di risorse (e una voce nella Memoria Storica).</li>' +
         '</ul>' +
-        '<p>A <strong>fine esplorazione</strong> di una reliquia il gioco si <strong>mette in pausa</strong> e un breve ' +
-        '<strong>resoconto</strong> riepiloga le risorse trovate; il bottino resta anche nella sezione <strong>Anomalie</strong> ' +
-        'del pannello Dispacci. Le anomalie si elencano lì man mano che esplori i sistemi.</p>'
+        '<p>La ricognizione è <strong>mirata</strong>: una flotta mandata sui detriti sfrutta solo quelli — per la nebulosa dello ' +
+        'stesso sistema serve un\'altra flotta. A <strong>fine esplorazione</strong> di una reliquia il gioco si <strong>mette in ' +
+        'pausa</strong> con un breve <strong>resoconto</strong> delle risorse trovate.</p>'
     },
     {
       id: 'colonial-ship',
