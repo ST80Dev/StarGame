@@ -1156,6 +1156,10 @@
         '<p><strong>Navi a casa vs in viaggio:</strong> le navi <em>parcheggiate</em> all\'Hangar consumano <strong>metalli</strong> ' +
         'per manutenzione/riparazione (occupare un attracco non è gratis); quelle <em>dispiegate</em> in flotta portano via la ' +
         'riserva a 4 risorse. Tenere una grande flotta ferma a casa, o in giro, è in entrambi i casi un impegno sui metalli.</p>' +
+        '<p><strong>Razioni equipaggio al porto:</strong> ogni <em>equipaggio</em> NON in viaggio (idle a terra o a bordo di una ' +
+        'flotta ferma) consuma <strong>un po\' di cibo e acqua</strong> sulla colonia di sosta (squadre specializzate ben nutrite). ' +
+        'Per equipaggio è poco; in totale si <em>sente</em> quando 6-10 equipaggi rientrano insieme su una colonia piccola — ' +
+        'lanciare una spedizione li toglie dal libro paga. Le flotte <em>in viaggio</em> non pagano qui (hanno la riserva di viaggio).</p>' +
         '<p><strong>Anche in orbita si consuma</strong> (l\'equipaggio mangia comunque): restare in orbita attinge allo ' +
         'stesso serbatoio dove l\'ha lasciato il viaggio. Orbitare una <em>tua</em> colonia o un alleato è <strong>gratis</strong> ' +
         '(rifornimento continuo); orbitare un sistema straniero o vuoto consuma il residuo → una <strong>guarnigione avanzata</strong> ' +

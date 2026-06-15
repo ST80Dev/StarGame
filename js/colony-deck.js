@@ -303,13 +303,14 @@
          malus temporanei del tick (Insediamento ×0.5, scarsità, rifiuti, guerra). */
       const pf = (ORION.time && ORION.time.productionFactors)
         ? ORION.time.productionFactors(ORION.game, colony)
-        : { prodMul: 1, popFood: 0, popWater: 0 };
+        : { prodMul: 1, popFood: 0, popWater: 0, crewFood: 0, crewWater: 0 };
 
       let html = '<aside class="deck-resources" aria-label="Risorse della colonia">';
       keys.forEach(function (k) {
         const stock = colony.stock[k] || 0;
         const popDrain = k === 'food' ? pf.popFood : k === 'water' ? pf.popWater : 0;
-        const net = (out.rates[k] || 0) * pf.prodMul - (out.upkeep[k] || 0) - popDrain;
+        const crewDrain = k === 'food' ? (pf.crewFood || 0) : k === 'water' ? (pf.crewWater || 0) : 0;
+        const net = (out.rates[k] || 0) * pf.prodMul - (out.upkeep[k] || 0) - popDrain - crewDrain;
         const state = scar && scar[k] ? scar[k].state : 'ok';
         const stateCls = state === 'crit' ? ' is-crit' : state === 'low' ? ' is-low' : '';
         const stateLabel = state === 'crit' ? 'critica' : state === 'low' ? 'allerta' : 'ok';
