@@ -5926,7 +5926,7 @@ function renderFleetView(stage) {
           '<button class="btn btn--mini btn--primary btn--with-icon" data-action="fleet-create" type="button"' +
             (canCreate ? '' : ' disabled title="Serve una colonia con Hangar di costruzione"') + '>' + uiIcon('plus', 'cyan') + ' Crea flotta</button>' +
           '<button class="btn btn--mini btn--with-icon" data-action="fleet-manage" type="button"' +
-            (g.fleets.length >= 2 ? '' : ' disabled title="Servono almeno 2 flotte"') + '>' + uiIcon('refresh', 'cyan') + ' Gestione flotte</button>' +
+            (g.fleets.length >= 1 ? '' : ' disabled title="Nessuna flotta attiva"') + '>' + uiIcon('refresh', 'cyan') + ' Gestione flotte</button>' +
         '</div>' +
       '</header>' +
       buildWarSection(g) +
@@ -7271,6 +7271,13 @@ function openFleetManageInFlight() {
 
   function render() {
     const fleets = g.fleets || [];
+    /* Con <2 flotte non c'è nulla da smistare/fondere: spiega (anziché un
+       bottone disabilitato muto) ed elenca le flotte presenti — così la
+       flotta in esplorazione è visibilmente conteggiata (#88 follow-up). */
+    const fewNote = (fleets.length < 2)
+      ? '<p class="fdetail__hint">' + uiIcon('info', 'soft') + ' Per smistare navi/equipaggi o fondere flotte ne servono almeno <strong>2</strong>. ' +
+        'Le tue flotte (anche quelle in esplorazione/viaggio) sono elencate qui sotto.</p>'
+      : '';
     /* Gruppi co-localizzati (≥2 flotte, nessuna in transito). */
     const bySys = {};
     fleets.forEach(function (f) {
@@ -7347,7 +7354,7 @@ function openFleetManageInFlight() {
         '<header class="fdetail__head"><div class="fdetail__title">' + uiIcon('fleet', 'cyan') +
           '<h2>Gestione flotte in volo</h2></div>' +
           '<button class="fdetail__x btn--icon-only" data-act="close" type="button" aria-label="Chiudi">' + uiIcon('close') + '</button></header>' +
-        '<div class="fdetail__body">' + togetherHtml + rendezHtml + '</div>' +
+        '<div class="fdetail__body">' + fewNote + togetherHtml + rendezHtml + '</div>' +
         '<div class="fdetail__foot"><button class="btn btn--mini btn--primary" data-act="close" type="button">Chiudi</button></div>' +
       '</div>';
     bind();
@@ -7435,8 +7442,9 @@ function openFleetDetail(fleetId, opts) {
   const D = {
     newColonyKey: null,
     /* Carrello composizione della modalità "nuova" (#88): la flotta non
-       viene materializzata finché non confermi. */
-    draft: { ships: {}, crew: 0 },
+       viene materializzata finché non confermi. `crew` = lista di id
+       equipaggio scelti per grado (mutua i chip della tab Esplorazione). */
+    draft: { ships: {}, crew: [] },
     renaming: false,
     ordOpen: !!opts.orders,
     ord: { tripType: null, target: null, waypoints: [], opt: { returnHome: true, exploreEach: false } }
@@ -7525,8 +7533,9 @@ function openFleetDetail(fleetId, opts) {
         '<p class="fdetail__hint">' + uiIcon('warning', 'gold') + ' Serve una colonia con <strong>Hangar di costruzione</strong> per formare una flotta.</p>',
         '<button class="btn btn--mini" data-action="fleet-overlay-close" type="button">Chiudi</button>');
     }
-    if (!D.newColonyKey || elig.indexOf(D.newColonyKey) < 0) { D.newColonyKey = elig[0]; D.draft = { ships: {}, crew: 0 }; }
-    if (!D.draft) D.draft = { ships: {}, crew: 0 };
+    if (!D.newColonyKey || elig.indexOf(D.newColonyKey) < 0) { D.newColonyKey = elig[0]; D.draft = { ships: {}, crew: [] }; }
+    if (!D.draft) D.draft = { ships: {}, crew: [] };
+    if (!Array.isArray(D.draft.crew)) D.draft.crew = [];
     const colony = g.colonies[D.newColonyKey];
     if (colony && ORION.fleet.ensureColonyShipKinds) ORION.fleet.ensureColonyShipKinds(colony);
     const optsHtml = elig.map(function (k) {
@@ -7550,16 +7559,34 @@ function openFleetDetail(fleetId, opts) {
     });
     if (!shipRows) shipRows = '<p class="fdetail__empty">Nessuna nave a terra: costruiscile all’Hangar di questa colonia.</p>';
 
-    /* Equipaggio (count). Il fine-tuning per grado resta nel dettaglio. */
-    const crewAvail = (colony && colony.crews && colony.crews.explorer && colony.crews.explorer.length) || 0;
-    const crewCart = D.draft.crew || 0;
-    const crewRow = '<div class="fdetail__crow">' +
-      '<span class="fdetail__crow-n">' + uiIcon('forces', 'amber') + ' Equipaggio</span>' +
-      '<span class="fdetail__crow-c">in flotta <strong>' + crewCart + '</strong> · a terra ' + (crewAvail - crewCart) + '</span>' +
-      '<span class="fdetail__crow-b">' +
-        '<button class="btn btn--mini" data-draft-crew-add="1" type="button"' + (crewCart >= crewAvail ? ' disabled' : '') + '>+</button>' +
-        '<button class="btn btn--mini" data-draft-crew-rem="1" type="button"' + (crewCart <= 0 ? ' disabled' : '') + '>−</button>' +
-      '</span></div>';
+    /* Equipaggio — selezione PER GRADO (mutua i chip della tab Esplorazione,
+       #76): vedi quali livelli hai e quanti, e scegli QUALI imbarcare. */
+    const crewList = (colony && colony.crews && Array.isArray(colony.crews.explorer)) ? colony.crews.explorer.slice() : [];
+    /* Pulisci selezioni non più disponibili (es. cambio colonia). */
+    D.draft.crew = D.draft.crew.filter(function (id) { return crewList.some(function (c) { return c.id === id; }); });
+    function crewGradeLabel(xp) {
+      return (ORION.expedition && ORION.expedition.enrichmentForXp) ? ORION.expedition.enrichmentForXp(xp).label : ('xp ' + xp);
+    }
+    /* Inventario per grado di ciò che è a terra (quanti di quel livello). */
+    const byGrade = {};
+    crewList.forEach(function (c) { const l = crewGradeLabel(c.xp || 0); byGrade[l] = (byGrade[l] || 0) + 1; });
+    const invLine = Object.keys(byGrade).length
+      ? '<div class="fcrew-inv">A terra: ' + Object.keys(byGrade).map(function (l) {
+          return '<span class="fcrew-inv__item">' + escapeHtml(l) + ' ×' + byGrade[l] + '</span>';
+        }).join('') + '</div>'
+      : '';
+    const crewChips = crewList.slice().sort(function (a, b) { return (b.xp || 0) - (a.xp || 0); }).map(function (c) {
+      const sel = D.draft.crew.indexOf(c.id) >= 0;
+      const lbl = crewGradeLabel(c.xp || 0);
+      return '<button class="exp-crew-chip' + (sel ? ' is-active' : '') + '" type="button" data-draft-crew-toggle="' + escapeHtml(String(c.id)) + '" ' +
+        'title="' + (sel ? 'Rimuovi dalla flotta' : 'Imbarca') + ' · ' + escapeHtml(lbl) + ' · xp ' + (c.xp || 0) + '">' +
+        '<span class="exp-crew-chip__rank">' + escapeHtml(lbl) + '</span>' +
+        '<span class="exp-crew-chip__xp">xp ' + (c.xp || 0) + '</span></button>';
+    }).join('');
+    const crewBody = crewList.length
+      ? invLine + '<div class="exp-crew-select fcrew-pick">' + crewChips + '</div>'
+      : '<p class="fdetail__empty">Nessun equipaggio a terra: formane in <em>Accademia militare</em>.</p>';
+    const crewSel = D.draft.crew.length;
 
     /* Riepilogo: n. navi + fabbisogno equipaggio per gli ordini. */
     let nShips = 0, crewReq = 0;
@@ -7567,16 +7594,17 @@ function openFleetDetail(fleetId, opts) {
       const n = D.draft.ships[k] || 0; nShips += n;
       const cls = ORION.fleet.getClass(k); crewReq += (cls && cls.crew ? cls.crew : 0) * n;
     });
-    const crewOk = crewCart >= crewReq;
+    const crewOk = crewSel >= crewReq;
     const sumChips =
       '<span class="fdetail__sumchip">' + nShips + ' navi</span>' +
       '<span class="fdetail__sumchip ' + (crewOk ? 'is-ok' : 'is-warn') + '" title="Equipaggio richiesto per gli ordini di movimento">' +
-        (crewOk ? '✓' : '⚠') + ' eq. ' + crewCart + '/' + crewReq + '</span>';
+        (crewOk ? '✓' : '⚠') + ' eq. ' + crewSel + '/' + crewReq + '</span>';
 
     const body =
       '<div class="fdetail__sec">' + secHead('roster', 'amber', 'Colonia origine') +
         '<select class="fdetail__select" data-bind="new-colony">' + optsHtml + '</select></div>' +
-      '<div class="fdetail__sec">' + secHead('forces', 'amber', 'Componi la flotta', 'dalle navi a terra') + shipRows + crewRow + '</div>' +
+      '<div class="fdetail__sec">' + secHead('fleet', 'cyan', 'Navi', 'dalle navi a terra') + shipRows + '</div>' +
+      '<div class="fdetail__sec">' + secHead('forces', 'amber', 'Equipaggio', 'in flotta ' + crewSel + '/' + crewReq) + crewBody + '</div>' +
       '<p class="fdetail__hint">' + uiIcon('info', 'soft') + ' Il nome si adatterà all’ordine che darai (sempre rinominabile). Nulla viene creato finché non confermi.</p>';
     const footer =
       '<div class="fdetail__sum">' + sumChips + '</div>' +
@@ -7890,7 +7918,7 @@ function openFleetDetail(fleetId, opts) {
     /* --- nuova flotta (#88: carrello + Conferma/Annulla) --- */
     const newColSel = host.querySelector('[data-bind="new-colony"]');
     if (newColSel) newColSel.addEventListener('change', function () {
-      D.newColonyKey = newColSel.value; D.draft = { ships: {}, crew: 0 }; render();
+      D.newColonyKey = newColSel.value; D.draft = { ships: {}, crew: [] }; render();
     });
     host.querySelectorAll('[data-draft-ship-add]').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -7906,20 +7934,21 @@ function openFleetDetail(fleetId, opts) {
         if (cur > 0) D.draft.ships[k] = cur - 1; render();
       });
     });
-    const dCrewAdd = host.querySelector('[data-draft-crew-add]');
-    if (dCrewAdd) dCrewAdd.addEventListener('click', function () {
-      const col = g.colonies[D.newColonyKey];
-      const avail = (col && col.crews && col.crews.explorer && col.crews.explorer.length) || 0;
-      if ((D.draft.crew || 0) < avail) D.draft.crew = (D.draft.crew || 0) + 1; render();
-    });
-    const dCrewRem = host.querySelector('[data-draft-crew-rem]');
-    if (dCrewRem) dCrewRem.addEventListener('click', function () {
-      if ((D.draft.crew || 0) > 0) D.draft.crew = D.draft.crew - 1; render();
+    /* Toggle equipaggio PER GRADO (per id): scegli quali livelli imbarcare. */
+    host.querySelectorAll('[data-draft-crew-toggle]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!Array.isArray(D.draft.crew)) D.draft.crew = [];
+        const id = b.dataset.draftCrewToggle;
+        const i = D.draft.crew.indexOf(id);
+        if (i >= 0) D.draft.crew.splice(i, 1); else D.draft.crew.push(id);
+        render();
+      });
     });
     const createBtn = host.querySelector('[data-act="create"]');
     if (createBtn) createBtn.addEventListener('click', function () {
       const colKey = D.newColonyKey;
-      const draft = D.draft || { ships: {}, crew: 0 };
+      const draft = D.draft || { ships: {}, crew: [] };
+      const draftCrew = Array.isArray(draft.crew) ? draft.crew : [];
       let nShips = 0; Object.keys(draft.ships).forEach(function (k) { nShips += draft.ships[k] || 0; });
       if (nShips <= 0) { showToast('Aggiungi almeno una nave alla flotta'); return; }
       /* Materializza solo ora: createFleet + assegnazioni in un colpo.
@@ -7933,8 +7962,9 @@ function openFleetDetail(fleetId, opts) {
         const ar = ORION.fleet.assignShips(g, nf, colKey, k, n);
         if (!ar.ok) failed = ar.reason;
       });
-      if (!failed && (draft.crew || 0) > 0) {
-        const ac = ORION.fleet.assignCrew(g, nf, colKey, draft.crew);
+      /* Equipaggi SCELTI per id (#76). */
+      for (let ci = 0; ci < draftCrew.length && !failed; ci++) {
+        const ac = ORION.fleet.assignCrewById(g, nf, colKey, draftCrew[ci]);
         if (!ac.ok) failed = ac.reason;
       }
       if (failed) { ORION.fleet.dissolveFleet(g, nf); showToast(failed); return; }

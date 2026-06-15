@@ -5627,6 +5627,11 @@ select.main-menu__input { cursor: pointer; }
 
 .fleet-view__actions { display: inline-flex; gap: 6px; flex-wrap: wrap; }
 
+/* Inventario equipaggio nel carrello creazione (#88) */
+.fcrew-inv { font-size: 0.76rem; color: var(--c-text-faint, #98a3c8); margin-bottom: 6px; display: flex; flex-wrap: wrap; gap: 4px 8px; }
+.fcrew-inv__item { white-space: nowrap; }
+.fcrew-pick { margin-top: 2px; }
+
 @media (max-width: 480px) {
   .fdetail__panel { max-width: 100%; }
   .fdetail__crow { flex-wrap: wrap; }
