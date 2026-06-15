@@ -710,6 +710,96 @@
   }
 
   /* ------------------------------------------------------------------
+     Gestione flotte in volo (decisione #88) — smistamento/fusione tra
+     flotte CO-LOCALIZZATE (stesso sistema, nessuna in viaggio). A
+     differenza di assignShips/assignCrew (colonia↔flotta, richiede
+     l'attracco alla colonia origine), questi spostano unità FRA due
+     entità mobili ovunque si trovino insieme. Zero RNG → determinismo
+     (#5); recovery-friendly (#22): nessun fail-state, solo motivi umani.
+     ------------------------------------------------------------------ */
+  function fleetsCoLocated(a, b) {
+    if (!a || !b || a === b) return false;
+    if (!a.location || !b.location) return false;
+    if (a.location.systemId !== b.location.systemId) return false;
+    if (a.location.status === 'in-transit' || b.location.status === 'in-transit') return false;
+    return true;
+  }
+
+  /* Sposta `count` navi di una classe da una flotta all'altra mantenendo
+     l'identità dell'entità (hp/wear/xp/nome → veteranità preservata). */
+  function transferShips(game, fromFleet, toFleet, kind, count) {
+    if (!fromFleet || !toFleet) return { ok: false, reason: 'Flotta inesistente' };
+    if (!fleetsCoLocated(fromFleet, toFleet)) {
+      return { ok: false, reason: 'Le flotte devono trovarsi insieme nello stesso sistema (nessuna in viaggio)' };
+    }
+    if (!CLASSES[kind]) return { ok: false, reason: 'Classe nave sconosciuta' };
+    count = Math.max(0, count | 0);
+    if (count <= 0) return { ok: false, reason: 'Quantità non valida' };
+    let moved = 0;
+    for (let i = fromFleet.ships.length - 1; i >= 0 && moved < count; i--) {
+      if (fromFleet.ships[i].kind === kind) {
+        toFleet.ships.push(fromFleet.ships.splice(i, 1)[0]);
+        moved++;
+      }
+    }
+    if (moved === 0) return { ok: false, reason: 'Nessuna nave di quella classe da trasferire' };
+    return { ok: true, moved: moved };
+  }
+
+  /* Sposta `count` equipaggi (entità con xp) da una flotta all'altra. */
+  function transferCrew(game, fromFleet, toFleet, count) {
+    if (!fromFleet || !toFleet) return { ok: false, reason: 'Flotta inesistente' };
+    if (!fleetsCoLocated(fromFleet, toFleet)) {
+      return { ok: false, reason: 'Le flotte devono trovarsi insieme nello stesso sistema (nessuna in viaggio)' };
+    }
+    count = Math.max(0, count | 0);
+    if (count <= 0) return { ok: false, reason: 'Quantità non valida' };
+    let moved = 0;
+    while (moved < count && fromFleet.crew.length > 0) {
+      toFleet.crew.push(fromFleet.crew.shift());
+      moved++;
+    }
+    if (moved === 0) return { ok: false, reason: 'Flotta senza equipaggio da trasferire' };
+    return { ok: true, moved: moved };
+  }
+
+  /* Fonde `fromFleet` in `toFleet`: navi + equipaggi + coloni + figure
+     confluiscono nella destinazione, poi la sorgente è sciolta. La
+     destinazione MANTIENE nome, ordine, owner e formazione. Le figure
+     eccedenti gli slot della destinazione tornano nel pool d'Impero
+     (#72). I viveri prendono il minimo (la flotta unita è rifornita come
+     la sua parte peggiore). popOnboard sommato (sicuro: ≤ cap unito,
+     additivo per nave coloniale). */
+  function mergeFleets(game, fromFleet, toFleet) {
+    if (!fromFleet || !toFleet) return { ok: false, reason: 'Flotta inesistente' };
+    if (fromFleet === toFleet) return { ok: false, reason: 'Stessa flotta' };
+    if (!fleetsCoLocated(fromFleet, toFleet)) {
+      return { ok: false, reason: 'Le flotte devono trovarsi insieme nello stesso sistema (nessuna in viaggio)' };
+    }
+    while (fromFleet.ships.length) toFleet.ships.push(fromFleet.ships.shift());
+    if (!Array.isArray(toFleet.crew)) toFleet.crew = [];
+    while (fromFleet.crew && fromFleet.crew.length) toFleet.crew.push(fromFleet.crew.shift());
+    toFleet.popOnboard = (toFleet.popOnboard || 0) + (fromFleet.popOnboard || 0);
+    fromFleet.popOnboard = 0;
+    if (typeof fromFleet.viveri === 'number') {
+      const tv = (toFleet.viveri != null) ? toFleet.viveri : VIVERI_CAP;
+      toFleet.viveri = Math.min(tv, fromFleet.viveri);
+    }
+    /* Figure: rilascia quelle della sorgente al pool, poi prova a
+       riassegnarle alla destinazione (rispetta slot + un bonus/ruolo). Le
+       non assegnabili restano in panchina (idle). */
+    if (ORION.commander && ORION.commander.officersOf) {
+      const C = ORION.commander;
+      const fromOff = C.officersOf(fromFleet).slice();
+      if (C.releaseAllFromFleet) C.releaseAllFromFleet(game, fromFleet);
+      if (C.assignToFleet) fromOff.forEach(function (o) { C.assignToFleet(game, toFleet, o.id); });
+    }
+    const idx = (game.fleets || []).indexOf(fromFleet);
+    if (idx >= 0) game.fleets.splice(idx, 1);
+    return { ok: true };
+  }
+
+  /* ------------------------------------------------------------------
      setOrder — assegna ordini a una flotta. Valida lo stato e (per gli
      ordini di movimento) calcola la rotta BFS. NON consuma Impulsi: la
      marcia avanza nel tick.
@@ -2241,6 +2331,11 @@
     assignCrewById: assignCrewById,
     unassignCrew: unassignCrew,
     dissolveFleet: dissolveFleet,
+    /* Gestione flotte in volo (#88). */
+    fleetsCoLocated: fleetsCoLocated,
+    transferShips: transferShips,
+    transferCrew: transferCrew,
+    mergeFleets: mergeFleets,
     setOrder: setOrder,
     tick: tick,
     awardCrewXp: awardCrewXp,
