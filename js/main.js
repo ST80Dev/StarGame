@@ -2131,14 +2131,54 @@ function renderPlanetColoniaTab(host, planet, colony) {
     return;
   }
 
-  // Colonizzazione in corso (M05)
+  // Colonizzazione in corso (M05 legacy + #66 con fleet).
+  // Fix UI sessione 2026-06-15: nel flusso #66 (fleetId presente) il motore
+  // decrementa fleet.orders.phaseLeft, NON colony.colonizing.duration → la UI
+  // mostrava "Restanti 102" e "Avanzamento 0%" fissi. Ora calcoliamo dal vivo.
   if (colony.colonizing) {
-    const total = planet.colCost.impulsi;
-    const remain = Math.max(0, colony.colonizing.duration | 0);
-    const pct = Math.round(((total - remain) / total) * 100);
+    let remain, total, phaseLabel = '◌ Spedizione coloniale in viaggio';
+    if (colony.colonizing.fleetId && ORION.game && ORION.game.fleets) {
+      const fleet = ORION.game.fleets.filter(function (f) { return f && f.id === colony.colonizing.fleetId; })[0];
+      if (fleet && fleet.orders && fleet.orders.type === 'colonize') {
+        const order = fleet.orders;
+        const orbitI = order.orbitI || 10;
+        const foundationI = order.foundationI || planet.colCost.impulsi;
+        if (order.phase === 'foundation') {
+          phaseLabel = '◌ Fondazione in corso';
+          remain = Math.max(0, order.phaseLeft | 0);
+          total = foundationI;
+        } else if (order.phase === 'orbit') {
+          phaseLabel = '◌ In orbita · preparazione atterraggio';
+          remain = Math.max(0, (order.phaseLeft | 0) + foundationI);
+          total = orbitI + foundationI;
+        } else {
+          /* travel: somma leg corrente + leg residui di rotta + orbit + foundation. */
+          phaseLabel = '◌ Spedizione coloniale in viaggio';
+          const route = fleet.route || [];
+          const routeIdx = fleet.routeIdx || 0;
+          let travelRemain = fleet.etaImpulsi | 0;
+          if (ORION.fleet && ORION.fleet.tempoLeg && ORION.fleet.fleetMinSpeed) {
+            const ms = ORION.fleet.fleetMinSpeed(fleet);
+            for (let i = routeIdx + 1; i < route.length - 1; i++) {
+              travelRemain += ORION.fleet.tempoLeg(ORION.game.galaxy, route[i], route[i + 1], ms);
+            }
+          }
+          remain = travelRemain + orbitI + foundationI;
+          total = remain;  /* snapshot iniziale non memorizzato → approssimazione */
+        }
+      } else {
+        remain = Math.max(0, colony.colonizing.duration | 0);
+        total = planet.colCost.impulsi;
+      }
+    } else {
+      /* Flusso legacy M05 senza fleet. */
+      remain = Math.max(0, colony.colonizing.duration | 0);
+      total = planet.colCost.impulsi;
+    }
+    const pct = total > 0 ? Math.round(((total - remain) / total) * 100) : 0;
     host.innerHTML =
       '<div class="sysinfo">' +
-        '<p class="sysinfo__home">◌ Spedizione coloniale in viaggio</p>' +
+        '<p class="sysinfo__home">' + phaseLabel + '</p>' +
         '<dl class="sysinfo__list">' +
           row('Partenza',  colony.colonizing.startedAt || '—') +
           row('Restanti', remain + ' ' + iU()) +
