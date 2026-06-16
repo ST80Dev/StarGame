@@ -8330,18 +8330,54 @@ function openFleetDetail(fleetId, opts) {
     return '<div class="fdetail__sec">' + secHead('roster', 'amber', 'Coloni a bordo', popOnboard + '/' + popCap + ' liv.') + rows + '</div>';
   }
 
-  /* ----- Viveri (#69) ----- */
+  /* ----- Viveri (#69) -----
+     Bilanciamento 2026-06-16: slider capienza serbatoio. Il giocatore sceglie
+     da VIVERI_CAP_MIN a VIVERI_CAP_MAX l'autonomia massima della flotta.
+     Costo proporzionale al crew × cap. Editabile solo se non in transito
+     (in volo il serbatoio è "fissato" alla scelta fatta in porto). */
   function secSupply() {
     const v = fleetViveriHtml(fleet);
     if (!v) return '';
+    const F = ORION.fleet;
     let refuel = '';
-    if (ORION.fleet.payablePortAt && ORION.fleet.payRefuelAt &&
-        ORION.fleet.payablePortAt(g, fleet.location.systemId) &&
-        ORION.fleet.viveriOf(fleet) < ORION.fleet.viveriCapOf(fleet)) {
-      const rc = ORION.fleet.payRefuelCost(g, fleet);
+    if (F.payablePortAt && F.payRefuelAt &&
+        F.payablePortAt(g, fleet.location.systemId) &&
+        F.viveriOf(fleet) < F.viveriCapOf(fleet)) {
+      const rc = F.payRefuelCost(g, fleet);
       refuel = '<button class="btn btn--mini btn--with-icon" data-act="refuel" type="button">⛽ Rifornisci (' + rc + ' cr)</button>';
     }
-    return '<div class="fdetail__sec fdetail__sec--supply">' + v + refuel + '</div>';
+    /* Slider capienza serbatoio. */
+    let capSlider = '';
+    if (F.setViveriCap && F.viveriCapOf) {
+      const cap = F.viveriCapOf(fleet);
+      const min = F.VIVERI_CAP_MIN || 50;
+      const max = F.VIVERI_CAP_MAX || 1500;
+      const crew = (F.fleetCrewRequired ? F.fleetCrewRequired(fleet) : 0) || 1;
+      const editable = fleet.location && fleet.location.status !== 'in-transit';
+      /* Stima costo PIENO completo (Ι caricati = cap, crew totale × rate). */
+      const rate = {
+        food: F.VIVERI_RATE_FOOD || 0.07, water: F.VIVERI_RATE_WATER || 0.05,
+        met: F.VIVERI_RATE_MET || 0.04, en: F.VIVERI_RATE_EN || 0.025
+      };
+      const cost = {
+        food: Math.ceil(crew * rate.food * cap),
+        water: Math.ceil(crew * rate.water * cap),
+        met: Math.ceil(crew * rate.met * cap),
+        en: Math.ceil(crew * rate.en * cap)
+      };
+      const costStr = '⛭ ' + cost.met + ' · ⚡ ' + cost.en + ' · ❖ ' + cost.food + ' · ≈ ' + cost.water;
+      const editAttr = editable ? '' : ' disabled';
+      const hintTxt = editable
+        ? 'Capienza serbatoio: scegli quanta autonomia caricare alla prossima sosta al porto. Costo proporzionale a equipaggio (' + crew + ') × Ι caricati.'
+        : 'In viaggio: capienza non modificabile fino al ritorno al porto.';
+      capSlider =
+        '<div class="fleet-viveri-cap" title="' + escapeHtml(hintTxt) + '">' +
+          '<label class="fleet-viveri-cap__lbl">Capienza serbatoio · <strong data-bind="vcap-val">' + cap + '</strong> Ι</label>' +
+          '<input type="range" min="' + min + '" max="' + max + '" step="10" value="' + cap + '" data-bind="vcap-slider"' + editAttr + '>' +
+          '<div class="fleet-viveri-cap__cost">Pieno completo: <span data-bind="vcap-cost">' + costStr + '</span></div>' +
+        '</div>';
+    }
+    return '<div class="fdetail__sec fdetail__sec--supply">' + v + refuel + capSlider + '</div>';
   }
 
   /* ===== Handlers ===== */
@@ -8560,6 +8596,40 @@ function openFleetDetail(fleetId, opts) {
         escapeHtml((r.civ && r.civ.name) || 'porto in pace') + '</strong> (−' + r.cost + ' cr).', 'planet');
       persistGame(g); render();
     });
+
+    /* Slider capienza serbatoio (#69, bilanciamento 2026-06-16). */
+    const vcapSlider = host.querySelector('[data-bind="vcap-slider"]');
+    if (vcapSlider) {
+      const valEl = host.querySelector('[data-bind="vcap-val"]');
+      const costEl = host.querySelector('[data-bind="vcap-cost"]');
+      const F = ORION.fleet;
+      const crew = (F.fleetCrewRequired ? F.fleetCrewRequired(fleet) : 0) || 1;
+      const rate = {
+        food: F.VIVERI_RATE_FOOD || 0.07, water: F.VIVERI_RATE_WATER || 0.05,
+        met: F.VIVERI_RATE_MET || 0.04, en: F.VIVERI_RATE_EN || 0.025
+      };
+      function updatePreview(val) {
+        if (valEl) valEl.textContent = val;
+        if (costEl) {
+          const m = Math.ceil(crew * rate.met * val);
+          const e = Math.ceil(crew * rate.en * val);
+          const f = Math.ceil(crew * rate.food * val);
+          const w = Math.ceil(crew * rate.water * val);
+          costEl.textContent = '⛭ ' + m + ' · ⚡ ' + e + ' · ❖ ' + f + ' · ≈ ' + w;
+        }
+      }
+      /* Live preview durante il trascinamento (non scrive lo stato). */
+      vcapSlider.addEventListener('input', function () {
+        updatePreview(parseInt(vcapSlider.value, 10) || 0);
+      });
+      /* Commit al rilascio: scrive il nuovo cap, persiste, rerender. */
+      vcapSlider.addEventListener('change', function () {
+        const val = parseInt(vcapSlider.value, 10) || 0;
+        F.setViveriCap(fleet, val);
+        persistGame(g);
+        render();
+      });
+    }
 
     /* --- dissolvi --- */
     const dissolve = host.querySelector('[data-act="dissolve"]');
