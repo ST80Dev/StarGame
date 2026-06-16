@@ -200,31 +200,76 @@
     } catch (e) { return false; }
   }
 
-  /* Backup .json automatico del payload locale prima della sovrascrittura.
-     Salva nel localStorage (max BACKUP_KEEP) + scarica .json. */
+  /* Backup automatico del payload locale prima della sovrascrittura cloud.
+     Vive in localStorage come ring buffer (max BACKUP_KEEP). NIENTE download
+     automatico: aprire il dialog "Salva con nome" del browser al boot e' una
+     UX brutta (sembra un file picker, vedi screenshot utente). L'utente puo'
+     scaricare/cancellare i backup dal pannello Save. */
   function backupLocalPayload(payload, label) {
     if (!payload) return null;
     const filename = (ORION.save && ORION.save.exportFilename)
       ? ORION.save.exportFilename(payload).replace(/\.json$/, '_backup_' + (label || 'pre-cloud') + '.json')
       : ('orion_backup_' + Date.now() + '.json');
-    /* localStorage backup (ring buffer) */
     try {
       const KEY = 'orion.backups';
       const arr = JSON.parse(localStorage.getItem(KEY) || '[]');
-      arr.push({ ts: Date.now(), filename: filename, payload: payload });
+      arr.push({ ts: Date.now(), filename: filename, label: label || 'pre-cloud', payload: payload });
       while (arr.length > CFG.BACKUP_KEEP) arr.shift();
       localStorage.setItem(KEY, JSON.stringify(arr));
-    } catch (e) { /* spazio insufficiente: pazienza, scarichiamo comunque */ }
-    /* Download automatico (recovery-friendly: l'utente ha sempre il vecchio). */
+    } catch (e) { /* localStorage pieno: il backup salta, niente fail-state */ }
+    return filename;
+  }
+
+  /* Lista dei backup in localStorage (piu' recenti prima). */
+  function listBackups() {
     try {
-      const blob = new Blob([JSON.stringify(payload, null, 0)], { type: 'application/json' });
+      const arr = JSON.parse(localStorage.getItem('orion.backups') || '[]');
+      /* Restituiamo metadata leggere — NIENTE payload, per non gonfiare la UI. */
+      return arr.map(function (b, i) {
+        const p = b.payload || {};
+        const ds = (ORION.time && ORION.time.format)
+          ? ORION.time.format(p.timeImpulsi || 0, 'compact') : '—';
+        return {
+          idx: i,
+          ts: b.ts || 0,
+          filename: b.filename,
+          label: b.label || '—',
+          seed: p.seed || '—',
+          ds: ds,
+          schema: p.schema || 0
+        };
+      }).reverse();
+    } catch (e) { return []; }
+  }
+
+  /* Scarica un backup come .json (azione esplicita dell'utente). */
+  function downloadBackup(idx) {
+    try {
+      const arr = JSON.parse(localStorage.getItem('orion.backups') || '[]');
+      /* idx e' nell'ordine reverse di listBackups, quindi normalizzo. */
+      const realIdx = arr.length - 1 - idx;
+      const b = arr[realIdx];
+      if (!b || !b.payload) return false;
+      const blob = new Blob([JSON.stringify(b.payload, null, 0)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = filename;
+      a.href = url; a.download = b.filename || ('orion_backup_' + Date.now() + '.json');
       document.body.appendChild(a); a.click();
       setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
-    } catch (e) { /* download bloccato: il backup vive comunque in localStorage */ }
-    return filename;
+      return true;
+    } catch (e) { return false; }
+  }
+
+  /* Cancella un backup dalla lista localStorage. */
+  function deleteBackup(idx) {
+    try {
+      const arr = JSON.parse(localStorage.getItem('orion.backups') || '[]');
+      const realIdx = arr.length - 1 - idx;
+      if (realIdx < 0 || realIdx >= arr.length) return false;
+      arr.splice(realIdx, 1);
+      localStorage.setItem('orion.backups', JSON.stringify(arr));
+      return true;
+    } catch (e) { return false; }
   }
 
   /* ---------- API alta ---------- */
@@ -346,6 +391,9 @@
     del: del,
     reconcileAtBoot: reconcileAtBoot,
     backupLocalPayload: backupLocalPayload,
+    listBackups: listBackups,
+    downloadBackup: downloadBackup,
+    deleteBackup: deleteBackup,
     localAutosaveMeta: localAutosaveMeta,
     localSlotMeta: localSlotMeta,
     writeLocalAutosave: writeLocalAutosave,
