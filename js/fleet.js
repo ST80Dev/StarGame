@@ -39,6 +39,16 @@
       cost: { met: 25, en: 12 }, time: 10,
       hp: 20, fp: 0, speed: 1.1, crew: 1, hangarLvl: 1, maintMet: 0.05
     },
+    /* Estrattore §17.3 (richiesta utente 2026-06-16): scafo industriale per
+       il drenaggio sostenuto delle anomalie/cinture. Resta sul sito a
+       raccogliere, harvest rate scalato sull'Hangar della colonia origine
+       (vedi anomaly.js). Più lento e rugged dell'esploratore. Equipaggio
+       riusato (esploratore) per evitare di moltiplicare le classi crew. */
+    estrattore: {
+      id: 'estrattore', name: 'Estrattore', glyph: '⊟',
+      cost: { met: 50, en: 20 }, time: 16,
+      hp: 35, fp: 0, speed: 0.9, crew: 1, hangarLvl: 1, maintMet: 0.08
+    },
     caccia: {
       id: 'caccia', name: 'Caccia stellare', glyph: '∢',
       cost: { met: 20, en: 8 }, time: 8,
@@ -120,7 +130,7 @@
     }
     return cap;
   }
-  const CLASS_ORDER = ['explorer', 'caccia', 'intercettore', 'corvetta', 'fregata', 'incrociatore', 'dreadnought', 'ammiraglia', 'coloniale'];
+  const CLASS_ORDER = ['explorer', 'estrattore', 'caccia', 'intercettore', 'corvetta', 'fregata', 'incrociatore', 'dreadnought', 'ammiraglia', 'coloniale'];
 
   /* M15: una flotta contiene una nave di questa classe? */
   function fleetHasKind(fleet, kind) {
@@ -197,6 +207,28 @@
   const VIVERI_RATE_EN = 0.025;    // energia per equipaggio per Ι (sistemi, la più piccola)
   const VIVERI_WARN = 60;          // soglia avviso (~25% del cap)
   const VIVERI_DRIFT_WEAR = 2;     // usura/Ι sulle navi in deriva (viveri a 0)
+  /* Usura per Ι in transito (decisione utente 2026-06-16): sostituisce il
+     lump-sum all'arrivo (era +8% + danger*10% solo esploratore). Modello
+     unico per tutte le classi: drip leggero per Ι, scalato sul danger del
+     sistema attraversato. Calibrazione target: ~25 viaggi da 40 Ι ≈ 65%
+     wear cumulato (lascia margine per gli incidenti). */
+  const WEAR_TRANSIT_BASE = 0.05;  // usura/Ι base in transito (danger=0)
+  /* Soglia oltre la quale una flotta in survey rientra automaticamente.
+     Coerente con il modello viveri (#69): nessuna distruzione, solo trigger
+     di rientro. Sopra 80% la riparazione costa significativamente e il
+     rischio incidente critico (wear=100) è alto. */
+  const WEAR_RETURN_THRESHOLD = 80;
+  /* Riparazione al porto (richiesta utente 2026-06-16): le flotte ferme al
+     porto di una colonia con Hangar (o orbitanti al suo sistema) recuperano
+     wear nel tempo. Tasso scalato sul livello Hangar; costo extra in metalli
+     proporzionale al wear effettivamente riparato. */
+  const REPAIR_RATE_BY_HANGAR = [0, 0.6, 1.0, 1.4, 1.8, 2.2]; // %wear/Ι per lvl (idx 0 unused, fino a lvl 5)
+  const REPAIR_MET_PER_PCT = 0.4;  // metalli per %wear riparato (extra su maintMet)
+  /* Tasso di riparazione presso una stazione orbitale (M16) operativa di
+     livello ≥ 2. Fisso, indipendente dalla colonia origine: la stazione ha
+     il proprio supply pool (vedi station.js) e il refit è un servizio
+     standard. */
+  const REPAIR_RATE_STATION = 1.0; // %wear/Ι alla stazione lvl ≥ 2
   const VIVERI_DRIFT_SLOW = 2;     // moltiplicatore durata leg in deriva
   const REFUEL_MARKUP = 1.6;       // sovrapprezzo rifornimento a pagamento presso AI in pace (#69)
 
@@ -1488,6 +1520,96 @@
       }
     }
   }
+  /* Usura per Ι in transito (decisione utente 2026-06-16). Sostituisce il
+     lump-sum all'arrivo (era +8% + danger*10% solo esploratore). Applicata
+     a tutte le navi della flotta in viaggio, scalata sul danger del SISTEMA
+     CORRENTE (più realistico: l'ambiente reale che attraversano ora).
+     - Skip se in deriva (#69): VIVERI_DRIFT_WEAR è già pesante e copre il caso.
+     - Skip se non in transito.
+     - Cap 100 come sempre, mai distruzione (recovery-friendly #22). */
+  function applyTransitWear(game, fleet) {
+    if (!fleet || !fleet.location || fleet.location.status !== 'in-transit') return;
+    if (fleet._drift) return;
+    if (!Array.isArray(fleet.ships) || !fleet.ships.length) return;
+    const sys = game.galaxy && game.galaxy.systems && game.galaxy.systems[fleet.location.systemId];
+    const danger = sys ? Math.max(0, Math.min(1, (sys.danger || 0) / 100)) : 0;
+    const w = WEAR_TRANSIT_BASE * (1 + danger);
+    for (let i = 0; i < fleet.ships.length; i++) {
+      fleet.ships[i].wear = Math.min(100, (fleet.ships[i].wear || 0) + w);
+    }
+  }
+
+  /* Riparazione al porto di una colonia (richiesta utente 2026-06-16).
+     Chiamata dal tick di colonia (time.js) per Ι. Riduce il wear delle navi
+     delle flotte docked/orbiting nel sistema della colonia. Tasso scalato
+     sul livello Hangar; ritorna il costo metalli da scaricare sulla stock.
+     Niente effetti se la colonia non ha Hangar (senza struttura non c'è
+     refit). Niente costo per navi già pristine (wear=0). */
+  function tickPortRepair(game, colony) {
+    if (!colony || !colony.structures || !game) return 0;
+    const hangar = colony.structures['cantiere-navale'];
+    if (!hangar || (hangar.level | 0) < 1) return 0;
+    const lvl = Math.min(hangar.level | 0, REPAIR_RATE_BY_HANGAR.length - 1);
+    const rate = REPAIR_RATE_BY_HANGAR[lvl];
+    if (rate <= 0) return 0;
+    const sysId = colony.systemId;
+    let metCost = 0;
+    (game.fleets || []).forEach(function (f) {
+      if (!f || !f.location || f.location.systemId !== sysId) return;
+      const st = f.location.status;
+      if (st !== 'docked' && st !== 'orbiting') return;
+      (f.ships || []).forEach(function (s) {
+        const cur = s.wear || 0;
+        if (cur <= 0) return;
+        const repaired = Math.min(cur, rate);
+        s.wear = cur - repaired;
+        metCost += repaired * REPAIR_MET_PER_PCT;
+      });
+    });
+    return metCost;
+  }
+
+  /* Riparazione presso una stazione orbitale (M16) operativa di livello ≥ 2.
+     Chiamata dal tick stazione (station.js). Tasso fisso. Niente costo
+     esposto qui — la stazione ha il suo supply pool gestito altrove. */
+  function tickStationRepair(game, station) {
+    if (!game || !station || station.phase !== 'operational' || (station.level | 0) < 2) return 0;
+    const sysId = station.systemId;
+    const rate = REPAIR_RATE_STATION;
+    let totalRepaired = 0;
+    (game.fleets || []).forEach(function (f) {
+      if (!f || !f.location || f.location.systemId !== sysId) return;
+      const st = f.location.status;
+      if (st !== 'docked' && st !== 'orbiting') return;
+      (f.ships || []).forEach(function (s) {
+        const cur = s.wear || 0;
+        if (cur <= 0) return;
+        const repaired = Math.min(cur, rate);
+        s.wear = cur - repaired;
+        totalRepaired += repaired;
+      });
+    });
+    return totalRepaired;
+  }
+
+  /* Soglia wear: trigger di rientro forzato (richiesta utente 2026-06-16).
+     Coerente col modello viveri (#69): la flotta si stacca dal task corrente
+     (survey/patrol/idle) e rientra al porto amico più vicino. Esposto qui in
+     fleet.js così anomaly.js può chiamarlo senza duplicare la logica. */
+  function forceReturnForWear(game, fleet) {
+    if (!fleet || !fleet.orders || fleet.orders.type === 'return') return false;
+    if (!fleet.ships || !fleet.ships.length) return false;
+    let maxW = 0;
+    for (let i = 0; i < fleet.ships.length; i++) maxW = Math.max(maxW, fleet.ships[i].wear || 0);
+    if (maxW < WEAR_RETURN_THRESHOLD) return false;
+    maybeForceReturn(game, fleet);
+    if (fleet.orders.type === 'return') {
+      fleet.orders._forcedWear = true;
+      return true;
+    }
+    return false;
+  }
+
   /* Stima Ι di una rotta (per gli avvisi UI all'ordine). */
   function routeImpulsi(galaxy, fleet, path) {
     if (!Array.isArray(path) || path.length < 2) return 0;
@@ -1656,6 +1778,10 @@
     /* Decisione #69: viveri PRIMA di tutto (anche le flotte idle lontane
        consumano; il rifornimento ai porti amici resetta i flag). */
     processViveri(game, fleet, events);
+    /* Usura per Ι in transito (decisione utente 2026-06-16): drip uniforme su
+       tutte le classi, scalato sul danger del sistema. Sostituisce il lump-sum
+       all'arrivo dell'esploratore (rimosso più sotto). */
+    applyTransitWear(game, fleet);
     if (fleet.orders.type === 'idle') return;
 
     /* Decisione #60: incident roll una sola volta all'avvio dell'explore
@@ -1880,14 +2006,11 @@
         fleet._exploreRewarded = true;
         awardCrewXp(game, fleet, 1, events, 'travel');
       }
-      /* Decisione #60: usura base del viaggio (come expedition.js):
-         +8% + danger*10% sulla nave esploratrice all'arrivo. */
-      const ship = fleet.ships && fleet.ships[0];
-      if (ship && ship.kind === 'explorer') {
-        const danger = _dangerForExplore(game.galaxy, fleet);
-        const w = 8 + Math.round(danger * 10);
-        ship.wear = Math.min(100, (ship.wear || 0) + w);
-      }
+      /* Sessione 2026-06-16: il lump-sum di usura all'arrivo (era +8% +
+         danger*10% sull'esploratore) è stato sostituito dal drip per Ι in
+         transito (applyTransitWear). Equivalente totale su un viaggio tipico
+         di ~20-40 Ι, ma proporzionale alla DURATA REALE del viaggio e
+         uniforme per tutte le classi (esploratore/estrattore/militari). */
       /* Auto-return alla colonia origine. Se incidente critico, override del
          ritorno con la durata d'emergenza. */
       const colony = game.colonies && game.colonies[fleet.ownerColonyKey];
@@ -2429,6 +2552,14 @@
     fleetUpkeep: fleetUpkeep,
     dockedMaintenance: dockedMaintenance,
     portMaintenance: portMaintenance,
+    tickPortRepair: tickPortRepair,
+    tickStationRepair: tickStationRepair,
+    forceReturnForWear: forceReturnForWear,
+    WEAR_TRANSIT_BASE: WEAR_TRANSIT_BASE,
+    WEAR_RETURN_THRESHOLD: WEAR_RETURN_THRESHOLD,
+    REPAIR_RATE_BY_HANGAR: REPAIR_RATE_BY_HANGAR,
+    REPAIR_MET_PER_PCT: REPAIR_MET_PER_PCT,
+    REPAIR_RATE_STATION: REPAIR_RATE_STATION,
     ensureColonyShipKinds: ensureColonyShipKinds,
     ownColonyKeyAt: ownColonyKeyAt,
     FORMATIONS: FORMATIONS,

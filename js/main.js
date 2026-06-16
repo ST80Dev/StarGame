@@ -4165,6 +4165,10 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
   const g = ORION.game;
   ORION.planet.ensureAssets(colony);
   const ships = (colony.ships && colony.ships.explorer) || 0;
+  /* Estrattore §17.3 (richiesta utente 2026-06-16): scafo dedicato al
+     drenaggio anomalie/cinture. Per le anomalie va bene anche l'esploratore
+     (compat), ma l'Estrattore è la scelta consigliata. */
+  const extractors = (colony.ships && colony.ships.estrattore) || 0;
   const crews = (colony.crews && colony.crews.explorer) || [];
   const xpAvg = crews.length ? ORION.expedition.averageXp(crews).toFixed(1) : '0';
 
@@ -4231,10 +4235,13 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
       const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
       const meta = anomalyKindMeta(s.kind);
       /* Per le cinture asteroidali aggiungiamo il nome del corpo: in un
-         sistema possono esserci più cinture, l'utente deve distinguerle. */
+         sistema possono esserci più cinture, l'utente deve distinguerle.
+         Nota: g.galaxy.systems[id] è lo stub di galassia (name/links), non
+         il sistema generato — findBody ha bisogno di quest'ultimo. */
       let bodyNote = '';
-      if (s.kind === 'cintura' && s.bodyKey && ORION.system && ORION.system.findBody) {
-        const body = ORION.system.findBody(sys, s.bodyKey);
+      if (s.kind === 'cintura' && s.bodyKey && ORION.system && ORION.system.generate && ORION.system.findBody) {
+        const sysFull = ORION.system.generate(g.galaxy, s.sysId);
+        const body = sysFull ? ORION.system.findBody(sysFull, s.bodyKey) : null;
         if (body && body.name) bodyNote = ' · <span class="expedition-item__body">' + escapeHtml(body.name) + '</span>';
       }
       let stateTxt;
@@ -4261,9 +4268,13 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
       }
       const here = s.sysId === colony.systemId;
       const dist = here ? 'stesso sistema' : (s.hops + ' salti');
-      const canSend = ships >= 1 && crews.length >= 1 && !s.harvesting;
+      const canSend = (extractors >= 1 || ships >= 1) && crews.length >= 1 && !s.harvesting;
       const sendTitle = s.harvesting ? 'Una flotta è già presente sul sito'
-        : (canSend ? 'Invia una flotta a raccogliere/esplorare (resta sul posto)' : 'Servono uno scafo e un equipaggio');
+        : (canSend
+            ? (extractors >= 1
+                ? 'Invia un Estrattore a drenare (resta sul posto, rate scalato sull\'Hangar)'
+                : 'Invia un esploratore a drenare (rate base — costruisci un Estrattore per più resa)')
+            : 'Servono uno scafo (Estrattore o esploratore) e un equipaggio');
       const bodyAttr = s.bodyKey ? (' data-body="' + escapeHtml(s.bodyKey) + '"') : '';
       return '<li class="expedition-item">' +
         '<div class="expedition-item__head">' +
@@ -4289,6 +4300,7 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
       '<p class="sysinfo__sub">Risorse disponibili</p>' +
       '<dl class="sysinfo__list">' +
         row('Scafi esploratori', String(ships)) +
+        row('Estrattori', String(extractors)) +
         row('Equipaggi', crews.length + (crews.length ? ' (xp medio ' + xpAvg + ')' : '')) +
         row('Sistemi raggiungibili', String(reachable.length)) +
       '</dl>' +
@@ -4302,10 +4314,11 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
       listHtml +
       (ORION.anomaly ? ('<p class="sysinfo__sub">Anomalie raggiungibili</p>' + anomHtml) : '') +
       '<p class="panel__note">Costruisci scafi nell\'<em>Hangar di costruzione</em> e forma equipaggi nell\'<em>Accademia militare</em>. ' +
-        'Ogni missione completata restituisce l\'equipaggio con +1 xp; gli scafi accumulano usura. ' +
-        'I tre tier di <em>iperguida</em> ridurranno i tempi di salto iperspaziale. ' +
+        'Ogni missione completata restituisce l\'equipaggio con +1 xp; gli scafi accumulano usura per Ι in viaggio e in raccolta. ' +
+        'L\'<em>Estrattore</em> è dedicato al drenaggio: rate scalato sul livello dell\'Hangar (lvl1=0.6/Ι · lvl2=0.8 · lvl3=1.0 · lvl4=1.2 · lvl5=1.4). ' +
         'Le <em>anomalie §17.3</em> si sfruttano inviando una flotta che <strong>resta sul posto</strong>: ' +
-        'detriti→metalli, nebulose→energia (raccolta ricorrente), reliquie→ricompensa una-tantum.</p>' +
+        'detriti/cinture→metalli, nebulose→energia (raccolta ricorrente), reliquie→ricompensa una-tantum. ' +
+        'Il rientro automatico scatta a viveri esauriti o wear ≥ 80%; riparazione al porto colonia (Hangar) o stazione orbitale lvl ≥ 2.</p>' +
     '</div>';
 
   const btn = host.querySelector('[data-action="exp-organize"]');
@@ -4378,16 +4391,23 @@ function doSurveyAnomaly(colony, targetSystemId, anomalyKind, bodyKey) {
   const g = ORION.game;
   const key = colony.systemId + ':' + colony.bodyKey;
   if (!ORION.fleet || !ORION.fleet.createFleet) { showToast('Modulo flotta non disponibile'); return; }
-  const shipsAvail = (colony.ships && colony.ships.explorer) || 0;
+  /* Decisione utente 2026-06-16: preferisci sempre l'Estrattore (rate
+     scalato sull'Hangar e più rugged in survey). Fallback all'esploratore
+     se non disponibile — l'esploratore in survey resta legittimo a rate
+     base CFG.HARVEST_RATE per compat coi save antichi. */
+  const extractorsAvail = (colony.ships && colony.ships.estrattore) || 0;
+  const explorersAvail = (colony.ships && colony.ships.explorer) || 0;
+  const useExtractor = extractorsAvail >= 1;
+  const shipKind = useExtractor ? 'estrattore' : 'explorer';
   const crewsAvail = (colony.crews && Array.isArray(colony.crews.explorer)) ? colony.crews.explorer.length : 0;
-  if (shipsAvail < 1) { showToast('Nessuno scafo esploratore disponibile'); return; }
-  if (crewsAvail < 1) { showToast('Nessun equipaggio esploratore disponibile'); return; }
+  if (!useExtractor && explorersAvail < 1) { showToast('Nessuno scafo idoneo (Estrattore o Esploratore) disponibile'); return; }
+  if (crewsAvail < 1) { showToast('Nessun equipaggio disponibile'); return; }
   /* Niente nome esplicito: lo riceverà al setOrder('explore') sotto, come
      callsign progressivo "Segugio N" (decisione utente 2026-06-15). */
   const cf = ORION.fleet.createFleet(g, key, null);
   if (!cf.ok) { showToast(cf.reason || 'Creazione flotta fallita'); return; }
   const fleet = cf.fleet;
-  const as = ORION.fleet.assignShips(g, fleet, key, 'explorer', 1);
+  const as = ORION.fleet.assignShips(g, fleet, key, shipKind, 1);
   if (!as.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(as.reason || 'Assegnazione nave fallita'); return; }
   const ac = ORION.fleet.assignCrew(g, fleet, key, 1);
   if (!ac.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(ac.reason || 'Assegnazione equipaggio fallita'); return; }

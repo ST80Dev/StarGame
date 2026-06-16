@@ -653,6 +653,12 @@
        dispiegate non pagano qui (riserva di viaggio a 4 risorse, viveri). */
     const F = root.ORION && root.ORION.fleet;
     const shipMetMaint = (F && F.portMaintenance) ? F.portMaintenance(game, colony) : 0;
+    /* Riparazione navi al porto (richiesta utente 2026-06-16): le flotte
+       ferme al sistema di una colonia con Hangar recuperano wear nel
+       tempo. Il costo metalli è proporzionale al wear effettivamente
+       riparato, sommato al normale shipMetMaint sopra. Se wear=0 ovunque,
+       costo=0 (niente drain inutile). */
+    const shipRepairMet = (F && F.tickPortRepair) ? F.tickPortRepair(game, colony) : 0;
     /* Razioni equipaggio al porto (decisione 2026-06-15): drain cibo/acqua
        sulla colonia per crews idle + crews di flotte parcheggiate. Solo
        operational (durante settling, decisione #27, gli equipaggi non sono
@@ -665,7 +671,7 @@
       const r = (out.rates[k] || 0) * malus * wMalus * warM * settling;
       const u = out.upkeep[k] || 0;
       let n = r - u;
-      if (k === 'met')   n -= shipMetMaint;
+      if (k === 'met')   n -= shipMetMaint + shipRepairMet;
       if (k === 'food')  n -= popFoodDemand  + crewPort.food;
       if (k === 'water') n -= popWaterDemand + crewPort.water;
       net[k] = n;
