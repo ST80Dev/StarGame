@@ -6288,6 +6288,60 @@ select.main-menu__input { cursor: pointer; }
 .lp-nav .nav-item[data-view="system"] .nav-item__glyph { color: #f0a868; }
 .lp-nav .nav-item[data-view="planet"] .nav-item__glyph { color: #80c8e6; }
 
+/* Strip orizzontale dei 4 livelli sopra il Roster (decisione utente 2026-06-16).
+   I 4 livelli (Galassia/Gruppo/Sistema/Pianeta) sono ora una riga di
+   bottoni-icona compatti in testa al Roster; la label sta sotto al glifo. */
+.lp-nav-horizontal {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin: 0 0 10px;
+  padding: 4px;
+  background: rgba(var(--c-bg-deep-rgb) / 0.5);
+  border: 1px solid rgba(var(--c-surface-rgb) / 0.6);
+  border-radius: 6px;
+}
+.lp-nav-horizontal .nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 4px;
+  font-size: 0.66rem;
+  text-align: center;
+  line-height: 1.1;
+}
+.lp-nav-horizontal .nav-item__glyph {
+  font-size: 1.15rem;
+  opacity: 0.95;
+}
+.lp-nav-horizontal .nav-item[data-view="galaxy"] .nav-item__glyph { color: var(--c-accent); }
+.lp-nav-horizontal .nav-item[data-view="group"]  .nav-item__glyph { color: #b89cff; }
+.lp-nav-horizontal .nav-item[data-view="system"] .nav-item__glyph { color: #f0a868; }
+.lp-nav-horizontal .nav-item[data-view="planet"] .nav-item__glyph { color: #80c8e6; }
+
+/* Gruppi del Roster: testata "Colonie / Stazioni orbitali" con contatore. */
+.lp-roster-group { margin-bottom: 10px; }
+.lp-roster-group:last-child { margin-bottom: 0; }
+.lp-roster-group__h {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 6px 2px 4px;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--c-text-soft);
+  font-weight: 600;
+}
+.lp-roster-group__n {
+  font-size: 0.62rem;
+  color: var(--c-text-faint);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.lp-item--station .lp-item__glyph { color: #b89cff; }
+
 /* --- Launcher buttons (Diplomazia / Ricerca / Mercato) --- */
 .lp-launcher { display: flex; flex-direction: column; gap: 5px; }
 .lp-launcher--single { margin-bottom: 8px; }
