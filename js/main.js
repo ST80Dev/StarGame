@@ -7515,7 +7515,12 @@ const FLEET_CALLSIGNS = {
   'patrol': 'Sentinella',
   'patrol-loop': 'Sentinella',
   'garrison': 'Sentinella',
-  'survey': 'Vedetta'
+  'survey': 'Vedetta',
+  /* Decisione utente 2026-06-16: una flotta con scafo Estrattore in survey
+     d'anomalia è di funzione "estrazione", non ricognizione → callsign
+     dedicato. orderDerivedFleetName/suggestedRenameFor selezionano questa
+     chiave quando la flotta porta almeno un estrattore. */
+  'extract': 'Estrattore'
 };
 /* Pool secondario (decisione utente 2026-06-15): un secondo nome per scopo,
    proposto come DEFAULT quando l'utente rinomina manualmente. Così è "guidato
@@ -7529,7 +7534,8 @@ const FLEET_CALLSIGNS_ALT = {
   'patrol': 'Bastione',
   'patrol-loop': 'Bastione',
   'garrison': 'Bastione',
-  'survey': 'Bussola'
+  'survey': 'Bussola',
+  'extract': 'Minatrice'
 };
 /* Numero progressivo per quel callsign: max suffisso numerico tra le flotte
    esistenti col prefisso "<Base> ", +1. Robusto a rinomine manuali (chi
@@ -7544,14 +7550,27 @@ function nextProgressiveFor(g, base) {
   });
   return max + 1;
 }
-function orderDerivedFleetName(g, order) {
+/* Decisione utente 2026-06-16: una flotta in `survey` con almeno uno scafo
+   Estrattore a bordo è funzionalmente in estrazione, non in ricognizione →
+   chiave callsign 'extract' anziché 'survey'. Restituisce la chiave effettiva
+   da usare per il pool di nomi. */
+function effectiveCallsignKey(fleet, order) {
+  if (!order || !order.type) return null;
+  if (order.type === 'survey' && fleet && Array.isArray(fleet.ships)) {
+    for (let i = 0; i < fleet.ships.length; i++) {
+      if (fleet.ships[i] && fleet.ships[i].kind === 'estrattore') return 'extract';
+    }
+  }
+  return order.type;
+}
+function orderDerivedFleetName(g, order, fleet) {
   if (!order || !order.type) return null;
   let base = null;
   if (order.type === 'move-route') {
     /* esplora-ogni-tappa → Segugio; rotta cargo/movimento → Convoglio */
     base = order.exploreEach ? 'Segugio' : 'Convoglio';
   } else {
-    base = FLEET_CALLSIGNS[order.type] || null;
+    base = FLEET_CALLSIGNS[effectiveCallsignKey(fleet, order)] || null;
   }
   if (!base) return null;   // 'return' e tipi sconosciuti → nessun ribattesimo
   return base + ' ' + nextProgressiveFor(g, base);
@@ -7559,7 +7578,7 @@ function orderDerivedFleetName(g, order) {
 function isDefaultFleetName(name) { return /^Squadrone\s+\d+$/.test(name || ''); }
 function maybeAutoRenameFleet(g, fleet, order) {
   if (!fleet || !isDefaultFleetName(fleet.name)) return;
-  const nm = orderDerivedFleetName(g, order);
+  const nm = orderDerivedFleetName(g, order, fleet);
   if (nm) fleet.name = nm.slice(0, 40);
 }
 /* Suggerimento di rinomina manuale (decisione utente 2026-06-15): propone il
@@ -7574,7 +7593,7 @@ function suggestedRenameFor(g, fleet) {
   if (order.type === 'move-route') {
     base = order.exploreEach ? FLEET_CALLSIGNS_ALT['explore'] : FLEET_CALLSIGNS_ALT['move'];
   } else {
-    base = FLEET_CALLSIGNS_ALT[order.type] || null;
+    base = FLEET_CALLSIGNS_ALT[effectiveCallsignKey(fleet, order)] || null;
   }
   if (!base) return null;
   return base + ' ' + nextProgressiveFor(g, base);
