@@ -95,7 +95,10 @@
       id: 'incrociatore', name: 'Incrociatore', glyph: '◆',
       cost: { met: 240, en: 110, food: 20 }, time: 40,
       hp: 300, fp: 45, speed: 0.8, crew: 14, hangarLvl: 4,
-      maintMet: 0.9, dockWeight: 3
+      /* Bilanciamento 2026-06-16: capitali +30% maintMet (era 0.9 → 1.2) +
+         nuovo maintEn per drenare l'energia in eccesso della capitale endgame
+         (era 0, in deficit perché capitali grosse non costavano energia al porto). */
+      maintMet: 1.2, maintEn: 0.3, dockWeight: 3
     },
     /* Dreadnought + Ammiraglia: l'Hangar planetario NON basta (#41) →
        richiedono il Bacino orbitale (struttura dedicata, structures.js).
@@ -106,14 +109,14 @@
       cost: { met: 600, en: 280, food: 40 }, time: 200,
       hp: 650, fp: 95, speed: 0.65, crew: 30, hangarLvl: 5,
       requiresStruct: { id: 'bacino-orbitale', level: 1 },
-      maintMet: 2.0, dockWeight: 6
+      maintMet: 2.7, maintEn: 0.6, dockWeight: 6   // bilanciamento 2026-06-16: maintMet +30%, +maintEn
     },
     ammiraglia: {
       id: 'ammiraglia', name: 'Nave Ammiraglia', glyph: '❖',
       cost: { met: 1000, en: 480, food: 80, water: 40 }, time: 280,
       hp: 1000, fp: 140, speed: 0.7, crew: 50, hangarLvl: 5,
       requiresStruct: { id: 'bacino-orbitale', level: 2 },
-      maintMet: 3.0, dockWeight: 10,
+      maintMet: 4.0, maintEn: 0.9, dockWeight: 10,   // bilanciamento 2026-06-16: maintMet +30%, +maintEn
       unique: true,        // GDD §12.1: una sola per civiltà
       flagship: true       // bonus di nave a tutta la flotta (flagshipBonus)
     }
@@ -2479,6 +2482,19 @@
     /* M16: + somma navi nel porto orbitale (colony.orbitalDock) quando esisterà. */
     return met;
   }
+  /* Bilanciamento 2026-06-16: variante energia. Solo le capitali (incrociatore/
+     dreadnought/ammiraglia) hanno maintEn; le altre 0. Specchio di
+     dockedMaintenance per simmetria, niente cambio di API esistente. */
+  function dockedMaintenanceEn(colony) {
+    if (!colony || !colony.ships) return 0;
+    let en = 0;
+    Object.keys(colony.ships).forEach(function (kind) {
+      const n = colony.ships[kind] | 0;
+      const cls = CLASSES[kind];
+      if (n > 0 && cls && cls.maintEn) en += n * cls.maintEn;
+    });
+    return en;
+  }
 
   /* Manutenzione TOTALE al porto di una colonia (decisione utente 2026-06-11):
      navi di riserva (colony.ships) + navi delle FLOTTE ferme a questo porto
@@ -2501,6 +2517,24 @@
       });
     }
     return met;
+  }
+  /* Bilanciamento 2026-06-16: variante energia di portMaintenance.
+     Specchio identico, ma somma maintEn (presente solo su capitali). */
+  function portMaintenanceEn(game, colony) {
+    let en = dockedMaintenanceEn(colony);
+    const sys = colony && colony.systemId;
+    if (game && Array.isArray(game.fleets) && sys != null) {
+      game.fleets.forEach(function (f) {
+        if (!f || !f.location || f.location.systemId !== sys) return;
+        const st = f.location.status;
+        if (st !== 'docked' && st !== 'orbiting') return;
+        (f.ships || []).forEach(function (s) {
+          const cls = CLASSES[s.kind];
+          if (cls && cls.maintEn) en += cls.maintEn;
+        });
+      });
+    }
+    return en;
   }
 
   /* M09 (decisione #49): imposta la formazione di combattimento. */
@@ -2551,7 +2585,9 @@
     awardCrewXp: awardCrewXp,
     fleetUpkeep: fleetUpkeep,
     dockedMaintenance: dockedMaintenance,
+    dockedMaintenanceEn: dockedMaintenanceEn,
     portMaintenance: portMaintenance,
+    portMaintenanceEn: portMaintenanceEn,
     tickPortRepair: tickPortRepair,
     tickStationRepair: tickStationRepair,
     forceReturnForWear: forceReturnForWear,

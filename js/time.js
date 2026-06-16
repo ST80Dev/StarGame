@@ -65,6 +65,13 @@
        Il consumo si applica solo in fase `operational` (non durante settling). */
     POP_FOOD_PER_UNIT:  2.5,    // cibo consumato per unità di pop / Impulso (decisione #38: ritarato sul modello a moduli)
     POP_WATER_PER_UNIT: 2.0,    // acqua consumata per unità di pop / Impulso
+    /* Bilanciamento 2026-06-16 (sessione capitale endgame): la popolazione
+       drena anche met/en (servizi residenziali, climatizzazione, ricambi
+       infrastrutturali). Specchio di POP_FOOD/WATER. Tarato perché una
+       capitale terrestre maxata (pop 12) abbia break-even energia/metalli
+       sotto questo livello e debba importare via rotte. */
+    POP_EN_PER_UNIT:    0.5,    // energia consumata per unità di pop / Impulso
+    POP_MET_PER_UNIT:   0.6,    // metalli consumati per unità di pop / Impulso (manutenzione civile)
     /* Razioni equipaggio AL PORTO (decisione 2026-06-15, speculare a #74
        manutenzione metalli): ogni equipaggio NON in viaggio drena cibo+acqua
        sulla colonia di sosta. "Non in viaggio" = idle in colony.crews.explorer
@@ -648,11 +655,18 @@
        autosufficienti, decisione #27). */
     const popFoodDemand  = (colony.phase !== 'settling') ? (pop.total || 0) * CFG.POP_FOOD_PER_UNIT  : 0;
     const popWaterDemand = (colony.phase !== 'settling') ? (pop.total || 0) * CFG.POP_WATER_PER_UNIT : 0;
+    /* Bilanciamento 2026-06-16: drenaggio met/en da popolazione (servizi
+       residenziali). Solo in fase operational, come food/water. */
+    const popEnDemand  = (colony.phase !== 'settling') ? (pop.total || 0) * CFG.POP_EN_PER_UNIT  : 0;
+    const popMetDemand = (colony.phase !== 'settling') ? (pop.total || 0) * CFG.POP_MET_PER_UNIT : 0;
     /* Decisione utente 2026-06-11: manutenzione navi PARCHEGGIATE all'Hangar
        (riparazione/mantenimento) → drain metalli sulla colonia. Le navi
        dispiegate non pagano qui (riserva di viaggio a 4 risorse, viveri). */
     const F = root.ORION && root.ORION.fleet;
     const shipMetMaint = (F && F.portMaintenance) ? F.portMaintenance(game, colony) : 0;
+    /* Bilanciamento 2026-06-16: manutenzione energetica delle navi capitali al
+       porto (incrociatore/dreadnought/ammiraglia). 0 se nessuna capitale. */
+    const shipEnMaint = (F && F.portMaintenanceEn) ? F.portMaintenanceEn(game, colony) : 0;
     /* Riparazione navi al porto (richiesta utente 2026-06-16): le flotte
        ferme al sistema di una colonia con Hangar recuperano wear nel
        tempo. Il costo metalli è proporzionale al wear effettivamente
@@ -671,7 +685,8 @@
       const r = (out.rates[k] || 0) * malus * wMalus * warM * settling;
       const u = out.upkeep[k] || 0;
       let n = r - u;
-      if (k === 'met')   n -= shipMetMaint + shipRepairMet;
+      if (k === 'met')   n -= shipMetMaint + shipRepairMet + popMetDemand;
+      if (k === 'en')    n -= shipEnMaint  + popEnDemand;
       if (k === 'food')  n -= popFoodDemand  + crewPort.food;
       if (k === 'water') n -= popWaterDemand + crewPort.water;
       net[k] = n;
@@ -2590,7 +2605,8 @@
      sono scalati — coerente con processProduction (`n = r*mul - u - pop`). */
   function productionFactors(game, colony) {
     if (!colony) {
-      return { prodMul: 1, settling: 1, scarcity: 1, waste: 1, war: 1, popFood: 0, popWater: 0 };
+      return { prodMul: 1, settling: 1, scarcity: 1, waste: 1, war: 1,
+        popFood: 0, popWater: 0, popMet: 0, popEn: 0 };
     }
     const sc = colony._scar ? scarcityMalus(colony._scar) : 1;
     const wa = wasteMalus(colony.waste);
@@ -2608,6 +2624,8 @@
       settling: st, scarcity: sc, waste: wa, war: wr,
       popFood:  op ? pop * CFG.POP_FOOD_PER_UNIT  : 0,
       popWater: op ? pop * CFG.POP_WATER_PER_UNIT : 0,
+      popMet:   op ? pop * CFG.POP_MET_PER_UNIT   : 0,
+      popEn:    op ? pop * CFG.POP_EN_PER_UNIT    : 0,
       crewFood:  crewPort.food,
       crewWater: crewPort.water
     };
