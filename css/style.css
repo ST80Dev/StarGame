@@ -3189,12 +3189,23 @@ select.main-menu__input { cursor: pointer; }
   border-radius: 6px;
 }
 .crew-filter {
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  color: var(--c-text, #d8def0);
-  padding: 4px 6px;
-  font-size: 0.85em;
+  background: rgba(10, 14, 28, 0.85);
+  border: 1px solid rgba(125, 110, 220, 0.30);
+  color: var(--c-text, #e9ecf6);
+  padding: 5px 8px;
+  font-size: 0.92em;
   border-radius: 4px;
+  font-family: inherit;
+}
+.crew-filter:hover { border-color: rgba(220, 170, 90, 0.40); }
+.crew-filter:focus {
+  outline: none;
+  border-color: var(--c-accent, #2fe6e0);
+  box-shadow: 0 0 0 2px rgba(47, 230, 224, 0.18);
+}
+.crew-filter option {
+  background: #0a1020;
+  color: #e9ecf6;
 }
 .crew-view__sorts {
   display: inline-flex;
@@ -3203,17 +3214,18 @@ select.main-menu__input { cursor: pointer; }
   margin-left: auto;
   font-size: 0.85em;
 }
-.crew-view__sorts-l { color: var(--c-muted, #8a93b8); margin-right: 2px; }
+.crew-view__sorts-l { color: var(--c-muted, #8a93b8); margin-right: 2px; font-size: 0.95em; }
 .crew-sort-btn {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.10);
   color: var(--c-text, #d8def0);
-  padding: 3px 8px;
-  font-size: 0.85em;
+  padding: 5px 11px;
+  font-size: 0.98em;
   border-radius: 3px;
   cursor: pointer;
   font-family: var(--font-mono, monospace);
 }
+.crew-sort-btn:hover { background: rgba(220, 170, 90, 0.10); border-color: rgba(220, 170, 90, 0.30); }
 .crew-sort-btn.is-active {
   background: rgba(220, 170, 90, 0.18);
   border-color: rgba(220, 170, 90, 0.40);
@@ -3258,6 +3270,12 @@ select.main-menu__input { cursor: pointer; }
 .crew-table__role { color: var(--c-muted, #8a93b8); font-size: 0.85em; }
 .crew-table__nodom { color: var(--c-muted, #8a93b8); opacity: 0.6; }
 .crew-table__detail { color: var(--c-muted, #8a93b8); font-size: 0.85em; margin-left: 4px; }
+/* Etichette stato leggermente più grandi nella tabella centrale (richiesta utente 2026-06-16). */
+.crew-table .lp-crew-row__status {
+  font-size: 0.92em;
+  padding: 2px 9px;
+  letter-spacing: 0.02em;
+}
 
 /* Comandanti nominati (decisione #43, M07 → gancio M14): roster figure
    con nome/rango/specializzazione/tratto. Stile sobrio, accento ambra
