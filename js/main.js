@@ -4177,38 +4177,24 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
 
   const expeditions = expeditionsForColony(colony);
 
+  /* Decisione utente 2026-06-16: la lista dettagliata delle spedizioni
+     attive duplicava il roster flotte centrale (vista Flotte e guerra) +
+     le pillole usura/viveri della sidebar sx. Qui ora un riepilogo
+     COMPATTO orientato al task (count + link), per togliere la ridondanza
+     senza perdere il colpo d'occhio. Il dettaglio per flotta (wear/xp/
+     incidenti) vive nella card della vista Flotte e nel dettaglio flotta. */
   let listHtml;
   if (expeditions.length) {
-    listHtml = '<ul class="expedition-list">' + expeditions.map(function (e) {
-      const target = g.galaxy.systems[e.targetSystemId];
-      const acr = regionAcronymFor(e.targetSystemId);
-      const targetName = target ? target.name : '—';
-      const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
-      const status = e.status;
-      const rem = (status === 'outbound') ? (e.durationOut | 0) :
-                  (status === 'returning') ? (e.durationBack | 0) : 0;
-      const wear = Math.min(100, e.shipWear || 0);
-      const xp = e.crewXp || 0;
-      const incCount = (e.incidents || []).length;
-      const enr = ORION.expedition.enrichmentForXp(xp);
-      const statusLabel = status === 'outbound' ? 'In rotta' :
-                          status === 'returning' ? 'Rientro' : 'Conclusa';
-      return '<li class="expedition-item">' +
-        '<div class="expedition-item__head">' +
-          '<span class="expedition-item__status expedition-status--' + status + '">' + statusLabel + '</span>' +
-          '<span class="expedition-item__target">' + escapeHtml(targetName) + tag + '</span>' +
-          '<span class="expedition-item__eta">ETA ' + rem + ' ' + iU() + '</span>' +
-        '</div>' +
-        '<div class="expedition-item__bars">' +
-          '<div class="wear-bar" title="Usura scafo ' + wear + '%">' +
-            '<div class="wear-bar__fill" style="width:' + wear + '%"></div>' +
-            '<span class="wear-bar__label">scafo ' + wear + '%</span>' +
-          '</div>' +
-          '<span class="xp-chip" title="' + enr.label + '">xp ' + xp + ' · ' + enr.label + '</span>' +
-          (incCount ? '<span class="expedition-item__inc" title="Incidenti accumulati">' + uiIcon('warning', 'gold') + ' ' + incCount + '</span>' : '') +
-        '</div>' +
-      '</li>';
-    }).join('') + '</ul>';
+    const n = expeditions.length;
+    const summary = n + ' spedizion' + (n === 1 ? 'e' : 'i') + ' attiv' + (n === 1 ? 'a' : 'e') +
+      ' da questa colonia';
+    listHtml = '<div class="lp-launcher lp-launcher--single">' +
+      '<button class="lp-launcher__btn" data-action="exp-open-fleets" type="button">' +
+        '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('fleet')) || '') + '</span>' +
+        '<span>' + escapeHtml(summary) + '</span>' +
+        '<span class="lp-launcher__sub">apri Flotte e guerra · vedi stato/usura/viveri</span>' +
+      '</button>' +
+    '</div>';
   } else {
     listHtml = '<p class="panel__note">Nessuna spedizione attiva. Costruisci scafi e equipaggi, poi pianifica una rotta.</p>';
   }
@@ -4326,6 +4312,9 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
 
   const btn = host.querySelector('[data-action="exp-organize"]');
   if (btn && !btn.disabled) btn.addEventListener('click', function () { openExpeditionPicker(colony); });
+  /* Link compatto al roster centrale (dedup pannello dx ↔ vista Flotte). */
+  const openFleetsBtn = host.querySelector('[data-action="exp-open-fleets"]');
+  if (openFleetsBtn) openFleetsBtn.addEventListener('click', function () { navigateView('fleet'); });
   host.querySelectorAll('[data-action="anom-send"]').forEach(function (b) {
     b.addEventListener('click', function () {
       doSurveyAnomaly(colony, Number(b.dataset.sys), b.dataset.kind, b.dataset.body || null);
@@ -6117,6 +6106,7 @@ function renderFleetView(stage) {
         ? '<span class="fleet-chip fleet-chip--dist" title="Distanza dalla colonia più vicina">' + uiIcon('roster', 'amber') + ' ' + (hd === 0 ? 'a casa' : hd + ' hop') + '</span>'
         : '';
       const viveriHtml = fleetViveriHtml(f);
+      const wearHtml = fleetWearHtml(f);
       return '<li class="fleet-item fleet-item--card" data-fleet-id="' + escapeHtml(f.id) + '" tabindex="0" role="button" aria-label="Apri dettaglio ' + escapeHtml(f.name) + '">' +
         '<div class="fleet-item__head">' +
           '<span class="fleet-item__name">' + uiIcon('fleet', 'cyan') + ' <strong>' + escapeHtml(f.name) + '</strong> ' +
@@ -6135,7 +6125,7 @@ function renderFleetView(stage) {
           offChip + popChip +
           '<span class="fleet-item__open" aria-hidden="true">' + uiIcon('chevronRight', 'soft') + '</span>' +
         '</div>' +
-        viveriHtml + vetHtml +
+        viveriHtml + wearHtml + vetHtml +
       '</li>';
     }
     /* Raggruppamento per gruppo stellare (sezioni collassabili). */
@@ -6372,6 +6362,33 @@ function fleetVeterancyHtml(fleet) {
       escapeHtml(cls.name) + nm + ' · ' + lbl + '</span>';
   }).join('');
   return '<div class="fleet-item__vets">' + chips + '</div>';
+}
+
+/* Decisione utente 2026-06-16: gauge usura scafi a livello flotta.
+   Riassume per colpo d'occhio l'usura media + il picco (worst-case): la
+   soglia di rientro forzato per singolo scafo è 80%, quindi il "peak" è
+   il segnale più azionabile. Stato cromatico mirrors fleet-viveri:
+   ok (peak<50%) · low (50-79%) · crit (≥80%). Restituisce stringa vuota
+   per flotte senza navi (mai render in tal caso). */
+function fleetWearHtml(fleet) {
+  if (!fleet || !Array.isArray(fleet.ships) || !fleet.ships.length) return '';
+  let sum = 0, max = 0, n = 0;
+  for (let i = 0; i < fleet.ships.length; i++) {
+    const s = fleet.ships[i];
+    const w = Math.min(100, Math.max(0, (s && s.wear) || 0));
+    sum += w; if (w > max) max = w; n++;
+  }
+  if (!n) return '';
+  const avg = Math.round(sum / n);
+  const peak = Math.round(max);
+  const st = peak >= 80 ? 'crit' : peak >= 50 ? 'low' : 'ok';
+  const peakStr = (peak !== avg) ? ' · peak ' + peak + '%' : '';
+  const label = 'Usura ' + avg + '%' + peakStr;
+  return '<div class="fleet-wear fleet-wear--' + st + '" title="Usura scafi della flotta: media e picco. Singolo scafo ≥80% → rientro forzato; ripara al porto/stazione lvl≥2.">' +
+    '<span class="fleet-wear__ico ui-icon ui-icon--amber" aria-hidden="true">⚒</span> ' +
+    '<span class="fleet-wear__lbl">' + label + '</span>' +
+    '<span class="fleet-wear__bar"><span class="fleet-wear__fill" style="width:' + avg + '%"></span></span>' +
+    '</div>';
 }
 
 /* Decisione #69: gauge viveri di flotta. Autonomia in Ι (0..cap) con stato
@@ -8361,8 +8378,17 @@ function openFleetDetail(fleetId, opts) {
     const v = fleetViveriHtml(fleet);
     if (!v) return '';
     const F = ORION.fleet;
+    /* Decisione utente 2026-06-16: rifornimento e modifica capienza
+       serbatoio AMMESSI SOLO al porto amico (tua colonia, tua stazione
+       operativa, colonia alleata) — `fleetAtFriendlyPort` codifica già
+       le 3 condizioni "ancorata · stazione orbitale · orbita in mia
+       colonia" + esclude le flotte in survey (vedi nota in fleet.js).
+       Fuori da queste situazioni nascondiamo il bottone Rifornisci e
+       disabilitiamo lo slider capienza: non si fanno operazioni di
+       porto a metà strada in sistemi alieni. */
+    const atFriendlyPort = !!(F.fleetAtFriendlyPort && F.fleetAtFriendlyPort(g, fleet));
     let refuel = '';
-    if (F.payablePortAt && F.payRefuelAt &&
+    if (atFriendlyPort && F.payablePortAt && F.payRefuelAt &&
         F.payablePortAt(g, fleet.location.systemId) &&
         F.viveriOf(fleet) < F.viveriCapOf(fleet)) {
       const rc = F.payRefuelCost(g, fleet);
@@ -8375,7 +8401,7 @@ function openFleetDetail(fleetId, opts) {
       const min = F.VIVERI_CAP_MIN || 50;
       const max = F.VIVERI_CAP_MAX || 1500;
       const crew = (F.fleetCrewRequired ? F.fleetCrewRequired(fleet) : 0) || 1;
-      const editable = fleet.location && fleet.location.status !== 'in-transit';
+      const editable = atFriendlyPort;
       /* Stima costo PIENO completo (Ι caricati = cap, crew totale × rate). */
       const rate = {
         food: F.VIVERI_RATE_FOOD || 0.07, water: F.VIVERI_RATE_WATER || 0.05,
@@ -8389,9 +8415,12 @@ function openFleetDetail(fleetId, opts) {
       };
       const costStr = '⛭ ' + cost.met + ' · ⚡ ' + cost.en + ' · ❖ ' + cost.food + ' · ≈ ' + cost.water;
       const editAttr = editable ? '' : ' disabled';
+      const inTransit = fleet.location && fleet.location.status === 'in-transit';
       const hintTxt = editable
         ? 'Capienza serbatoio: scegli quanta autonomia caricare alla prossima sosta al porto. Costo proporzionale a equipaggio (' + crew + ') × Ι caricati.'
-        : 'In viaggio: capienza non modificabile fino al ritorno al porto.';
+        : inTransit
+          ? 'In viaggio: capienza non modificabile fino al ritorno al porto.'
+          : 'Modifica capienza disponibile solo al porto amico (tua colonia, tua stazione, alleato).';
       capSlider =
         '<div class="fleet-viveri-cap" title="' + escapeHtml(hintTxt) + '">' +
           '<label class="fleet-viveri-cap__lbl">Capienza serbatoio · <strong data-bind="vcap-val">' + cap + '</strong> Ι</label>' +
@@ -8399,7 +8428,11 @@ function openFleetDetail(fleetId, opts) {
           '<div class="fleet-viveri-cap__cost">Pieno completo: <span data-bind="vcap-cost">' + costStr + '</span></div>' +
         '</div>';
     }
-    return '<div class="fdetail__sec fdetail__sec--supply">' + v + refuel + capSlider + '</div>';
+    /* Decisione utente 2026-06-16: pillola usura accanto ai viveri nel
+       riepilogo flotta (vista e dettaglio). Empty string se la flotta non
+       ha navi (caso degenere) — già coperto da fleetWearHtml. */
+    const wearH = fleetWearHtml(fleet);
+    return '<div class="fdetail__sec fdetail__sec--supply">' + v + wearH + refuel + capSlider + '</div>';
   }
 
   /* ===== Handlers ===== */
@@ -10970,10 +11003,14 @@ function renderLeftPanel() {
     const statusLbl = status === 'docked' ? 'attracco' : status === 'in-transit' ? 'viaggio' : 'orbita';
     const cls = status === 'docked' ? 'ok' : status === 'in-transit' ? 'info' : 'warn';
     const fleetIcon = (ORION.icon && ORION.icon('fleet')) || '';
+    /* Decisione utente 2026-06-16: pillola usura anche nel riepilogo flotte
+       della sidebar sx (oltre che nella vista centrale e nel dettaglio). */
+    const wearH = fleetWearHtml(f);
     return '<button class="lp-item lp-item--fleet" data-action="roster-fleet" data-id="' + escapeHtml(f.id) + '" data-sys="' + sysId + '" type="button">' +
       '<span class="lp-item__glyph ui-icon" aria-hidden="true">' + fleetIcon + '</span>' +
       '<span class="lp-item__name"><strong>' + escapeHtml(f.name) + '</strong> <span class="lp-item__sub">in ' + escapeHtml(sysName) + '</span></span>' +
       '<span class="lp-item__badges"><span class="lp-item__badge lp-item__badge--' + cls + '">' + statusLbl + '</span></span>' +
+      (wearH ? '<span class="lp-item__row">' + wearH + '</span>' : '') +
     '</button>';
   }
   /* Stazioni orbitali (M16): elencate nel Roster come pari delle colonie
@@ -11333,12 +11370,23 @@ function renderLeftPanel() {
   host.querySelectorAll('[data-action="roster-fleet"]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       const sid = Number(btn.dataset.sys);
-      /* Click su una flotta → vedila sulla mappa, allo zoom di gruppo
-         stellare ma con la FLOTTA AL CENTRO schermo (richiesta utente
-         2026-06-14), non il baricentro del gruppo. */
+      const fid = btn.dataset.id;
+      const fleet = (ORION.game && ORION.game.fleets || []).find(function (f) { return f.id === fid; });
+      const loc = fleet && fleet.location;
+      /* Decisione utente 2026-06-16: una flotta parcheggiata o impegnata in
+         un task intra-sistema (attracco/orbita/intra-transit) merita lo zoom
+         a livello SISTEMA — la mostriamo sull'anomalia/corpo/colonia con
+         dettaglio immediato. Solo il viaggio INTERSTELLARE (in-transit senza
+         `intra`) resta a livello gruppo, dove la flotta è un puntino lungo
+         la rotta tra stelle. */
       if (sid >= 0 && ORION.game && ORION.game.state) ORION.game.state.selectedId = sid;
-      navigateView('group');
-      if (sid >= 0 && ORION.map && ORION.map.focusSystemCentered) ORION.map.focusSystemCentered(sid);
+      const inInterstellar = !!(loc && loc.status === 'in-transit' && !loc.intra);
+      if (inInterstellar) {
+        navigateView('group');
+        if (sid >= 0 && ORION.map && ORION.map.focusSystemCentered) ORION.map.focusSystemCentered(sid);
+      } else {
+        navigateView('system');
+      }
     });
   });
   /* Stazioni orbitali nel Roster (decisione utente 2026-06-16): click →
