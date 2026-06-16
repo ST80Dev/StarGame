@@ -3251,6 +3251,17 @@ select.main-menu__input { cursor: pointer; }
   font-size: 0.78em;
   font-family: var(--font-mono, monospace);
 }
+/* Drenaggio in corso: variante verde per il riepilogo "raccolti X · rate/Ι". */
+.xp-chip--harvest {
+  background: rgba(140, 200, 130, 0.16);
+  color: #a8d8a0;
+  border-color: rgba(140, 200, 130, 0.36);
+}
+.expedition-item__body {
+  color: var(--c-text-soft);
+  font-size: 0.86em;
+  font-style: italic;
+}
 
 /* Wear bar ambra → rossa */
 .wear-bar {

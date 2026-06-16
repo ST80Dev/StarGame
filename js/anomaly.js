@@ -38,11 +38,18 @@
     LOW_FRAC: 0.15        // soglia "riserva quasi esaurita" (evento una volta)
   };
 
-  /* Mappa kind → comportamento. */
+  /* Mappa kind → comportamento.
+     `perBody:true` (cintura) = un sito per ogni corpo del tipo nel sistema
+     (più cinture in un sistema = più siti distinti). Per gli altri kind
+     una sola entità per (sysId, kind). */
   const KINDS = {
     detriti:  { harvest: true, res: 'met', cap: 420 },
     nebulosa: { harvest: true, res: 'en',  cap: 320 },
-    reliquie: { harvest: false, relic: true }
+    reliquie: { harvest: false, relic: true },
+    /* Cintura asteroidale: corpo §6.3, esposta come sito harvest (richiesta
+       utente 2026-06-16). Riserva maggiore delle altre — è una risorsa
+       industriale ricorrente, non un'anomalia "rara". */
+    cintura:  { harvest: true, res: 'met', cap: 600, perBody: true }
   };
 
   function ensure(game) {
@@ -61,8 +68,14 @@
 
   /* Chiave canonica di un sito: UNA entità per (sistema, tipo). Una flotta
      in orbita raccoglie/esplora quel tipo nel sistema — avere più "copie"
-     della stessa anomalia non avrebbe senso (decisione di sessione). */
-  function siteKey(sysId, kind) { return sysId + ':' + kind; }
+     della stessa anomalia non avrebbe senso (decisione di sessione).
+     Eccezione: kind `perBody` (cintura) → chiave include bodyKey, perché
+     più cinture nello stesso sistema sono siti distinti. */
+  function siteKey(sysId, kind, bodyKey) {
+    const def = KINDS[kind];
+    if (def && def.perBody && bodyKey) return sysId + ':' + kind + ':' + bodyKey;
+    return sysId + ':' + kind;
+  }
 
   /* Rifonde game.anomalies sulle chiavi canoniche, unendo eventuali doppioni
      (tiene lo stato più "avanzato": riserva minima per la raccolta, esplorata/
@@ -73,7 +86,7 @@
     Object.keys(old).forEach(function (k) {
       const s = old[k];
       if (!s || s.sysId == null || !s.kind) return;
-      const ck = siteKey(s.sysId, s.kind);
+      const ck = siteKey(s.sysId, s.kind, s.bodyKey);
       const e = next[ck];
       if (!e) { next[ck] = s; return; }
       if (s.kind === 'reliquie') {
@@ -103,6 +116,7 @@
     if (!(ORION.system && ORION.system.generate)) return;
     game._anomScanned[sysId] = true;
     const sys = ORION.system.generate(game.galaxy, sysId);
+    /* Anomalie §17.3 (detriti/nebulosa/reliquie): UNA entità per (sistema, tipo). */
     const anoms = (sys && sys.anomalies) || [];
     const kinds = {};
     for (let i = 0; i < anoms.length; i++) { if (KINDS[anoms[i].kind]) kinds[anoms[i].kind] = true; }
@@ -111,11 +125,28 @@
       const key = siteKey(sysId, kind);
       if (game.anomalies[key]) return;
       if (def.relic) {
-        game.anomalies[key] = { sysId: sysId, kind: 'reliquie', explored: false, progress: 0 };
+        game.anomalies[key] = { sysId: sysId, kind: 'reliquie', explored: false, progress: 0, harvested: 0 };
       } else {
-        game.anomalies[key] = { sysId: sysId, kind: kind, res: def.res, cap: def.cap, reserve: def.cap, lowFlag: false };
+        game.anomalies[key] = { sysId: sysId, kind: kind, res: def.res, cap: def.cap, reserve: def.cap, lowFlag: false, harvested: 0 };
       }
     });
+    /* Cinture asteroidali (richiesta utente 2026-06-16): UN sito per ogni
+       corpo di tipo `cintura` nel sistema. La cintura è un CORPO §6.3, non
+       una anomalia, ma il modello harvest §17.3 si applica naturalmente
+       (riserva ricorrente di metalli). */
+    const bodies = (sys && sys.bodies) || [];
+    const beltDef = KINDS.cintura;
+    for (let j = 0; j < bodies.length; j++) {
+      const b = bodies[j];
+      if (!b || b.type !== 'cintura' || !b.key) continue;
+      const bk = siteKey(sysId, 'cintura', b.key);
+      if (game.anomalies[bk]) continue;
+      game.anomalies[bk] = {
+        sysId: sysId, kind: 'cintura', bodyKey: b.key,
+        res: beltDef.res, cap: beltDef.cap, reserve: beltDef.cap,
+        lowFlag: false, harvested: 0
+      };
+    }
   }
 
   /* Flotta presente nel sistema, a prescindere dall'ordine (uso generico). */
@@ -123,14 +154,20 @@
      tipo): ordine `survey` con anomalyKind corrispondente, presente in orbita.
      Così una flotta mandata sui detriti raccoglie SOLO i detriti, non la
      nebulosa dello stesso sistema (decisione di sessione). */
-  function fleetSurveyingSite(game, sysId, kind) {
+  function fleetSurveyingSite(game, sysId, kind, bodyKey) {
     const fl = game.fleets || [];
+    /* Per kind perBody (cintura) il match richiede anche bodyKey: una flotta
+       su una cintura specifica non drena le altre dello stesso sistema. */
+    const def = KINDS[kind];
+    const needBody = !!(def && def.perBody);
     for (let i = 0; i < fl.length; i++) {
       const f = fl[i];
       if (!f || !f.location || f.location.systemId !== sysId) continue;
       if (f.location.status !== 'orbiting' && f.location.status !== 'docked') continue;
       const o = f.orders;
-      if (o && o.type === 'survey' && o.anomalyKind === kind) return f;
+      if (!o || o.type !== 'survey' || o.anomalyKind !== kind) continue;
+      if (needBody && o.bodyKey !== bodyKey) continue;
+      return f;
     }
     return null;
   }
@@ -166,8 +203,9 @@
     for (let i = 0; i < keys.length; i++) {
       const site = game.anomalies[keys[i]];
       /* Solo una flotta che sta facendo ricognizione SU QUESTO sito (sistema
-         + tipo) lo raccoglie/esplora — non basta orbitare nel sistema. */
-      const fleet = fleetSurveyingSite(game, site.sysId, site.kind);
+         + tipo [+ bodyKey per cinture]) lo raccoglie/esplora — non basta
+         orbitare nel sistema. */
+      const fleet = fleetSurveyingSite(game, site.sysId, site.kind, site.bodyKey);
       if (site.kind === 'reliquie') {
         if (site.explored) continue;
         if (fleet) {
@@ -194,6 +232,7 @@
         const take = Math.min(CFG.HARVEST_RATE, site.reserve);
         deposit(game, fleet, site.res, take);
         site.reserve -= take;
+        site.harvested = (site.harvested || 0) + take;
         if (!site.lowFlag && site.reserve <= site.cap * CFG.LOW_FRAC) {
           site.lowFlag = true;
           events.push({ kind: 'anomaly-depleted', sysId: site.sysId, res: site.res, impulso: game.timeImpulsi });
@@ -212,7 +251,7 @@
     let best = Infinity;
     Object.keys(game.anomalies).forEach(function (k) {
       const s = game.anomalies[k];
-      if (s.kind === 'reliquie' && !s.explored && fleetSurveyingSite(game, s.sysId, s.kind)) {
+      if (s.kind === 'reliquie' && !s.explored && fleetSurveyingSite(game, s.sysId, s.kind, s.bodyKey)) {
         const d = CFG.RELIC_HOLD - (s.progress || 0);
         if (d > 0 && d < best) best = d;
       }
@@ -228,9 +267,12 @@
       const sys = game.galaxy.systems[s.sysId];
       return {
         key: k, sysId: s.sysId, sysName: sys ? sys.name : '—', kind: s.kind,
+        bodyKey: s.bodyKey || null,
         res: s.res || null, reserve: s.reserve, cap: s.cap,
         explored: !!s.explored, progress: s.progress || 0, loot: s.loot || null,
-        harvesting: !!fleetSurveyingSite(game, s.sysId, s.kind)
+        harvested: s.harvested || 0,
+        harvestRate: CFG.HARVEST_RATE,
+        harvesting: !!fleetSurveyingSite(game, s.sysId, s.kind, s.bodyKey)
       };
     });
   }

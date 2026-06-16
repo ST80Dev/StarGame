@@ -3870,7 +3870,7 @@ function renderCantieriSection(colony, planet) {
   }
 
   let html = '<div class="cantieri-section">' +
-    '<p class="sysinfo__sub">Cantieri & Squadre <span class="cantieri-section__hint">(esplorazione)</span></p>';
+    '<p class="sysinfo__sub">Cantieri & Squadre</p>';
 
   if (hasHangar) {
     /* M08 Fase A (decisione #42): counter di TUTTE le classi navi note. */
@@ -4076,7 +4076,7 @@ function renderCantieriSection(colony, planet) {
       '<button class="btn btn--mini" data-build-crew type="button"' +
         ((payOk && !crewCapFull) ? '' : ' disabled') +
         (crewCapFull ? ' title="Accademia satura (' + activeCrew + '/' + trainSlots + ') — potenzia l\'Accademia per addestrare più equipaggi in parallelo"' : '') +
-        '>+ Equipaggio esploratore</button>' +
+        '>+ Equipaggio</button>' +
     '</div></div>';
   }
 
@@ -4230,6 +4230,13 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
       const acr = regionAcronymFor(s.sysId);
       const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
       const meta = anomalyKindMeta(s.kind);
+      /* Per le cinture asteroidali aggiungiamo il nome del corpo: in un
+         sistema possono esserci più cinture, l'utente deve distinguerle. */
+      let bodyNote = '';
+      if (s.kind === 'cintura' && s.bodyKey && ORION.system && ORION.system.findBody) {
+        const body = ORION.system.findBody(sys, s.bodyKey);
+        if (body && body.name) bodyNote = ' · <span class="expedition-item__body">' + escapeHtml(body.name) + '</span>';
+      }
       let stateTxt;
       if (s.kind === 'reliquie') {
         const pct = Math.round(((s.progress || 0) / (ORION.anomaly.CFG.RELIC_HOLD || 40)) * 100);
@@ -4238,21 +4245,37 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
         const pct = s.cap ? Math.round((s.reserve / s.cap) * 100) : 0;
         stateTxt = meta.res + ' · riserva ' + pct + '%';
       }
+      /* Mini riepilogo del drenaggio (richiesta utente 2026-06-16): numeri
+         assoluti delle risorse raccolte fino a quel momento + rate per Ι.
+         Visibile per i siti harvest, solo se c'è qualcosa di rilevante. */
+      let harvestTxt = '';
+      if (s.kind !== 'reliquie') {
+        const got = +(s.harvested || 0).toFixed(1);
+        const rate = s.harvestRate != null ? s.harvestRate : 0.6;
+        const resLbl = resShortLabel(s.res);
+        if (s.harvesting) {
+          harvestTxt = '<span class="xp-chip xp-chip--harvest" title="Risorse raccolte da questo sito · ritmo per Impulso">raccolti <strong>' + got + ' ' + resLbl + '</strong> · <strong>' + rate + '</strong>/' + iU() + '</span>';
+        } else if (got > 0) {
+          harvestTxt = '<span class="xp-chip" title="Risorse raccolte da questo sito (raccolta interrotta)">raccolti ' + got + ' ' + resLbl + '</span>';
+        }
+      }
       const here = s.sysId === colony.systemId;
       const dist = here ? 'stesso sistema' : (s.hops + ' salti');
       const canSend = ships >= 1 && crews.length >= 1 && !s.harvesting;
       const sendTitle = s.harvesting ? 'Una flotta è già presente sul sito'
         : (canSend ? 'Invia una flotta a raccogliere/esplorare (resta sul posto)' : 'Servono uno scafo e un equipaggio');
+      const bodyAttr = s.bodyKey ? (' data-body="' + escapeHtml(s.bodyKey) + '"') : '';
       return '<li class="expedition-item">' +
         '<div class="expedition-item__head">' +
           '<span class="expedition-item__status expedition-status--outbound">' + meta.label + '</span>' +
-          '<span class="expedition-item__target">' + escapeHtml(sys ? sys.name : '—') + tag + '</span>' +
+          '<span class="expedition-item__target">' + escapeHtml(sys ? sys.name : '—') + tag + bodyNote + '</span>' +
           '<span class="expedition-item__eta">' + dist + '</span>' +
         '</div>' +
         '<div class="expedition-item__bars">' +
           '<span class="xp-chip" title="Stato del sito">' + stateTxt + '</span>' +
+          harvestTxt +
           (s.harvesting ? '<span class="xp-chip" title="Flotta presente">✦ in raccolta</span>' : '') +
-          '<button class="btn btn--mini btn--primary" data-action="anom-send" data-sys="' + s.sysId + '" data-kind="' + s.kind + '" type="button"' +
+          '<button class="btn btn--mini btn--primary" data-action="anom-send" data-sys="' + s.sysId + '" data-kind="' + s.kind + '"' + bodyAttr + ' type="button"' +
             (canSend ? '' : ' disabled') + ' title="' + sendTitle + '">Invia flotta</button>' +
         '</div>' +
       '</li>';
@@ -4288,16 +4311,28 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
   const btn = host.querySelector('[data-action="exp-organize"]');
   if (btn && !btn.disabled) btn.addEventListener('click', function () { openExpeditionPicker(colony); });
   host.querySelectorAll('[data-action="anom-send"]').forEach(function (b) {
-    b.addEventListener('click', function () { doSurveyAnomaly(colony, Number(b.dataset.sys), b.dataset.kind); });
+    b.addEventListener('click', function () {
+      doSurveyAnomaly(colony, Number(b.dataset.sys), b.dataset.kind, b.dataset.body || null);
+    });
   });
 }
 
 /* Metadati di presentazione per il tipo di anomalia (§17.3). */
 function anomalyKindMeta(kind) {
-  if (kind === 'detriti')  return { label: 'Campo di detriti', res: 'metalli' };
-  if (kind === 'nebulosa') return { label: 'Nebulosa',         res: 'energia' };
-  if (kind === 'reliquie') return { label: 'Reliquia antica',  res: null };
+  if (kind === 'detriti')  return { label: 'Campo di detriti',      res: 'metalli' };
+  if (kind === 'nebulosa') return { label: 'Nebulosa',              res: 'energia' };
+  if (kind === 'reliquie') return { label: 'Reliquia antica',       res: null };
+  if (kind === 'cintura')  return { label: 'Cintura asteroidale',   res: 'metalli' };
   return { label: kind, res: null };
+}
+
+/* Etichetta breve della risorsa per UI "raccolti X met". */
+function resShortLabel(res) {
+  if (res === 'met') return 'met';
+  if (res === 'en')  return 'en';
+  if (res === 'food') return 'food';
+  if (res === 'water') return 'water';
+  return res || '';
 }
 
 /* Anomalie note (§17.3) nei sistemi ESPLORATI raggiungibili da questa
@@ -4339,7 +4374,7 @@ function reachableAnomaliesFor(colony) {
    sistema di un'anomalia con ordine `survey`: arriva e RESTA a
    raccogliere/esplorare. Stesso pattern di doLaunchExpedition (decisione
    #60), ma l'ordine non rientra. */
-function doSurveyAnomaly(colony, targetSystemId, anomalyKind) {
+function doSurveyAnomaly(colony, targetSystemId, anomalyKind, bodyKey) {
   const g = ORION.game;
   const key = colony.systemId + ':' + colony.bodyKey;
   if (!ORION.fleet || !ORION.fleet.createFleet) { showToast('Modulo flotta non disponibile'); return; }
@@ -4356,7 +4391,7 @@ function doSurveyAnomaly(colony, targetSystemId, anomalyKind) {
   if (!as.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(as.reason || 'Assegnazione nave fallita'); return; }
   const ac = ORION.fleet.assignCrew(g, fleet, key, 1);
   if (!ac.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(ac.reason || 'Assegnazione equipaggio fallita'); return; }
-  const so = ORION.fleet.setOrder(g, fleet, { type: 'survey', toSysId: targetSystemId, anomalyKind: anomalyKind || null });
+  const so = ORION.fleet.setOrder(g, fleet, { type: 'survey', toSysId: targetSystemId, anomalyKind: anomalyKind || null, bodyKey: bodyKey || null });
   if (!so.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(so.reason || 'Ordine ricognizione rifiutato'); return; }
   /* Callsign d'esordio "Vedetta N". */
   maybeAutoRenameFleet(g, fleet, { type: 'survey', toSysId: targetSystemId });
@@ -4408,8 +4443,9 @@ function openExpeditionPicker(colony, opts) {
   }
   const selCrew = crews.filter(function (c) { return c.id === selectedCrewId; })[0] || null;
   const crewXp = selCrew ? (selCrew.xp || 0) : 0;
-  /* Default ON: rientro alla base dopo aver esplorato (modello explore). */
-  const returnHome = opts.returnHome !== false;
+  /* Default OFF (richiesta utente 2026-06-16): la flotta resta in orbita
+     al sistema esplorato. Spuntare per farla rientrare a base. */
+  const returnHome = opts.returnHome === true;
 
   let host = document.querySelector('[data-bind="exp-picker"]');
   if (!host) {
