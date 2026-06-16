@@ -11003,14 +11003,17 @@ function renderLeftPanel() {
     const statusLbl = status === 'docked' ? 'attracco' : status === 'in-transit' ? 'viaggio' : 'orbita';
     const cls = status === 'docked' ? 'ok' : status === 'in-transit' ? 'info' : 'warn';
     const fleetIcon = (ORION.icon && ORION.icon('fleet')) || '';
-    /* Decisione utente 2026-06-16: pillola usura anche nel riepilogo flotte
-       della sidebar sx (oltre che nella vista centrale e nel dettaglio). */
+    /* Decisione utente 2026-06-16: pillola usura/viveri su una SECONDA riga,
+       sotto nome+badge. Inline mangiava la prima riga e troncava il nome. */
     const wearH = fleetWearHtml(f);
+    const viveriH = fleetViveriHtml(f);
     return '<button class="lp-item lp-item--fleet" data-action="roster-fleet" data-id="' + escapeHtml(f.id) + '" data-sys="' + sysId + '" type="button">' +
-      '<span class="lp-item__glyph ui-icon" aria-hidden="true">' + fleetIcon + '</span>' +
-      '<span class="lp-item__name"><strong>' + escapeHtml(f.name) + '</strong> <span class="lp-item__sub">in ' + escapeHtml(sysName) + '</span></span>' +
-      '<span class="lp-item__badges"><span class="lp-item__badge lp-item__badge--' + cls + '">' + statusLbl + '</span></span>' +
-      (wearH ? '<span class="lp-item__row">' + wearH + '</span>' : '') +
+      '<span class="lp-item__head">' +
+        '<span class="lp-item__glyph ui-icon" aria-hidden="true">' + fleetIcon + '</span>' +
+        '<span class="lp-item__name"><strong>' + escapeHtml(f.name) + '</strong> <span class="lp-item__sub">in ' + escapeHtml(sysName) + '</span></span>' +
+        '<span class="lp-item__badges"><span class="lp-item__badge lp-item__badge--' + cls + '">' + statusLbl + '</span></span>' +
+      '</span>' +
+      ((viveriH || wearH) ? ('<span class="lp-item__row">' + viveriH + wearH + '</span>') : '') +
     '</button>';
   }
   /* Stazioni orbitali (M16): elencate nel Roster come pari delle colonie
@@ -11069,7 +11072,9 @@ function renderLeftPanel() {
 
   /* Sezione Roster (decisione utente 2026-06-16):
      - rimossa la sezione "Navigazione" → i 4 livelli (Galassia/Gruppo/Sistema/
-       Pianeta) vivono ora come strip orizzontale in testa al Roster
+       Pianeta) vivono come strip orizzontale sempre visibile in testa alla
+       sidebar (decisione utente 2026-06-16, seconda iterazione: fuori dal
+       Roster, tra nome impero e linguette — utile in qualunque tab).
      - rimosse le flotte dal Roster (vivono nella linguetta dedicata "Flotte")
      - aggiunte le stazioni orbitali sotto le colonie come pari delle colonie */
   const navHorizontalHtml = '<nav class="lp-nav-horizontal" role="tablist" aria-label="Livello di navigazione">' +
@@ -11082,7 +11087,7 @@ function renderLeftPanel() {
     '<div class="lp-roster-group__h">Stazioni orbitali <span class="lp-roster-group__n">' + myStations.length + '</span></div>' +
     (myStations.length ? stationItems : '<p class="lp-empty">Nessuna stazione orbitale.</p>') +
   '</div>';
-  const rosterBody = navHorizontalHtml + colonyGroupHtml + stationGroupHtml;
+  const rosterBody = colonyGroupHtml + stationGroupHtml;
   const rosterCount = myKeys.length + ' colonie · ' + myStations.length + ' stazioni';
   /* Alert sulla linguetta Roster: scarsità crit (rosso) / low (ambra). */
   let rosterAlert = null;
@@ -11279,7 +11284,7 @@ function renderLeftPanel() {
     bodyHtml = '<div class="lp-tab-body lp-tab-body--chron" data-bind="chronicle-host">' + cronHtml + '</div>';
   }
 
-  host.innerHTML = empHtml + tabsHtml + bodyHtml;
+  host.innerHTML = empHtml + navHorizontalHtml + tabsHtml + bodyHtml;
 
   /* Mantieni `[data-bind="chronicle"]` valido per pushChronicle/restore:
      ri-tagghiamo l'UL come "chronicle" così le funzioni esistenti continuano
