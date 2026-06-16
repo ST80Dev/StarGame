@@ -7782,8 +7782,12 @@ function openFleetDetail(fleetId, opts) {
     newColonyKey: null,
     /* Carrello composizione della modalità "nuova" (#88): la flotta non
        viene materializzata finché non confermi. `crew` = lista di id
-       equipaggio scelti per grado (mutua i chip della tab Esplorazione). */
+       equipaggio scelti per grado (mutua i chip della tab Esplorazione).
+       `creating`: vero finché la flotta non è stata materializzata —
+       composizione + ordine vivono nella stessa schermata, un unico
+       "Crea e parti" atomicizza tutto. */
     draft: { ships: {}, crew: [] },
+    creating: !fleet,
     renaming: false,
     ordOpen: !!opts.orders,
     ord: { tripType: null, target: null, waypoints: [], opt: { returnHome: true, exploreEach: false } }
@@ -7852,9 +7856,43 @@ function openFleetDetail(fleetId, opts) {
   }
 
   function render() {
-    host.innerHTML = fleet ? renderExisting() : renderNew();
+    if (D.creating) {
+      /* Stub di flotta-bozza: stesso shape della flotta reale (location,
+         ships, crew) così riusiamo `renderDestArea`/`renderOrdOpts`/
+         `buildOrder` come per le flotte esistenti. Non viene mai pushato
+         in g.fleets: vive solo nella closure finché non si conferma. */
+      fleet = buildDraftFleet();
+    }
+    host.innerHTML = D.creating ? renderNew() : renderExisting();
     bind();
     host.hidden = false;
+  }
+
+  /* Costruisce una flotta-bozza dai dati del carrello (D.draft) ancorata
+     alla colonia origine scelta (D.newColonyKey, status 'docked'). */
+  function buildDraftFleet() {
+    const elig = eligibleColonies();
+    if (D.newColonyKey == null || elig.indexOf(D.newColonyKey) < 0) {
+      D.newColonyKey = elig[0] || null;
+    }
+    const ck = D.newColonyKey;
+    const col = ck ? g.colonies[ck] : null;
+    const sysId = col ? col.systemId : 0;
+    const ships = [];
+    Object.keys(D.draft.ships || {}).forEach(function (k) {
+      const n = D.draft.ships[k] || 0;
+      for (let i = 0; i < n; i++) ships.push({ kind: k });
+    });
+    return {
+      id: '__draft__',
+      name: 'Nuova flotta',
+      ownerColonyKey: ck,
+      location: { systemId: sysId, status: 'docked' },
+      ships: ships,
+      crew: (D.draft.crew || []).slice(),
+      orders: null,
+      formation: 'balanced'
+    };
   }
 
   /* ===== Modalità nuova (#88: composizione nella creazione) =====
@@ -7936,17 +7974,69 @@ function openFleetDetail(fleetId, opts) {
       '<span class="fdetail__sumchip ' + (crewOk ? 'is-ok' : 'is-warn') + '" title="Equipaggio richiesto per gli ordini di movimento">' +
         (crewOk ? '✓' : '⚠') + ' eq. ' + crewSel + '/' + crewReq + '</span>';
 
+    /* Sezione ordine (obbligatoria): builder sempre aperto, riusa le stesse
+       helper delle flotte esistenti — la flotta-bozza nello stub fa da
+       "fleet" per `renderDestArea`/`renderOrdOpts`/`buildOrder`. */
+    const ordSec = nShips > 0
+      ? '<div class="fdetail__sec fdetail__sec--ord is-editing">' +
+          secHead('fleet', 'cyan', 'Ordine alla partenza', 'obbligatorio') +
+          renderOrderBuilderDraft() +
+        '</div>'
+      : '<div class="fdetail__sec fdetail__sec--ord">' +
+          secHead('fleet', 'cyan', 'Ordine alla partenza', 'obbligatorio') +
+          '<p class="fdetail__empty">Aggiungi almeno una nave per scegliere un ordine.</p>' +
+        '</div>';
+
     const body =
       '<div class="fdetail__sec">' + secHead('roster', 'amber', 'Colonia origine') +
         '<select class="fdetail__select" data-bind="new-colony">' + optsHtml + '</select></div>' +
       '<div class="fdetail__sec">' + secHead('fleet', 'cyan', 'Navi', 'dalle navi a terra') + shipRows + '</div>' +
       '<div class="fdetail__sec">' + secHead('forces', 'amber', 'Equipaggio', 'in flotta ' + crewSel + '/' + crewReq) + crewBody + '</div>' +
-      '<p class="fdetail__hint">' + uiIcon('info', 'soft') + ' Il nome si adatterà all’ordine che darai (sempre rinominabile). Nulla viene creato finché non confermi.</p>';
+      ordSec +
+      '<p class="fdetail__hint">' + uiIcon('info', 'soft') + ' Il nome si adatterà all’ordine. <strong>Annulla</strong> non crea nulla.</p>';
+
+    /* Validazione globale: serve composizione + ordine valido per creare. */
+    const draftOrder = (nShips > 0) ? buildOrder() : null;
+    const canCreate = nShips > 0 && !!draftOrder;
+    const disabledReason = (nShips <= 0)
+      ? 'Aggiungi almeno una nave'
+      : (!draftOrder ? 'Definisci l’ordine alla partenza' : '');
+
     const footer =
       '<div class="fdetail__sum">' + sumChips + '</div>' +
       '<button class="btn btn--mini" data-action="fleet-overlay-close" type="button">Annulla</button>' +
-      '<button class="btn btn--mini btn--primary btn--with-icon" data-act="create" type="button"' + (nShips <= 0 ? ' disabled title="Aggiungi almeno una nave"' : '') + '>' + uiIcon('check', 'cyan') + ' Conferma</button>';
+      '<button class="btn btn--mini btn--primary btn--with-icon" data-act="create" type="button"' +
+        (canCreate ? '' : ' disabled title="' + escapeHtml(disabledReason) + '"') + '>' +
+        uiIcon('check', 'cyan') + ' Crea e parti</button>';
     return shell('Nuova flotta', null, body, footer);
+  }
+
+  /* Variante del builder ordini per la modalità "nuova": sempre aperto,
+     niente toggle "cambia/annulla" e niente coppia "Conferma/Annulla
+     ordine" inline — il footer globale "Crea e parti" gestisce la conferma
+     atomica composizione + ordine. */
+  function renderOrderBuilderDraft() {
+    const TRIPS = [
+      { id: 'explore', ic: 'system', lab: 'Esplora' },
+      { id: 'transfer', ic: 'fleet', lab: 'Trasferisci' },
+      { id: 'hold', ic: 'pin', lab: '⏸ Sosta' },
+      { id: 'patrol', ic: 'refresh', lab: 'Pattuglia A↔B' },
+      { id: 'patrol-loop', ic: 'refresh', lab: 'Ciclica' },
+      { id: 'move-route', ic: 'fleet', lab: 'Rotta a tappe' },
+      { id: 'dock', ic: 'home', lab: 'Ormeggia a…' }
+    ];
+    const dockN = dockTargets().length;
+    let h = '<div class="fdetail__ord-build"><div class="fdetail__chips">' + TRIPS.map(function (t) {
+      const dis = (t.id === 'dock' && dockN === 0);
+      const act = (D.ord.tripType === t.id) ? ' is-active' : '';
+      return '<button class="fdetail__chip' + act + '" data-trip="' + t.id + '" type="button"' + (dis ? ' disabled' : '') + '>' +
+        uiIcon(t.ic, 'cyan') + ' ' + t.lab + '</button>';
+    }).join('') + '</div>';
+    const tt = D.ord.tripType;
+    if (tt) h += renderDestArea(tt);
+    if (tt) h += renderOrdOpts(tt);
+    if (!tt) h += '<p class="fdetail__hint">Scegli un tipo di missione qui sopra.</p>';
+    return h + '</div>';
   }
 
   /* ===== Modalità dettaglio (flotta esistente) ===== */
@@ -8385,8 +8475,13 @@ function openFleetDetail(fleetId, opts) {
       const draftCrew = Array.isArray(draft.crew) ? draft.crew : [];
       let nShips = 0; Object.keys(draft.ships).forEach(function (k) { nShips += draft.ships[k] || 0; });
       if (nShips <= 0) { showToast('Aggiungi almeno una nave alla flotta'); return; }
-      /* Materializza solo ora: createFleet + assegnazioni in un colpo.
-         Rollback completo se qualcosa fallisce (recovery-friendly #22). */
+      /* L'ordine è obbligatorio in creazione: lo costruiamo PRIMA di
+         materializzare (la flotta-bozza è già nello stub, quindi
+         buildOrder() ragiona sul sistema d'origine corretto). */
+      const order = buildOrder();
+      if (!order) { showToast('Definisci l’ordine alla partenza'); return; }
+      /* Materializza solo ora: createFleet + assegnazioni + setOrder in
+         un colpo. Rollback completo se qualcosa fallisce (#22). */
       const r = ORION.fleet.createFleet(g, colKey, null);
       if (!r.ok) { showToast(r.reason); return; }
       const nf = r.fleet;
@@ -8401,14 +8496,67 @@ function openFleetDetail(fleetId, opts) {
         const ac = ORION.fleet.assignCrewById(g, nf, colKey, draftCrew[ci]);
         if (!ac.ok) failed = ac.reason;
       }
+      if (!failed) {
+        const so = ORION.fleet.setOrder(g, nf, order);
+        if (!so.ok) failed = so.reason;
+      }
       if (failed) { ORION.fleet.dissolveFleet(g, nf); showToast(failed); return; }
-      fleet = nf;
+      /* Auto-rename + penalità coesione coerenti con `doConfirmOrder`. */
+      maybeAutoRenameFleet(g, nf, order);
+      if (ORION.cohesion && ORION.cohesion.applyTravelPenalty && order.type !== 'idle' && order.type !== 'return') {
+        const sysIds = collectOrderSystems(g, nf, order);
+        const pen = ORION.cohesion.applyTravelPenalty(g, sysIds);
+        if (pen.applied < 0) showToast('Rotta attraverso ' + pen.affectedSys.length + ' sistema coeso — disposizione ' + pen.applied);
+      }
       pushChronicle(ORION.time.currentDS(g) + ' — Nuova flotta <strong>' + escapeHtml(nf.name) +
-        '</strong> formata su ' + escapeHtml(systemNameFromKey(g, colKey)) + '.', 'planet');
+        '</strong> formata su ' + escapeHtml(systemNameFromKey(g, colKey)) + ' · ' +
+        escapeHtml(orderLabel({ orders: order })) + '.', 'planet');
       persistGame(g);
+      fleet = nf;
+      D.creating = false;
+      D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: true, exploreEach: false } };
       render();
     });
-    if (!fleet) return;
+
+    /* --- Interazioni ordine (condivise creazione + dettaglio) ---
+       Vivono sopra il guard `D.creating` perché agiscono solo su D.ord —
+       servono identiche per costruire la flotta-bozza in creazione e per
+       cambiare ordine a una flotta esistente. */
+    host.querySelectorAll('[data-trip]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        D.ord.tripType = b.dataset.trip; D.ord.target = null; D.ord.waypoints = [];
+        /* Sosta su flotta ferma = "resta qui": preseleziona il sistema
+           attuale → conferma in un click (#89 fix). In creazione, "qui" =
+           sistema della colonia origine, sempre 'docked'. */
+        if (b.dataset.trip === 'hold' && fleet && fleet.location.status !== 'in-transit') {
+          D.ord.target = fleet.location.systemId;
+        }
+        render();
+      });
+    });
+    host.querySelectorAll('[data-pick-target]').forEach(function (b) {
+      b.addEventListener('click', function () { D.ord.target = Number(b.dataset.pickTarget); render(); });
+    });
+    host.querySelectorAll('[data-add-wp]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (D.ord.tripType === 'patrol' && D.ord.waypoints.length >= 2) {
+          showToast('A↔B usa solo 2 sistemi. Scegli "Ciclica" per più nodi.'); return;
+        }
+        const dw = host.querySelector('[data-bind="next-dwell"]');
+        const dwell = dw ? Math.max(0, parseInt(dw.value || '0', 10) || 0) : 0;
+        D.ord.waypoints.push({ sysId: Number(b.dataset.addWp), dwell: dwell });
+        render();
+      });
+    });
+    host.querySelectorAll('[data-rm-wp]').forEach(function (b) {
+      b.addEventListener('click', function () { D.ord.waypoints.splice(Number(b.dataset.rmWp), 1); render(); });
+    });
+    const optRet = host.querySelector('[data-bind="opt-return"]');
+    if (optRet) optRet.addEventListener('change', function () { D.ord.opt.returnHome = optRet.checked; render(); });
+    const optExp = host.querySelector('[data-bind="opt-explore-each"]');
+    if (optExp) optExp.addEventListener('change', function () { D.ord.opt.exploreEach = optExp.checked; render(); });
+
+    if (D.creating) return;
 
     /* --- rinomina (#88) --- */
     const renToggle = host.querySelector('[data-act="rename-toggle"]');
@@ -8443,38 +8591,9 @@ function openFleetDetail(fleetId, opts) {
       D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: true, exploreEach: false } };
       render();
     });
-    host.querySelectorAll('[data-trip]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        D.ord.tripType = b.dataset.trip; D.ord.target = null; D.ord.waypoints = [];
-        /* Sosta su flotta ferma = "resta qui": preseleziona il sistema
-           attuale → conferma in un click, niente scelta di sistema (#89 fix). */
-        if (b.dataset.trip === 'hold' && fleet.location.status !== 'in-transit') {
-          D.ord.target = fleet.location.systemId;
-        }
-        render();
-      });
-    });
-    host.querySelectorAll('[data-pick-target]').forEach(function (b) {
-      b.addEventListener('click', function () { D.ord.target = Number(b.dataset.pickTarget); render(); });
-    });
-    host.querySelectorAll('[data-add-wp]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        if (D.ord.tripType === 'patrol' && D.ord.waypoints.length >= 2) {
-          showToast('A↔B usa solo 2 sistemi. Scegli "Ciclica" per più nodi.'); return;
-        }
-        const dw = host.querySelector('[data-bind="next-dwell"]');
-        const dwell = dw ? Math.max(0, parseInt(dw.value || '0', 10) || 0) : 0;
-        D.ord.waypoints.push({ sysId: Number(b.dataset.addWp), dwell: dwell });
-        render();
-      });
-    });
-    host.querySelectorAll('[data-rm-wp]').forEach(function (b) {
-      b.addEventListener('click', function () { D.ord.waypoints.splice(Number(b.dataset.rmWp), 1); render(); });
-    });
-    const optRet = host.querySelector('[data-bind="opt-return"]');
-    if (optRet) optRet.addEventListener('change', function () { D.ord.opt.returnHome = optRet.checked; });
-    const optExp = host.querySelector('[data-bind="opt-explore-each"]');
-    if (optExp) optExp.addEventListener('change', function () { D.ord.opt.exploreEach = optExp.checked; });
+    /* I bind condivisi su trip/pick-target/add-wp/rm-wp/opt-* stanno
+       sopra il guard D.creating — qui resta solo `ord-confirm` che
+       richiede una flotta reale. */
     const ordConfirm = host.querySelector('[data-act="ord-confirm"]');
     if (ordConfirm) ordConfirm.addEventListener('click', doConfirmOrder);
 
