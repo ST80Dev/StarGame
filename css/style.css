@@ -6269,7 +6269,27 @@ select.main-menu__input { cursor: pointer; }
   color: var(--c-text-soft);
   margin-left: 4px;
 }
-.lp-item__badges { display: flex; gap: 3px; }
+.lp-item__badges { display: flex; gap: 3px; flex: 0 0 auto; }
+/* Decisione utente 2026-06-16 (seconda iterazione): nel roster flotte la
+   prima riga (glifo + nome + badge stato) va tenuta intatta — il nome non
+   deve essere mangiato dalle pillole. Quindi `.lp-item--fleet` diventa
+   colonna: testa in alto, riga viveri/usura sotto. Le colonie restano in
+   layout monolinea (non hanno la seconda riga). */
+.lp-item--fleet { flex-direction: column; align-items: stretch; gap: 4px; }
+.lp-item--fleet .lp-item__head {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  min-width: 0;
+}
+.lp-item--fleet .lp-item__row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  width: 100%;
+}
+/* Riduci il margine verticale delle pillole quando vivono in una riga di
+   roster flotte (evita doppio gap col gap della colonna). */
+.lp-item--fleet .lp-item__row .fleet-viveri,
+.lp-item--fleet .lp-item__row .fleet-wear {
+  margin: 0; flex: 1 1 calc(50% - 4px); min-width: 120px;
+}
 .lp-item__badge {
   font-size: 0.74rem;
   font-weight: 600;
