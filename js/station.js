@@ -414,6 +414,16 @@
         st.hp = Math.min(hpCap, (st.hp || 0) + CFG.REPAIR_RATE * st.level);
       }
       st._underAttack = false; // reset per il prossimo tick (settato da combat)
+
+      /* 6) Refit navi al porto orbitale (richiesta utente 2026-06-16).
+         Stazione operativa lvl ≥ 2 e rifornita: ripara il wear delle navi
+         delle flotte ferme nel sistema. Niente costo per il giocatore — la
+         stazione paga con il proprio supply (già drenato dall'upkeep sopra).
+         Skip se supply isolated (la stazione non ha materiali per il refit). */
+      if (st.supplyState !== 'isolated' && root.ORION && root.ORION.fleet &&
+          root.ORION.fleet.tickStationRepair) {
+        root.ORION.fleet.tickStationRepair(game, st);
+      }
     }
   }
 

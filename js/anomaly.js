@@ -31,11 +31,23 @@
   const DISCOVERY_EXPLORED = 2;
 
   const CFG = {
-    HARVEST_RATE: 0.6,    // risorse/Ι raccolte da una flotta presente
+    HARVEST_RATE: 0.6,    // risorse/Ι base con esploratore (legacy)
     REGEN: 0.15,          // rigenerazione/Ι della riserva quando idle
     RELIC_HOLD: 40,       // Ι di presenza per esplorare una reliquia
     RELIC_REWARD: { met: 220, en: 130 },
-    LOW_FRAC: 0.15        // soglia "riserva quasi esaurita" (evento una volta)
+    LOW_FRAC: 0.15,       // soglia "riserva quasi esaurita" (evento una volta)
+    /* Decisione utente 2026-06-16: usura per Ι sulle navi in survey/harvest.
+       Più bassa del transito (0.05) — l'Estrattore è progettato per restare
+       sul posto a lungo. Calibrazione target: ~1000 Ι di harvest continuo
+       producono ~30% wear, lasciando margine per più cicli prima del refit. */
+    WEAR_SURVEY_BASE: 0.03,
+    /* Estrattore: rate base + bonus per livello Hangar della colonia origine
+       (richiesta utente 2026-06-16). lvl1=0.6 · lvl2=0.8 · lvl3=1.0 · lvl4=1.2
+       · lvl5=1.4. Calcolato come EXTRACTOR_RATE_BASE + EXTRACTOR_RATE_PER_LVL * (lvl-1). */
+    EXTRACTOR_RATE_BASE: 0.6,
+    EXTRACTOR_RATE_PER_LVL: 0.2,
+    /* XP equipaggio durante harvest: +1 ogni N Ι di drenaggio effettivo. */
+    SURVEY_XP_EVERY: 40
   };
 
   /* Mappa kind → comportamento.
@@ -189,6 +201,63 @@
     if (col && col.stock) col.stock[res] = (col.stock[res] || 0) + amt;
   }
 
+  /* Rate di raccolta della flotta sul sito (decisione utente 2026-06-16).
+     - Estrattore: base + bonus per livello Hangar della colonia origine.
+       Se la flotta ha più Estrattori (caso teorico), il rate somma per ogni
+       Estrattore (somma capacità di drenaggio).
+     - Esploratore (fallback storico): CFG.HARVEST_RATE costante.
+     - Cap implicito: il take è min(rate, site.reserve) nel chiamante.
+     Niente effetto se nessuna delle due classi è presente (es. solo navi
+     militari): rate=0, niente raccolta. */
+  function harvestRateFor(game, fleet) {
+    if (!fleet || !Array.isArray(fleet.ships) || !fleet.ships.length) return 0;
+    let extractors = 0, explorers = 0;
+    for (let i = 0; i < fleet.ships.length; i++) {
+      const k = fleet.ships[i] && fleet.ships[i].kind;
+      if (k === 'estrattore') extractors++;
+      else if (k === 'explorer') explorers++;
+    }
+    if (extractors === 0 && explorers === 0) return 0;
+    let rate = 0;
+    if (extractors > 0) {
+      const colony = game.colonies && game.colonies[fleet.ownerColonyKey];
+      const hangar = colony && colony.structures && colony.structures['cantiere-navale'];
+      const lvl = Math.max(1, (hangar && hangar.level | 0) || 1);
+      rate += extractors * (CFG.EXTRACTOR_RATE_BASE + CFG.EXTRACTOR_RATE_PER_LVL * (lvl - 1));
+    }
+    /* L'esploratore in survey è il fallback minimo (compat con i save vecchi
+       che hanno flotte di soli esploratori in survey). */
+    if (extractors === 0 && explorers > 0) {
+      rate = CFG.HARVEST_RATE;
+    }
+    return rate;
+  }
+
+  /* Usura per Ι sulle navi che drenano (richiesta utente 2026-06-16).
+     Applicata SOLO se la raccolta è effettiva (chiamata dopo deposit),
+     così navi su sito esausto non si usurano per niente. */
+  function applySurveyWear(fleet) {
+    if (!Array.isArray(fleet.ships)) return;
+    const w = CFG.WEAR_SURVEY_BASE;
+    for (let i = 0; i < fleet.ships.length; i++) {
+      fleet.ships[i].wear = Math.min(100, (fleet.ships[i].wear || 0) + w);
+    }
+  }
+
+  /* XP equipaggio durante harvest: +1 ogni N Ι di drenaggio effettivo.
+     Counter persistito su fleet._surveyXpCounter, idempotente sui save. */
+  function accrueSurveyXp(game, fleet, events) {
+    fleet._surveyXpCounter = (fleet._surveyXpCounter || 0) + 1;
+    if (fleet._surveyXpCounter < CFG.SURVEY_XP_EVERY) return;
+    fleet._surveyXpCounter = 0;
+    /* Riusa il path standard di XP equipaggio (mantiene il servizio
+       'harvest' per il ruolo Ingegnere alla promozione, simmetria con
+       'travel' degli esploratori). */
+    if (ORION.fleet && ORION.fleet.awardCrewXp) {
+      ORION.fleet.awardCrewXp(game, fleet, 1, events, 'harvest');
+    }
+  }
+
   function tick(game, events) {
     if (!game) return;
     ensure(game);
@@ -229,13 +298,26 @@
       }
       /* Raccolta ricorrente. */
       if (fleet && site.reserve > 0) {
-        const take = Math.min(CFG.HARVEST_RATE, site.reserve);
+        const rate = harvestRateFor(game, fleet);
+        const take = Math.min(rate, site.reserve);
         deposit(game, fleet, site.res, take);
         site.reserve -= take;
         site.harvested = (site.harvested || 0) + take;
+        /* Usura/XP per Ι in survey (decisione utente 2026-06-16): le navi che
+           drenano subiscono un drip leggero di wear; gli equipaggi maturano
+           XP ogni SURVEY_XP_EVERY Ι. Trigger di rientro automatico se wear
+           supera la soglia (delegato a fleet.forceReturnForWear). */
+        applySurveyWear(fleet);
+        accrueSurveyXp(game, fleet, events);
         if (!site.lowFlag && site.reserve <= site.cap * CFG.LOW_FRAC) {
           site.lowFlag = true;
           events.push({ kind: 'anomaly-depleted', sysId: site.sysId, res: site.res, impulso: game.timeImpulsi });
+        }
+        if (ORION.fleet && ORION.fleet.forceReturnForWear) {
+          if (ORION.fleet.forceReturnForWear(game, fleet)) {
+            events.push({ kind: 'fleet-wear-return', fleetId: fleet.id, fleetName: fleet.name,
+              sysId: site.sysId, impulso: game.timeImpulsi });
+          }
         }
       } else if (!fleet && site.reserve < site.cap) {
         site.reserve = Math.min(site.cap, site.reserve + CFG.REGEN);
