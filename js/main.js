@@ -7699,12 +7699,6 @@ function openFleetDetail(fleetId, opts) {
     });
     return out;
   }
-  function canReturnHome() {
-    const colony = g.colonies[fleet.ownerColonyKey];
-    if (!colony) return false;
-    if (fleet.location.systemId === colony.systemId && fleet.location.status === 'docked') return false;
-    return true;
-  }
 
   /* ---- shell ---- */
   function shell(title, sub, body, footer) {
@@ -7883,21 +7877,38 @@ function openFleetDetail(fleetId, opts) {
       { id: 'patrol', ic: 'refresh', lab: 'Pattuglia A↔B' },
       { id: 'patrol-loop', ic: 'refresh', lab: 'Ciclica' },
       { id: 'move-route', ic: 'fleet', lab: 'Rotta a tappe' },
-      { id: 'return', ic: 'home', lab: 'Rientro' }
+      { id: 'dock', ic: 'home', lab: 'Ormeggia a…' }
     ];
-    const canRet = canReturnHome();
+    const dockN = dockTargets().length;
     let h = '<div class="fdetail__ord-build"><div class="fdetail__chips">' + TRIPS.map(function (t) {
-      const dis = !enabled || (t.id === 'return' && !canRet);
+      const dis = !enabled || (t.id === 'dock' && dockN === 0);
       const act = (D.ord.tripType === t.id) ? ' is-active' : '';
       return '<button class="fdetail__chip' + act + '" data-trip="' + t.id + '" type="button"' + (dis ? ' disabled' : '') + '>' +
         uiIcon(t.ic, 'cyan') + ' ' + t.lab + '</button>';
     }).join('') + '</div>';
     if (enabled) {
       const tt = D.ord.tripType;
-      if (tt && tt !== 'return') h += renderDestArea(tt);
+      if (tt) h += renderDestArea(tt);
       if (tt) h += renderOrdOpts(tt) + renderOrdConfirm(tt);
     }
     return h + '</div>';
+  }
+  /* Tue colonie raggiungibili dove la flotta può andare a ORMEGGIARSI
+     (decisione A: "Rientro" → "Trasferisci a <colonia> + ormeggia"). Esclude
+     il sistema attuale se già ormeggiata. Una voce per sistema. */
+  function dockTargets() {
+    const seen = {}; const out = [];
+    Object.keys(g.colonies).forEach(function (k) {
+      const c = g.colonies[k];
+      if (!c || !c.colonized || c.systemId < 0 || seen[c.systemId]) return;
+      if (c.systemId === fleet.location.systemId && fleet.location.status === 'docked') return;
+      const path = ORION.fleet.computePath(g.galaxy, fleet.location.systemId, c.systemId);
+      if (!path) return;
+      seen[c.systemId] = true;
+      out.push({ sysId: c.systemId, hops: path.length - 1 });
+    });
+    out.sort(function (a, b) { return a.hops - b.hops; });
+    return out;
   }
   function renderWaypoints() {
     if (!D.ord.waypoints.length) return '<p class="fdetail__empty">Nessuna tappa: aggiungine dalla lista.</p>';
@@ -7911,6 +7922,24 @@ function openFleetDetail(fleetId, opts) {
     const isExplore = (tt === 'explore');
     const isHold = (tt === 'hold');
     const isMulti = (tt === 'move-route' || tt === 'patrol-loop' || tt === 'patrol');
+    /* Ormeggia a… → elenco delle TUE colonie raggiungibili (riusa move). */
+    if (tt === 'dock') {
+      const tg = dockTargets();
+      if (!tg.length) return '<p class="fdetail__empty">Nessuna colonia raggiungibile dove ormeggiare.</p>';
+      const rows = tg.map(function (d) {
+        const s = g.galaxy.systems[d.sysId];
+        const grp = g.galaxy.groups[s.cluster] || {};
+        const acr = grp.acronym ? '<span class="name-tag">[' + escapeHtml(grp.acronym) + ']</span>' : '';
+        const selA = (D.ord.target === d.sysId);
+        return '<li class="fdetail__dest' + (selA ? ' is-selected' : '') + '">' +
+          '<span class="fdetail__dest-name">' + uiIcon('roster', 'amber') + ' ' + escapeHtml(s.name) + ' ' + acr + '</span>' +
+          '<span class="fdetail__dest-meta">' + d.hops + ' hop</span>' +
+          '<button class="btn btn--mini' + (selA ? ' is-active' : '') + '" data-pick-target="' + d.sysId + '" type="button">' + (selA ? '✓' : 'scegli') + '</button>' +
+        '</li>';
+      }).join('');
+      return '<p class="fdetail__hint">Scegli una tua colonia: la flotta ci arriva e si <strong>ormeggia</strong>.</p>' +
+        '<ul class="fdetail__dest-list">' + rows + '</ul>';
+    }
     /* Sosta = "resta dove sei". Se la flotta è ferma, NON è un selettore di
        sistema: si conferma e basta (sistema attuale già preselezionato dal
        click sull'ordine). Solo se è IN VIAGGIO mostra dove fermarsi.
@@ -7990,7 +8019,9 @@ function openFleetDetail(fleetId, opts) {
     if (o.tripType === 'patrol') return o.waypoints.length >= 2 ? { type: 'patrol', sysA: o.waypoints[0].sysId, sysB: o.waypoints[1].sysId } : null;
     if (o.tripType === 'patrol-loop') return o.waypoints.length >= 2 ? { type: 'patrol-loop', loop: o.waypoints.map(function (w) { return w.sysId; }), dwell: o.waypoints.map(function (w) { return w.dwell; }) } : null;
     if (o.tripType === 'move-route') return o.waypoints.length ? { type: 'move-route', waypoints: o.waypoints.map(function (w) { return w.sysId; }), dwell: o.waypoints.map(function (w) { return w.dwell; }), exploreEach: o.opt.exploreEach, returnHome: o.opt.returnHome } : null;
-    if (o.tripType === 'return') return { type: 'return' };
+    /* Ormeggia a… → un `move` verso il sistema della colonia: all'arrivo la
+       flotta si ormeggia (decisione A). */
+    if (o.tripType === 'dock') return o.target != null ? { type: 'move', toSysId: o.target } : null;
     return null;
   }
   function renderOrdConfirm(tt) {
@@ -8030,10 +8061,16 @@ function openFleetDetail(fleetId, opts) {
         uiIcon('check', 'cyan') + ' Conferma ordine</button></div>';
   }
 
+  /* Colonia-PORTO: la tua colonia nel sistema dove la flotta è ora (decisione
+     A 2026-06-15 — si gestisce dove è ormeggiata, non alla sola origine). */
+  function portColonyKey() {
+    return (ORION.fleet.ownColonyKeyAt) ? ORION.fleet.ownColonyKeyAt(g, fleet.location.systemId) : fleet.ownerColonyKey;
+  }
   /* ----- Composizione (navi + equipaggio) ----- */
   function secComposition() {
-    const colony = g.colonies[fleet.ownerColonyKey];
-    const docked = colony && fleet.location.status === 'docked' && fleet.location.systemId === colony.systemId;
+    const ck = portColonyKey();
+    const colony = ck ? g.colonies[ck] : null;
+    const docked = !!(colony && fleet.location.status === 'docked' && fleet.location.systemId === colony.systemId);
     if (colony) ORION.fleet.ensureColonyShipKinds(colony);
     const classes = ORION.fleet.classList();
     let rows = '';
@@ -8300,29 +8337,29 @@ function openFleetDetail(fleetId, opts) {
     const ordConfirm = host.querySelector('[data-act="ord-confirm"]');
     if (ordConfirm) ordConfirm.addEventListener('click', doConfirmOrder);
 
-    /* --- composizione --- */
+    /* --- composizione --- (al PORTO corrente, non alla sola origine) */
     host.querySelectorAll('[data-add-ship]').forEach(function (b) {
       b.addEventListener('click', function () {
-        const r = ORION.fleet.assignShips(g, fleet, fleet.ownerColonyKey, b.dataset.addShip, 1);
+        const r = ORION.fleet.assignShips(g, fleet, portColonyKey(), b.dataset.addShip, 1);
         if (!r.ok) { showToast(r.reason); return; } persistGame(g); render();
       });
     });
     host.querySelectorAll('[data-rem-ship]').forEach(function (b) {
       b.addEventListener('click', function () {
-        const r = ORION.fleet.unassignShips(g, fleet, fleet.ownerColonyKey, b.dataset.remShip, 1);
+        const r = ORION.fleet.unassignShips(g, fleet, portColonyKey(), b.dataset.remShip, 1);
         if (!r.ok) { showToast(r.reason); return; } persistGame(g); render();
       });
     });
     /* Assegna l'equipaggio SCELTO per grado (non +1 a caso). */
     host.querySelectorAll('[data-add-crew-id]').forEach(function (b) {
       b.addEventListener('click', function () {
-        const r = ORION.fleet.assignCrewById(g, fleet, fleet.ownerColonyKey, b.dataset.addCrewId);
+        const r = ORION.fleet.assignCrewById(g, fleet, portColonyKey(), b.dataset.addCrewId);
         if (!r.ok) { showToast(r.reason); return; } persistGame(g); render();
       });
     });
     const remCrew = host.querySelector('[data-act="rem-crew"]');
     if (remCrew) remCrew.addEventListener('click', function () {
-      const r = ORION.fleet.unassignCrew(g, fleet, fleet.ownerColonyKey, 1);
+      const r = ORION.fleet.unassignCrew(g, fleet, portColonyKey(), 1);
       if (!r.ok) { showToast(r.reason); return; } persistGame(g); render();
     });
 

@@ -680,10 +680,16 @@
      l'utente deve prima darle ordine `return`. */
   function dissolveFleet(game, fleet) {
     if (!fleet) return { ok: false, reason: 'Flotta inesistente' };
-    const colony = game.colonies && game.colonies[fleet.ownerColonyKey];
-    if (!colony) return { ok: false, reason: 'Colonia origine non più esistente' };
-    if (fleet.location.systemId !== colony.systemId || fleet.location.status === 'in-transit') {
-      return { ok: false, reason: 'La flotta deve essere all\'attracco della colonia. Imposta "Rientra" e attendi.' };
+    /* Decisione A (2026-06-15): scioglie restituendo gli asset alla colonia
+       dove la flotta è ORMEGGIATA ADESSO (porto corrente), non più solo
+       all'origine. Serve una tua colonia nel sistema + flotta non in viaggio. */
+    if (fleet.location.status === 'in-transit') {
+      return { ok: false, reason: 'La flotta è in viaggio. Ormeggiala a una tua colonia, poi sciogliela.' };
+    }
+    const colonyKey = ownColonyKeyAt(game, fleet.location.systemId);
+    const colony = colonyKey && game.colonies[colonyKey];
+    if (!colony) {
+      return { ok: false, reason: 'La flotta deve essere ormeggiata a una tua colonia per essere sciolta.' };
     }
     /* Restituisci navi al counter colonia per classe. */
     ensureColonyShipKinds(colony);
@@ -701,7 +707,7 @@
     if (ORION.commander && ORION.commander.releaseAllFromFleet) {
       ORION.commander.releaseAllFromFleet(game, fleet);
     } else if (fleet.commander && ORION.commander && ORION.commander.releaseFromFleet) {
-      ORION.commander.releaseFromFleet(game, fleet, { toColonyKey: fleet.ownerColonyKey });
+      ORION.commander.releaseFromFleet(game, fleet, { toColonyKey: colonyKey });
     }
     /* Rimuovi la flotta dal gioco. */
     const idx = (game.fleets || []).indexOf(fleet);
@@ -1313,6 +1319,17 @@
     }
     return null;
   }
+  /* Chiave della tua colonia nel sistema indicato (la prima trovata). Usata
+     dalle operazioni "al porto corrente" (decisione A 2026-06-15: una flotta
+     si gestisce dove è ormeggiata, non più solo alla colonia d'origine). */
+  function ownColonyKeyAt(game, sysId) {
+    const cols = game.colonies || {};
+    for (const k in cols) {
+      const c = cols[k];
+      if (c && c.colonized && c.systemId === sysId) return k;
+    }
+    return null;
+  }
   /* Porto amico (rifornimento gratuito) nel sistema indicato? (tua colonia,
      una tua STAZIONE operativa #81, o colonia di AI alleata #51). */
   function isFriendlyPortAt(game, sys) {
@@ -1765,9 +1782,18 @@
       /* L'attacco mantiene `fleet.attackTarget` (+ opzionale
          `fleet.attackBodyKey`): all'arrivo la flotta orbita e
          processSkirmishes ingaggia il bersaglio al tick successivo. */
-      fleet.location.status = 'orbiting';
-      if (order.type === 'attack' && order.bodyKey) {
-        fleet.location.bodyKey = order.bodyKey;
+      /* Decisione A (2026-06-15): un `move` che arriva a un sistema con una
+         TUA colonia ci si ORMEGGIA — la flotta non "appartiene" più alla sola
+         colonia d'origine: atterra dove la mandi (riusa `move`, niente nuovi
+         ordini). L'attacco resta in orbita per ingaggiare al tick successivo. */
+      if (order.type === 'move' && ownColonyAt(game, arrivedAt)) {
+        fleet.location.status = 'docked';
+        fleet.location.bodyKey = null;
+      } else {
+        fleet.location.status = 'orbiting';
+        if (order.type === 'attack' && order.bodyKey) {
+          fleet.location.bodyKey = order.bodyKey;
+        }
       }
       fleet.etaImpulsi = 0;
       fleet.route = [arrivedAt];
@@ -2363,6 +2389,7 @@
     dockedMaintenance: dockedMaintenance,
     portMaintenance: portMaintenance,
     ensureColonyShipKinds: ensureColonyShipKinds,
+    ownColonyKeyAt: ownColonyKeyAt,
     FORMATIONS: FORMATIONS,
     setFormation: setFormation,
     fleetHasColonial: fleetHasColonial,
