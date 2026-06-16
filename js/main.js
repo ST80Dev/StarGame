@@ -690,6 +690,21 @@ function newGame(seed, opts) {
   }
   if (ORION.anomaly && ORION.anomaly.ensure) {
     ORION.anomaly.ensure(ORION.game);
+    /* Pre-scan dei sistemi-colonia (incluso il sistema natale): registra in
+       game.anomalies i siti §17.3 deterministicamente, così la tab
+       Esplorazione mostra subito le anomalie intra-sistema senza attendere
+       che una flotta orbiti nel proprio sistema. Diagnostica utente
+       2026-06-16: "non vedo le anomalie del mio stesso sistema". */
+    if (ORION.anomaly.ensureSites) {
+      const seen = {};
+      Object.keys(ORION.game.colonies || {}).forEach(function (k) {
+        const c = ORION.game.colonies[k];
+        if (!c || c.systemId == null) return;
+        if (seen[c.systemId]) return;
+        seen[c.systemId] = true;
+        ORION.anomaly.ensureSites(ORION.game, c.systemId);
+      });
+    }
   }
 
   setHudDate(ORION.time.currentDS(ORION.game));
@@ -10717,6 +10732,27 @@ function renderLeftPanel() {
   const currentView = ORION._currentView || 'galaxy';
   const dxKey = resolveDxColonyKey();
 
+  /* ----- Navigazione (Galassia/Gruppo/Sistema/Pianeta) -----
+     La sezione "Navigazione" separata è stata rimossa (decisione utente
+     2026-06-16): le voci vivono ora come strip orizzontale in cima al
+     Roster. Definita qui sopra perché viene consumata nella stessa render
+     dal blocco Roster. */
+  const navItems = [
+    { view: 'galaxy', icon: 'galaxy', label: 'Galassia' },
+    { view: 'group',  icon: 'group',  label: 'Gruppo' },
+    { view: 'system', icon: 'system', label: 'Sistema' },
+    { view: 'planet', icon: 'planet', label: 'Pianeta' }
+  ];
+  function navItemsHtml() {
+    return navItems.map(function (n) {
+      const active = (n.view === currentView) ? ' is-active' : '';
+      const icon = (ORION.icon && ORION.icon(n.icon)) || '';
+      return '<button class="nav-item' + active + '" data-view="' + n.view + '" type="button" title="' + escapeHtml(n.label) + '" aria-label="' + escapeHtml(n.label) + '">' +
+        '<span class="nav-item__glyph ui-icon" aria-hidden="true">' + icon + '</span>' +
+        '<span class="nav-item__label">' + n.label + '</span></button>';
+    }).join('');
+  }
+
   /* ----- Roster ----- */
   const colItems = myKeys.map(function (k) {
     const c = g.colonies[k];
@@ -10770,7 +10806,39 @@ function renderLeftPanel() {
       '<span class="lp-item__badges"><span class="lp-item__badge lp-item__badge--' + cls + '">' + statusLbl + '</span></span>' +
     '</button>';
   }
-  const fleetItems = fleets.map(fleetItemHtml).join('');
+  /* Stazioni orbitali (M16): elencate nel Roster come pari delle colonie
+     (scelta utente). Click → vista Stazioni; lo stato (operativa/in opera/
+     catturata/isolata) finisce nel badge. */
+  const stations = (g.stations || []);
+  const myStations = stations.filter(function (s) {
+    return ORION.station && ORION.station.isPlayerStation
+      ? ORION.station.isPlayerStation(s)
+      : (s && s.owner == null);
+  });
+  function stationItemHtml(st) {
+    const sysId = st.systemId;
+    const sysName = sysId >= 0 && g.galaxy.systems[sysId] ? g.galaxy.systems[sysId].name : '—';
+    const tag = bodyTagHtml(sysId); // sistema → tag regione
+    let badgeLbl = 'operativa', badgeCls = 'ok';
+    if (st.phase === 'building') { badgeLbl = 'in opera'; badgeCls = 'info'; }
+    else if (st.supplyState === 'isolated') { badgeLbl = 'isolata'; badgeCls = 'crit'; }
+    else if (st.supplyState === 'low') { badgeLbl = 'a corto'; badgeCls = 'warn'; }
+    const lvl = Math.max(0, st.level | 0);
+    const lvlChip = (st.phase === 'building' && lvl === 0)
+      ? ''
+      : '<span class="lp-item__badge lp-item__badge--info" title="Livello">lvl ' + lvl + '</span>';
+    const stIcon = (ORION.icon && ORION.icon('station')) || '';
+    const nm = st.name || ('Stazione ' + st.id);
+    return '<button class="lp-item lp-item--station" data-action="roster-station" data-id="' + escapeHtml(st.id) + '" data-sys="' + sysId + '" type="button">' +
+      '<span class="lp-item__glyph ui-icon" aria-hidden="true">' + stIcon + '</span>' +
+      '<span class="lp-item__name"><strong>' + escapeHtml(nm) + '</strong>' + tag +
+        ' <span class="lp-item__sub">in ' + escapeHtml(sysName) + '</span></span>' +
+      '<span class="lp-item__badges">' + lvlChip +
+        '<span class="lp-item__badge lp-item__badge--' + badgeCls + '">' + badgeLbl + '</span>' +
+      '</span>' +
+    '</button>';
+  }
+  const stationItems = myStations.map(stationItemHtml).join('');
   /* Riepilogo flotte raggruppate per gruppo stellare (specchio sintetico
      della vista centrale) per la linguetta dedicata "Flotte". */
   function fleetGroupedHtml() {
@@ -10792,10 +10860,23 @@ function renderLeftPanel() {
     }).join('');
   }
 
-  const rosterBody =
+  /* Sezione Roster (decisione utente 2026-06-16):
+     - rimossa la sezione "Navigazione" → i 4 livelli (Galassia/Gruppo/Sistema/
+       Pianeta) vivono ora come strip orizzontale in testa al Roster
+     - rimosse le flotte dal Roster (vivono nella linguetta dedicata "Flotte")
+     - aggiunte le stazioni orbitali sotto le colonie come pari delle colonie */
+  const navHorizontalHtml = '<nav class="lp-nav-horizontal" role="tablist" aria-label="Livello di navigazione">' +
+    navItemsHtml() + '</nav>';
+  const colonyGroupHtml = '<div class="lp-roster-group">' +
+    '<div class="lp-roster-group__h">Colonie <span class="lp-roster-group__n">' + myKeys.length + '</span></div>' +
     (myKeys.length ? colItems : '<p class="lp-empty">Nessuna colonia operativa.</p>') +
-    (fleets.length ? fleetItems : (myKeys.length ? '<p class="lp-empty">Nessuna flotta attiva.</p>' : ''));
-  const rosterCount = myKeys.length + ' colonie · ' + fleets.length + ' flotte';
+  '</div>';
+  const stationGroupHtml = '<div class="lp-roster-group">' +
+    '<div class="lp-roster-group__h">Stazioni orbitali <span class="lp-roster-group__n">' + myStations.length + '</span></div>' +
+    (myStations.length ? stationItems : '<p class="lp-empty">Nessuna stazione orbitale.</p>') +
+  '</div>';
+  const rosterBody = navHorizontalHtml + colonyGroupHtml + stationGroupHtml;
+  const rosterCount = myKeys.length + ' colonie · ' + myStations.length + ' stazioni';
   /* Alert sulla linguetta Roster: scarsità crit (rosso) / low (ambra). */
   let rosterAlert = null;
   myKeys.forEach(function (k) {
@@ -10808,20 +10889,7 @@ function renderLeftPanel() {
     });
   });
 
-  /* ----- Navigazione (Galassia/Gruppo/Sistema/Pianeta) ----- */
-  const navItems = [
-    { view: 'galaxy', icon: 'galaxy', label: 'Galassia' },
-    { view: 'group',  icon: 'group',  label: 'Gruppo' },
-    { view: 'system', icon: 'system', label: 'Sistema' },
-    { view: 'planet', icon: 'planet', label: 'Pianeta' }
-  ];
-  const navHtml = navItems.map(function (n) {
-    const active = (n.view === currentView) ? ' is-active' : '';
-    const icon = (ORION.icon && ORION.icon(n.icon)) || '';
-    return '<button class="nav-item' + active + '" data-view="' + n.view + '" type="button">' +
-      '<span class="nav-item__glyph ui-icon" aria-hidden="true">' + icon + '</span>' +
-      '<span class="nav-item__label">' + n.label + '</span></button>';
-  }).join('');
+  /* navItems definito in testa a renderLeftPanel — riusato qui sotto. */
 
   /* ----- Launcher (Diplomazia/Ricerca/Mercato + vista Flotte/Civiltà) ----- */
   function launcherIcon(name) {
@@ -10966,7 +11034,6 @@ function renderLeftPanel() {
 
   const lpTabs = [
     { id: 'roster',    iconName: 'roster',    tone: 'cyan',   label: 'Roster',        alert: rosterAlert },
-    { id: 'nav',       iconName: 'galaxy',    tone: 'violet', label: 'Navigazione',   alert: null },
     { id: 'fleet',     iconName: 'fleet',     tone: 'cyan',   label: 'Flotte',        alert: warThreats ? 'bad' : null },
     { id: 'launcher',  iconName: 'settings',  tone: 'gold',   label: 'Sale e moduli', alert: (typeof dispatchPending === 'function' && dispatchPending()) ? 'info' : null }
   ];
@@ -10995,8 +11062,6 @@ function renderLeftPanel() {
   let bodyHtml = '';
   if (activeLp === 'roster') {
     bodyHtml = '<div class="lp-tab-body"><div class="lp-tab-body__count">' + rosterCount + '</div>' + rosterBody + '</div>';
-  } else if (activeLp === 'nav') {
-    bodyHtml = '<div class="lp-tab-body"><nav class="lp-nav">' + navHtml + '</nav></div>';
   } else if (activeLp === 'fleet') {
     bodyHtml = '<div class="lp-tab-body">' + fleetTabBody + '</div>';
   } else if (activeLp === 'launcher') {
@@ -11104,6 +11169,15 @@ function renderLeftPanel() {
       if (sid >= 0 && ORION.game && ORION.game.state) ORION.game.state.selectedId = sid;
       navigateView('group');
       if (sid >= 0 && ORION.map && ORION.map.focusSystemCentered) ORION.map.focusSystemCentered(sid);
+    });
+  });
+  /* Stazioni orbitali nel Roster (decisione utente 2026-06-16): click →
+     apre la vista Stazioni (parità con le colonie). */
+  host.querySelectorAll('[data-action="roster-station"]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const sid = Number(btn.dataset.sys);
+      if (sid >= 0 && ORION.game && ORION.game.state) ORION.game.state.selectedId = sid;
+      navigateView('stations');
     });
   });
 }

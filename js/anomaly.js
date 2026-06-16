@@ -96,8 +96,12 @@
   function ensureSites(game, sysId) {
     ensure(game);
     if (game._anomScanned[sysId]) return;
-    game._anomScanned[sysId] = true;
+    /* Guard PRIMA del flag (fix sessione 2026-06-16): se ORION.system.generate
+       non è caricato (transitorio, es. test headless), NON marchiamo come
+       scansionato — altrimenti il sistema verrebbe saltato per sempre nella
+       sessione corrente anche dopo che ORION.system diventa disponibile. */
     if (!(ORION.system && ORION.system.generate)) return;
+    game._anomScanned[sysId] = true;
     const sys = ORION.system.generate(game.galaxy, sysId);
     const anoms = (sys && sys.anomalies) || [];
     const kinds = {};
