@@ -3934,6 +3934,9 @@ function renderCantieriSection(colony, planet) {
         ((F.portMaintenance && F.portMaintenance(ORION.game, colony) > 0)
           ? '<span class="cantieri-cap" title="Manutenzione/riparazione delle navi al porto: riserva + flotte ferme qui (occupare un attracco consuma metalli). Le flotte in viaggio pagano la riserva di viaggio.">Manutenzione <strong>−' + F.portMaintenance(ORION.game, colony).toFixed(2) + ' ' + resIcon('met') + '/' + iU() + '</strong></span>'
           : '') +
+        ((F.portMaintenanceEn && F.portMaintenanceEn(ORION.game, colony) > 0)
+          ? '<span class="cantieri-cap" title="Sistemi delle navi capitali al porto (incrociatore/dread/ammiraglia): consumano energia per i sistemi di bordo anche da fermi.">Sistemi <strong>−' + F.portMaintenanceEn(ORION.game, colony).toFixed(2) + ' ' + resIcon('en') + '/' + iU() + '</strong></span>'
+          : '') +
         techHtml +
       '</div>' +
       shipReserveBox(colony, classes);
@@ -8872,7 +8875,7 @@ function rateGrid(rates, upkeep, colony) {
      realtà era 5.98×0.5 ≈ 2.99 (e netto ≈ 0 con upkeep 3). */
   const pf = (ORION.time && ORION.time.productionFactors)
     ? ORION.time.productionFactors(ORION.game, colony)
-    : { prodMul: 1, popFood: 0, popWater: 0, crewFood: 0, crewWater: 0 };
+    : { prodMul: 1, popFood: 0, popWater: 0, popMet: 0, popEn: 0, crewFood: 0, crewWater: 0 };
   /* Decisione utente (2026-06-15): il flusso delle rotte commerciali deve
      pesare nel saldo. + in entrata sulla destinazione, − in uscita sulla
      sorgente (flussi EFFETTIVI, conteggiano il budget di throughput). */
@@ -8880,17 +8883,29 @@ function rateGrid(rates, upkeep, colony) {
   const tradeNet = (ORION.trade && ORION.trade.colonyTradeFlow)
     ? ORION.trade.colonyTradeFlow(ORION.game, colKey)
     : { met: 0, en: 0, food: 0, water: 0 };
+  /* Bilanciamento 2026-06-16: manutenzione flotta (met dalle navi parcheggiate
+     + en dalle capitali). Specchio coerente di processProduction in time.js,
+     così il saldo mostrato qui coincide con quello reale tick-per-tick. */
+  const F = ORION.fleet;
+  const shipMet = (F && F.portMaintenance) ? F.portMaintenance(ORION.game, colony) : 0;
+  const shipEn  = (F && F.portMaintenanceEn) ? F.portMaintenanceEn(ORION.game, colony) : 0;
   const items = [];
   ['met', 'en', 'food', 'water'].forEach(function (k) {
     const r = (rates[k] || 0) * pf.prodMul; const u = upkeep[k] || 0;
-    const popDrain = k === 'food' ? pf.popFood : k === 'water' ? pf.popWater : 0;
+    const popDrain =
+      k === 'food'  ? pf.popFood  :
+      k === 'water' ? pf.popWater :
+      k === 'met'   ? (pf.popMet  || 0) :
+      k === 'en'    ? (pf.popEn   || 0) : 0;
     const crewDrain = k === 'food' ? (pf.crewFood || 0) : k === 'water' ? (pf.crewWater || 0) : 0;
+    const shipDrain = k === 'met' ? shipMet : k === 'en' ? shipEn : 0;
     const trade = tradeNet[k] || 0;   // + entrata, − uscita
-    const net = r - u - popDrain - crewDrain + trade;
-    if (!(r || u || popDrain || crewDrain || trade)) return;
+    const net = r - u - popDrain - crewDrain - shipDrain + trade;
+    if (!(r || u || popDrain || crewDrain || shipDrain || trade)) return;
     let aux = '+' + fmtAbs(r) + ' prod / −' + fmtAbs(u) + ' uso';
     if (popDrain > 0) aux += ' / −' + fmtAbs(popDrain) + ' pop';
     if (crewDrain > 0) aux += ' / −' + fmtAbs(crewDrain) + ' razioni';
+    if (shipDrain > 0) aux += ' / −' + fmtAbs(shipDrain) + ' flotta';
     if (trade > 0) aux += ' / +' + fmtAbs(trade) + ' commercio';
     else if (trade < 0) aux += ' / −' + fmtAbs(trade) + ' commercio';
     items.push(row(resLabel(k), '<span class="rate ' + (net >= 0 ? 'rate--pos' : 'rate--neg') + '">' + fmtNet(net) + '</span> / ' + iU() + ' <span class="rate-aux">(' + aux + ')</span>'));
@@ -10721,13 +10736,23 @@ function buildEmpireState() {
     const out = ORION.planet.structureOutput(c, planet, g);
     const pf = (ORION.time && ORION.time.productionFactors)
       ? ORION.time.productionFactors(g, c)
-      : { prodMul: 1, popFood: 0, popWater: 0, crewFood: 0, crewWater: 0 };
+      : { prodMul: 1, popFood: 0, popWater: 0, popMet: 0, popEn: 0, crewFood: 0, crewWater: 0 };
+    /* Bilanciamento 2026-06-16: include manutenzione flotta met/en al porto,
+       allineato a processProduction (drenaggio reale del tick). */
+    const Fdash = ORION.fleet;
+    const shipMet = (Fdash && Fdash.portMaintenance) ? Fdash.portMaintenance(g, c) : 0;
+    const shipEn  = (Fdash && Fdash.portMaintenanceEn) ? Fdash.portMaintenanceEn(g, c) : 0;
     let stockTotal = 0, stockNet = 0;
     ['met', 'en', 'food', 'water'].forEach(function (rk) {
       stockTotal += (c.stock[rk] || 0);
-      const popDrain = rk === 'food' ? pf.popFood : rk === 'water' ? pf.popWater : 0;
+      const popDrain =
+        rk === 'food'  ? pf.popFood  :
+        rk === 'water' ? pf.popWater :
+        rk === 'met'   ? (pf.popMet  || 0) :
+        rk === 'en'    ? (pf.popEn   || 0) : 0;
       const crewDrain = rk === 'food' ? (pf.crewFood || 0) : rk === 'water' ? (pf.crewWater || 0) : 0;
-      stockNet += (out.rates[rk] || 0) * pf.prodMul - (out.upkeep[rk] || 0) - popDrain - crewDrain;
+      const shipDrain = rk === 'met' ? shipMet : rk === 'en' ? shipEn : 0;
+      stockNet += (out.rates[rk] || 0) * pf.prodMul - (out.upkeep[rk] || 0) - popDrain - crewDrain - shipDrain;
     });
 
     const tel = (ORION._empireTel && ORION._empireTel[k]) || { pop: [], morale: [], stock: [] };
