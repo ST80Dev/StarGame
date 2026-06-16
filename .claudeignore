@@ -1,0 +1,27 @@
+# Archivio storico — non caricare di default. Consultare on-demand.
+docs/CLAUDE_FULL_ARCHIVE.md
+
+# Asset/preview generati
+icons-preview.html
+icons-preview.svg
+fonts/
+
+# Build/dipendenze (per quando arriveranno)
+node_modules/
+dist/
+build/
+.next/
+.cache/
+coverage/
+
+# OS / editor
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Log / dump
+*.log
+*.sql.gz
+*.dump
