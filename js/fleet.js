@@ -95,7 +95,10 @@
       id: 'incrociatore', name: 'Incrociatore', glyph: '◆',
       cost: { met: 240, en: 110, food: 20 }, time: 40,
       hp: 300, fp: 45, speed: 0.8, crew: 14, hangarLvl: 4,
-      maintMet: 0.9, dockWeight: 3
+      /* Bilanciamento 2026-06-16: capitali +30% maintMet (era 0.9 → 1.2) +
+         nuovo maintEn per drenare l'energia in eccesso della capitale endgame
+         (era 0, in deficit perché capitali grosse non costavano energia al porto). */
+      maintMet: 1.2, maintEn: 0.3, dockWeight: 3
     },
     /* Dreadnought + Ammiraglia: l'Hangar planetario NON basta (#41) →
        richiedono il Bacino orbitale (struttura dedicata, structures.js).
@@ -106,14 +109,14 @@
       cost: { met: 600, en: 280, food: 40 }, time: 200,
       hp: 650, fp: 95, speed: 0.65, crew: 30, hangarLvl: 5,
       requiresStruct: { id: 'bacino-orbitale', level: 1 },
-      maintMet: 2.0, dockWeight: 6
+      maintMet: 2.7, maintEn: 0.6, dockWeight: 6   // bilanciamento 2026-06-16: maintMet +30%, +maintEn
     },
     ammiraglia: {
       id: 'ammiraglia', name: 'Nave Ammiraglia', glyph: '❖',
       cost: { met: 1000, en: 480, food: 80, water: 40 }, time: 280,
       hp: 1000, fp: 140, speed: 0.7, crew: 50, hangarLvl: 5,
       requiresStruct: { id: 'bacino-orbitale', level: 2 },
-      maintMet: 3.0, dockWeight: 10,
+      maintMet: 4.0, maintEn: 0.9, dockWeight: 10,   // bilanciamento 2026-06-16: maintMet +30%, +maintEn
       unique: true,        // GDD §12.1: una sola per civiltà
       flagship: true       // bonus di nave a tutta la flotta (flagshipBonus)
     }
@@ -195,7 +198,13 @@
      Serbatoio di "autonomia in Ι" che cala 1/Ι lontano da un porto amico e
      si ricarica al cap quando vi si sosta. Caso peggiore: rientro forzato +
      deriva (lenta + usura), MAI blocco/distruzione (recovery-friendly #22). */
-  const VIVERI_CAP = 250;          // autonomia bersaglio in Ι (confermata utente)
+  const VIVERI_CAP = 250;          // autonomia bersaglio DEFAULT in Ι (capienza serbatoio personalizzabile per flotta)
+  /* Bilanciamento 2026-06-16: il giocatore può ora scegliere quanta autonomia
+     caricare alla partenza (slider 1→VIVERI_CAP_MAX). Default 250 (back-compat
+     con save esistenti). Costo proporzionale: più carico = più crew × Ι × rate.
+     Hard cap solo per sanity check (no overflow numerici / UI). */
+  const VIVERI_CAP_MIN = 50;
+  const VIVERI_CAP_MAX = 1500;
   /* Decisione utente 2026-06-11: la riserva di viaggio è a 4 risorse, con
      quantità tarate perché far partire/rifornire una flotta pesi davvero sul
      bilancio della colonia (cibo/acqua sostentamento equipaggio; metalli
@@ -503,7 +512,9 @@
          soglia di ritirata (aggressive 0% · balanced 30% · defensive 50%). */
       formation: 'balanced',
       /* Decisione #69: viveri di flotta. Nuova flotta provvista al porto
-         d'origine (parte al cap). */
+         d'origine (parte al cap). Bilanciamento 2026-06-16: `viveriCap` è
+         ora un campo per-flotta (personalizzabile dal giocatore). Default 250. */
+      viveriCap: VIVERI_CAP,
       viveri: VIVERI_CAP
     };
     game.fleets.push(fleet);
@@ -831,7 +842,7 @@
     toFleet.popOnboard = (toFleet.popOnboard || 0) + (fromFleet.popOnboard || 0);
     fromFleet.popOnboard = 0;
     if (typeof fromFleet.viveri === 'number') {
-      const tv = (toFleet.viveri != null) ? toFleet.viveri : VIVERI_CAP;
+      const tv = (toFleet.viveri != null) ? toFleet.viveri : viveriCapOf(toFleet);
       toFleet.viveri = Math.min(tv, fromFleet.viveri);
     }
     /* Figure: rilascia quelle della sorgente al pool, poi prova a
@@ -1343,9 +1354,29 @@
      ------------------------------------------------------------------ */
   function viveriOf(fleet) {
     if (!fleet) return 0;
-    if (fleet.viveri == null) fleet.viveri = VIVERI_CAP;
+    if (fleet.viveri == null) fleet.viveri = viveriCapOf(fleet);
     return fleet.viveri;
   }
+  /* Capienza serbatoio della flotta (Ι). Lazy-init per save vecchi:
+     viveriCap mancante → default 250. */
+  function viveriCapOf(fleet) {
+    if (!fleet) return VIVERI_CAP;
+    if (fleet.viveriCap == null) fleet.viveriCap = VIVERI_CAP;
+    return fleet.viveriCap;
+  }
+  /* Imposta la capienza serbatoio di una flotta (slider UI alla partenza).
+     Clampato in [VIVERI_CAP_MIN, VIVERI_CAP_MAX]. Se il nuovo cap è inferiore
+     all'autonomia corrente, eccedenza scartata (non si guadagna risorse). */
+  function setViveriCap(fleet, cap) {
+    if (!fleet) return 0;
+    const c = Math.max(VIVERI_CAP_MIN, Math.min(VIVERI_CAP_MAX, Math.round(cap || 0)));
+    fleet.viveriCap = c;
+    if ((fleet.viveri || 0) > c) fleet.viveri = c;
+    return c;
+  }
+  /* API legacy: ritorna il default globale (per back-compat di chiamanti
+     che non hanno una flotta in mano). I nuovi consumer dovrebbero passare
+     la flotta a viveriCapOf. */
   function viveriCap() { return VIVERI_CAP; }
   function viveriStatus(fleet) {
     const v = viveriOf(fleet);
@@ -1412,11 +1443,12 @@
      (parziale se a corto, recovery-friendly); porto alleato = gratis. Costo
      di 1 Ι di autonomia = equipaggio × (RATE_FOOD + RATE_WATER). */
   function loadViveriAtPort(game, fleet) {
+    const cap = viveriCapOf(fleet);
     const cur = viveriOf(fleet);
-    if (cur >= VIVERI_CAP) return 0;
+    if (cur >= cap) return 0;
     const crew = Math.max(1, fleetCrewRequired(fleet));
     const colony = ownColonyAt(game, fleet.location.systemId);
-    let fillI = VIVERI_CAP - cur;
+    let fillI = cap - cur;
     if (!colony && ORION.station && ORION.station.stationAt) {
       /* M16 (#81): nessuna tua colonia qui ma una STAZIONE operativa →
          rifornisce dal proprio serbatoio (limitato → parziale, recovery-
@@ -1481,9 +1513,9 @@
      così anche le flotte idle lontane consumano (l'equipaggio mangia). */
   function processViveri(game, fleet, events) {
     if (!fleet || !fleet.location) return;
-    if (fleet.viveri == null) fleet.viveri = VIVERI_CAP;
+    if (fleet.viveri == null) fleet.viveri = viveriCapOf(fleet);
     if (fleetAtFriendlyPort(game, fleet)) {
-      if (fleet.viveri < VIVERI_CAP) loadViveriAtPort(game, fleet);
+      if (fleet.viveri < viveriCapOf(fleet)) loadViveriAtPort(game, fleet);
       fleet._supplyWarned = false;
       if (fleet._drift) {
         fleet._drift = false;
@@ -1671,7 +1703,7 @@
 
   /* Costo in crediti del riempimento al cap presso un porto a pagamento. */
   function payRefuelCost(game, fleet) {
-    const fillI = VIVERI_CAP - viveriOf(fleet);
+    const fillI = viveriCapOf(fleet) - viveriOf(fleet);
     if (fillI <= 0) return 0;
     const crew = Math.max(1, fleetCrewRequired(fleet));
     const ref = (ORION.treasury && ORION.treasury.REF_PRICE) || { met: 1, en: 0.9, food: 1.4, water: 1.2 };
@@ -1687,11 +1719,11 @@
     const civ = payablePortAt(game, fleet.location.systemId);
     if (!civ) return { ok: false, reason: 'Nessun porto in pace in questo sistema' };
     if (!ORION.treasury || !ORION.treasury.spendCredits) return { ok: false, reason: 'Tesoreria non disponibile' };
-    if (viveriOf(fleet) >= VIVERI_CAP) return { ok: false, reason: 'Serbatoio già pieno' };
+    if (viveriOf(fleet) >= viveriCapOf(fleet)) return { ok: false, reason: 'Serbatoio già pieno' };
     const cost = payRefuelCost(game, fleet);
     const paid = ORION.treasury.spendCredits(game, cost);
     if (!paid || !paid.ok) return { ok: false, reason: 'Crediti insufficienti (' + cost + ' richiesti)' };
-    fleet.viveri = VIVERI_CAP;
+    fleet.viveri = viveriCapOf(fleet);
     fleet._drift = false;
     fleet._supplyWarned = false;
     return { ok: true, cost: cost, civ: civ };
@@ -2479,6 +2511,19 @@
     /* M16: + somma navi nel porto orbitale (colony.orbitalDock) quando esisterà. */
     return met;
   }
+  /* Bilanciamento 2026-06-16: variante energia. Solo le capitali (incrociatore/
+     dreadnought/ammiraglia) hanno maintEn; le altre 0. Specchio di
+     dockedMaintenance per simmetria, niente cambio di API esistente. */
+  function dockedMaintenanceEn(colony) {
+    if (!colony || !colony.ships) return 0;
+    let en = 0;
+    Object.keys(colony.ships).forEach(function (kind) {
+      const n = colony.ships[kind] | 0;
+      const cls = CLASSES[kind];
+      if (n > 0 && cls && cls.maintEn) en += n * cls.maintEn;
+    });
+    return en;
+  }
 
   /* Manutenzione TOTALE al porto di una colonia (decisione utente 2026-06-11):
      navi di riserva (colony.ships) + navi delle FLOTTE ferme a questo porto
@@ -2501,6 +2546,24 @@
       });
     }
     return met;
+  }
+  /* Bilanciamento 2026-06-16: variante energia di portMaintenance.
+     Specchio identico, ma somma maintEn (presente solo su capitali). */
+  function portMaintenanceEn(game, colony) {
+    let en = dockedMaintenanceEn(colony);
+    const sys = colony && colony.systemId;
+    if (game && Array.isArray(game.fleets) && sys != null) {
+      game.fleets.forEach(function (f) {
+        if (!f || !f.location || f.location.systemId !== sys) return;
+        const st = f.location.status;
+        if (st !== 'docked' && st !== 'orbiting') return;
+        (f.ships || []).forEach(function (s) {
+          const cls = CLASSES[s.kind];
+          if (cls && cls.maintEn) en += cls.maintEn;
+        });
+      });
+    }
+    return en;
   }
 
   /* M09 (decisione #49): imposta la formazione di combattimento. */
@@ -2551,7 +2614,9 @@
     awardCrewXp: awardCrewXp,
     fleetUpkeep: fleetUpkeep,
     dockedMaintenance: dockedMaintenance,
+    dockedMaintenanceEn: dockedMaintenanceEn,
     portMaintenance: portMaintenance,
+    portMaintenanceEn: portMaintenanceEn,
     tickPortRepair: tickPortRepair,
     tickStationRepair: tickStationRepair,
     forceReturnForWear: forceReturnForWear,
@@ -2576,6 +2641,14 @@
     disembarkPop: disembarkPop,
     /* Decisione #69: viveri di flotta (tether logistico). */
     viveriCap: viveriCap,
+    viveriCapOf: viveriCapOf,
+    setViveriCap: setViveriCap,
+    VIVERI_CAP_MIN: VIVERI_CAP_MIN,
+    VIVERI_CAP_MAX: VIVERI_CAP_MAX,
+    VIVERI_RATE_FOOD: VIVERI_RATE_FOOD,
+    VIVERI_RATE_WATER: VIVERI_RATE_WATER,
+    VIVERI_RATE_MET: VIVERI_RATE_MET,
+    VIVERI_RATE_EN: VIVERI_RATE_EN,
     viveriOf: viveriOf,
     viveriStatus: viveriStatus,
     fleetAtFriendlyPort: fleetAtFriendlyPort,

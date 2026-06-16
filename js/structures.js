@@ -89,7 +89,7 @@
     {
       id: 'fonderia', name: 'Fonderia', cat: 'produttiva', glyph: '🜂',
       desc: 'Raffina i metalli grezzi: aumenta la resa delle miniere del 40% per livello.',
-      cost: { met: 70, en: 25 }, time: 16,
+      cost: { met: 90, en: 35 }, time: 16,
       upkeep: { en: 3, met: 1 },   // +met: manutenzione macchinari (2026-06-11)
       rates: {},   // moltiplicatore, non produzione diretta
       modifiers: { 'miniera.rates.met': 0.40 },
@@ -100,10 +100,16 @@
     {
       id: 'raffineria', name: 'Raffineria energetica', cat: 'produttiva', glyph: '⚛',
       desc: 'Sintetizza vettori energetici di alta qualità da risorse locali.',
-      cost: { met: 65, en: 20 }, time: 16,
+      cost: { met: 85, en: 30 }, time: 16,
       upkeep: { water: 2, met: 1 },   // +met manutenzione (2026-06-11)
       rates: { en: 2 },
-      modifiers: { 'centrale-solare.rates.en': 0.40 },
+      /* Bilanciamento 2026-06-16 (sessione capitale endgame): la raffineria
+         restava troppo prolifica accoppiata alla centrale-solare a maxL,
+         portando una capitale matura a +50 en/Ι di surplus. 0.40 → 0.25
+         per spingere l'autosufficienza energetica sotto break-even a pop 10+,
+         in linea con il design "import via rotte". La fonderia resta a 0.40
+         (i metalli sono già drenati da maintMet di flotta). */
+      modifiers: { 'centrale-solare.rates.en': 0.25 },
       slots: 1, maxLevel: 3,
       bodyTypes: HABITABLE,
       requires: ['struct:centrale-solare:1']
@@ -113,8 +119,8 @@
     {
       id: 'laboratorio', name: 'Laboratorio', cat: 'ricerca', glyph: '⌬',
       desc: 'Contribuisce alla ricerca distribuita della civiltà.',
-      cost: { met: 60, en: 20 }, time: 14,
-      upkeep: { en: 1, met: 1 },   // +met manutenzione (2026-06-11); #48: 2→1 en
+      cost: { met: 80, en: 30 }, time: 14,
+      upkeep: { en: 2, met: 1 },   // bilanciamento 2026-06-16: +1 en (era 1, ora 2)
       rates: { research: 0.5 },   // pacing M13 (2026-06-13, #87): 3→0.5, la ricerca avanzata è un traguardo d'impero (spinge a colonizzare + costruire più lab)
       slots: 1, maxLevel: 4,
       bodyTypes: HABITABLE,
@@ -123,7 +129,7 @@
     {
       id: 'osservatorio', name: 'Osservatorio planetario', cat: 'ricerca', glyph: '◎',
       desc: 'Scansiona suolo, atmosfera e sottosuolo: rivela le risorse avanzate parzialmente nascoste.',
-      cost: { met: 55, en: 25 }, time: 14,
+      cost: { met: 70, en: 35 }, time: 14,
       upkeep: { en: 2 },
       rates: { scan: 1 },
       slots: 1, maxLevel: 2,
@@ -135,8 +141,10 @@
     {
       id: 'cantiere-navale', name: 'Hangar di costruzione', cat: 'militare', glyph: '▱',
       desc: 'Necessario per costruire astronavi. Offre cantieri (build paralleli) e attracchi (porto a terra). Cresce coi livelli.',
-      cost: { met: 120, en: 40 }, time: 50,
-      upkeep: { en: 3, met: 1 },   // decisione #48: 4 → 3
+      cost: { met: 95, en: 40 }, time: 50,
+      /* Bilanciamento 2026-06-16: hangar ABBASSATO 120→95 (sblocco esplorazione
+         più rapido nell'early); upkeep en 3→4 (carico militare al porto). */
+      upkeep: { en: 4, met: 2 },   // bilanciamento 2026-06-16: en 3→4, met 1→2
       rates: {},
       slots: 2, maxLevel: 5,
       bodyTypes: HABITABLE,
@@ -154,7 +162,7 @@
     {
       id: 'accademia-militare', name: 'Accademia militare', cat: 'militare', glyph: '⚔',
       desc: 'Forma quadri militari e veterani (figure speciali, M14).',
-      cost: { met: 60, en: 30, food: 10 }, time: 22,
+      cost: { met: 90, en: 45, food: 15 }, time: 22,
       upkeep: { en: 1, food: 1 },   // decisione #48: 2 → 1
       rates: {},
       slots: 1, maxLevel: 5,
@@ -176,8 +184,8 @@
     {
       id: 'batteria-difesa', name: 'Batteria di difesa', cat: 'militare', glyph: '⊕',
       desc: 'Torrette orbitali e cannoni planetari. Difende il sistema della colonia in battaglia. Cresce coi livelli (più moduli = più fuoco e corazza).',
-      cost: { met: 70, en: 25 }, time: 18,
-      upkeep: { en: 2, met: 1 },   // +met manutenzione (2026-06-11)
+      cost: { met: 100, en: 35 }, time: 18,
+      upkeep: { en: 3, met: 1 },   // bilanciamento 2026-06-16: en 2→3
       rates: {},
       slots: 1, maxLevel: 5,
       bodyTypes: HABITABLE.concat(ORBITAL),
@@ -188,8 +196,10 @@
     {
       id: 'scudo-planetario', name: 'Scudo planetario', cat: 'militare', glyph: '◈',
       desc: 'Schermo deflettore ad alta energia: aggiunge corazza pura alla difesa del sistema. Richiede tecnologia degli scudi (M13).',
-      cost: { met: 140, en: 90, water: 20 }, time: 40,
-      upkeep: { en: 6, met: 1 },   // +met manutenzione (2026-06-11)
+      /* Bilanciamento 2026-06-16: T3 ×2.7 sul costo base + upkeep en +50%
+         (era +6, ora +9). Lo scaling per livello passa a L^1.4 (vedi stepCost). */
+      cost: { met: 380, en: 240, water: 60 }, time: 40,
+      upkeep: { en: 9, met: 1 },   // bilanciamento 2026-06-16: en 6→9
       rates: {},
       slots: 2, maxLevel: 2,
       bodyTypes: HABITABLE,
@@ -215,7 +225,7 @@
     {
       id: 'ospedale', name: 'Ospedale', cat: 'civile', glyph: '✚',
       desc: 'Accelera la crescita della popolazione e ne migliora la qualità.',
-      cost: { met: 55, en: 20, food: 5 }, time: 14,
+      cost: { met: 70, en: 30, food: 8 }, time: 14,
       upkeep: { en: 1, food: 1 },   // decisione #48: 2 → 1
       rates: { popGrowth: 0.2 },
       slots: 1, maxLevel: 3,
@@ -224,7 +234,7 @@
     {
       id: 'mercato', name: 'Mercato', cat: 'civile', glyph: '⇄',
       desc: 'Hub commerciale per le rotte interne. Ogni livello aggiunge rotte simultanee e throughput/Ι (M12 §15.2).',
-      cost: { met: 50, en: 15 }, time: 12,
+      cost: { met: 65, en: 20 }, time: 12,
       upkeep: { en: 1 },
       rates: {},
       slots: 1, maxLevel: 5,
@@ -247,7 +257,7 @@
     {
       id: 'impianto-riciclo', name: 'Impianto di riciclo', cat: 'civile', glyph: '♻',
       desc: 'Tratta i rifiuti prodotti da popolazione e industria, recuperandone energia. Si autoalimenta col rifiuto (nessun upkeep). Un solo impianto regge una grande colonia.',
-      cost: { met: 50, en: 15 }, time: 12,
+      cost: { met: 65, en: 20 }, time: 12,
       /* Decisione #48 (retune): nessun upkeep energia — l'impianto è
          alimentato dal rifiuto che brucia (waste-to-energy). Così smaltire
          non litiga col budget energetico. */
@@ -263,8 +273,8 @@
     {
       id: 'impianto-esotico', name: 'Impianto esotico', cat: 'avanzata', glyph: '✦',
       desc: 'Sfrutta risorse avanzate per moltiplicatori globali. Richiede una risorsa rara identificata sul pianeta.',
-      cost: { met: 120, en: 60, water: 10 }, time: 40,
-      upkeep: { en: 5, met: 1 },   // +met manutenzione (2026-06-11)
+      cost: { met: 180, en: 95, water: 15 }, time: 40,
+      upkeep: { en: 8, met: 2 },   // bilanciamento 2026-06-16: en 5→8, met 1→2
       rates: { exotic: 1 },
       slots: 2, maxLevel: 2,
       bodyTypes: HABITABLE.concat(ORBITAL),
@@ -276,8 +286,8 @@
     {
       id: 'centro-ingegneria-planetaria', name: 'Centro di ingegneria planetaria', cat: 'avanzata', glyph: '⛭',
       desc: 'Bonifica territoriale: recupera terreno edificabile dalle aree marginali del pianeta. Espande la capacità di costruzione (slot).',
-      cost: { met: 180, en: 80, water: 30 }, time: 50,
-      upkeep: { en: 4, met: 2 },   // +met manutenzione (2026-06-11)
+      cost: { met: 520, en: 230, water: 90 }, time: 50,
+      upkeep: { en: 6, met: 3 },   // bilanciamento 2026-06-16: en 4→6, met 2→3
       rates: {},
       slots: 2, maxLevel: 1,
       bodyTypes: HABITABLE.concat(ORBITAL),
@@ -293,8 +303,8 @@
     {
       id: 'terraformatori', name: 'Terraformatori', cat: 'avanzata', glyph: '✦',
       desc: 'Trasforma il pianeta su scala continentale: nuovi biomi, nuovi spazi insediabili. Solo su corpi abitabili o industriali.',
-      cost: { met: 320, en: 180, water: 60, food: 20 }, time: 90,
-      upkeep: { en: 8, water: 2, met: 2 },   // +met manutenzione (2026-06-11)
+      cost: { met: 800, en: 450, water: 150, food: 50 }, time: 90,
+      upkeep: { en: 12, water: 2, met: 3 },   // bilanciamento 2026-06-16: en 8→12, met 2→3
       rates: {},
       slots: 3, maxLevel: 1,
       bodyTypes: ['terrestre', 'oceanico', 'forestale', 'desertico', 'vulcanico', 'ghiacciato'],
@@ -312,8 +322,8 @@
     {
       id: 'bacino-orbitale', name: 'Bacino orbitale', cat: 'militare', glyph: '⊠',
       desc: 'Cantiere pesante per navi capitali. lvl 1 sblocca il Dreadnought, lvl 2 la Nave Ammiraglia. Aggiunge cantieri e attracchi di grossa stazza.',
-      cost: { met: 500, en: 220, food: 30 }, time: 120,
-      upkeep: { en: 6, met: 3 },
+      cost: { met: 1300, en: 580, food: 80 }, time: 120,
+      upkeep: { en: 9, met: 5 },   // bilanciamento 2026-06-16: en 6→9, met 3→5
       rates: {},
       slots: 4, maxLevel: 2,
       bodyTypes: HABITABLE,
@@ -360,14 +370,22 @@
   }
 
   /* Costo/tempo del modulo che porta AL livello L (decisione #38: escalano).
-     Costo ×L (freno forte sul "tall"); tempo più dolce (×1 + 0.3·(L−1)). */
+     Costo ×L (freno forte sul "tall"); tempo più dolce (×1 + 0.3·(L−1)).
+     Bilanciamento 2026-06-16: le strutture TIER 3 (avanzate strategiche) usano
+     una scala più ripida L^1.4 per rendere i salti di livello davvero costosi
+     in end-game (scudo L2, esotico L2, bacino L2). Tutte le altre restano
+     lineari. */
+  const ADVANCED_TIER_IDS = ['scudo-planetario', 'centro-ingegneria-planetaria',
+    'terraformatori', 'bacino-orbitale', 'impianto-esotico'];
   function scaleCost(cost, factor) {
     const out = {};
     Object.keys(cost || {}).forEach(function (k) { out[k] = Math.round(cost[k] * factor); });
     return out;
   }
   function stepCost(def, toLevel) {
-    return scaleCost(def.cost || {}, Math.max(1, toLevel || 1));
+    const L = Math.max(1, toLevel || 1);
+    const factor = (def && ADVANCED_TIER_IDS.indexOf(def.id) >= 0) ? Math.pow(L, 1.4) : L;
+    return scaleCost(def.cost || {}, factor);
   }
   function stepTime(def, toLevel) {
     const L = Math.max(1, toLevel || 1);

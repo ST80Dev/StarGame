@@ -6376,7 +6376,7 @@ function fleetVeterancyHtml(fleet) {
 function fleetViveriHtml(fleet) {
   const F = ORION.fleet;
   if (!F || !F.viveriOf || !fleet || !fleet.ships || !fleet.ships.length) return '';
-  const cap = F.viveriCap ? F.viveriCap() : 250;
+  const cap = F.viveriCapOf ? F.viveriCapOf(fleet) : (F.viveriCap ? F.viveriCap() : 250);
   const v = Math.max(0, Math.round(F.viveriOf(fleet)));
   const st = F.viveriStatus ? F.viveriStatus(fleet) : 'ok';
   const atPort = (ORION.game && F.fleetAtFriendlyPort) ? F.fleetAtFriendlyPort(ORION.game, fleet) : false;
@@ -8337,7 +8337,7 @@ function openFleetDetail(fleetId, opts) {
     let refuel = '';
     if (ORION.fleet.payablePortAt && ORION.fleet.payRefuelAt &&
         ORION.fleet.payablePortAt(g, fleet.location.systemId) &&
-        ORION.fleet.viveriOf(fleet) < ORION.fleet.viveriCap()) {
+        ORION.fleet.viveriOf(fleet) < ORION.fleet.viveriCapOf(fleet)) {
       const rc = ORION.fleet.payRefuelCost(g, fleet);
       refuel = '<button class="btn btn--mini btn--with-icon" data-act="refuel" type="button">⛽ Rifornisci (' + rc + ' cr)</button>';
     }
