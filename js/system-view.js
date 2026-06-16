@@ -519,18 +519,27 @@
         if (f.location.status === 'in-transit' && !f.location.intra) continue;
         const intra = f.location.intra || null;
         let anchorKey = null;
+        let anomalyAnchor = null;
         if (!intra) {
           let bk = f.location.bodyKey;
           const o = f.orders || {};
           /* Corpo bersaglio in QUESTO sistema (garrison/attacco/colonizzazione
              portano un bodyKey): la flotta è lì sopra. */
           if (bk == null && o.bodyKey != null && (o.toSysId == null || o.toSysId === sysId)) bk = o.bodyKey;
+          /* Decisione utente 2026-06-16: flotta in `survey` su anomalia di
+             QUESTO sistema senza corpo associato (detriti/nebulosa/reliquie):
+             ancoraggio sul glifo dell'anomalia per kind, non in orbita
+             generica. Le anomalie body-tied (cintura) usano già bodyKey. */
+          if (bk == null && o.type === 'survey' && o.anomalyKind &&
+              (o.toSysId == null || o.toSysId === sysId)) {
+            anomalyAnchor = o.anomalyKind;
+          }
           /* "Parcheggiata" = attraccata oppure senza un compito attivo (idle).
              SOLO in questo caso la ancoriamo alla colonia. Una flotta che
              esplora / viaggia / fa ricognizione NON va messa sul pianeta
              (richiesta utente 2026-06-15): resta "in giro per il sistema". */
           const parked = (f.location.status === 'docked') || !o.type || o.type === 'idle';
-          if (bk == null && parked) {
+          if (bk == null && !anomalyAnchor && parked) {
             if (f.ownerColonyKey != null) {
               const parts = String(f.ownerColonyKey).split(':');
               if (parts.length === 2 && parseInt(parts[0], 10) === sysId) bk = parts[1];
@@ -547,9 +556,11 @@
           }
           anchorKey = bk; /* null → loiter (in giro per il sistema) */
         }
-        entries.push({ f, intra, anchorKey });
+        entries.push({ f, intra, anchorKey, anomalyAnchor });
       }
-      const groupKey = (e) => e.intra ? ('__i' + e.f.id) : (e.anchorKey == null ? '__loiter' : e.anchorKey);
+      const groupKey = (e) => e.intra ? ('__i' + e.f.id)
+                              : e.anomalyAnchor ? ('__an:' + e.anomalyAnchor)
+                              : (e.anchorKey == null ? '__loiter' : e.anchorKey);
       const count = {}, idxMap = {};
       entries.forEach((e) => { const k = groupKey(e); count[k] = (count[k] || 0) + 1; });
 
@@ -580,6 +591,31 @@
           const ang = hash01(e.anchorKey) * Math.PI * 2 + (n > 1 ? idx * (Math.PI * 2 / n) : 0);
           const rr = br + 16;
           mx = p.x + Math.cos(ang) * rr; my = p.y + Math.sin(ang) * rr;
+        } else if (e.anomalyAnchor) {
+          /* Decisione utente 2026-06-16: ancoraggio sul glifo dell'anomalia
+             (detriti/nebulosa/reliquie). Risolve la posizione cercando la
+             prima anomalia del sistema con kind corrispondente. */
+          const A = (this.system && this.system.anomalies) || [];
+          let aw = null;
+          for (let ai = 0; ai < A.length; ai++) {
+            if (A[ai].kind === e.anomalyAnchor) {
+              aw = { x: Math.cos(A[ai].angle) * A[ai].orbit, y: Math.sin(A[ai].angle) * A[ai].orbit };
+              break;
+            }
+          }
+          if (aw) {
+            const p = this.worldToScreen(aw.x, aw.y);
+            const ang = hash01('an:' + e.anomalyAnchor) * Math.PI * 2 + (n > 1 ? idx * (Math.PI * 2 / n) : 0);
+            const rr = 14;
+            mx = p.x + Math.cos(ang) * rr; my = p.y + Math.sin(ang) * rr;
+          } else {
+            /* Anomalia non presente nei dati del sistema → fallback loiter. */
+            const frac = 0.5 + 0.4 * hash01('r' + f.id);
+            const ang = hash01('a' + f.id) * Math.PI * 2;
+            const lr = maxOrbit * frac;
+            const p = this.worldToScreen(Math.cos(ang) * lr, Math.sin(ang) * lr);
+            mx = p.x; my = p.y;
+          }
         } else {
           /* "In giro per il sistema": punto deterministico su un'orbita media,
              scattered per flotta (e distribuito se più d'una). */

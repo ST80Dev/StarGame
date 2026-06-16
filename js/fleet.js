@@ -1014,6 +1014,12 @@
         fleet.route = [currentSys];
         fleet.routeIdx = 0;
         fleet.location.status = 'orbiting';
+        /* Decisione utente 2026-06-16: la flotta sta operando SUL sito —
+           se l'anomalia è body-tied (cintura) propaghiamo il bodyKey alla
+           location così system-view la disegna sopra il corpo invece che
+           in orbita generica. Per detriti/nebulosa/reliquie (no body)
+           system-view risolve via orders.anomalyKind. */
+        fleet.location.bodyKey = order.bodyKey || null;
         fleet.etaImpulsi = 0;
         return { ok: true };
       }
@@ -1424,10 +1430,17 @@
   /* La flotta è a un porto amico? Una flotta IN VIAGGIO non lo è mai: durante
      un leg `location.systemId` resta sul nodo di partenza (aggiornato solo a
      fine leg) — senza questo guard l'andata da una colonia risulterebbe
-     "sempre a un porto" e i viveri non si consumerebbero mai (#69 fix). */
+     "sempre a un porto" e i viveri non si consumerebbero mai (#69 fix).
+     Decisione utente 2026-06-16: una flotta impegnata in un task in-system
+     che la inchioda fuori dall'attracco (`survey` su un'anomalia: orbita il
+     sito e drena risorse) NON è al porto, anche se il sistema ospita una
+     tua colonia. Niente tag "al porto" né auto-refill durante l'estrazione:
+     "è decollata, è fuori dalla colonia". */
   function fleetAtFriendlyPort(game, fleet) {
     if (!fleet || !fleet.location) return false;
     if (fleet.location.status === 'in-transit') return false;
+    const o = fleet.orders;
+    if (o && o.type === 'survey') return false;
     return isFriendlyPortAt(game, fleet.location.systemId);
   }
   /* AI in PACE (non alleata, non in guerra) nel sistema indicato — porto dove
@@ -2005,6 +2018,10 @@
     if (order.type === 'survey') {
       _autoRevealAt(arrivedAt);
       fleet.location.status = 'orbiting';
+      /* Vedi nota in setOrder/survey: propaga il bodyKey per ancorare la
+         flotta al corpo dell'anomalia in system-view (cintura) — per
+         anomalie non body-tied resta null e il render usa anomalyKind. */
+      fleet.location.bodyKey = order.bodyKey || null;
       fleet.etaImpulsi = 0;
       fleet.route = [arrivedAt];
       fleet.routeIdx = 0;
