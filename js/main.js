@@ -18,7 +18,21 @@ ORION.version = '0.6.6';
 /* Etichette provvisorie del viewport per le viste non ancora implementate. */
 ORION.viewLabels = {
   research:  { caption: 'VISTA RICERCA',    hint: 'Pool d’impero + albero tecnologico (M13).' },
-  diplomacy: { caption: 'VISTA DIPLOMAZIA', hint: 'La diplomazia arriverà più avanti nello sviluppo.' }
+  diplomacy: { caption: 'VISTA DIPLOMAZIA', hint: 'La diplomazia arriverà più avanti nello sviluppo.' },
+  crews:     { caption: 'ROSTER EQUIPAGGI', hint: 'Riepilogo equipaggi e figure d\'impero.' }
+};
+
+/* Stato sidebar/centrale del Roster Equipaggi (richiesta utente 2026-06-16).
+   Volatile in memoria + persistito in localStorage (UI_GUIDE §9: mai nel
+   save di partita). Valori inizializzati anche se loadUiPrefs non scatta. */
+ORION.crewSidebarSort = 'xp';     /* 'xp' | 'system' | 'status' */
+ORION.crewCentralPrefs = {
+  tab: 'crews',                   /* 'crews' | 'figures' */
+  sort: 'xp',
+  filterSys: 'all',
+  filterStatus: 'all',
+  filterXp: 'all',
+  filterDom: 'all'
 };
 
 /* Stato di partita corrente (in memoria). Il salvataggio è M06. */
@@ -180,6 +194,12 @@ function loadUiPrefs() {
     if (d.chronicleFilter === 'all' || d.chronicleFilter === 'important') {
       ORION.chronicleFilter = d.chronicleFilter;
     }
+    if (d.crewSidebarSort === 'xp' || d.crewSidebarSort === 'system' || d.crewSidebarSort === 'status') {
+      ORION.crewSidebarSort = d.crewSidebarSort;
+    }
+    if (d.crewCentralPrefs && typeof d.crewCentralPrefs === 'object') {
+      Object.assign(ORION.crewCentralPrefs, d.crewCentralPrefs);
+    }
     /* La pin si recupera per partita (chiave seed-aware), perché un
        seed diverso → colonie diverse → il pin vecchio non è valido. */
   } catch (_) { /* niente */ }
@@ -193,7 +213,9 @@ function saveUiPrefs() {
       lpSectionCollapsed: ORION.lpSectionCollapsed,
       empireDeckOpen: ORION.empireDeckOpen,
       lpTab: ORION.lpTab,
-      chronicleFilter: ORION.chronicleFilter
+      chronicleFilter: ORION.chronicleFilter,
+      crewSidebarSort: ORION.crewSidebarSort,
+      crewCentralPrefs: ORION.crewCentralPrefs
     }));
   } catch (_) { /* niente */ }
 }
@@ -961,6 +983,18 @@ function renderView(stage, view) {
     if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
     if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
     renderResearchView(stage);
+    return;
+  }
+
+  // Riepilogo equipaggi impero (richiesta utente 2026-06-16): vista
+  // espansa con filtri/ordinamenti + tab Figure. Lo snapshot vive in
+  // ORION.crewRoster (modulo dedicato).
+  if (view === 'crews') {
+    if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; } if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
+    if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
+    if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
+    if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
+    if (ORION.crewRoster && ORION.crewRoster.renderCentral) ORION.crewRoster.renderCentral(stage);
     return;
   }
 
@@ -4004,8 +4038,11 @@ function renderCantieriSection(colony, planet) {
     const E2 = ORION.expedition || {};
     const techBonus2 = E2.techSpeedBonus ? E2.techSpeedBonus(colony) : 0;
     const effCrewTime = E2.applyTechSpeed ? E2.applyTechSpeed(crewTime, colony) : crewTime;
-    /* Equipaggi in missione: vivono nelle spedizioni (rimossi dall'array
-       della colonia al lancio), li recuperiamo per mostrarli nel roster. */
+    /* Roster per-colonia (richiesta utente 2026-06-16): mostra SOLO gli
+       equipaggi a riposo qui. Quelli imbarcati su flotta o in spedizione
+       appartengono concettualmente alla flotta che li trasporta — il
+       riepilogo d'impero vive nella scheda "Equipaggi" della sidebar sx +
+       Roster esteso al centro. Il counter resta in `away` per il totale. */
     const away = expeditionsForColony(colony);
     const totalCrews = crews.length + away.length;
     /* Decisione utente 2026-06-11: cap addestramenti dal livello d'Accademia. */
@@ -4035,8 +4072,11 @@ function renderCantieriSection(colony, planet) {
           return '<span class="cantieri-cap" title="Razioni cibo/acqua per equipaggi idle sulla colonia. Gli equipaggi in missione mangiano dai viveri di flotta.">Razioni <strong>' + cp.crews + ' eq.</strong> · <strong>−' + cp.food.toFixed(2) + ' ' + resIcon('food') + '</strong> · <strong>−' + cp.water.toFixed(2) + ' ' + resIcon('water') + '</strong> / ' + iU() + '</span>';
         })() +
       '</div>';
-    /* Roster per-equipaggio: a riposo (assegnabili) + in missione. */
-    if (totalCrews) {
+    /* Roster per-equipaggio (richiesta utente 2026-06-16): SOLO equipaggi a
+       riposo qui — quelli imbarcati o in missione appartengono concettualmente
+       alla flotta che li trasporta, visibili nel Roster Equipaggi d'impero
+       (sidebar sx "Equipaggi" + vista centrale espansa). */
+    if (crews.length) {
       html += '<ul class="crew-roster">';
       crews.forEach(function (c) {
         const enr = ORION.expedition.enrichmentForXp(c.xp || 0);
@@ -4047,19 +4087,13 @@ function renderCantieriSection(colony, planet) {
           '<span class="crew-roster__status crew-roster__status--rest">a riposo</span>' +
         '</li>';
       });
-      away.forEach(function (e) {
-        const enr = ORION.expedition.enrichmentForXp(e.crewXp || 0);
-        const target = ORION.game.galaxy.systems[e.targetSystemId];
-        const tname = target ? target.name : '—';
-        const st = e.status === 'returning' ? 'in rientro' : 'in missione';
-        html += '<li class="crew-roster__item crew-roster__item--away">' +
-          '<span class="crew-roster__rank crew-roster__rank--t' + enr.tier + '">' + enr.label + '</span>' +
-          '<span class="crew-roster__id">' + escapeHtml(crewShortLabel(e.crewId)) + '</span>' +
-          '<span class="xp-chip" title="Esperienza">xp ' + (e.crewXp || 0) + '</span>' +
-          '<span class="crew-roster__status crew-roster__status--away" title="' + escapeHtml(tname) + '">' + st + ' → ' + escapeHtml(tname) + '</span>' +
-        '</li>';
-      });
       html += '</ul>';
+      if (away.length) {
+        html += '<div class="crew-roster__away-hint">' +
+          '<span class="xp-chip">' + away.length + '</span> ' +
+          'equipaggi originari di questa colonia ora in viaggio/missione — vedi <strong>Equipaggi</strong> (sidebar sx).' +
+        '</div>';
+      }
     }
     queue.forEach(function (q, idx) {
       const total = q.totalTime || effCrewTime;
@@ -11244,9 +11278,19 @@ function renderLeftPanel() {
       : '') +
     (fleets.length ? fleetGroupedHtml() : '<p class="lp-empty">Nessuna flotta attiva. Crea una flotta da un Hangar.</p>');
 
+  /* Riepilogo equipaggi (richiesta utente 2026-06-16): linguetta gemella
+     di "Flotte". Alert ambra se ≥1 equipaggio è vicino alla promozione. */
+  let crewSnap = null;
+  let crewAlert = null;
+  if (ORION.crewRoster && ORION.crewRoster.snapshot) {
+    crewSnap = ORION.crewRoster.snapshot(g);
+    if (crewSnap.totals.promotable > 0) crewAlert = 'info';
+  }
+
   const lpTabs = [
     { id: 'roster',    iconName: 'roster',    tone: 'cyan',   label: 'Roster',        alert: rosterAlert },
     { id: 'fleet',     iconName: 'fleet',     tone: 'cyan',   label: 'Flotte',        alert: warThreats ? 'bad' : null },
+    { id: 'crews',     iconName: 'forces',    tone: 'amber',  label: 'Equipaggi',     alert: crewAlert },
     { id: 'launcher',  iconName: 'settings',  tone: 'gold',   label: 'Sale e moduli', alert: (typeof dispatchPending === 'function' && dispatchPending()) ? 'info' : null }
   ];
   if (councilBody) {
@@ -11276,6 +11320,11 @@ function renderLeftPanel() {
     bodyHtml = '<div class="lp-tab-body"><div class="lp-tab-body__count">' + rosterCount + '</div>' + rosterBody + '</div>';
   } else if (activeLp === 'fleet') {
     bodyHtml = '<div class="lp-tab-body">' + fleetTabBody + '</div>';
+  } else if (activeLp === 'crews') {
+    const crewBody = (ORION.crewRoster && ORION.crewRoster.renderSidebarTab)
+      ? ORION.crewRoster.renderSidebarTab(g)
+      : '<p class="lp-empty">Modulo equipaggi non disponibile.</p>';
+    bodyHtml = '<div class="lp-tab-body lp-tab-body--crew">' + crewBody + '</div>';
   } else if (activeLp === 'launcher') {
     bodyHtml = '<div class="lp-tab-body"><div class="lp-launcher">' + launcherHtml + '</div></div>';
   } else if (activeLp === 'council') {
@@ -11285,6 +11334,13 @@ function renderLeftPanel() {
   }
 
   host.innerHTML = empHtml + navHorizontalHtml + tabsHtml + bodyHtml;
+
+  /* Bind tab Equipaggi (richiesta utente 2026-06-16): ordinamento ciclico
+     + click su riga (focus colonia o sistema/gruppo). Idempotente: cerca
+     solo se la tab è attiva. */
+  if (activeLp === 'crews' && ORION.crewRoster && ORION.crewRoster.bindSidebarTab) {
+    ORION.crewRoster.bindSidebarTab(host);
+  }
 
   /* Mantieni `[data-bind="chronicle"]` valido per pushChronicle/restore:
      ri-tagghiamo l'UL come "chronicle" così le funzioni esistenti continuano
