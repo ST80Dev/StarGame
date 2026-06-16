@@ -623,13 +623,17 @@
     }
   }
 
-  /* Cerca un corpo (pianeta o luna) per chiave. */
+  /* Cerca un corpo (pianeta o luna) per chiave. Tollera input non-generato
+     (es. stub di galassia con bodies undefined): ritorna null senza esplodere. */
   function findBody(system, key) {
+    if (!system || !Array.isArray(system.bodies)) return null;
     for (let i = 0; i < system.bodies.length; i++) {
       const b = system.bodies[i];
       if (b.key === key) return b;
-      for (let m = 0; m < b.moons.length; m++) {
-        if (b.moons[m].key === key) return b.moons[m];
+      const moons = b.moons;
+      if (!Array.isArray(moons)) continue;
+      for (let m = 0; m < moons.length; m++) {
+        if (moons[m].key === key) return moons[m];
       }
     }
     return null;

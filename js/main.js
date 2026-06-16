@@ -4231,10 +4231,13 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
       const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
       const meta = anomalyKindMeta(s.kind);
       /* Per le cinture asteroidali aggiungiamo il nome del corpo: in un
-         sistema possono esserci più cinture, l'utente deve distinguerle. */
+         sistema possono esserci più cinture, l'utente deve distinguerle.
+         Nota: g.galaxy.systems[id] è lo stub di galassia (name/links), non
+         il sistema generato — findBody ha bisogno di quest'ultimo. */
       let bodyNote = '';
-      if (s.kind === 'cintura' && s.bodyKey && ORION.system && ORION.system.findBody) {
-        const body = ORION.system.findBody(sys, s.bodyKey);
+      if (s.kind === 'cintura' && s.bodyKey && ORION.system && ORION.system.generate && ORION.system.findBody) {
+        const sysFull = ORION.system.generate(g.galaxy, s.sysId);
+        const body = sysFull ? ORION.system.findBody(sysFull, s.bodyKey) : null;
         if (body && body.name) bodyNote = ' · <span class="expedition-item__body">' + escapeHtml(body.name) + '</span>';
       }
       let stateTxt;
