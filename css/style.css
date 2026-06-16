@@ -3001,6 +3001,245 @@ select.main-menu__input { cursor: pointer; }
 }
 .crew-roster__status--rest { color: #9fd0a8; }
 .crew-roster__status--away { color: #e6b878; }
+.crew-roster__away-hint {
+  margin: 4px 0 8px;
+  padding: 6px 8px;
+  font-size: 0.82em;
+  color: var(--c-muted, #8a93b8);
+  background: rgba(110, 90, 200, 0.05);
+  border: 1px dashed rgba(125, 110, 220, 0.20);
+  border-radius: 6px;
+}
+.crew-roster__away-hint strong { color: #c8b6ff; }
+
+/* =====================================================================
+   Roster Equipaggi Impero (richiesta utente 2026-06-16)
+   - Sidebar sx (.lp-crew-*): scheda compatta gemella di "Flotte"
+   - Vista centrale (.crew-view, .crew-table): roster esteso con filtri
+   ===================================================================== */
+.lp-crew-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+  background: rgba(220, 170, 90, 0.05);
+  border: 1px solid rgba(220, 170, 90, 0.18);
+  border-radius: 6px;
+  margin-bottom: 6px;
+}
+.lp-crew-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-size: 0.82em;
+  color: var(--c-text, #d8def0);
+}
+.lp-crew-totals strong { color: #f0d8a0; }
+.lp-crew-totals__sep { opacity: 0.4; }
+.lp-crew-pro { color: #f0d8a0; }
+.lp-crew-controls {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.lp-crew-sort {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8em;
+}
+.lp-crew-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lp-crew-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
+  background: rgba(110, 90, 200, 0.06);
+  border: 1px solid rgba(125, 110, 220, 0.18);
+  border-radius: 6px;
+  color: var(--c-text, #d8def0);
+  font-size: 0.85em;
+  text-align: left;
+  cursor: pointer;
+}
+.lp-crew-row:hover {
+  background: rgba(110, 90, 200, 0.12);
+  border-color: rgba(125, 110, 220, 0.35);
+}
+.lp-crew-row--rest { background: rgba(110, 200, 130, 0.06); border-color: rgba(110, 200, 130, 0.20); }
+.lp-crew-row--transit { background: rgba(230, 170, 80, 0.06); border-color: rgba(230, 170, 80, 0.22); }
+.lp-crew-row__top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: space-between;
+}
+.lp-crew-row__name { font-family: var(--font-mono, monospace); }
+.lp-crew-row__name strong { color: var(--c-text, #e9ecf6); }
+.lp-crew-row__xp {
+  font-size: 0.78em;
+  padding: 1px 6px;
+  border-radius: 9px;
+  font-family: var(--font-mono, monospace);
+}
+.lp-crew-row__bot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 0.82em;
+  color: var(--c-muted, #8a93b8);
+}
+.lp-crew-row__status {
+  font-size: 0.78em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: var(--font-mono, monospace);
+  background: rgba(255, 255, 255, 0.06);
+}
+.lp-crew-row__status--ok   { color: #9fd0a8; background: rgba(110, 200, 130, 0.12); }
+.lp-crew-row__status--info { color: #a8d4ee; background: rgba(90, 170, 220, 0.12); }
+.lp-crew-row__status--warn { color: #ffae5c; background: rgba(230, 170, 80, 0.12); }
+.lp-crew-row__detail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-crew-dom {
+  font-size: 0.78em;
+  padding: 1px 6px;
+  border-radius: 9px;
+  background: rgba(110, 90, 200, 0.16);
+  color: #c8b6ff;
+  font-family: var(--font-mono, monospace);
+}
+.lp-crew-promochip {
+  color: #f0d8a0;
+  margin-left: 4px;
+  font-size: 0.9em;
+}
+
+/* Vista centrale espansa */
+.crew-view { padding: 16px 20px; height: 100%; overflow-y: auto; }
+.crew-view__totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 0.9em;
+  color: var(--c-text, #d8def0);
+  margin-bottom: 12px;
+  opacity: 0.9;
+}
+.crew-view__totals strong { color: var(--c-amber, #ffae5c); }
+.crew-view__tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 12px;
+}
+.crew-view__tab {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  padding: 6px 14px;
+  color: var(--c-muted, #8a93b8);
+  cursor: pointer;
+  font-size: 0.95em;
+  border-radius: 4px 4px 0 0;
+}
+.crew-view__tab.is-active {
+  background: rgba(220, 170, 90, 0.10);
+  border-color: rgba(220, 170, 90, 0.30);
+  color: #f0d8a0;
+}
+.crew-view__tab-n {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 6px;
+  font-size: 0.82em;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: var(--c-text, #d8def0);
+}
+.crew-view__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+}
+.crew-filter {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: var(--c-text, #d8def0);
+  padding: 4px 6px;
+  font-size: 0.85em;
+  border-radius: 4px;
+}
+.crew-view__sorts {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  font-size: 0.85em;
+}
+.crew-view__sorts-l { color: var(--c-muted, #8a93b8); margin-right: 2px; }
+.crew-sort-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: var(--c-text, #d8def0);
+  padding: 3px 8px;
+  font-size: 0.85em;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: var(--font-mono, monospace);
+}
+.crew-sort-btn.is-active {
+  background: rgba(220, 170, 90, 0.18);
+  border-color: rgba(220, 170, 90, 0.40);
+  color: #f0d8a0;
+}
+.crew-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+.crew-table th, .crew-table td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  vertical-align: middle;
+}
+.crew-table th {
+  font-size: 0.82em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--c-muted, #8a93b8);
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.03);
+}
+.crew-table__row { cursor: pointer; }
+.crew-table__row:hover { background: rgba(220, 170, 90, 0.05); }
+.crew-table__xp { font-family: var(--font-mono, monospace); margin-left: 4px; }
+.crew-table__bar {
+  display: inline-block;
+  width: 60px; height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  margin-left: 6px;
+  overflow: hidden;
+  vertical-align: middle;
+}
+.crew-table__bar-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #6cb3e6, #f0c878);
+}
+.crew-table__role { color: var(--c-muted, #8a93b8); font-size: 0.85em; }
+.crew-table__nodom { color: var(--c-muted, #8a93b8); opacity: 0.6; }
+.crew-table__detail { color: var(--c-muted, #8a93b8); font-size: 0.85em; margin-left: 4px; }
 
 /* Comandanti nominati (decisione #43, M07 → gancio M14): roster figure
    con nome/rango/specializzazione/tratto. Stile sobrio, accento ambra
