@@ -300,19 +300,19 @@
 
     var header =
       '<div class="lp-crew-head">' +
+        '<button class="lp-crew-sort" data-crew-sort type="button" title="Ordina (ciclico): xp / sistema / stato">' +
+          uiIcon('refresh') + '<span class="lp-crew-sort__lbl">' + SORT_LABEL[mode] + '</span>' +
+        '</button>' +
         '<div class="lp-crew-totals">' +
-          '<span><strong>' + tot.crews + '</strong> equipaggi</span>' +
+          '<span><strong>' + tot.crews + '</strong> eq.</span>' +
           '<span class="lp-crew-totals__sep">·</span>' +
           '<span title="Esperienza media">⌀ xp <strong>' + tot.avgXp.toFixed(1) + '</strong></span>' +
           (tot.promotable ? ('<span class="lp-crew-totals__sep">·</span>' +
-            '<span class="lp-crew-pro" title="Vicini alla promozione (xp ≥ 8)">★ <strong>' + tot.promotable + '</strong> pron' + (tot.promotable === 1 ? 'to' : 'ti') + '</span>') : '') +
+            '<span class="lp-crew-pro" title="Vicini alla promozione (xp ≥ 8)">★ <strong>' + tot.promotable + '</strong></span>') : '') +
         '</div>' +
-        '<div class="lp-crew-controls">' +
-          '<button class="btn btn--mini lp-crew-sort" data-crew-sort type="button" title="Cambia ordinamento">' +
-            'ord: ' + SORT_LABEL[mode] +
-          '</button>' +
-          '<button class="btn btn--mini" data-crew-open type="button" title="Apri roster esteso nel pannello centrale">Roster esteso →</button>' +
-        '</div>' +
+        '<button class="lp-crew-open" data-crew-open type="button" title="Apri Roster esteso nel pannello centrale" aria-label="Roster esteso">' +
+          uiIcon('chronicle') +
+        '</button>' +
       '</div>';
 
     var rowsHtml = sorted.map(function (cw) {

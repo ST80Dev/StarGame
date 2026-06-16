@@ -3019,9 +3019,9 @@ select.main-menu__input { cursor: pointer; }
    ===================================================================== */
 .lp-crew-head {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 6px;
-  padding: 6px 8px;
+  padding: 5px 8px;
   background: rgba(220, 170, 90, 0.05);
   border: 1px solid rgba(220, 170, 90, 0.18);
   border-radius: 6px;
@@ -3029,23 +3029,41 @@ select.main-menu__input { cursor: pointer; }
 }
 .lp-crew-totals {
   display: flex;
+  flex: 1 1 auto;
   flex-wrap: wrap;
-  gap: 4px 8px;
-  font-size: 0.82em;
+  gap: 2px 6px;
+  align-items: baseline;
+  font-size: 0.88em;
   color: var(--c-text, #d8def0);
+  min-width: 0;
 }
 .lp-crew-totals strong { color: #f0d8a0; }
 .lp-crew-totals__sep { opacity: 0.4; }
 .lp-crew-pro { color: #f0d8a0; }
-.lp-crew-controls {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.lp-crew-sort {
+.lp-crew-sort,
+.lp-crew-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: var(--c-text, #d8def0);
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
   font-family: var(--font-mono, monospace);
-  font-size: 0.8em;
+  font-size: 0.78em;
+  flex: 0 0 auto;
 }
+.lp-crew-sort:hover,
+.lp-crew-open:hover {
+  background: rgba(220, 170, 90, 0.12);
+  border-color: rgba(220, 170, 90, 0.30);
+}
+.lp-crew-sort .ui-icon,
+.lp-crew-open .ui-icon { font-size: 0.95em; opacity: 0.85; }
+.lp-crew-sort__lbl { letter-spacing: 0.02em; }
+.lp-crew-open { padding: 3px 7px; }
 .lp-crew-list {
   display: flex;
   flex-direction: column;
@@ -3054,13 +3072,13 @@ select.main-menu__input { cursor: pointer; }
 .lp-crew-row {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 6px 8px;
+  gap: 4px;
+  padding: 7px 9px;
   background: rgba(110, 90, 200, 0.06);
   border: 1px solid rgba(125, 110, 220, 0.18);
   border-radius: 6px;
   color: var(--c-text, #d8def0);
-  font-size: 0.85em;
+  font-size: 0.95em;
   text-align: left;
   cursor: pointer;
 }
@@ -3079,8 +3097,8 @@ select.main-menu__input { cursor: pointer; }
 .lp-crew-row__name { font-family: var(--font-mono, monospace); }
 .lp-crew-row__name strong { color: var(--c-text, #e9ecf6); }
 .lp-crew-row__xp {
-  font-size: 0.78em;
-  padding: 1px 6px;
+  font-size: 0.82em;
+  padding: 1px 7px;
   border-radius: 9px;
   font-family: var(--font-mono, monospace);
 }
@@ -3089,12 +3107,12 @@ select.main-menu__input { cursor: pointer; }
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  font-size: 0.82em;
+  font-size: 0.88em;
   color: var(--c-muted, #8a93b8);
 }
 .lp-crew-row__status {
-  font-size: 0.78em;
-  padding: 1px 6px;
+  font-size: 0.82em;
+  padding: 1px 7px;
   border-radius: 3px;
   font-family: var(--font-mono, monospace);
   background: rgba(255, 255, 255, 0.06);
@@ -3104,8 +3122,8 @@ select.main-menu__input { cursor: pointer; }
 .lp-crew-row__status--warn { color: #ffae5c; background: rgba(230, 170, 80, 0.12); }
 .lp-crew-row__detail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lp-crew-dom {
-  font-size: 0.78em;
-  padding: 1px 6px;
+  font-size: 0.82em;
+  padding: 1px 7px;
   border-radius: 9px;
   background: rgba(110, 90, 200, 0.16);
   color: #c8b6ff;
@@ -6580,8 +6598,8 @@ select.main-menu__input { cursor: pointer; }
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
-  margin: 0 0 10px;
-  padding: 4px;
+  margin: 0 0 4px;
+  padding: 2px;
   background: rgba(var(--c-bg-deep-rgb) / 0.5);
   border: 1px solid rgba(var(--c-surface-rgb) / 0.6);
   border-radius: 6px;
@@ -6590,14 +6608,14 @@ select.main-menu__input { cursor: pointer; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 6px 4px;
+  gap: 1px;
+  padding: 3px 4px;
   font-size: 0.66rem;
   text-align: center;
-  line-height: 1.1;
+  line-height: 1.05;
 }
 .lp-nav-horizontal .nav-item__glyph {
-  font-size: 1.15rem;
+  font-size: 1.1rem;
   opacity: 0.95;
 }
 .lp-nav-horizontal .nav-item[data-view="galaxy"] .nav-item__glyph { color: var(--c-accent); }
