@@ -12580,6 +12580,10 @@ function renderSaveModal() {
      on-demand (un GET piccolo). Lo stato di sync e' un indicatore live. */
   html += cloudSectionHtml();
 
+  /* Backup automatici locali (creati dal reconcile cloud quando il cloud
+     sovrascrive il locale). Visibile solo se ce ne sono. */
+  html += backupSectionHtml();
+
   /* Export/Import + Nuova partita. Export richiede una partita corrente;
      "Nuova partita" rimanda al main menu (decisione #25) e ha senso solo
      da dentro partita (altrimenti il main menu è già aperto). */
@@ -12650,6 +12654,48 @@ function attachCloudHandlers(root) {
   });
   const ref = root.querySelector('[data-action="cloud-refresh-list"]');
   if (ref) ref.addEventListener('click', function () { refreshCloudRemoteList(); });
+  /* Backup automatici: scarica / cancella. */
+  root.querySelectorAll('[data-action="backup-download"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const ok = ORION.cloud.downloadBackup(Number(b.dataset.idx));
+      showToast(ok ? '⬇ Backup scaricato' : 'Backup non trovato');
+    });
+  });
+  root.querySelectorAll('[data-action="backup-delete"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (!confirm('Cancellare questo backup automatico? Resta solo se è già stato scaricato.')) return;
+      ORION.cloud.deleteBackup(Number(b.dataset.idx));
+      renderSaveModal();
+    });
+  });
+}
+
+function backupSectionHtml() {
+  if (!ORION.cloud || !ORION.cloud.listBackups) return '';
+  const list = ORION.cloud.listBackups();
+  if (!list || !list.length) return '';
+  let h = '<section class="save-section">' +
+    '<h3 class="save-section__title">Backup automatici locali (' + list.length + ')</h3>' +
+    '<p class="save-section__hint">' +
+      'Creati automaticamente quando il cloud sovrascrive il locale. ' +
+      'Conservati nel browser (gli ultimi ' + ORION.cloud.CFG.BACKUP_KEEP + '). Scaricali se vuoi tenerli al sicuro.' +
+    '</p>' +
+    '<ul class="backup-list">';
+  list.forEach(function (b) {
+    const date = b.ts ? new Date(b.ts).toLocaleString() : '—';
+    h += '<li class="backup-list__item">' +
+      '<div class="backup-list__meta">' +
+        '<div><strong>' + escapeHtml(b.label) + '</strong> · ' + escapeHtml(b.ds) + ' · seed <code>' + escapeHtml(b.seed) + '</code></div>' +
+        '<div class="backup-list__date">' + escapeHtml(date) + '</div>' +
+      '</div>' +
+      '<div class="backup-list__actions">' +
+        '<button class="btn btn--mini" data-action="backup-download" data-idx="' + b.idx + '" type="button">⬇ Scarica</button>' +
+        '<button class="btn btn--mini btn--danger" data-action="backup-delete" data-idx="' + b.idx + '" type="button">Cancella</button>' +
+      '</div>' +
+    '</li>';
+  });
+  h += '</ul></section>';
+  return h;
 }
 
 function refreshCloudRemoteList() {
@@ -13553,7 +13599,7 @@ function reconcileCloudAtBoot() {
     if (!res) return;
     switch (res.action) {
       case 'pulled-overwrote-local':
-        showToast('☁ Cloud più recente: locale sostituito (backup .json scaricato)');
+        showToast('☁ Cloud più recente: locale sostituito (backup nel pannello Save)');
         /* Se l'utente e' gia' entrato in partita, suggerisci ricarica. */
         if (ORION.game) showToast('Ricarica la pagina per usare il save cloud appena scaricato');
         break;
