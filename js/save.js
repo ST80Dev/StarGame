@@ -771,6 +771,10 @@
       ts: Date.now()
     };
     writeStore(store);
+    /* Cloud sync (debounced) — decisione di sessione. */
+    if (ORION.cloud && ORION.cloud.schedulePush) {
+      ORION.cloud.schedulePush('autosave', game);
+    }
   }
   function loadAutosave() {
     const store = readStore();
@@ -782,6 +786,7 @@
     const store = readStore();
     store.autosave = null;
     writeStore(store);
+    if (ORION.cloud && ORION.cloud.del) ORION.cloud.del('autosave');
   }
 
   /* ------------------------------------------------------------------
@@ -853,6 +858,10 @@
       ts: Date.now()
     };
     writeStore(store);
+    /* Cloud sync immediato per gli slot manuali (azione esplicita dell'utente). */
+    if (ORION.cloud && ORION.cloud.pushNow) {
+      ORION.cloud.pushNow('s' + idx, game);
+    }
     return true;
   }
   function loadSlot(idx) {
@@ -868,6 +877,7 @@
     const store = readStore();
     store.slots[idx] = null;
     writeStore(store);
+    if (ORION.cloud && ORION.cloud.del) ORION.cloud.del('s' + idx);
     return true;
   }
 
