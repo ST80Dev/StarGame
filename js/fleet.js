@@ -965,7 +965,7 @@
          specifica (sistema + tipo). Una flotta sui detriti NON drena anche
          la nebulosa dello stesso sistema. `anomalyKind` ∈ detriti/nebulosa/
          reliquie. */
-      const baseOrder = { type: 'survey', toSysId: to, anomalyKind: order.anomalyKind || null };
+      const baseOrder = { type: 'survey', toSysId: to, anomalyKind: order.anomalyKind || null, bodyKey: order.bodyKey || null };
       if (to === currentSys) {
         fleet.orders = baseOrder;
         fleet.route = [currentSys];
