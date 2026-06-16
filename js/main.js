@@ -8378,8 +8378,17 @@ function openFleetDetail(fleetId, opts) {
     const v = fleetViveriHtml(fleet);
     if (!v) return '';
     const F = ORION.fleet;
+    /* Decisione utente 2026-06-16: rifornimento e modifica capienza
+       serbatoio AMMESSI SOLO al porto amico (tua colonia, tua stazione
+       operativa, colonia alleata) — `fleetAtFriendlyPort` codifica già
+       le 3 condizioni "ancorata · stazione orbitale · orbita in mia
+       colonia" + esclude le flotte in survey (vedi nota in fleet.js).
+       Fuori da queste situazioni nascondiamo il bottone Rifornisci e
+       disabilitiamo lo slider capienza: non si fanno operazioni di
+       porto a metà strada in sistemi alieni. */
+    const atFriendlyPort = !!(F.fleetAtFriendlyPort && F.fleetAtFriendlyPort(g, fleet));
     let refuel = '';
-    if (F.payablePortAt && F.payRefuelAt &&
+    if (atFriendlyPort && F.payablePortAt && F.payRefuelAt &&
         F.payablePortAt(g, fleet.location.systemId) &&
         F.viveriOf(fleet) < F.viveriCapOf(fleet)) {
       const rc = F.payRefuelCost(g, fleet);
@@ -8392,7 +8401,7 @@ function openFleetDetail(fleetId, opts) {
       const min = F.VIVERI_CAP_MIN || 50;
       const max = F.VIVERI_CAP_MAX || 1500;
       const crew = (F.fleetCrewRequired ? F.fleetCrewRequired(fleet) : 0) || 1;
-      const editable = fleet.location && fleet.location.status !== 'in-transit';
+      const editable = atFriendlyPort;
       /* Stima costo PIENO completo (Ι caricati = cap, crew totale × rate). */
       const rate = {
         food: F.VIVERI_RATE_FOOD || 0.07, water: F.VIVERI_RATE_WATER || 0.05,
@@ -8406,9 +8415,12 @@ function openFleetDetail(fleetId, opts) {
       };
       const costStr = '⛭ ' + cost.met + ' · ⚡ ' + cost.en + ' · ❖ ' + cost.food + ' · ≈ ' + cost.water;
       const editAttr = editable ? '' : ' disabled';
+      const inTransit = fleet.location && fleet.location.status === 'in-transit';
       const hintTxt = editable
         ? 'Capienza serbatoio: scegli quanta autonomia caricare alla prossima sosta al porto. Costo proporzionale a equipaggio (' + crew + ') × Ι caricati.'
-        : 'In viaggio: capienza non modificabile fino al ritorno al porto.';
+        : inTransit
+          ? 'In viaggio: capienza non modificabile fino al ritorno al porto.'
+          : 'Modifica capienza disponibile solo al porto amico (tua colonia, tua stazione, alleato).';
       capSlider =
         '<div class="fleet-viveri-cap" title="' + escapeHtml(hintTxt) + '">' +
           '<label class="fleet-viveri-cap__lbl">Capienza serbatoio · <strong data-bind="vcap-val">' + cap + '</strong> Ι</label>' +
