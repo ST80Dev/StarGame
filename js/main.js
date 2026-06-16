@@ -12466,6 +12466,10 @@ function renderSaveModal() {
       '</section>';
   }
 
+  /* Cloud: stato + bottoni manuali. La lista degli slot remoti si carica
+     on-demand (un GET piccolo). Lo stato di sync e' un indicatore live. */
+  html += cloudSectionHtml();
+
   /* Export/Import + Nuova partita. Export richiede una partita corrente;
      "Nuova partita" rimanda al main menu (decisione #25) e ha senso solo
      da dentro partita (altrimenti il main menu è già aperto). */
@@ -12481,6 +12485,135 @@ function renderSaveModal() {
 
   body.innerHTML = html;
   attachSaveModalHandlers(body);
+  attachCloudHandlers(body);
+}
+
+/* ------------------------------------------------------------------
+   Sezione Cloud nella modale Save (decisione di sessione).
+   ------------------------------------------------------------------ */
+function cloudSectionHtml() {
+  if (!ORION.cloud) return '';
+  const C = ORION.cloud;
+  const enabled = C.isEnabled();
+  const s = C.STATE || {};
+  let label = '—';
+  let cls = 'cloud-state cloud-state--idle';
+  if (!enabled) { label = 'Disabilitato'; cls = 'cloud-state cloud-state--off'; }
+  else if (s.status === 'syncing') { label = 'Sincronizzazione…'; cls = 'cloud-state cloud-state--sync'; }
+  else if (s.status === 'ok' && s.lastSyncAt) { label = 'OK · ' + new Date(s.lastSyncAt).toLocaleTimeString(); cls = 'cloud-state cloud-state--ok'; }
+  else if (s.status === 'error') { label = 'Errore: ' + (s.lastError || 'sconosciuto'); cls = 'cloud-state cloud-state--err'; }
+  else if (s.status === 'offline') { label = 'Offline'; cls = 'cloud-state cloud-state--err'; }
+
+  const toggleLabel = enabled ? 'Disabilita cloud' : 'Abilita cloud';
+  const hasGame = !!ORION.game;
+
+  return '<section class="save-section">' +
+    '<h3 class="save-section__title">☁ Cloud sync</h3>' +
+    '<div class="cloud-row">' +
+      '<span class="' + cls + '">' + escapeHtml(label) + '</span>' +
+      '<div class="cloud-actions">' +
+        (hasGame ? '<button class="btn btn--mini" data-action="cloud-push-now" type="button">Sincronizza ora</button>' : '') +
+        '<button class="btn btn--mini" data-action="cloud-refresh-list" type="button">Mostra slot remoti</button>' +
+        '<button class="btn btn--mini" data-action="cloud-toggle" type="button">' + escapeHtml(toggleLabel) + '</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="cloud-remote" data-bind="cloud-remote"></div>' +
+    '</section>';
+}
+
+function attachCloudHandlers(root) {
+  if (!ORION.cloud) return;
+  const C = ORION.cloud;
+  const push = root.querySelector('[data-action="cloud-push-now"]');
+  if (push) push.addEventListener('click', function () {
+    if (!ORION.game) return;
+    showToast('☁ Sincronizzazione in corso…');
+    C.pushNow('autosave', ORION.game)
+      .then(function () { showToast('☁ Autosave sincronizzato'); renderSaveModal(); })
+      .catch(function (err) { showToast('☁ Errore: ' + (err && err.message || err)); renderSaveModal(); });
+  });
+  const tog = root.querySelector('[data-action="cloud-toggle"]');
+  if (tog) tog.addEventListener('click', function () {
+    C.setEnabled(!C.isEnabled());
+    showToast(C.isEnabled() ? '☁ Cloud abilitato' : '☁ Cloud disabilitato');
+    renderSaveModal();
+  });
+  const ref = root.querySelector('[data-action="cloud-refresh-list"]');
+  if (ref) ref.addEventListener('click', function () { refreshCloudRemoteList(); });
+}
+
+function refreshCloudRemoteList() {
+  const host = document.querySelector('[data-bind="cloud-remote"]');
+  if (!host) return;
+  host.innerHTML = '<p class="save-empty">Caricamento…</p>';
+  ORION.cloud.list().then(function (rows) {
+    if (!rows || !rows.length) { host.innerHTML = '<p class="save-empty">Nessun salvataggio nel cloud.</p>'; return; }
+    /* ordina: autosave, s0..s4 */
+    const order = { 'autosave': -1, 's0': 0, 's1': 1, 's2': 2, 's3': 3, 's4': 4 };
+    rows.sort(function (a, b) { return (order[a.slot] || 99) - (order[b.slot] || 99); });
+    let h = '<ul class="save-grid">';
+    rows.forEach(function (r) {
+      h += '<li class="save-grid__item">' + cloudCardHtml(r) + '</li>';
+    });
+    h += '</ul>';
+    host.innerHTML = h;
+    host.querySelectorAll('[data-action="cloud-pull"]').forEach(function (b) {
+      b.addEventListener('click', function () { cloudPullToLocal(b.dataset.slot); });
+    });
+    host.querySelectorAll('[data-action="cloud-delete"]').forEach(function (b) {
+      b.addEventListener('click', function () { cloudDeleteRemote(b.dataset.slot); });
+    });
+  }).catch(function (err) {
+    host.innerHTML = '<p class="save-empty">Errore: ' + escapeHtml(String(err && err.message || err)) + '</p>';
+  });
+}
+
+function cloudCardHtml(row) {
+  const date = row.updated_at ? new Date(row.updated_at).toLocaleString() : '—';
+  const isAuto = row.slot === 'autosave';
+  const idx = isAuto ? -1 : parseInt(row.slot.substring(1), 10);
+  return '<div class="save-card save-card--cloud' + (isAuto ? ' save-card--auto' : '') + '">' +
+    '<div class="save-card__name">☁ ' + escapeHtml(isAuto ? 'Autosave' : ('Slot ' + (idx + 1))) + '</div>' +
+    '<dl class="save-card__meta">' +
+      (row.empire_label ? '<div><dt>Popolo</dt><dd><strong>' + escapeHtml(row.empire_label) + '</strong></dd></div>' : '') +
+      (row.ds_label ? '<div><dt>' + uiIcon('clock', 'soft') + ' Data Stellare</dt><dd>' + escapeHtml(row.ds_label) + '</dd></div>' : '') +
+      '<div><dt>Seed</dt><dd><code>' + escapeHtml(row.seed || '—') + '</code></dd></div>' +
+      '<div><dt>Schema</dt><dd>' + (row.schema || 0) + '</dd></div>' +
+      '<div><dt>Aggiornato</dt><dd>' + date + '</dd></div>' +
+    '</dl>' +
+    '<div class="save-card__actions">' +
+      '<button class="btn btn--mini" data-action="cloud-pull" data-slot="' + escapeHtml(row.slot) + '" type="button">Scarica nel locale</button>' +
+      '<button class="btn btn--mini btn--danger" data-action="cloud-delete" data-slot="' + escapeHtml(row.slot) + '" type="button">Elimina remoto</button>' +
+    '</div>' +
+    '</div>';
+}
+
+function cloudPullToLocal(slot) {
+  if (!ORION.cloud) return;
+  if (!confirm('Scaricare il salvataggio cloud "' + slot + '" e sovrascrivere quello locale corrispondente? La copia locale precedente verrà esportata come .json di backup.')) return;
+  ORION.cloud.pull(slot).then(function (row) {
+    if (!row) { showToast('Slot vuoto sul cloud'); return; }
+    /* Backup del locale prima di sovrascrivere. */
+    const localMeta = (slot === 'autosave')
+      ? ORION.cloud.localAutosaveMeta()
+      : ORION.cloud.localSlotMeta(parseInt(slot.substring(1), 10));
+    if (localMeta && localMeta.payload) {
+      ORION.cloud.backupLocalPayload(localMeta.payload, 'pre-pull-' + slot);
+    }
+    if (slot === 'autosave') ORION.cloud.writeLocalAutosave(row);
+    else ORION.cloud.writeLocalSlot(parseInt(slot.substring(1), 10), row);
+    showToast('☁ Slot ' + slot + ' scaricato nel locale');
+    renderSaveModal();
+  }).catch(function (err) { showToast('☁ Errore: ' + (err && err.message || err)); });
+}
+
+function cloudDeleteRemote(slot) {
+  if (!ORION.cloud) return;
+  if (!confirm('Eliminare definitivamente lo slot "' + slot + '" dal cloud? Il locale resta intatto.')) return;
+  ORION.cloud.del(slot).then(function () {
+    showToast('☁ Slot ' + slot + ' eliminato dal cloud');
+    refreshCloudRemoteList();
+  });
 }
 
 function saveCardHtml(meta, perms) {
@@ -13294,7 +13427,48 @@ function boot() {
   initMobileNav();
   initMainMenu();
   showMainMenu('home');
+  /* Cloud sync (decisione di sessione): reconciliation autosave al boot,
+     piu' recente vince, backup .json del perdente. Non blocca il menu —
+     se finisce dopo "Continua", l'utente ha gia' caricato il locale; in
+     quel caso lo invitiamo a ricaricare con un toast. */
+  reconcileCloudAtBoot();
   console.info('%cOrion Empires ' + ORION.version + ' — main menu pronto.', 'color:#2fe6e0');
+}
+
+function reconcileCloudAtBoot() {
+  if (!ORION.cloud || !ORION.cloud.reconcileAtBoot) return;
+  if (!ORION.cloud.isEnabled()) return;
+  showToast('☁ Controllo cloud…');
+  ORION.cloud.reconcileAtBoot().then(function (res) {
+    if (!res) return;
+    switch (res.action) {
+      case 'pulled-overwrote-local':
+        showToast('☁ Cloud più recente: locale sostituito (backup .json scaricato)');
+        /* Se l'utente e' gia' entrato in partita, suggerisci ricarica. */
+        if (ORION.game) showToast('Ricarica la pagina per usare il save cloud appena scaricato');
+        break;
+      case 'pulled-fresh':
+        showToast('☁ Salvataggio cloud scaricato (nessun locale)');
+        break;
+      case 'pushed-initial':
+        showToast('☁ Autosave caricato nel cloud');
+        break;
+      case 'pushed-local-newer':
+        showToast('☁ Locale più recente: cloud aggiornato');
+        break;
+      case 'in-sync':
+        /* niente toast: rumore inutile a ogni avvio */
+        break;
+      case 'offline':
+        showToast('☁ Cloud non raggiungibile: gioco offline');
+        break;
+      case 'disabled':
+      case 'empty':
+      default:
+        break;
+    }
+    renderSaveModal();   /* se la modale e' aperta, aggiorna lo stato */
+  });
 }
 
 /* M06.6: bottone "?" in HUD — apre l'indice di tutte le lezioni

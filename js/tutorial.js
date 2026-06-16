@@ -269,6 +269,10 @@
         'colonizzazione). 5 <strong>slot manuali</strong> per i checkpoint volontari.</p>' +
         '<p><strong>Esporta .json</strong> per trasferire la partita tra dispositivi (PC ↔ tablet): il file è ' +
         'autosufficiente, la galassia si rigenera dal seed. <strong>Importa .json</strong> sostituisce la partita corrente.</p>' +
+        '<p><strong>☁ Cloud sync</strong>: l\'autosave viene replicato su un database privato (Supabase) ' +
+        'con debounce 5 s. Al boot la versione <strong>più recente vince</strong>: se il cloud è più nuovo, ' +
+        'la copia locale viene esportata come <code>.json</code> di backup prima della sovrascrittura ' +
+        '(recovery-friendly). Puoi disabilitare la sincronia dal pannello Save.</p>' +
         '<p>In modalità <strong>Ironman</strong> (preset Incubo) gli slot manuali sono nascosti: solo autosave + export/import, ' +
         'niente save-scumming.</p>'
     },
