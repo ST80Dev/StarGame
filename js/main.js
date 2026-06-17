@@ -2179,6 +2179,52 @@ function expeditionsForColony(colony) {
   return out;
 }
 
+/* Ricognizioni attive (survey) lanciate da questa colonia. Separate dalle
+   esplorazioni inter-sistema (`expeditionsForColony`) per evitare il counter
+   confuso "X spedizioni" che mescolava i due flussi: le survey sono missioni
+   a permanenza sull'anomalia, non viaggi di scoperta. */
+function surveysForColony(colony) {
+  const g = ORION.game;
+  if (!g || !colony || !Array.isArray(g.fleets)) return [];
+  const key = colony.systemId + ':' + colony.bodyKey;
+  const out = [];
+  for (let i = 0; i < g.fleets.length; i++) {
+    const f = g.fleets[i];
+    if (!f || f.ownerColonyKey !== key) continue;
+    if (!f.orders || f.orders.type !== 'survey') continue;
+    out.push(f);
+  }
+  return out;
+}
+
+/* Esploratori "in attesa di ordini" appartenenti a questa colonia: flotte
+   con 1 scafo esploratore + 1 equipaggio, idle/orbiting in un sistema NON
+   casa. Tipicamente nascono dal lancio col default `move-route` + returnHome
+   OFF — a fine rotta restano in sosta al target. Il giocatore non aveva un
+   modo immediato di vederle dal pannello Esplorazione e finivano "fuori
+   conto" rispetto a `colony.ships.explorer`. Restituiamo qui le flotte
+   da richiamare con un click. */
+function idleExplorerFleetsForColony(colony) {
+  const g = ORION.game;
+  if (!g || !colony || !Array.isArray(g.fleets)) return [];
+  const key = colony.systemId + ':' + colony.bodyKey;
+  const homeSys = colony.systemId;
+  const out = [];
+  for (let i = 0; i < g.fleets.length; i++) {
+    const f = g.fleets[i];
+    if (!f || f.ownerColonyKey !== key) continue;
+    if (!f.location || f.location.systemId === homeSys) continue;
+    if (f.location.status === 'in-transit') continue;
+    if (!Array.isArray(f.ships) || f.ships.length !== 1) continue;
+    if (!f.ships[0] || f.ships[0].kind !== 'explorer') continue;
+    if (!Array.isArray(f.crew) || f.crew.length !== 1) continue;
+    const ot = f.orders && f.orders.type;
+    if (ot !== 'idle' && ot !== 'survey') continue;
+    out.push(f);
+  }
+  return out;
+}
+
 /* --- Tab Colonia / Colonizzazione --- */
 function renderPlanetColoniaTab(host, planet, colony) {
   const g = ORION.game;
@@ -4362,27 +4408,59 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
   const xpAvg = crews.length ? ORION.expedition.averageXp(crews).toFixed(1) : '0';
 
   const expeditions = expeditionsForColony(colony);
+  const surveys = surveysForColony(colony);
+  const idleScouts = idleExplorerFleetsForColony(colony);
 
-  /* Decisione utente 2026-06-16: la lista dettagliata delle spedizioni
-     attive duplicava il roster flotte centrale (vista Flotte e guerra) +
-     le pillole usura/viveri della sidebar sx. Qui ora un riepilogo
-     COMPATTO orientato al task (count + link), per togliere la ridondanza
-     senza perdere il colpo d'occhio. Il dettaglio per flotta (wear/xp/
-     incidenti) vive nella card della vista Flotte e nel dettaglio flotta. */
-  let listHtml;
-  if (expeditions.length) {
-    const n = expeditions.length;
-    const summary = n + ' spedizion' + (n === 1 ? 'e' : 'i') + ' attiv' + (n === 1 ? 'a' : 'e') +
-      ' da questa colonia';
-    listHtml = '<div class="lp-launcher lp-launcher--single">' +
+  /* Decisione utente 2026-06-17: il counter "X spedizioni" era ambiguo —
+     non distingueva esplorazioni inter-sistema e ricognizioni anomalia
+     (survey), né mostrava gli esploratori in sosta al target (move-route
+     default OFF). Ora un riepilogo a 3 voci con CTA dedicate. */
+  function plural(n, sing, plur) { return n === 1 ? sing : plur; }
+  function partsRow(label, n, sub) {
+    if (n <= 0) return '';
+    return '<div class="lp-launcher lp-launcher--single">' +
       '<button class="lp-launcher__btn" data-action="exp-open-fleets" type="button">' +
         '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('fleet')) || '') + '</span>' +
-        '<span>' + escapeHtml(summary) + '</span>' +
-        '<span class="lp-launcher__sub">apri Flotte e guerra · vedi stato/usura/viveri</span>' +
+        '<span>' + escapeHtml(n + ' ' + label) + '</span>' +
+        '<span class="lp-launcher__sub">' + escapeHtml(sub) + '</span>' +
       '</button>' +
     '</div>';
-  } else {
-    listHtml = '<p class="panel__note">Nessuna spedizione attiva. Costruisci scafi e equipaggi, poi pianifica una rotta.</p>';
+  }
+  let listHtml = '';
+  if (expeditions.length) {
+    listHtml += partsRow(
+      plural(expeditions.length, 'esplorazione attiva', 'esplorazioni attive'),
+      expeditions.length,
+      'apri Flotte e guerra · stato/usura/viveri'
+    );
+  }
+  if (surveys.length) {
+    listHtml += partsRow(
+      plural(surveys.length, 'ricognizione anomalia', 'ricognizioni anomalia'),
+      surveys.length,
+      'flotte in raccolta sull\'anomalia · apri Flotte'
+    );
+  }
+  if (idleScouts.length) {
+    const idleHtml = idleScouts.map(function (f) {
+      const sysLbl = (g.galaxy.systems[f.location.systemId] || {}).name || '—';
+      const otLbl = (f.orders && f.orders.type === 'survey') ? 'in raccolta' : 'in sosta';
+      return '<li class="expedition-item">' +
+        '<div class="expedition-item__head">' +
+          '<span class="expedition-item__status expedition-status--outbound">' + escapeHtml(f.name || 'Esploratore') + '</span>' +
+          '<span class="expedition-item__target">' + escapeHtml(sysLbl) + '</span>' +
+          '<span class="expedition-item__eta">' + escapeHtml(otLbl) + '</span>' +
+        '</div>' +
+        '<div class="expedition-item__bars">' +
+          '<button class="btn btn--mini btn--primary" data-action="exp-recall" data-fleet="' + escapeHtml(f.id) + '" type="button" title="Imposta l\'ordine Rientra alla base: la flotta torna qui, scafo + equipaggio rientrano nei conteggi della colonia.">Richiama a base</button>' +
+        '</div>' +
+      '</li>';
+    }).join('');
+    listHtml += '<p class="sysinfo__sub">Esploratori da richiamare</p>' +
+      '<ul class="expedition-list">' + idleHtml + '</ul>';
+  }
+  if (!listHtml) {
+    listHtml = '<p class="panel__note">Nessuna missione attiva. Costruisci scafi e equipaggi, poi pianifica una rotta.</p>';
   }
 
   const canOrganize = ships >= 1 && crews.length >= 1;
@@ -4503,7 +4581,23 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
   if (openFleetsBtn) openFleetsBtn.addEventListener('click', function () { navigateView('fleet'); });
   host.querySelectorAll('[data-action="anom-send"]').forEach(function (b) {
     b.addEventListener('click', function () {
-      doSurveyAnomaly(colony, Number(b.dataset.sys), b.dataset.kind, b.dataset.body || null);
+      openAnomalySurveyPicker(colony, Number(b.dataset.sys), b.dataset.kind, b.dataset.body || null);
+    });
+  });
+  /* Decisione utente 2026-06-17: bottone "Richiama a base" per gli
+     esploratori in sosta al target (move-route default OFF). Setta
+     ordine `return` sulla flotta; al docking l'auto-dissolve restituisce
+     scafo + equipaggio ai counter della colonia. */
+  host.querySelectorAll('[data-action="exp-recall"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const fid = b.dataset.fleet;
+      const fleet = (ORION.game.fleets || []).filter(function (f) { return f && f.id === fid; })[0];
+      if (!fleet) { showToast('Flotta non trovata'); return; }
+      const res = ORION.fleet.setOrder(ORION.game, fleet, { type: 'return' });
+      if (!res.ok) { showToast(res.reason || 'Richiamo rifiutato'); return; }
+      pushChronicle(ORION.time.currentDS(ORION.game) + ' — <strong>' + escapeHtml(fleet.name || 'Esploratore') + '</strong> in rientro alla base.', 'explore');
+      persistGame(ORION.game);
+      updatePlanetUI();
     });
   });
 }
@@ -4565,29 +4659,44 @@ function reachableAnomaliesFor(colony) {
    sistema di un'anomalia con ordine `survey`: arriva e RESTA a
    raccogliere/esplorare. Stesso pattern di doLaunchExpedition (decisione
    #60), ma l'ordine non rientra. */
-function doSurveyAnomaly(colony, targetSystemId, anomalyKind, bodyKey) {
+function doSurveyAnomaly(colony, targetSystemId, anomalyKind, bodyKey, opts) {
+  opts = opts || {};
   const g = ORION.game;
   const key = colony.systemId + ':' + colony.bodyKey;
   if (!ORION.fleet || !ORION.fleet.createFleet) { showToast('Modulo flotta non disponibile'); return; }
-  /* Decisione utente 2026-06-16: preferisci sempre l'Estrattore (rate
-     scalato sull'Hangar e più rugged in survey). Fallback all'esploratore
-     se non disponibile — l'esploratore in survey resta legittimo a rate
-     base CFG.HARVEST_RATE per compat coi save antichi. */
   const extractorsAvail = (colony.ships && colony.ships.estrattore) || 0;
-  const explorersAvail = (colony.ships && colony.ships.explorer) || 0;
-  const useExtractor = extractorsAvail >= 1;
-  const shipKind = useExtractor ? 'estrattore' : 'explorer';
+  const explorersAvail  = (colony.ships && colony.ships.explorer)   || 0;
+  /* Decisione utente 2026-06-17: se l'opt.shipKind è esplicito (picker),
+     rispettarlo. Altrimenti preferiamo Esploratore per le reliquie (l'
+     Estrattore non porta vantaggi quando anomaly.harvest=false: meglio
+     tenerlo per cinture/detriti/nebulose) e Estrattore per il resto. */
+  let shipKind = opts.shipKind;
+  if (shipKind !== 'estrattore' && shipKind !== 'explorer') {
+    if (anomalyKind === 'reliquie') {
+      shipKind = explorersAvail >= 1 ? 'explorer' : (extractorsAvail >= 1 ? 'estrattore' : null);
+    } else {
+      shipKind = extractorsAvail >= 1 ? 'estrattore' : (explorersAvail >= 1 ? 'explorer' : null);
+    }
+  }
+  if (shipKind === 'estrattore' && extractorsAvail < 1) {
+    shipKind = explorersAvail >= 1 ? 'explorer' : null;
+  }
+  if (shipKind === 'explorer' && explorersAvail < 1) {
+    shipKind = extractorsAvail >= 1 ? 'estrattore' : null;
+  }
   const crewsAvail = (colony.crews && Array.isArray(colony.crews.explorer)) ? colony.crews.explorer.length : 0;
-  if (!useExtractor && explorersAvail < 1) { showToast('Nessuno scafo idoneo (Estrattore o Esploratore) disponibile'); return; }
+  if (!shipKind) { showToast('Nessuno scafo idoneo (Estrattore o Esploratore) disponibile'); return; }
   if (crewsAvail < 1) { showToast('Nessun equipaggio disponibile'); return; }
-  /* Niente nome esplicito: lo riceverà al setOrder('explore') sotto, come
-     callsign progressivo "Segugio N" (decisione utente 2026-06-15). */
   const cf = ORION.fleet.createFleet(g, key, null);
   if (!cf.ok) { showToast(cf.reason || 'Creazione flotta fallita'); return; }
   const fleet = cf.fleet;
   const as = ORION.fleet.assignShips(g, fleet, key, shipKind, 1);
   if (!as.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(as.reason || 'Assegnazione nave fallita'); return; }
-  const ac = ORION.fleet.assignCrew(g, fleet, key, 1);
+  let ac = null;
+  if (opts.crewId != null && ORION.fleet.assignCrewById) {
+    ac = ORION.fleet.assignCrewById(g, fleet, key, opts.crewId);
+  }
+  if (!ac || !ac.ok) ac = ORION.fleet.assignCrew(g, fleet, key, 1);
   if (!ac.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(ac.reason || 'Assegnazione equipaggio fallita'); return; }
   const so = ORION.fleet.setOrder(g, fleet, { type: 'survey', toSysId: targetSystemId, anomalyKind: anomalyKind || null, bodyKey: bodyKey || null });
   if (!so.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(so.reason || 'Ordine ricognizione rifiutato'); return; }
@@ -4755,6 +4864,160 @@ function openExpeditionPicker(colony, opts) {
 
 function closeExpeditionPicker() {
   const host = document.querySelector('[data-bind="exp-picker"]');
+  if (host) { host.hidden = true; host.innerHTML = ''; }
+}
+
+/* Picker per "Invia flotta" su anomalia (decisione utente 2026-06-17):
+   prima era un quick-action che usava primo scafo idoneo + primo
+   equipaggio in lista, senza scelta. Disallineato dal picker spedizione
+   e fastidioso quando si vuole mandare un equipaggio specifico a una
+   reliquia. Apriamo un dialog con stessa estetica del picker spedizione:
+   scelta scafo (Estrattore/Esploratore) + scelta equipaggio (chip per xp).
+   Per le reliquie il default è Esploratore (sull'anomalia.harvest=false
+   l'Estrattore non aggiunge nulla: meglio tenerlo per le miniere vere). */
+function openAnomalySurveyPicker(colony, targetSystemId, anomalyKind, bodyKey, opts) {
+  opts = opts || {};
+  const g = ORION.game;
+  const extractors = (colony.ships && colony.ships.estrattore) || 0;
+  const explorers  = (colony.ships && colony.ships.explorer)   || 0;
+  const crews = (colony.crews && colony.crews.explorer) || [];
+  const crewsSorted = crews.slice().sort(function (a, b) { return (b.xp || 0) - (a.xp || 0); });
+
+  /* Default scafo: reliquie → esploratore (estrattore non porta vantaggi
+     sui siti relic), altrimenti estrattore (rate scalato sull'Hangar).
+     Fallback all'unico disponibile. */
+  const isRelic = anomalyKind === 'reliquie';
+  let defaultKind;
+  if (extractors >= 1 && explorers >= 1) {
+    defaultKind = isRelic ? 'explorer' : 'estrattore';
+  } else if (extractors >= 1) {
+    defaultKind = 'estrattore';
+  } else if (explorers >= 1) {
+    defaultKind = 'explorer';
+  } else {
+    defaultKind = null;
+  }
+  let selectedKind = opts.shipKind;
+  if (selectedKind !== 'estrattore' && selectedKind !== 'explorer') selectedKind = defaultKind;
+  if (selectedKind === 'estrattore' && extractors < 1) selectedKind = explorers >= 1 ? 'explorer' : null;
+  if (selectedKind === 'explorer'   && explorers   < 1) selectedKind = extractors >= 1 ? 'estrattore' : null;
+
+  let selectedCrewId = opts.selectedCrewId;
+  if (selectedCrewId == null || !crews.some(function (c) { return c.id === selectedCrewId; })) {
+    selectedCrewId = crewsSorted.length ? crewsSorted[0].id : null;
+  }
+
+  let host = document.querySelector('[data-bind="anom-picker"]');
+  if (!host) {
+    host = document.createElement('div');
+    host.className = 'expedition-pick-overlay';
+    host.setAttribute('data-bind', 'anom-picker');
+    host.setAttribute('role', 'dialog');
+    host.setAttribute('aria-modal', 'true');
+    host.setAttribute('aria-label', 'Invia flotta su anomalia');
+    document.body.appendChild(host);
+  }
+
+  const meta = anomalyKindMeta(anomalyKind);
+  const sys = g.galaxy.systems[targetSystemId];
+  const acr = regionAcronymFor(targetSystemId);
+  const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
+
+  /* Chip selettore tipo scafo. */
+  function shipChip(kind, label, sub, count, disabled) {
+    const sel = selectedKind === kind;
+    return '<button class="exp-crew-chip' + (sel ? ' is-selected' : '') + '" type="button"' +
+      ' role="radio" aria-checked="' + (sel ? 'true' : 'false') + '"' +
+      ' data-action="anom-ship-pick" data-kind="' + escapeHtml(kind) + '"' +
+      (disabled ? ' disabled title="Nessuno disponibile"' : ' title="' + escapeHtml(sub) + '"') + '>' +
+      '<span class="exp-crew-chip__rank">' + escapeHtml(label) + '</span>' +
+      '<span class="exp-crew-chip__xp">' + count + ' disp.</span>' +
+    '</button>';
+  }
+  const shipChips = '<div class="exp-crew-select" role="radiogroup" aria-label="Scegli scafo">' +
+    shipChip('estrattore', 'Estrattore', 'rate scalato sull\'Hangar — consigliato per harvest', extractors, extractors < 1) +
+    shipChip('explorer',   'Esploratore', 'rate base, niente bonus harvest', explorers, explorers < 1) +
+  '</div>';
+
+  let crewChips;
+  if (!crewsSorted.length) {
+    crewChips = '<p class="panel__note">Nessun equipaggio disponibile: formane uno nell\'<em>Accademia militare</em>.</p>';
+  } else {
+    crewChips = '<div class="exp-crew-select" role="radiogroup" aria-label="Scegli equipaggio">' +
+      crewsSorted.map(function (c) {
+        const xp = c.xp || 0;
+        const enr = ORION.expedition.enrichmentForXp(xp);
+        const sel = c.id === selectedCrewId;
+        return '<button class="exp-crew-chip' + (sel ? ' is-selected' : '') + '" type="button"' +
+          ' role="radio" aria-checked="' + (sel ? 'true' : 'false') + '"' +
+          ' data-action="anom-crew-pick" data-crew="' + escapeHtml(String(c.id)) + '"' +
+          ' title="' + escapeHtml(enr.label) + ' · xp ' + xp + '">' +
+          '<span class="exp-crew-chip__rank">' + escapeHtml(enr.label) + '</span>' +
+          '<span class="exp-crew-chip__xp">xp ' + xp + '</span>' +
+        '</button>';
+      }).join('') +
+    '</div>';
+  }
+
+  const canSend = selectedKind != null && selectedCrewId != null;
+  const sendTitle = !selectedKind ? 'Nessuno scafo idoneo disponibile'
+    : !selectedCrewId ? 'Serve un equipaggio'
+    : 'Invia la flotta sul sito (resta in raccolta finché non la richiami)';
+
+  host.innerHTML =
+    '<div class="expedition-pick-overlay__panel" role="document">' +
+      '<header class="expedition-pick-overlay__head">' +
+        '<h2 class="expedition-pick-overlay__title">Invia flotta su anomalia</h2>' +
+        '<button class="btn btn--mini btn--icon-only" data-action="anom-pick-close" type="button" aria-label="Chiudi">' +
+          '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+        '</button>' +
+      '</header>' +
+      '<p class="panel__note">' + escapeHtml(meta.label) + ' nel sistema <strong>' + (sys ? escapeHtml(sys.name) : '—') + '</strong>' + tag + '.</p>' +
+      '<p class="sysinfo__sub">Scafo</p>' +
+      shipChips +
+      '<p class="sysinfo__sub">Equipaggio</p>' +
+      crewChips +
+      '<div class="expedition-card__actions" style="margin-top:12px">' +
+        '<button class="btn btn--mini btn--primary btn--with-icon" data-action="anom-launch" type="button"' +
+          (canSend ? '' : ' disabled') + ' title="' + escapeHtml(sendTitle) + '">' +
+          '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('send')) || '') + '</span> Invia flotta' +
+        '</button>' +
+      '</div>' +
+    '</div>';
+  host.hidden = false;
+
+  function reopen(next) {
+    openAnomalySurveyPicker(colony, targetSystemId, anomalyKind, bodyKey, {
+      shipKind: (next && 'shipKind' in next) ? next.shipKind : selectedKind,
+      selectedCrewId: (next && 'selectedCrewId' in next) ? next.selectedCrewId : selectedCrewId
+    });
+  }
+
+  host.addEventListener('click', function (e) {
+    if (e.target === host || e.target.closest('[data-action="anom-pick-close"]')) {
+      closeAnomalySurveyPicker();
+    }
+  });
+  host.querySelectorAll('[data-action="anom-ship-pick"]').forEach(function (b) {
+    if (b.disabled) return;
+    b.addEventListener('click', function () { reopen({ shipKind: b.dataset.kind }); });
+  });
+  host.querySelectorAll('[data-action="anom-crew-pick"]').forEach(function (b) {
+    b.addEventListener('click', function () { reopen({ selectedCrewId: b.dataset.crew }); });
+  });
+  const launchBtn = host.querySelector('[data-action="anom-launch"]');
+  if (launchBtn && !launchBtn.disabled) {
+    launchBtn.addEventListener('click', function () {
+      doSurveyAnomaly(colony, targetSystemId, anomalyKind, bodyKey, {
+        shipKind: selectedKind, crewId: selectedCrewId
+      });
+      closeAnomalySurveyPicker();
+    });
+  }
+}
+
+function closeAnomalySurveyPicker() {
+  const host = document.querySelector('[data-bind="anom-picker"]');
   if (host) { host.hidden = true; host.innerHTML = ''; }
 }
 

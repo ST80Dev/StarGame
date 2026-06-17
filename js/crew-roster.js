@@ -137,7 +137,21 @@
           detail = sysName(f.location.systemId) + ' → ' + sysName(toId) +
             ' (ETA ' + (f.etaImpulsi | 0) + ' Ι)';
         } else {
-          detail = sysName(f.location.systemId) + (fst.id === 'docked' ? ' (attracco)' : ' (orbita)');
+          /* Decisione utente 2026-06-17: il dettaglio "imbarcato · orbita"
+             era ambiguo per le flotte in missione attiva (survey su anomalia,
+             pattuglia ciclica, ecc.) — l'utente non riusciva a capire a quale
+             flotta apparteneva l'equipaggio. Usa il tipo d'ordine quando
+             rilevante per dare contesto. */
+          var ot = (f.orders && f.orders.type) || 'idle';
+          var sysLbl = sysName(f.location.systemId);
+          var orderTxt = '';
+          if (ot === 'survey') orderTxt = ' · estrazione anomalia';
+          else if (ot === 'patrol-loop') orderTxt = ' · pattuglia ciclica';
+          else if (ot === 'patrol') orderTxt = ' · pattuglia';
+          else if (ot === 'garrison') orderTxt = ' · presidio';
+          else if (ot === 'idle' && fst.id === 'orbit') orderTxt = ' · in sosta';
+          var locTxt = (fst.id === 'docked') ? ' (attracco)' : ' (orbita)';
+          detail = sysLbl + locTxt + orderTxt;
         }
         out.crews.push({
           id: cc.id,
