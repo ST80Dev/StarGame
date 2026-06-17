@@ -1184,6 +1184,21 @@
          viene mai eseguita → "Rientra" sembra non avere effetto e la
          flotta resta in orbita (bug segnalato 2026-06-15). */
       if (path.length <= 1) {
+        /* Bug 2026-06-17: uno scout monouso (1 esploratore + 1 equipaggio)
+           riportato/rientrato mentre è GIÀ nel sistema della colonia non
+           passava mai dall'handler d'arrivo `return` (che ricuce scafo +
+           equipaggio nei counter). Restava ormeggiato come flotta separata,
+           invisibile alla sidebar Esplorazione e non riusabile (ripara al
+           dock all'infinito). Qui pieghiamo subito lo scout nei counter,
+           coerente col fold-back dell'arrivo. Le flotte multi-nave o non-
+           esploratore mantengono l'ormeggio in posizione (niente smobilito
+           a sorpresa di una flotta da combattimento). */
+        const isScout = fleet.ships.length === 1 && fleet.crew.length === 1 &&
+          fleet.ships[0] && fleet.ships[0].kind === 'explorer';
+        if (isScout) {
+          const d = dissolveFleet(game, fleet);
+          if (d.ok) return { ok: true, dissolved: true };
+        }
         fleet.location.status = 'docked';
         fleet.location.bodyKey = null;
         fleet.location.intra = null;
