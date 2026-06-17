@@ -31,6 +31,7 @@ manualmente dal giocatore, e ammesse solo se **coerenti** con l'oggetto di desti
 | **Colonizza** | multi-fase | viaggio → orbita → fondazione; al termine colonia operativa, flotta auto-park | no (poi sosta) |
 | **Attracca** | istantanea | ormeggia in porto in una **tua** colonia | no |
 | **Estrai** | continuativa | drena un **giacimento** (anomalia o corpo sfruttabile) finché presente; deposita in colonia | **sì → step finale** |
+| **Ricognizione** | continuativa | costruisce/approfondisce il **dossier** di una civ AI / covo pirata per presenza | **sì → step finale** |
 | *Difendi alleato* | *futura* | *unisce la forza alla difesa di un alleato sotto attacco* | *— (engine TODO)* |
 
 > **"Resta in orbita" / "Presidia" / "Schiera in difesa" NON sono comandi.** Sono lo *stato di default*
@@ -69,7 +70,25 @@ azioneDisponibile(A, oggetto, flotta) = gateOggetto(A, oggetto) && gateFlotta(A,
 | Colonizza | ≥1 nave **coloniale** a bordo |
 | Estrai | ≥1 **estrattore** (rate pieno) o **esploratore** (rate minimo); *reliquie*: nessun requisito (per presenza) |
 | Attracca | — |
+| Ricognizione | — (qualsiasi flotta; lo **score di composizione** determina la *velocità*, non il tetto) |
 | *Difendi alleato* | *potenza di fuoco > 0 (futura)* |
+
+### Dossier / intel (Ricognizione) — modello cumulativo
+
+L'intel **non è cappato dalla composizione**: si accumula per presenza e persiste tra le visite.
+
+```
+civ.intelProgress / nest.intelProgress  (continuo, persistito, additivo)
+   += rate per I di presenza (orbiting/docked),  rate = max(FLOOR, score × k)
+livelli a soglia:  frammentario > 0 · parziale ≥ 3 · completo ≥ 6
+```
+
+- **Composizione = velocità/efficienza** (ammiraglia: completo in pochi I; esploratore: lento ma possibile).
+- **Persistenza paga**: il `FLOOR` garantisce un guadagno minimo a ogni visita → grindabile con flotta minima.
+- **Primo contatto** (knowledge → *contacted*) alla prima presenza ≥ `CONTACT_PRESENCE_I` (4 I).
+- Al cap (*completo*) smette. Auto per presenza (recovery-friendly) **anche senza** comando Ricognizione;
+  il comando rende l'intento esplicito, impegna la flotta e mostra il contatore.
+- **UI**: contatore su scheda flotta + marker — `Dossier ‹civ›: ▮▮▯▯ n/soglia · livello: parziale`.
 
 ### Gate di conoscenza (controlla se M2 è proponibile)
 
@@ -101,6 +120,20 @@ Cliccando un oggetto sulla mappa si apre **lo stesso modal** con la catena minim
 - corpo preciso in sistema esplorato → `M1(sistema) + M2(corpo)` + Azioni valide per quel corpo;
 - sistema solo *detected* → `M1` (lo scoprirai), nessun M2.
 
+### Rotta avanzata / Pattuglia (opt-in)
+
+Il flusso base è **una destinazione + un'azione** (90% dei casi). Un toggle esplicito
+**"Rotta avanzata / Pattuglia"** (collassato di default) espande la stessa coda con:
+
+- **più tappe** M1 in sequenza;
+- **dwell per tappa** (pausa orbitale → durante la sosta l'intel/dossier si accumula per presenza);
+- toggle **ciclica** (loop infinito → `patrol-loop`);
+- toggle **rientro a fine** (`returnHome`).
+
+Non è un secondo sistema: è la stessa coda con flag, mappata su `move-route` / `patrol-loop`.
+Esempio "tieni 2 sistemi sotto controllo continuo": pattuglia ciclica A↔B con `dwell ≥` tempo
+di ricognizione → dossier continuo su entrambi, hands-free.
+
 ---
 
 ## 5. Tabella master — corpo → M2 → Azioni
@@ -116,10 +149,10 @@ Cliccando un oggetto sulla mappa si apre **lo stesso modal** con la catena minim
 | **Anomalia — detriti** | sì | **Estrai** | estrattore/esploratore | → **met** |
 | **Anomalia — nebulosa** | sì | **Estrai** | estrattore/esploratore | → **en** |
 | **Anomalia — reliquie** | sì | **Estrai** (esplora) | nessuno (per presenza) | progress → bottino una-tantum multi-risorsa |
-| **Pianeta/colonia AI ostile o attaccabile** | sì | **Attacca** | potenza di fuoco | scaramuccia all'arrivo; relazione si deteriora se non già ostile |
-| **Pianeta/colonia AI alleata** (sotto minaccia) | sì | *Difendi alleato (futura)* | potenza di fuoco | *unisce forza alla difesa (engine TODO)* |
+| **Pianeta/colonia AI ostile o attaccabile** | sì | **Attacca** · **Ricognizione** | Attacca: fuoco · Ricognizione: — | scaramuccia / costruisce dossier |
+| **Pianeta/colonia AI alleata** (sotto minaccia) | sì | **Ricognizione** · *Difendi alleato (futura)* | Ricogn.: — · Difesa: fuoco | dossier / *difesa (engine TODO)* |
 | **Pianeta/luna neutrale inerte** (no AI, no giacimento, non colonizzabile) | sì | *(nessuna)* → solo sosta/orbita | — | vigilanza per presenza |
-| **Covo pirata** | sì | **Attacca** | potenza di fuoco | scaramuccia; distrugge il covo |
+| **Covo pirata** | sì | **Attacca** · **Ricognizione** | Attacca: fuoco · Ricognizione: — | distrugge il covo / dossier covo |
 | **Anomalia/corpo in sistema solo detected** | **no** | — | — | esplora prima (M1) |
 
 ### Combattimento — partecipazione
@@ -144,6 +177,6 @@ Cliccando un oggetto sulla mappa si apre **lo stesso modal** con la catena minim
 
 ## 7. Riepilogo verbi esposti al giocatore
 
-**Movimento:** M1 (vai al sistema) · M2 (vai al corpo)
-**Azioni:** Attacca · Colonizza · Attracca · Estrai *(+ Difendi alleato, futura)*
-**Default (non comandi):** sosta · vigilanza/difesa per presenza · rientro come azione rapida
+**Movimento:** M1 (vai al sistema) · M2 (vai al corpo) · *Rotta avanzata/Pattuglia (opt-in)*
+**Azioni:** Attacca · Colonizza · Attracca · Estrai · Ricognizione *(+ Difendi alleato, futura)*
+**Default (non comandi):** sosta · vigilanza/difesa per presenza · intel-by-presence · rientro come azione rapida
