@@ -8796,7 +8796,9 @@ function openFleetDetail(fleetId, opts) {
       fleet = nf;
       D.creating = false;
       D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: false, exploreEach: false } };
-      render();
+      /* "Crea e parti" è l'azione finale: chiudiamo la modal — niente
+         re-render sul dettaglio della flotta appena nata. */
+      closeDetail();
     });
 
     /* --- Interazioni ordine (condivise creazione + dettaglio) ---
@@ -9027,7 +9029,9 @@ function openFleetDetail(fleetId, opts) {
     persistGame(g);
     D.ordOpen = false;
     D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: false, exploreEach: false } };
-    render();
+    /* Confermare un ordine è l'azione finale: chiudiamo la modal invece
+       di tornare al dettaglio "view" — simmetrico con "Crea e parti". */
+    closeDetail();
   }
 
   render();
