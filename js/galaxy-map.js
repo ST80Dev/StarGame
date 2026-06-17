@@ -378,10 +378,12 @@
     nodeReveal() {
       if (this.activeGroupId >= 0) return 1;
       /* decisione #80 — la dissolvenza dei nodi si COMPLETA sulla soglia di
-         reset di activeGroupId (1.5×): così uscendo da un gruppo l'override
-         (=1) passa il testimone allo smoothstep (≈1 a 1.5×) senza scalino, e
-         i nodi sfumano gradualmente fino a 0 verso la galassia. */
-      return smoothstep(0.95, 1.5, this.scale / this.fitScale);
+         reset di activeGroupId (2.0×): così uscendo da un gruppo l'override
+         (=1) passa il testimone allo smoothstep (≈1 a 2.0×) senza scalino.
+         Feedback 2026-06-17: finestra allargata 0.95→2.0× (era 0.95→1.5×)
+         per creare uno stato intermedio dove regioni e sistemi coesistono
+         a metà alpha invece di scattare l'uno nell'altro in una tacca. */
+      return smoothstep(0.95, 2.0, this.scale / this.fitScale);
     }
 
     nodeRadius(parallax) {
@@ -813,7 +815,7 @@
       this.offsetY = sy - (sy - this.offsetY) * k;
       this.scale = newScale;
       // zoom-out marcato: esci dal gruppo "entrato" (torni alla galassia)
-      if (this.scale < this.fitScale * 1.5) this.activeGroupId = -1;
+      if (this.scale < this.fitScale * 2.0) this.activeGroupId = -1;
       this.requestRender();
     }
 
@@ -1028,7 +1030,11 @@
       this._drawEcliptic(ctx);
 
       const reveal = this.nodeReveal();
-      const regionAlpha = 1 - smoothstep(0.2, 0.85, reveal);
+      /* Feedback 2026-06-17: finestra di overlap allargata (0.05→0.95) così
+         le etichette regione iniziano a sbiadire subito e finiscono solo a
+         rivelazione quasi completa — l'intermedio mostra entrambi i livelli
+         a metà alpha invece di scambiarsi a uno scatto. */
+      const regionAlpha = 1 - smoothstep(0.05, 0.95, reveal);
 
       if (regionAlpha > 0.01) this._drawRegions(ctx, regionAlpha);
       if (reveal > 0.01) {
@@ -1294,7 +1300,10 @@
     _drawNodes(ctx, reveal) {
       const g = this.galaxy;
       const disc = this.state.discovery;
-      const showLabels = reveal > 0.7;
+      /* Feedback 2026-06-17: soglia abbassata 0.7→0.45 così i nomi sistemi
+         emergono già nello stato intermedio (sfumati da `globalAlpha=reveal`)
+         mentre le etichette regione sono ancora visibili a metà alpha. */
+      const showLabels = reveal > 0.45;
       ctx.globalAlpha = reveal;
 
       // sistemi con almeno una colonia attiva (oltre al sistema base, evidenziato a parte).
