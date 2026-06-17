@@ -1581,26 +1581,25 @@
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
 
-      var nodeR = this.nodeRadius(1);
-      var blobBase = nodeR * 5;
-      var zoomOut = clamp(300 / Math.max(this.scale, 50), 1.0, 4.0);
+      var blobBase = Math.max(60, this.scale * 0.08);
+      var zoomOut = clamp(350 / Math.max(this.scale, 40), 1.0, 6.0);
 
       for (var e = 0; e < entries2.length; e++) {
         var ent = entries2[e];
         var sys = g.systems[ent.sysId];
         if (!sys) continue;
         var p = this.project(sys.x, sys.y, sys.z || 0);
-        var blobR = blobBase * (1 + (ent.count - 1) * 0.35);
+        var blobR = blobBase * (1 + (ent.count - 1) * 0.4);
         if (p.x + blobR < 0 || p.x - blobR > this.cssW ||
             p.y + blobR < 0 || p.y - blobR > this.cssH) continue;
 
         var n = parseInt(ent.color.slice(1), 16);
         var cr = (n >> 16) & 255, cg = (n >> 8) & 255, cb = n & 255;
-        var alpha = clamp(0.25 + ent.count * 0.08, 0.25, 0.55) * reveal * zoomOut;
+        var alpha = clamp(0.40 + ent.count * 0.12, 0.40, 0.85) * reveal * zoomOut;
 
         var grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, blobR);
         grad.addColorStop(0, 'rgba(' + cr + ',' + cg + ',' + cb + ',' + alpha + ')');
-        grad.addColorStop(0.45, 'rgba(' + cr + ',' + cg + ',' + cb + ',' + (alpha * 0.5) + ')');
+        grad.addColorStop(0.35, 'rgba(' + cr + ',' + cg + ',' + cb + ',' + (alpha * 0.55) + ')');
         grad.addColorStop(1, 'rgba(' + cr + ',' + cg + ',' + cb + ',0)');
         ctx.fillStyle = grad;
         ctx.beginPath();
