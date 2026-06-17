@@ -4707,7 +4707,7 @@ function closeExpeditionPicker() {
 
 function doLaunchExpedition(colony, targetSystemId, opts) {
   opts = opts || {};
-  const returnHome = opts.returnHome !== false;   // default ON (modello explore)
+  const returnHome = opts.returnHome === true;    // default OFF (richiesta utente 2026-06-17)
   const g = ORION.game;
   const key = colony.systemId + ':' + colony.bodyKey;
   /* Decisione #60: lancio come flotta con ordine explore (sostituisce
@@ -8007,7 +8007,7 @@ function openFleetDetail(fleetId, opts) {
     creating: !fleet,
     renaming: false,
     ordOpen: !!opts.orders,
-    ord: { tripType: null, target: null, waypoints: [], opt: { returnHome: true, exploreEach: false } }
+    ord: { tripType: null, target: null, waypoints: [], opt: { returnHome: false, exploreEach: false } }
   };
 
   const host = ensureFleetOverlayHost('fleet-detail');
@@ -8783,7 +8783,7 @@ function openFleetDetail(fleetId, opts) {
       persistGame(g);
       fleet = nf;
       D.creating = false;
-      D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: true, exploreEach: false } };
+      D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: false, exploreEach: false } };
       render();
     });
 
@@ -8848,7 +8848,7 @@ function openFleetDetail(fleetId, opts) {
         if (ORION.tutorial) ORION.tutorial.fire('fleet-orders');
       } else {
         /* Annulla → mantiene l'ordine corrente e ridisabilita i pulsanti. */
-        D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: true, exploreEach: false } };
+        D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: false, exploreEach: false } };
       }
       render();
     });
@@ -8857,7 +8857,7 @@ function openFleetDetail(fleetId, opts) {
     const ordCancel = host.querySelector('[data-act="ord-cancel"]');
     if (ordCancel) ordCancel.addEventListener('click', function () {
       D.ordOpen = false;
-      D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: true, exploreEach: false } };
+      D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: false, exploreEach: false } };
       render();
     });
     /* I bind condivisi su trip/pick-target/add-wp/rm-wp/opt-* stanno
@@ -9014,7 +9014,7 @@ function openFleetDetail(fleetId, opts) {
       escapeHtml(orderLabel({ orders: order })) + '.', 'explore');
     persistGame(g);
     D.ordOpen = false;
-    D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: true, exploreEach: false } };
+    D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: false, exploreEach: false } };
     render();
   }
 
