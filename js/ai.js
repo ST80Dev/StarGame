@@ -196,9 +196,17 @@
 
     /* Contatto da presenza (decisione 2026-06-17): una flotta player in
        orbita/docked nel sistema di una civ (o di un covo pirata noto)
-       formalizza il contatto in pochi Ι. Il grado di intel ottenuto
-       dipende dalla composizione della flotta più potente presente. */
-    CONTACT_PRESENCE_I: 4
+       formalizza il contatto in pochi Ι. */
+    CONTACT_PRESENCE_I: 4,
+
+    /* Dossier cumulativo (Stadio 1, docs/FLEET_FLOW.md): l'intel si ACCUMULA
+       per presenza e persiste tra le visite. La composizione decide la
+       VELOCITÀ (non il tetto): rate per Ι = max(FLOOR, score × RATE).
+       Soglie livello su `intelProgress`: frammentario >0 · parziale ≥3 ·
+       completo ≥6. Persistenza paga: il FLOOR garantisce un guadagno minimo
+       a ogni visita → grindabile con flotta minima. (Tunabile in M20.) */
+    INTEL_RATE: 0.2,
+    INTEL_FLOOR: 0.1
   };
 
   /* ------------------------------------------------------------------
@@ -270,6 +278,12 @@
     if (score >= 3) return 'partial';
     return 'fragmentary';
   }
+  /* Stadio 1 — livello dal progresso cumulativo (vedi CFG.INTEL_RATE/FLOOR). */
+  function intelLevelFromProgress(p) {
+    if (p >= 6) return 'complete';
+    if (p >= 3) return 'partial';
+    return 'fragmentary';
+  }
   function intelLevelRank(level) { return INTEL_LEVEL[level] || 0; }
 
   /* Tracciamento permanenza flotte player in sistemi rilevanti. Vive su
@@ -319,18 +333,22 @@
       activeKeys[key] = true;
       let entry = presence[key];
       if (!entry || entry.sysId !== bestSys) {
-        presence[key] = { sysId: bestSys, sinceI: I, bestScore: bestScore };
-        continue;
+        entry = presence[key] = { sysId: bestSys, sinceI: I };
       }
-      if (bestScore > entry.bestScore) entry.bestScore = bestScore;
-      if ((I - entry.sinceI) < CFG.CONTACT_PRESENCE_I) continue;
-
-      const newLevel = intelLevelFromScore(entry.bestScore);
+      /* Accumulo cumulativo (Stadio 1): ogni Ι di presenza aggiunge intel,
+         con rate = velocità per composizione, FLOOR = guadagno minimo per
+         persistenza. Persiste su civ.intelProgress (additivo, lazy). */
+      civ.intelProgress = (civ.intelProgress || 0) +
+        Math.max(CFG.INTEL_FLOOR, bestScore * CFG.INTEL_RATE);
+      const newLevel = intelLevelFromProgress(civ.intelProgress);
       const newRank = intelLevelRank(newLevel);
       const curRank = intelLevelRank(civ.intelLevel);
       if (knowledgeRank(civ) < KNOWLEDGE.contacted) {
-        civ.intelLevel = newLevel;
-        markContact(game, civ, events, 'presence');
+        /* Primo contatto: scatta dopo la permanenza minima. */
+        if ((I - entry.sinceI) >= CFG.CONTACT_PRESENCE_I) {
+          civ.intelLevel = newLevel;
+          markContact(game, civ, events, 'presence');
+        }
       } else if (newRank > curRank) {
         const prev = civ.intelLevel;
         civ.intelLevel = newLevel;
@@ -355,12 +373,13 @@
       activeKeys[key] = true;
       let entry = presence[key];
       if (!entry) {
-        presence[key] = { sysId: nest.sysId, sinceI: I, bestScore: sc };
-        continue;
+        entry = presence[key] = { sysId: nest.sysId, sinceI: I };
       }
-      if (sc > entry.bestScore) entry.bestScore = sc;
+      /* Accumulo cumulativo come per le civ (persiste su nest.intelProgress). */
+      nest.intelProgress = (nest.intelProgress || 0) +
+        Math.max(CFG.INTEL_FLOOR, sc * CFG.INTEL_RATE);
       if ((I - entry.sinceI) < CFG.CONTACT_PRESENCE_I) continue;
-      const newLevel = intelLevelFromScore(entry.bestScore);
+      const newLevel = intelLevelFromProgress(nest.intelProgress);
       const newRank = intelLevelRank(newLevel);
       const curRank = intelLevelRank(nest.intelLevel);
       if (newRank > curRank) {
@@ -1691,6 +1710,7 @@
     processPresence: processPresence,
     fleetIntelScore: fleetIntelScore,
     intelLevelFromScore: intelLevelFromScore,
+    intelLevelFromProgress: intelLevelFromProgress,
     intelLevelRank: intelLevelRank,
     visibleCivs: visibleCivs,
     materialize: materialize,
