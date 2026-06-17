@@ -1581,21 +1581,22 @@
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
 
-      var baseRadius = Math.max(80, this.scale * 0.12);
-      var zoomComp = clamp(1.0 / Math.max(this.scale * 0.002, 0.18), 1.0, 5.0);
+      var nodeR = this.nodeRadius(1);
+      var blobBase = nodeR * 5;
+      var zoomOut = clamp(300 / Math.max(this.scale, 50), 1.0, 4.0);
 
       for (var e = 0; e < entries2.length; e++) {
         var ent = entries2[e];
         var sys = g.systems[ent.sysId];
         if (!sys) continue;
         var p = this.project(sys.x, sys.y, sys.z || 0);
-        var blobR = baseRadius * (1 + (ent.count - 1) * 0.5) * zoomComp;
+        var blobR = blobBase * (1 + (ent.count - 1) * 0.35);
         if (p.x + blobR < 0 || p.x - blobR > this.cssW ||
             p.y + blobR < 0 || p.y - blobR > this.cssH) continue;
 
         var n = parseInt(ent.color.slice(1), 16);
         var cr = (n >> 16) & 255, cg = (n >> 8) & 255, cb = n & 255;
-        var alpha = clamp(0.30 + ent.count * 0.10, 0.30, 0.65) * reveal * clamp(zoomComp * 0.55, 0.55, 1.6);
+        var alpha = clamp(0.25 + ent.count * 0.08, 0.25, 0.55) * reveal * zoomOut;
 
         var grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, blobR);
         grad.addColorStop(0, 'rgba(' + cr + ',' + cg + ',' + cb + ',' + alpha + ')');
