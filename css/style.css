@@ -6390,6 +6390,57 @@ select.main-menu__input { cursor: pointer; }
   border-color: var(--c-accent);
   box-shadow: 0 0 0 1px rgba(127, 208, 230, 0.18);
 }
+/* Linguette di sezione cronaca (Galassia/Colonie) — sostituiscono il
+   segmented control filtro Importanti/Tutto. Stessa struttura visiva di
+   .chron-filter ma con badge "non letti" pulsante (decisione 2026-06-17).
+   L'aura è limitata al bottone non-attivo: il bottone attivo ha già il
+   focus dell'utente. */
+.chron-sections {
+  display: flex; gap: 4px;
+  margin: 2px 4px 8px 4px;
+}
+.chron-sections__btn {
+  position: relative;
+  flex: 1;
+  background: rgb(var(--c-surface-rgb) / 0.5);
+  color: var(--c-text-soft);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  font-family: inherit;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+.chron-sections__btn:hover {
+  background: rgb(var(--c-surface-rgb) / 0.75);
+  color: var(--c-text);
+}
+.chron-sections__btn.is-active {
+  background: rgb(var(--c-surface-rgb) / 0.9);
+  color: var(--c-accent);
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 1px rgba(127, 208, 230, 0.18);
+}
+.chron-sections__btn.has-alert {
+  border-color: var(--c-accent-warm, #ffb86b);
+  color: var(--c-text);
+  animation: chronSectionPulse 1.6s ease-in-out infinite;
+}
+.chron-sections__dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--c-accent-warm, #ffb86b);
+  box-shadow: 0 0 6px rgba(255, 184, 107, 0.7);
+  vertical-align: middle;
+}
+@keyframes chronSectionPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 184, 107, 0.0); }
+  50%      { box-shadow: 0 0 0 2px rgba(255, 184, 107, 0.35); }
+}
 .lp-tab-body--chron .chronicle__log {
   display: flex; flex-direction: column; gap: 5px;
   margin: 0; padding: 0 4px; list-style: none;
