@@ -8108,7 +8108,13 @@ function openFleetDetail(fleetId, opts) {
       ships: ships,
       crew: (D.draft.crew || []).slice(),
       orders: null,
-      formation: 'balanced'
+      formation: 'balanced',
+      /* Capienza serbatoio configurabile alla partenza (slider): se
+         l'utente l'ha toccata vive in D.draft.viveriCap, altrimenti
+         viveriCapOf restituirà il default. `viveri` = pieno (la flotta
+         nasce al porto amico, carica al cap). */
+      viveriCap: (D.draft.viveriCap != null) ? D.draft.viveriCap : undefined,
+      viveri: (D.draft.viveriCap != null) ? D.draft.viveriCap : undefined
     };
   }
 
@@ -8204,11 +8210,17 @@ function openFleetDetail(fleetId, opts) {
           '<p class="fdetail__empty">Aggiungi almeno una nave per scegliere un ordine.</p>' +
         '</div>';
 
+    /* Sezione viveri (slider capienza serbatoio) — disponibile alla
+       partenza perché la flotta-bozza è di fatto al porto amico
+       (colonia origine). Costo del pieno cresce con l'equipaggio. */
+    const supSec = (nShips > 0) ? secSupplyDraft(crewReq) : '';
+
     const body =
       '<div class="fdetail__sec">' + secHead('roster', 'amber', 'Colonia origine') +
         '<select class="fdetail__select" data-bind="new-colony">' + optsHtml + '</select></div>' +
       '<div class="fdetail__sec">' + secHead('fleet', 'cyan', 'Navi', 'dalle navi a terra') + shipRows + '</div>' +
       '<div class="fdetail__sec">' + secHead('forces', 'amber', 'Equipaggio', 'in flotta ' + crewSel + '/' + crewReq) + crewBody + '</div>' +
+      supSec +
       ordSec +
       '<p class="fdetail__hint">' + uiIcon('info', 'soft') + ' Il nome si adatterà all’ordine. <strong>Annulla</strong> non crea nulla.</p>';
 
@@ -8254,6 +8266,38 @@ function openFleetDetail(fleetId, opts) {
     if (tt) h += renderOrdOpts(tt);
     if (!tt) h += '<p class="fdetail__hint">Scegli un tipo di missione qui sopra.</p>';
     return h + '</div>';
+  }
+
+  /* Sezione viveri per la flotta-bozza: slider capienza serbatoio + costo
+     stimato del pieno. Riusa data-bind dello slider di secSupply così il
+     binder esistente (in bind()) lo intercetta — in modalità creazione
+     scrive in D.draft.viveriCap invece che su fleet.viveriCap. */
+  function secSupplyDraft(crewReq) {
+    const F = ORION.fleet;
+    if (!F.viveriCapOf || !F.setViveriCap) return '';
+    const min = F.VIVERI_CAP_MIN || 50;
+    const max = F.VIVERI_CAP_MAX || 1500;
+    const def = F.VIVERI_CAP || 250;
+    const cap = (D.draft.viveriCap != null) ? D.draft.viveriCap : def;
+    const crew = Math.max(1, crewReq | 0);
+    const rate = {
+      food: F.VIVERI_RATE_FOOD || 0.07, water: F.VIVERI_RATE_WATER || 0.05,
+      met: F.VIVERI_RATE_MET || 0.04, en: F.VIVERI_RATE_EN || 0.025
+    };
+    const m = Math.ceil(crew * rate.met * cap);
+    const e = Math.ceil(crew * rate.en * cap);
+    const f = Math.ceil(crew * rate.food * cap);
+    const w = Math.ceil(crew * rate.water * cap);
+    const costStr = '⛭ ' + m + ' · ⚡ ' + e + ' · ❖ ' + f + ' · ≈ ' + w;
+    const hint = 'Capienza serbatoio: scegli quanta autonomia caricare al pieno alla partenza. Costo proporzionale a equipaggio (' + crew + ') × Ι caricati.';
+    return '<div class="fdetail__sec fdetail__sec--supply">' +
+      secHead('forces', 'amber', 'Viveri alla partenza') +
+      '<div class="fleet-viveri-cap" title="' + escapeHtml(hint) + '">' +
+        '<label class="fleet-viveri-cap__lbl">Capienza serbatoio · <strong data-bind="vcap-val">' + cap + '</strong> Ι</label>' +
+        '<input type="range" min="' + min + '" max="' + max + '" step="10" value="' + cap + '" data-bind="vcap-slider">' +
+        '<div class="fleet-viveri-cap__cost">Pieno completo: <span data-bind="vcap-cost">' + costStr + '</span></div>' +
+      '</div>' +
+    '</div>';
   }
 
   /* ===== Modalità dettaglio (flotta esistente) ===== */
@@ -8766,6 +8810,14 @@ function openFleetDetail(fleetId, opts) {
       const r = ORION.fleet.createFleet(g, colKey, null);
       if (!r.ok) { showToast(r.reason); return; }
       const nf = r.fleet;
+      /* Applica la capienza serbatoio scelta dal giocatore (slider in
+         renderNew). createFleet nasce già al pieno: dopo setViveriCap
+         risincronizziamo `viveri` al nuovo cap così la flotta parte al
+         pieno della capienza scelta. */
+      if (D.draft.viveriCap != null && ORION.fleet.setViveriCap) {
+        ORION.fleet.setViveriCap(nf, D.draft.viveriCap);
+        nf.viveri = nf.viveriCap;
+      }
       let failed = null;
       Object.keys(draft.ships).forEach(function (k) {
         if (failed) return; const n = draft.ships[k] || 0; if (n <= 0) return;
@@ -8838,6 +8890,49 @@ function openFleetDetail(fleetId, opts) {
     if (optRet) optRet.addEventListener('change', function () { D.ord.opt.returnHome = optRet.checked; render(); });
     const optExp = host.querySelector('[data-bind="opt-explore-each"]');
     if (optExp) optExp.addEventListener('change', function () { D.ord.opt.exploreEach = optExp.checked; render(); });
+
+    /* Slider capienza serbatoio (#69, bilanciamento 2026-06-16). Bindato
+       per ENTRAMBE le modalità: in creazione scrive D.draft.viveriCap
+       (la flotta sarà materializzata con quel cap al pieno); in dettaglio
+       esistente passa per F.setViveriCap + persistGame. */
+    const vcapSlider = host.querySelector('[data-bind="vcap-slider"]');
+    if (vcapSlider) {
+      const valEl = host.querySelector('[data-bind="vcap-val"]');
+      const costEl = host.querySelector('[data-bind="vcap-cost"]');
+      const F = ORION.fleet;
+      const crew = (F.fleetCrewRequired ? F.fleetCrewRequired(fleet) : 0) || 1;
+      const rate = {
+        food: F.VIVERI_RATE_FOOD || 0.07, water: F.VIVERI_RATE_WATER || 0.05,
+        met: F.VIVERI_RATE_MET || 0.04, en: F.VIVERI_RATE_EN || 0.025
+      };
+      function updatePreview(val) {
+        if (valEl) valEl.textContent = val;
+        if (costEl) {
+          const m = Math.ceil(crew * rate.met * val);
+          const e = Math.ceil(crew * rate.en * val);
+          const f = Math.ceil(crew * rate.food * val);
+          const w = Math.ceil(crew * rate.water * val);
+          costEl.textContent = '⛭ ' + m + ' · ⚡ ' + e + ' · ❖ ' + f + ' · ≈ ' + w;
+        }
+      }
+      vcapSlider.addEventListener('input', function () {
+        updatePreview(parseInt(vcapSlider.value, 10) || 0);
+      });
+      vcapSlider.addEventListener('change', function () {
+        const val = parseInt(vcapSlider.value, 10) || 0;
+        if (D.creating) {
+          /* Clampa nello stesso range di setViveriCap. */
+          const min = F.VIVERI_CAP_MIN || 50;
+          const max = F.VIVERI_CAP_MAX || 1500;
+          D.draft.viveriCap = Math.max(min, Math.min(max, val));
+          render();
+        } else {
+          F.setViveriCap(fleet, val);
+          persistGame(g);
+          render();
+        }
+      });
+    }
 
     if (D.creating) return;
 
@@ -8963,39 +9058,8 @@ function openFleetDetail(fleetId, opts) {
       persistGame(g); render();
     });
 
-    /* Slider capienza serbatoio (#69, bilanciamento 2026-06-16). */
-    const vcapSlider = host.querySelector('[data-bind="vcap-slider"]');
-    if (vcapSlider) {
-      const valEl = host.querySelector('[data-bind="vcap-val"]');
-      const costEl = host.querySelector('[data-bind="vcap-cost"]');
-      const F = ORION.fleet;
-      const crew = (F.fleetCrewRequired ? F.fleetCrewRequired(fleet) : 0) || 1;
-      const rate = {
-        food: F.VIVERI_RATE_FOOD || 0.07, water: F.VIVERI_RATE_WATER || 0.05,
-        met: F.VIVERI_RATE_MET || 0.04, en: F.VIVERI_RATE_EN || 0.025
-      };
-      function updatePreview(val) {
-        if (valEl) valEl.textContent = val;
-        if (costEl) {
-          const m = Math.ceil(crew * rate.met * val);
-          const e = Math.ceil(crew * rate.en * val);
-          const f = Math.ceil(crew * rate.food * val);
-          const w = Math.ceil(crew * rate.water * val);
-          costEl.textContent = '⛭ ' + m + ' · ⚡ ' + e + ' · ❖ ' + f + ' · ≈ ' + w;
-        }
-      }
-      /* Live preview durante il trascinamento (non scrive lo stato). */
-      vcapSlider.addEventListener('input', function () {
-        updatePreview(parseInt(vcapSlider.value, 10) || 0);
-      });
-      /* Commit al rilascio: scrive il nuovo cap, persiste, rerender. */
-      vcapSlider.addEventListener('change', function () {
-        const val = parseInt(vcapSlider.value, 10) || 0;
-        F.setViveriCap(fleet, val);
-        persistGame(g);
-        render();
-      });
-    }
+    /* Slider capienza serbatoio già bindato sopra (vale anche in
+       creazione, su D.draft.viveriCap). */
 
     /* --- dissolvi --- */
     const dissolve = host.querySelector('[data-act="dissolve"]');
