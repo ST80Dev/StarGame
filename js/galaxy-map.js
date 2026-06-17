@@ -1357,9 +1357,26 @@
           continue;
         }
 
-        // anello sottile di pericolo (§5.3) — niente alone sfocato
-        const dcol = this._dangerColor(s.danger, fade);
-        this._ring(ctx, p, r + 2.5, dcol, 1);
+        // indicatore pericolo (§5.3): arco neon sfumato sotto la stella
+        const drgb = this._dangerRGB(s.danger);
+        const dAlpha = 0.7 * fade;
+        const arcR = r + 2.5;
+        const arcW = Math.max(1.2, r * 0.25);
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, arcR, Math.PI * 0.3, Math.PI * 0.7);
+        ctx.shadowColor = 'rgba(' + drgb + ',' + (dAlpha * 0.7) + ')';
+        ctx.shadowBlur = Math.max(4, r * 0.5);
+        ctx.strokeStyle = 'rgba(' + drgb + ',' + (dAlpha * 0.45) + ')';
+        ctx.lineWidth = arcW + Math.max(2, r * 0.25);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, arcR, Math.PI * 0.3, Math.PI * 0.7);
+        ctx.strokeStyle = 'rgba(' + drgb + ',' + dAlpha + ')';
+        ctx.lineWidth = arcW;
+        ctx.stroke();
+        ctx.restore();
 
         // corpo della stella (colore = tipo); depth fade
         const col = starColor(g, s.star);
@@ -1455,18 +1472,18 @@
           colors.unshift(PLAYER_COLOR);
         }
 
-        const chipS = Math.max(3, Math.round(r * 0.38));
-        const gap = 1;
-        const rowGap = 2;
-        const startX = p.x + r + 5;
+        const chipS = clamp(Math.round(r * 0.55), 4, 14);
+        const gap = Math.max(1, Math.round(chipS * 0.2));
+        const rowGap = Math.max(2, Math.round(chipS * 0.35));
+        const startX = p.x + r + Math.max(4, Math.round(r * 0.4));
         var cy = p.y - ((colors.length - 1) * (chipS + rowGap)) / 2;
 
         for (var ci = 0; ci < colors.length; ci++) {
           var col = colors[ci];
           var count = Math.min(byColor[col], 6);
           ctx.fillStyle = col;
-          ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-          ctx.lineWidth = 0.6;
+          ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+          ctx.lineWidth = Math.max(0.6, chipS * 0.1);
           for (var pi = 0; pi < count; pi++) {
             var cx = startX + pi * (chipS + gap);
             ctx.fillRect(cx, cy, chipS, chipS);
@@ -2138,7 +2155,7 @@
         if (Number(k.slice(0, colon)) === sysId) playerCount++;
       });
       if (playerCount) {
-        civLines.push('<span class="gmap-tip__civ" style="--tc:' + PLAYER_COLOR + '"><span class="gmap-tip__sw"></span>Tu (' + playerCount + (playerCount === 1 ? ' colonia' : ' colonie') + ')</span>');
+        civLines.push('<span class="gmap-tip__civ" style="--tc:' + PLAYER_COLOR + '"><span class="gmap-tip__sw"></span>Tu</span>');
       }
       var civs = game.civs || [];
       for (var i = 0; i < civs.length; i++) {
@@ -2151,7 +2168,7 @@
           if (colon > 0 && Number(pk.slice(0, colon)) === sysId) cnt++;
         }
         if (cnt) {
-          civLines.push('<span class="gmap-tip__civ" style="--tc:' + esc(civ.color) + '"><span class="gmap-tip__sw"></span>' + esc(civ.name) + ' (' + cnt + (cnt === 1 ? ' pianeta' : ' pianeti') + ')</span>');
+          civLines.push('<span class="gmap-tip__civ" style="--tc:' + esc(civ.color) + '"><span class="gmap-tip__sw"></span>' + esc(civ.name) + '</span>');
         }
       }
       if (civLines.length) html += '<div class="gmap-tip__civs">' + civLines.join('') + '</div>';
@@ -2212,14 +2229,11 @@
       ctx.fillText(text, p.x, y);
     }
 
-    _dangerColor(d, fade) {
-      const a = 0.7 * (fade == null ? 1 : fade);
-      const ah = 0.75 * (fade == null ? 1 : fade);
-      const ax = 0.8 * (fade == null ? 1 : fade);
-      if (d <= 25) return 'rgba(79,224,138,' + a + ')';
-      if (d <= 50) return 'rgba(255,202,85,' + a + ')';
-      if (d <= 75) return 'rgba(255,157,60,' + ah + ')';
-      return 'rgba(255,92,108,' + ax + ')';
+    _dangerRGB(d) {
+      if (d <= 25) return '79,224,138';
+      if (d <= 50) return '255,202,85';
+      if (d <= 75) return '255,157,60';
+      return '255,92,108';
     }
   }
 

@@ -797,7 +797,8 @@
       if (!AI || !game) return;
       var sysId = this.system ? this.system.id : null;
       if (sysId == null) return;
-      var chipS = Math.max(4, Math.round(r * 0.35));
+      var clamp = root.ORION.util.clamp;
+      var chipS = clamp(Math.round(r * 0.55), 4, 14);
 
       var isPlayerColony = false;
       var colKey = sysId + ':' + body.key;
@@ -809,12 +810,12 @@
       if (!isPlayerColony && !civ) return;
 
       var color = isPlayerColony ? '#5fa8ff' : civ.color;
-      var cx = p.x + r + 3;
+      var cx = p.x + r + Math.max(3, Math.round(r * 0.3));
       var cy = p.y - r;
       ctx.fillStyle = color;
       ctx.fillRect(cx, cy, chipS, chipS);
-      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-      ctx.lineWidth = 0.6;
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.lineWidth = Math.max(0.6, chipS * 0.1);
       ctx.strokeRect(cx, cy, chipS, chipS);
     }
 
