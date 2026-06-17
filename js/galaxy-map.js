@@ -1069,10 +1069,13 @@
 
       if (regionAlpha > 0.01) this._drawRegions(ctx, regionAlpha);
       const influenceMode = this.mapLayer === 'influence';
+      /* La heatmap imperi è una vista d'insieme: va mostrata a TUTTI i livelli
+         di zoom, anzi è più utile a vista galassia (reveal≈0). Quindi è fuori
+         dal gate `reveal>0.01` e non viene moltiplicata per reveal. */
+      if (influenceMode) this._drawInfluence(ctx);
       if (reveal > 0.01) {
         this._drawEdges(ctx, reveal);
         if (influenceMode) {
-          this._drawInfluence(ctx, reveal);
           this._drawNodes(ctx, reveal);
         } else {
           this._drawTradeRoutes(ctx, reveal);
@@ -1509,7 +1512,7 @@
 
     /* Heatmap influenza imperi: blob radiali sfumati per civiltà,
        intensità proporzionale al numero di pianeti per sistema. */
-    _drawInfluence(ctx, reveal) {
+    _drawInfluence(ctx) {
       var game = root.ORION && root.ORION.game;
       if (!game) return;
       var g = this.galaxy;
@@ -1597,7 +1600,7 @@
         var n = parseInt(ent.color.slice(1), 16);
         var cr = (n >> 16) & 255, cg = (n >> 8) & 255, cb = n & 255;
         var rawAlpha = clamp(0.55 + ent.count * 0.18, 0.55, 1.0);
-        var alpha = rawAlpha * reveal * clamp(zoomOut * 0.4, 0.4, 2.5);
+        var alpha = rawAlpha * clamp(zoomOut * 0.5, 0.6, 2.5);
 
         var grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, blobR);
         grad.addColorStop(0, 'rgba(' + cr + ',' + cg + ',' + cb + ',' + alpha + ')');
