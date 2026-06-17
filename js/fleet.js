@@ -899,9 +899,36 @@
     if (type === 'move' || type === 'explore') {
       const to = order.toSysId;
       if (to == null) return { ok: false, reason: 'Sistema di destinazione assente' };
-      const path = computePath(game.galaxy, fleet.location.systemId, to);
+      /* Stadio 1.5 — M2: `move` con bodyKey è una manovra verso un CORPO
+         preciso. Inter-sistema: M1 fino al sistema, poi all'arrivo M2 verso
+         il corpo (handler d'arrivo). Intra-sistema (to == sistema corrente):
+         solo M2. Senza bodyKey resta M1 puro (orbita generica). */
+      const bodyKey = (type === 'move' && order.bodyKey != null) ? String(order.bodyKey) : null;
+      const currentSys = fleet.location.systemId;
+      if (to === currentSys) {
+        /* M2 puro (stesso sistema). */
+        if (bodyKey == null) {
+          /* Già in orbita generica: niente da percorrere. */
+          fleet.orders = { type: 'idle' };
+          fleet.route = [currentSys]; fleet.routeIdx = 0; fleet.etaImpulsi = 0;
+          return { ok: true };
+        }
+        fleet.orders = { type: 'move', toSysId: to, bodyKey: bodyKey };
+        const intraI = intraTravelI(game, fleet, bodyKey);
+        if (intraI > 0) {
+          beginIntraTransit(game, fleet, bodyKey, intraI);
+        } else {
+          /* Già al corpo. */
+          fleet.route = [currentSys]; fleet.routeIdx = 0;
+          fleet.location.status = 'orbiting'; fleet.location.bodyKey = bodyKey;
+          fleet.etaImpulsi = 0;
+          fleet.orders = { type: 'idle' };
+        }
+        return { ok: true };
+      }
+      const path = computePath(game.galaxy, currentSys, to);
       if (!path) return { ok: false, reason: 'Nessuna rotta verso il sistema target' };
-      fleet.orders = { type: type, toSysId: to };
+      fleet.orders = { type: type, toSysId: to, bodyKey: bodyKey };
       fleet.route = path;
       fleet.routeIdx = 0;
       fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
@@ -1025,6 +1052,41 @@
            system-view risolve via orders.anomalyKind. */
         fleet.location.bodyKey = order.bodyKey || null;
         fleet.etaImpulsi = 0;
+        return { ok: true };
+      }
+      const path = computePath(game.galaxy, currentSys, to);
+      if (!path) return { ok: false, reason: 'Nessuna rotta verso il sistema target' };
+      fleet.orders = baseOrder;
+      fleet.route = path;
+      fleet.routeIdx = 0;
+      fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
+      return { ok: true };
+    }
+
+    /* Stadio 1.5 — ordine `recon` (Ricognizione): la flotta raggiunge il
+       sistema (di una civ AI / covo) e RESTA in orbita a costruire il dossier
+       (ai.processPresence accumula l'intel per presenza, qualunque ordine; qui
+       l'intento è esplicito e impegna la flotta). Opzionale bodyKey per
+       ancorarsi a un pianeta AI. Continuativa → step terminale. */
+    if (type === 'recon') {
+      const to = order.toSysId;
+      if (to == null) return { ok: false, reason: 'Sistema target assente' };
+      const sys = game.galaxy.systems[to];
+      if (!sys) return { ok: false, reason: 'Sistema target inesistente' };
+      const currentSys = fleet.location.systemId;
+      const bodyKey = order.bodyKey != null ? String(order.bodyKey) : null;
+      const baseOrder = { type: 'recon', toSysId: to, bodyKey: bodyKey };
+      if (to === currentSys) {
+        fleet.orders = baseOrder;
+        const intraI = bodyKey != null ? intraTravelI(game, fleet, bodyKey) : 0;
+        if (intraI > 0) {
+          beginIntraTransit(game, fleet, bodyKey, intraI);
+        } else {
+          fleet.route = [currentSys]; fleet.routeIdx = 0;
+          fleet.location.status = 'orbiting';
+          fleet.location.bodyKey = bodyKey;
+          fleet.etaImpulsi = 0;
+        }
         return { ok: true };
       }
       const path = computePath(game.galaxy, currentSys, to);
@@ -1702,7 +1764,7 @@
     let waypoints = null;
     switch (order.type) {
       case 'move': case 'explore': case 'transfer':
-      case 'attack': case 'garrison': case 'colonize': case 'survey':
+      case 'attack': case 'garrison': case 'colonize': case 'survey': case 'recon':
         if (order.toSysId != null) waypoints = [order.toSysId];
         break;
       case 'move-route': waypoints = order.waypoints || []; break;
@@ -1829,8 +1891,12 @@
     } else if (order.type === 'attack') {
       fleet.attackTarget = sysId;
       fleet.attackBodyKey = toBk;
+    } else if (order.type === 'move') {
+      /* Stadio 1.5 — M2 completata: la flotta orbita il corpo, step concluso
+         → idle (la coda può avanzare). */
+      fleet.orders = { type: 'idle' };
     }
-    /* garrison/survey: resta orbiting, l'ordine prosegue attivo. */
+    /* garrison/survey/recon: resta orbiting, l'ordine prosegue attivo. */
   }
 
   /* ------------------------------------------------------------------
@@ -1992,6 +2058,26 @@
 
     if (order.type === 'move' || order.type === 'attack') {
       _autoRevealAt(arrivedAt);
+      /* Stadio 1.5 — M1+M2 in un solo `move`: se l'ordine porta un bodyKey e
+         il sistema NON è una tua colonia, l'arrivo (M1 completato) avvia la
+         manovra intra verso il corpo (M2). L'ordine resta `move`: arriveIntra
+         lo chiude a idle quando raggiunge il corpo. */
+      if (order.type === 'move' && order.bodyKey != null && !ownColonyAt(game, arrivedAt)) {
+        const intraI = intraTravelI(game, fleet, order.bodyKey);
+        events.push({
+          kind: 'fleet-arrived', fleetId: fleet.id, fleetName: fleet.name,
+          systemId: arrivedAt, bodyKey: null, impulso: game.timeImpulsi
+        });
+        if (intraI > 0) {
+          beginIntraTransit(game, fleet, order.bodyKey, intraI);
+        } else {
+          fleet.location.status = 'orbiting';
+          fleet.location.bodyKey = order.bodyKey;
+          fleet.etaImpulsi = 0; fleet.route = [arrivedAt]; fleet.routeIdx = 0;
+          fleet.orders = { type: 'idle' };
+        }
+        return;
+      }
       /* L'attacco mantiene `fleet.attackTarget` (+ opzionale
          `fleet.attackBodyKey`): all'arrivo la flotta orbita e
          processSkirmishes ingaggia il bersaglio al tick successivo. */
@@ -2039,6 +2125,26 @@
         impulso: game.timeImpulsi
       });
       /* L'ordine garrison rimane attivo. */
+      return;
+    }
+
+    /* Stadio 1.5 — arrivo `recon`: orbita e RESTA attivo; l'intel/dossier si
+       accumula per presenza (ai.processPresence). bodyKey opzionale (ancora
+       a un pianeta AI). Terminale: la coda non avanza. */
+    if (order.type === 'recon') {
+      _autoRevealAt(arrivedAt);
+      fleet.location.status = 'orbiting';
+      fleet.location.bodyKey = order.bodyKey || null;
+      fleet.etaImpulsi = 0;
+      fleet.route = [arrivedAt];
+      fleet.routeIdx = 0;
+      events.push({
+        kind: 'fleet-arrived',
+        fleetId: fleet.id, fleetName: fleet.name,
+        systemId: arrivedAt, bodyKey: order.bodyKey || null,
+        impulso: game.timeImpulsi
+      });
+      /* L'ordine recon rimane attivo. */
       return;
     }
 
