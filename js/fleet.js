@@ -864,7 +864,7 @@
      ordini di movimento) calcola la rotta BFS. NON consuma Impulsi: la
      marcia avanza nel tick.
      ------------------------------------------------------------------ */
-  function setOrder(game, fleet, order) {
+  function setOrder(game, fleet, order, opts) {
     if (!fleet) return { ok: false, reason: 'Flotta inesistente' };
     if (!order || !order.type) return { ok: false, reason: 'Ordine non valido' };
     if (fleet.ships.length === 0) return { ok: false, reason: 'Flotta vuota' };
@@ -873,6 +873,10 @@
     /* Qualunque nuovo ordine annulla l'intento offensivo precedente
        (M09 — decisione #49): re-ordinare una flotta cancella l'attacco. */
     fleet.attackTarget = null;
+    /* Stadio 1.4: un ordine MANUALE resetta il piano accodato (la coda
+       appartiene al piano precedente). L'avanzamento interno della coda
+       passa opts.fromQueue=true per non auto-cancellarsi. */
+    if (!opts || !opts.fromQueue) fleet.queue = [];
     if (type === 'idle') {
       fleet.orders = { type: 'idle' };
       fleet.route = [];
@@ -1842,7 +1846,16 @@
        tutte le classi, scalato sul danger del sistema. Sostituisce il lump-sum
        all'arrivo dell'esploratore (rimosso più sotto). */
     applyTransitWear(game, fleet);
-    if (fleet.orders.type === 'idle') return;
+    if (fleet.orders.type === 'idle') {
+      /* Stadio 1.4: la flotta è "settled" (fine di uno step non continuativo).
+         Se c'è una coda, applica il prossimo step (M1→M2→azione). Gli ordini
+         continuativi (survey/garrison/colonize) non passano da idle → restano
+         terminali e la coda non avanza, come da design. */
+      if (Array.isArray(fleet.queue) && fleet.queue.length) {
+        applyNextQueued(game, fleet, events);
+      }
+      return;
+    }
 
     /* Decisione #60: incident roll una sola volta all'avvio dell'explore
        outbound (mentre in-transit). */
@@ -1917,6 +1930,7 @@
         fleet.route = [arrivedAt];
         fleet.routeIdx = 0;
         fleet.orders = { type: 'idle' };
+        fleet.queue = [];   /* Stadio 1.4: scarta il piano residuo: ridecidi dopo lo scontro. */
         fleet.combatResolvedAt = null;
         events.push({
           kind: 'fleet-intercepted',
@@ -2715,6 +2729,56 @@
     return out;
   }
 
+  /* ------------------------------------------------------------------
+     Stadio 1.4 — Coda comandi (fleet.queue). Step accodati manualmente
+     che si applicano uno alla volta quando la flotta è "settled" (idle).
+     Avanzamento agganciato in `tick` (hook idle). Editabile/interrompibile
+     solo agli snodi (la flotta è ferma quando si avanza). Additivo/lazy:
+     nessun campo nuovo nel save, guardie Array.isArray ovunque.
+     ------------------------------------------------------------------ */
+  function applyNextQueued(game, fleet, events) {
+    if (!fleet || !Array.isArray(fleet.queue) || !fleet.queue.length) return false;
+    const step = fleet.queue.shift();
+    const r = setOrder(game, fleet, step, { fromQueue: true });
+    if (!r.ok) {
+      /* Step non più valido (mondo cambiato): degrada con grazia e scarta la
+         coda residua (recovery-friendly #22) invece di fallire a freddo. */
+      fleet.queue = [];
+      if (events) events.push({
+        kind: 'fleet-queue-aborted', fleetId: fleet.id, fleetName: fleet.name,
+        reason: r.reason || null,
+        systemId: fleet.location ? fleet.location.systemId : null,
+        impulso: game.timeImpulsi || 0
+      });
+      return false;
+    }
+    if (events) events.push({
+      kind: 'fleet-queue-advance', fleetId: fleet.id, fleetName: fleet.name,
+      orderType: step.type,
+      systemId: fleet.location ? fleet.location.systemId : null,
+      impulso: game.timeImpulsi || 0
+    });
+    return true;
+  }
+
+  /* Imposta un PIANO: il primo step parte subito (setOrder, che resetta la
+     coda preesistente), il resto va in coda. steps = [orderSpec, ...]. */
+  function setPlan(game, fleet, steps) {
+    if (!fleet) return { ok: false, reason: 'Flotta inesistente' };
+    if (!Array.isArray(steps) || !steps.length) return { ok: false, reason: 'Piano vuoto' };
+    const r = setOrder(game, fleet, steps[0]);
+    if (!r.ok) return r;
+    fleet.queue = steps.slice(1);
+    return { ok: true };
+  }
+  function enqueueOrder(fleet, step) {
+    if (!fleet || !step || !step.type) return { ok: false, reason: 'Step non valido' };
+    if (!Array.isArray(fleet.queue)) fleet.queue = [];
+    fleet.queue.push(step);
+    return { ok: true };
+  }
+  function clearQueue(fleet) { if (fleet) fleet.queue = []; }
+
   ORION.fleet = {
     CLASSES: CLASSES,
     CLASS_ORDER: CLASS_ORDER,
@@ -2741,6 +2805,11 @@
     transferCrew: transferCrew,
     mergeFleets: mergeFleets,
     setOrder: setOrder,
+    /* Stadio 1.4 — coda comandi (docs/FLEET_FLOW.md). */
+    setPlan: setPlan,
+    enqueueOrder: enqueueOrder,
+    clearQueue: clearQueue,
+    applyNextQueued: applyNextQueued,
     tick: tick,
     awardCrewXp: awardCrewXp,
     fleetUpkeep: fleetUpkeep,
