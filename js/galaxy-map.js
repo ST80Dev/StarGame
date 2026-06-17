@@ -1525,6 +1525,7 @@
 
       if (!this._influenceCache) {
         var entries = [];
+        var capitals = [];
         var civMap = {};
 
         var cols = game.colonies || {};
@@ -1542,10 +1543,16 @@
           civMap[key].count++;
         }
 
+        var homeSid = g.homeId;
+        if (homeSid != null && disc[homeSid] >= DET) {
+          capitals.push({ color: PLAYER_COLOR, sysId: homeSid, name: 'Tu' });
+        }
+
         var civs = game.civs || [];
         for (var i = 0; i < civs.length; i++) {
           var civ = civs[i];
           if (!civ || !civ.alive || !Array.isArray(civ.planets)) continue;
+          var capSid = -1;
           for (var j = 0; j < civ.planets.length; j++) {
             var pk = civ.planets[j];
             var colon2 = pk.indexOf(':');
@@ -1555,12 +1562,17 @@
             var key2 = civ.color + ':' + sid2;
             if (!civMap[key2]) civMap[key2] = { color: civ.color, sysId: sid2, count: 0 };
             civMap[key2].count++;
+            if (j === 0) capSid = sid2;
+          }
+          if (capSid >= 0) {
+            capitals.push({ color: civ.color, sysId: capSid, name: civ.name });
           }
         }
 
         var mapKeys = Object.keys(civMap);
         for (var m = 0; m < mapKeys.length; m++) entries.push(civMap[mapKeys[m]]);
         this._influenceCache = entries;
+        this._capitalCache = capitals;
       }
 
       var entries2 = this._influenceCache;
@@ -1583,11 +1595,11 @@
 
         var n = parseInt(ent.color.slice(1), 16);
         var cr = (n >> 16) & 255, cg = (n >> 8) & 255, cb = n & 255;
-        var alpha = clamp(0.18 + ent.count * 0.06, 0.18, 0.45) * reveal * clamp(zoomComp * 0.65, 0.65, 1.4);
+        var alpha = clamp(0.25 + ent.count * 0.08, 0.25, 0.55) * reveal * clamp(zoomComp * 0.65, 0.65, 1.4);
 
         var grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, blobR);
         grad.addColorStop(0, 'rgba(' + cr + ',' + cg + ',' + cb + ',' + alpha + ')');
-        grad.addColorStop(0.5, 'rgba(' + cr + ',' + cg + ',' + cb + ',' + (alpha * 0.5) + ')');
+        grad.addColorStop(0.45, 'rgba(' + cr + ',' + cg + ',' + cb + ',' + (alpha * 0.5) + ')');
         grad.addColorStop(1, 'rgba(' + cr + ',' + cg + ',' + cb + ',0)');
         ctx.fillStyle = grad;
         ctx.beginPath();
@@ -1596,6 +1608,51 @@
       }
 
       ctx.globalCompositeOperation = 'source-over';
+
+      var caps = this._capitalCache || [];
+      for (var ci2 = 0; ci2 < caps.length; ci2++) {
+        var cap = caps[ci2];
+        var csys = g.systems[cap.sysId];
+        if (!csys) continue;
+        var cp = this.project(csys.x, csys.y, csys.z || 0);
+        if (cp.x < -40 || cp.x > this.cssW + 40 || cp.y < -40 || cp.y > this.cssH + 40) continue;
+        var cn = parseInt(cap.color.slice(1), 16);
+        var ccr = (cn >> 16) & 255, ccg = (cn >> 8) & 255, ccb = cn & 255;
+        var capR = clamp(this.nodeRadius(cp.parallax) * 1.8, 6, 18);
+
+        ctx.save();
+        ctx.shadowColor = 'rgba(' + ccr + ',' + ccg + ',' + ccb + ',0.7)';
+        ctx.shadowBlur = capR * 1.2;
+        ctx.strokeStyle = cap.color;
+        ctx.lineWidth = Math.max(1.5, capR * 0.2);
+        ctx.beginPath();
+        for (var si2 = 0; si2 < 4; si2++) {
+          var a0 = si2 * Math.PI / 2 - Math.PI / 4;
+          ctx.moveTo(cp.x + Math.cos(a0) * capR, cp.y + Math.sin(a0) * capR);
+          ctx.lineTo(cp.x + Math.cos(a0 + Math.PI / 4) * capR * 0.5, cp.y + Math.sin(a0 + Math.PI / 4) * capR * 0.5);
+          ctx.lineTo(cp.x + Math.cos(a0 + Math.PI / 2) * capR, cp.y + Math.sin(a0 + Math.PI / 2) * capR);
+        }
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+
+        ctx.fillStyle = cap.color;
+        ctx.beginPath();
+        ctx.arc(cp.x, cp.y, Math.max(2, capR * 0.2), 0, Math.PI * 2);
+        ctx.fill();
+
+        var capFs = clamp(capR * 0.7, 7, 13);
+        ctx.font = '700 ' + capFs + 'px Orbitron, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = Math.max(2.5, capFs * 0.25);
+        ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+        ctx.strokeText('★ ' + cap.name, cp.x, cp.y + capR + 4);
+        ctx.fillStyle = cap.color;
+        ctx.fillText('★ ' + cap.name, cp.x, cp.y + capR + 4);
+      }
+
       ctx.restore();
     }
 
