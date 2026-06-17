@@ -2291,13 +2291,19 @@ function surveysForColony(colony) {
   return out;
 }
 
-/* Esploratori "in attesa di ordini" appartenenti a questa colonia: flotte
-   con 1 scafo esploratore + 1 equipaggio, idle/orbiting in un sistema NON
-   casa. Tipicamente nascono dal lancio col default `move-route` + returnHome
-   OFF — a fine rotta restano in sosta al target. Il giocatore non aveva un
-   modo immediato di vederle dal pannello Esplorazione e finivano "fuori
-   conto" rispetto a `colony.ships.explorer`. Restituiamo qui le flotte
-   da richiamare con un click. */
+/* Esploratori monouso (1 scafo esploratore + 1 equipaggio) appartenenti a
+   questa colonia che attendono di essere riportati nei counter:
+   - REMOTI: idle/survey, fermi in sosta in un sistema diverso da casa
+     (tipicamente lancio col default `move-route` + returnHome OFF — a fine
+     rotta restano in orbita al target).
+   - A CASA: ormeggiati/in orbita al sistema della colonia ma rimasti come
+     flotta separata invece di rifondersi nei counter (bug 2026-06-17: scout
+     iniziale rientrato già-a-casa via setOrder('return') con rotta a 0 leg).
+     Per non listare flotte appena assemblate (wizard) e ancora senza ordini,
+     a casa includiamo solo gli scout "reduci" da una missione: usura > 0,
+     già premiati da un'esplorazione, o con ordine return/survey pendente.
+   In entrambi i casi il pannello offre un'azione one-click che li ricuce
+   (scafo + equipaggio tornano disponibili sulla colonia). */
 function idleExplorerFleetsForColony(colony) {
   const g = ORION.game;
   if (!g || !colony || !Array.isArray(g.fleets)) return [];
@@ -2307,13 +2313,20 @@ function idleExplorerFleetsForColony(colony) {
   for (let i = 0; i < g.fleets.length; i++) {
     const f = g.fleets[i];
     if (!f || f.ownerColonyKey !== key) continue;
-    if (!f.location || f.location.systemId === homeSys) continue;
+    if (!f.location) continue;
     if (f.location.status === 'in-transit') continue;
     if (!Array.isArray(f.ships) || f.ships.length !== 1) continue;
     if (!f.ships[0] || f.ships[0].kind !== 'explorer') continue;
     if (!Array.isArray(f.crew) || f.crew.length !== 1) continue;
-    const ot = f.orders && f.orders.type;
-    if (ot !== 'idle' && ot !== 'survey') continue;
+    const ot = (f.orders && f.orders.type) || 'idle';
+    const atHome = f.location.systemId === homeSys;
+    if (atHome) {
+      if (ot !== 'idle' && ot !== 'return' && ot !== 'survey') continue;
+      const used = (f.ships[0].wear || 0) > 0 || f._exploreRewarded || ot === 'return' || ot === 'survey';
+      if (!used) continue;
+    } else {
+      if (ot !== 'idle' && ot !== 'survey') continue;
+    }
     out.push(f);
   }
   return out;
@@ -4485,9 +4498,18 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
     );
   }
   if (idleScouts.length) {
+    const homeSysId = colony.systemId;
     const idleHtml = idleScouts.map(function (f) {
+      const atHome = f.location.systemId === homeSysId;
       const sysLbl = (g.galaxy.systems[f.location.systemId] || {}).name || '—';
-      const otLbl = (f.orders && f.orders.type === 'survey') ? 'in raccolta' : 'in sosta';
+      const ot = f.orders && f.orders.type;
+      const otLbl = atHome ? 'all\'attracco' : (ot === 'survey' ? 'in raccolta' : 'in sosta');
+      /* A casa l'azione ricuce subito (scafo+equipaggio nei counter): "Riporta
+         in servizio". Remoto: ordine di rientro che viaggia fino a casa. */
+      const btnLabel = atHome ? 'Riporta in servizio' : 'Richiama a base';
+      const btnTitle = atHome
+        ? 'Smobilita lo scout ormeggiato: scafo + equipaggio tornano subito disponibili nella colonia.'
+        : 'Ordine Rientra alla base: la flotta torna qui, poi scafo + equipaggio rientrano nei conteggi della colonia.';
       return '<li class="expedition-item">' +
         '<div class="expedition-item__head">' +
           '<span class="expedition-item__status expedition-status--outbound">' + escapeHtml(f.name || 'Esploratore') + '</span>' +
@@ -4495,11 +4517,11 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
           '<span class="expedition-item__eta">' + escapeHtml(otLbl) + '</span>' +
         '</div>' +
         '<div class="expedition-item__bars">' +
-          '<button class="btn btn--mini btn--primary" data-action="exp-recall" data-fleet="' + escapeHtml(f.id) + '" type="button" title="Imposta l\'ordine Rientra alla base: la flotta torna qui, scafo + equipaggio rientrano nei conteggi della colonia.">Richiama a base</button>' +
+          '<button class="btn btn--mini btn--primary" data-action="exp-recall" data-fleet="' + escapeHtml(f.id) + '" type="button" title="' + btnTitle + '">' + btnLabel + '</button>' +
         '</div>' +
       '</li>';
     }).join('');
-    listHtml += '<p class="sysinfo__sub">Esploratori da richiamare</p>' +
+    listHtml += '<p class="sysinfo__sub">Esploratori da riportare in servizio</p>' +
       '<ul class="expedition-list">' + idleHtml + '</ul>';
   }
   if (!listHtml) {
@@ -4627,18 +4649,24 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
       openAnomalySurveyPicker(colony, Number(b.dataset.sys), b.dataset.kind, b.dataset.body || null);
     });
   });
-  /* Decisione utente 2026-06-17: bottone "Richiama a base" per gli
-     esploratori in sosta al target (move-route default OFF). Setta
-     ordine `return` sulla flotta; al docking l'auto-dissolve restituisce
-     scafo + equipaggio ai counter della colonia. */
+  /* Decisione utente 2026-06-17: bottone "Richiama a base"/"Riporta in
+     servizio" per gli esploratori monouso fermi (remoti in sosta o
+     ormeggiati a casa ma non rifusi nei counter). Setta ordine `return`:
+     se la flotta è già a casa (rotta a 0 leg) setOrder la ricuce subito
+     (res.dissolved); altrimenti viaggia e si dissolve al docking. */
   host.querySelectorAll('[data-action="exp-recall"]').forEach(function (b) {
     b.addEventListener('click', function () {
       const fid = b.dataset.fleet;
       const fleet = (ORION.game.fleets || []).filter(function (f) { return f && f.id === fid; })[0];
       if (!fleet) { showToast('Flotta non trovata'); return; }
+      const name = fleet.name || 'Esploratore';
       const res = ORION.fleet.setOrder(ORION.game, fleet, { type: 'return' });
       if (!res.ok) { showToast(res.reason || 'Richiamo rifiutato'); return; }
-      pushChronicle(ORION.time.currentDS(ORION.game) + ' — <strong>' + escapeHtml(fleet.name || 'Esploratore') + '</strong> in rientro alla base.', 'explore');
+      if (res.dissolved) {
+        pushChronicle(ORION.time.currentDS(ORION.game) + ' — <strong>' + escapeHtml(name) + '</strong> smobilitata: scafo ed equipaggio di nuovo disponibili sulla colonia.', 'explore');
+      } else {
+        pushChronicle(ORION.time.currentDS(ORION.game) + ' — <strong>' + escapeHtml(name) + '</strong> in rientro alla base.', 'explore');
+      }
       persistGame(ORION.game);
       updatePlanetUI();
     });
