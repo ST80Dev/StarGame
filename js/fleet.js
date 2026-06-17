@@ -877,6 +877,10 @@
        appartiene al piano precedente). L'avanzamento interno della coda
        passa opts.fromQueue=true per non auto-cancellarsi. */
     if (!opts || !opts.fromQueue) fleet.queue = [];
+    /* Stadio 1.6: ogni nuovo ordine apre un nuovo segmento di viaggio →
+       riarma il tiro incidente (uno per segmento). Gli ordini intra/idle non
+       tireranno comunque (gate in tick: rotta > 1, non intra). */
+    fleet._incidentRolled = false;
     if (type === 'idle') {
       fleet.orders = { type: 'idle' };
       fleet.route = [];
@@ -932,8 +936,6 @@
       fleet.route = path;
       fleet.routeIdx = 0;
       fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
-      /* Decisione #60: reset flag incidente all'avvio di un nuovo explore. */
-      if (type === 'explore') fleet._incidentRolled = false;
       return { ok: true };
     }
 
@@ -1351,29 +1353,29 @@
   }
 
   /* ------------------------------------------------------------------
-     Incidenti su ordine 'explore' (decisione #60, migrazione M07→M08).
-     Porta dentro fleet.js le 4 tipologie di incidente di expedition.js
-     (50% ritardo / 30% usura / 15% critico / 5% scoperta fortuita).
+     Incidenti di VIAGGIO (Stadio 1.6 — docs/FLEET_FLOW.md). Generalizza il
+     vecchio incidente solo-explore (decisione #60) a QUALSIASI segmento di
+     movimento inter-sistema, con rischio PROPORZIONALE agli Ι TOTALI del
+     viaggio (non per leg). Un solo tiro per segmento (gated _incidentRolled).
+     Le manovre intra-sistema (M2) NON tirano (rischio nullo, sistema noto).
+     4 tipologie (50% ritardo / 30% usura / 15% critico / 5% scoperta fortuita).
      RNG deterministico da seed:fleet-incident:<fleet.id> — replay-safe.
-     Si tira 1 sola volta per esplorazione (gated da fleet._incidentRolled).
      Recovery-friendly (#22): l'avaria critica perde lo scafo ma l'equipaggio
-     si salva sempre (riprodotto dal pattern expedition.js).
+     si salva sempre. (Probabilità tunabili in M20.)
      ------------------------------------------------------------------ */
-  function _dangerForExplore(galaxy, fleet) {
-    let sysId = fleet.location.systemId;
-    if (fleet.orders && fleet.orders.type === 'explore' && fleet.orders.toSysId != null) {
-      sysId = fleet.orders.toSysId;
-    }
+  const INCIDENT_RISK_PER_I = 0.0035;   // rischio per Ι di viaggio
+  const INCIDENT_RISK_MAX = 0.55;       // cap sul rischio per segmento
+  function _dangerForTravel(galaxy, fleet) {
+    let sysId = (fleet.orders && fleet.orders.toSysId != null)
+      ? fleet.orders.toSysId : fleet.location.systemId;
     const s = galaxy && galaxy.systems && galaxy.systems[sysId];
     if (!s) return 0.5;
     return Math.max(0, Math.min(1, (s.danger || 0) / 100));
   }
-  function _accidentChanceForExplore(game, fleet) {
-    const d = _dangerForExplore(game.galaxy, fleet);
-    let c;
-    if (d <= 0.33) c = 0.05;
-    else if (d <= 0.66) c = 0.15;
-    else c = 0.30;
+  function _accidentChanceForTravel(game, fleet, totalI) {
+    const d = _dangerForTravel(game.galaxy, fleet);
+    /* Rischio ∝ Ι totali, modulato dal danger del bersaglio. */
+    let c = INCIDENT_RISK_PER_I * (totalI || 0) * (0.6 + 0.9 * d);
     const xp = (fleet.crew && fleet.crew[0] && fleet.crew[0].xp) || 0;
     c *= 1 - Math.min(0.20, xp * 0.02);
     if (ORION.ai && ORION.ai.pirateThreat && fleet.orders && fleet.orders.toSysId != null) {
@@ -1383,17 +1385,17 @@
     if (ORION.cohesion && ORION.cohesion.expeditionRiskBonus && fleet.orders && fleet.orders.toSysId != null) {
       c += ORION.cohesion.expeditionRiskBonus(game, fleet.orders.toSysId);
     }
-    return Math.max(0, c);
+    return Math.max(0, Math.min(INCIDENT_RISK_MAX, c));
   }
-  function _rollExploreIncident(game, fleet, events) {
+  function _rollTravelIncident(game, fleet, events) {
     if (fleet._incidentRolled) return;
     fleet._incidentRolled = true;
-    if (!fleet.orders || fleet.orders.type !== 'explore') return;
     if (!ORION.rng || !ORION.rng.makeRng) return;
-    const rng = ORION.rng.makeRng((game.seed || '') + ':fleet-incident:' + fleet.id);
-    const chance = _accidentChanceForExplore(game, fleet);
+    const totalI = routeImpulsi(game.galaxy, fleet, fleet.route);
+    const rng = ORION.rng.makeRng((game.seed || '') + ':fleet-incident:' + fleet.id + ':' + (game.timeImpulsi || 0));
+    const chance = _accidentChanceForTravel(game, fleet, totalI);
     if (rng.float() >= chance) return;
-    const danger = _dangerForExplore(game.galaxy, fleet);
+    const danger = _dangerForTravel(game.galaxy, fleet);
     const r = rng.float();
     const ship = fleet.ships && fleet.ships[0];
     if (r < 0.50) {
@@ -1923,11 +1925,13 @@
       return;
     }
 
-    /* Decisione #60: incident roll una sola volta all'avvio dell'explore
-       outbound (mentre in-transit). */
-    if (fleet.orders.type === 'explore' && !fleet._incidentRolled &&
-        fleet.location && fleet.location.status === 'in-transit') {
-      _rollExploreIncident(game, fleet, events);
+    /* Stadio 1.6: rischio di viaggio ∝ Ι totali, una sola volta per segmento
+       INTER-sistema (rotta > 1, non per leg). Le manovre intra (location.intra)
+       e le soste non tirano. Vale per qualsiasi ordine di movimento. */
+    if (!fleet._incidentRolled && fleet.location &&
+        fleet.location.status === 'in-transit' && !fleet.location.intra &&
+        Array.isArray(fleet.route) && fleet.route.length > 1) {
+      _rollTravelIncident(game, fleet, events);
     }
 
     /* Fase B: per i nuovi ordini con dwell, il countdown di sosta avviene
