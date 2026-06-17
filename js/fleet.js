@@ -2616,6 +2616,105 @@
     return !!computePath(galaxy, fromSysId, toSysId);
   }
 
+  /* ==================================================================
+     STADIO 1 — Modello comandi (fonte di verità: docs/FLEET_FLOW.md)
+     Funzioni PURE e additive: non cambiano il comportamento esistente,
+     sono consumate da UI (modal) e mappa per offrire/validare gli step.
+     ================================================================== */
+
+  /* La flotta può estrarre (rate > 0)? Estrattore = rate pieno, esploratore
+     = fallback minimo. Le reliquie non richiedono nulla (per presenza). */
+  function fleetHasExtractor(fleet) {
+    if (!fleet || !Array.isArray(fleet.ships)) return false;
+    for (let i = 0; i < fleet.ships.length; i++) {
+      const k = fleet.ships[i] && fleet.ships[i].kind;
+      if (k === 'estrattore' || k === 'explorer') return true;
+    }
+    return false;
+  }
+
+  /* Etichetta di stato derivata (fleetStance) da (status, bodyKey, orders,
+     composizione). Niente nuovo campo persistito: pura derivazione. Il nome
+     del corpo lo aggiunge il chiamante (questa funzione non tocca la galassia).
+       code ∈ port | transit | extracting | recon | defending | orbiting | holding */
+  const STANCE_LABEL = {
+    port: 'In porto',
+    transit: 'In viaggio',
+    extracting: 'In estrazione',
+    recon: 'In ricognizione',
+    defending: 'In difesa',
+    orbiting: 'In orbita',
+    holding: 'In sosta'
+  };
+  function fleetStance(fleet) {
+    if (!fleet || !fleet.location) return { code: 'holding', label: STANCE_LABEL.holding, bodyKey: null };
+    const loc = fleet.location;
+    const ord = fleet.orders || {};
+    const body = loc.bodyKey || null;
+    if (loc.status === 'docked') return { code: 'port', label: STANCE_LABEL.port, bodyKey: body };
+    if (loc.status === 'in-transit') return { code: 'transit', label: STANCE_LABEL.transit, bodyKey: null };
+    /* orbiting */
+    if (ord.type === 'survey' || ord.type === 'estrai') return { code: 'extracting', label: STANCE_LABEL.extracting, bodyKey: body };
+    if (ord.type === 'recon') return { code: 'recon', label: STANCE_LABEL.recon, bodyKey: body };
+    if (body) {
+      if (fleetHasGunsLocal(fleet)) return { code: 'defending', label: STANCE_LABEL.defending, bodyKey: body };
+      return { code: 'orbiting', label: STANCE_LABEL.orbiting, bodyKey: body };
+    }
+    return { code: 'holding', label: STANCE_LABEL.holding, bodyKey: null };
+  }
+
+  /* M2 (manovra intra-sistema verso un corpo) è proponibile solo se il
+     sistema di destinazione è ESPLORATO: senza, i corpi non sono noti
+     (gate di conoscenza). Un sistema solo *detected* accetta solo M1. */
+  function canTargetBody(target) {
+    return !!(target && target.explored);
+  }
+
+  /* actionsFor — la tabella master in codice. Funzione PURA di un
+     descrittore NORMALIZZATO del bersaglio (lo costruisce il chiamante dai
+     sottosistemi vivi) + flotta. Ritorna le Azioni di 3° livello con il loro
+     stato di disponibilità (gateFlotta soddisfatto o no) senza filtrarle, così
+     l'UI può mostrarle disabilitate con la motivazione.
+       target = {
+         kind,         // 'system'|'planet'|'moon'|'anomaly'|'nest'|'body'
+         explored,     // sistema esplorato?
+         ownColony,    // è una TUA colonia?
+         colonizable,  // colonizzabile e libero?
+         giacimento,   // corpo sfruttabile (Estrai)?
+         anomalyKind,  // 'detriti'|'nebulosa'|'reliquie'|null
+         aiPresent,    // civ AI occupante (attaccabile/reconnabile)
+         aiAlly        // alleato (Difendi alleato — futura)
+       }
+     Ritorna [{ id, available, gate, future }] in ordine di default suggerito. */
+  function actionsFor(target, fleet) {
+    const out = [];
+    if (!target) return out;
+    const armed = fleetHasGunsLocal(fleet);
+    const colonial = fleetHasColonial(fleet);
+    const extractor = fleetHasExtractor(fleet);
+
+    if (target.ownColony) {
+      out.push({ id: 'dock', available: true, gate: null, future: false });
+    }
+    if (target.colonizable) {
+      out.push({ id: 'colonize', available: colonial, gate: 'coloniale', future: false });
+    }
+    if (target.giacimento || target.anomalyKind) {
+      const reliquie = target.anomalyKind === 'reliquie';
+      out.push({ id: 'extract', available: reliquie ? true : extractor, gate: reliquie ? null : 'estrattore', future: false });
+    }
+    if (target.aiPresent || target.kind === 'nest') {
+      out.push({ id: 'attack', available: armed, gate: 'fuoco', future: false });
+    }
+    if (target.aiPresent || target.aiAlly || target.kind === 'nest') {
+      out.push({ id: 'recon', available: true, gate: null, future: false });
+    }
+    if (target.aiAlly) {
+      out.push({ id: 'defend-ally', available: armed, gate: 'fuoco', future: true });
+    }
+    return out;
+  }
+
   ORION.fleet = {
     CLASSES: CLASSES,
     CLASS_ORDER: CLASS_ORDER,
@@ -2662,6 +2761,11 @@
     FORMATIONS: FORMATIONS,
     setFormation: setFormation,
     fleetHasColonial: fleetHasColonial,
+    fleetHasExtractor: fleetHasExtractor,
+    /* Stadio 1 — modello comandi (docs/FLEET_FLOW.md). */
+    fleetStance: fleetStance,
+    canTargetBody: canTargetBody,
+    actionsFor: actionsFor,
     /* M15 — grandi navi. */
     fleetHasKind: fleetHasKind,
     fleetOfficerSlots: fleetOfficerSlots,
