@@ -1579,29 +1579,30 @@
       if (!entries2.length) return;
 
       ctx.save();
-      ctx.globalCompositeOperation = 'screen';
+      ctx.globalCompositeOperation = 'lighter';
 
       var vpMin = Math.min(this.cssW, this.cssH);
-      var blobBase = Math.max(vpMin * 0.07, this.scale * 0.08);
-      var zoomOut = clamp(400 / Math.max(this.scale, 30), 1.0, 8.0);
+      var blobBase = Math.max(vpMin * 0.1, this.scale * 0.1);
+      var zoomOut = clamp(500 / Math.max(this.scale, 20), 1.0, 12.0);
 
       for (var e = 0; e < entries2.length; e++) {
         var ent = entries2[e];
         var sys = g.systems[ent.sysId];
         if (!sys) continue;
         var p = this.project(sys.x, sys.y, sys.z || 0);
-        var blobR = blobBase * (1 + (ent.count - 1) * 0.4);
+        var blobR = blobBase * (1 + (ent.count - 1) * 0.5);
         if (p.x + blobR < 0 || p.x - blobR > this.cssW ||
             p.y + blobR < 0 || p.y - blobR > this.cssH) continue;
 
         var n = parseInt(ent.color.slice(1), 16);
         var cr = (n >> 16) & 255, cg = (n >> 8) & 255, cb = n & 255;
-        var rawAlpha = clamp(0.45 + ent.count * 0.15, 0.45, 0.90);
-        var alpha = rawAlpha * reveal * clamp(zoomOut * 0.5, 0.5, 1.8);
+        var rawAlpha = clamp(0.55 + ent.count * 0.18, 0.55, 1.0);
+        var alpha = rawAlpha * reveal * clamp(zoomOut * 0.4, 0.4, 2.5);
 
         var grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, blobR);
         grad.addColorStop(0, 'rgba(' + cr + ',' + cg + ',' + cb + ',' + alpha + ')');
-        grad.addColorStop(0.3, 'rgba(' + cr + ',' + cg + ',' + cb + ',' + (alpha * 0.6) + ')');
+        grad.addColorStop(0.25, 'rgba(' + cr + ',' + cg + ',' + cb + ',' + (alpha * 0.65) + ')');
+        grad.addColorStop(0.6, 'rgba(' + cr + ',' + cg + ',' + cb + ',' + (alpha * 0.25) + ')');
         grad.addColorStop(1, 'rgba(' + cr + ',' + cg + ',' + cb + ',0)');
         ctx.fillStyle = grad;
         ctx.beginPath();
