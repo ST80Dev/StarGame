@@ -8246,9 +8246,25 @@ function openFleetDetail(fleetId, opts) {
   /* ===== Modalità dettaglio (flotta esistente) ===== */
   function renderExisting() {
     const body = secRename() + secPos() + secOrders() + secComposition() + secFormation() + secOfficers() + secPop() + secSupply();
-    const footer =
-      '<button class="btn btn--mini btn--danger btn--with-icon" data-act="dissolve" type="button">' + uiIcon('trash', 'pink') + ' Dissolvi</button>' +
-      '<button class="btn btn--mini btn--primary" data-action="fleet-overlay-close" type="button">Chiudi</button>';
+    let footer;
+    if (D.ordOpen) {
+      /* Edit ordine in corso → il footer diventa la coppia Annulla /
+         Conferma ordine, e nasconde Dissolvi/Chiudi per evitare l'uscita
+         silenziosa che lasciava l'edit pending senza esito (stesso
+         principio del flusso "Crea e parti" della nuova flotta). */
+      const order = buildOrder();
+      const canConfirm = !!order;
+      const disReason = !canConfirm ? 'Definisci la destinazione' : '';
+      footer =
+        '<button class="btn btn--mini" data-act="ord-cancel" type="button">Annulla modifica</button>' +
+        '<button class="btn btn--mini btn--primary btn--with-icon" data-act="ord-confirm" type="button"' +
+          (canConfirm ? '' : ' disabled title="' + escapeHtml(disReason) + '"') + '>' +
+          uiIcon('check', 'cyan') + ' Conferma ordine</button>';
+    } else {
+      footer =
+        '<button class="btn btn--mini btn--danger btn--with-icon" data-act="dissolve" type="button">' + uiIcon('trash', 'pink') + ' Dissolvi</button>' +
+        '<button class="btn btn--mini btn--primary" data-action="fleet-overlay-close" type="button">Chiudi</button>';
+    }
     return shell(fleet.name, 'M09 · Fase A', body, footer);
   }
 
@@ -8468,13 +8484,12 @@ function openFleetDetail(fleetId, opts) {
         : 'una destinazione';
       return '<p class="fdetail__hint">Scegli ' + need + '.</p>';
     }
-    /* "Resta qui" (idle): nessun viaggio → niente check equipaggio/viveri. */
+    /* "Resta qui" (idle): nessun viaggio → niente check equipaggio/viveri.
+       Pulsanti Annulla/Conferma vivono nel footer della modal (sia in
+       creazione che in dettaglio esistente con D.ordOpen). */
     if (order.type === 'idle') {
       return '<div class="fdetail__sum">' +
-        '<span class="fdetail__sumchip is-ok">⏸ resta in orbita qui</span>' +
-        '<button class="btn btn--mini" data-act="ord-cancel" type="button">Annulla</button>' +
-        '<button class="btn btn--mini btn--primary btn--with-icon" data-act="ord-confirm" type="button">' +
-          uiIcon('check', 'cyan') + ' Conferma ordine</button></div>';
+        '<span class="fdetail__sumchip is-ok">⏸ resta in orbita qui</span></div>';
     }
     const crewOk = fleet.crew.length >= ORION.fleet.fleetCrewRequired(fleet);
     let chips = '<span class="fdetail__sumchip ' + (crewOk ? 'is-ok' : 'is-warn') + '">' +
@@ -8490,10 +8505,7 @@ function openFleetDetail(fleetId, opts) {
         chips += '<span class="fdetail__sumchip ' + cls + '" title="~' + so.routeI + ' Ι rotta · ' + so.autonomyI + ' Ι autonomia">' + ic + '</span>';
       }
     }
-    return '<div class="fdetail__sum">' + chips +
-      '<button class="btn btn--mini" data-act="ord-cancel" type="button">Annulla</button>' +
-      '<button class="btn btn--mini btn--primary btn--with-icon" data-act="ord-confirm" type="button">' +
-        uiIcon('check', 'cyan') + ' Conferma ordine</button></div>';
+    return '<div class="fdetail__sum">' + chips + '</div>';
   }
 
   /* Colonia-PORTO: la tua colonia nel sistema dove la flotta è ora (decisione
