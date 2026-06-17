@@ -1357,9 +1357,12 @@
           continue;
         }
 
-        // anello sottile di pericolo (§5.3) — niente alone sfocato
+        // indicatore pericolo (§5.3): piccolo arco sotto la stella, non un anello pieno
         const dcol = this._dangerColor(s.danger, fade);
-        this._ring(ctx, p, r + 2.5, dcol, 1);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r + 2.5, Math.PI * 0.3, Math.PI * 0.7);
+        ctx.strokeStyle = dcol; ctx.lineWidth = Math.max(1.2, r * 0.25);
+        ctx.stroke();
 
         // corpo della stella (colore = tipo); depth fade
         const col = starColor(g, s.star);
@@ -1455,18 +1458,18 @@
           colors.unshift(PLAYER_COLOR);
         }
 
-        const chipS = Math.max(3, Math.round(r * 0.38));
-        const gap = 1;
-        const rowGap = 2;
-        const startX = p.x + r + 5;
+        const chipS = clamp(Math.round(r * 0.55), 4, 14);
+        const gap = Math.max(1, Math.round(chipS * 0.2));
+        const rowGap = Math.max(2, Math.round(chipS * 0.35));
+        const startX = p.x + r + Math.max(4, Math.round(r * 0.4));
         var cy = p.y - ((colors.length - 1) * (chipS + rowGap)) / 2;
 
         for (var ci = 0; ci < colors.length; ci++) {
           var col = colors[ci];
           var count = Math.min(byColor[col], 6);
           ctx.fillStyle = col;
-          ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-          ctx.lineWidth = 0.6;
+          ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+          ctx.lineWidth = Math.max(0.6, chipS * 0.1);
           for (var pi = 0; pi < count; pi++) {
             var cx = startX + pi * (chipS + gap);
             ctx.fillRect(cx, cy, chipS, chipS);
@@ -2138,7 +2141,7 @@
         if (Number(k.slice(0, colon)) === sysId) playerCount++;
       });
       if (playerCount) {
-        civLines.push('<span class="gmap-tip__civ" style="--tc:' + PLAYER_COLOR + '"><span class="gmap-tip__sw"></span>Tu (' + playerCount + (playerCount === 1 ? ' colonia' : ' colonie') + ')</span>');
+        civLines.push('<span class="gmap-tip__civ" style="--tc:' + PLAYER_COLOR + '"><span class="gmap-tip__sw"></span>Tu</span>');
       }
       var civs = game.civs || [];
       for (var i = 0; i < civs.length; i++) {
@@ -2151,7 +2154,7 @@
           if (colon > 0 && Number(pk.slice(0, colon)) === sysId) cnt++;
         }
         if (cnt) {
-          civLines.push('<span class="gmap-tip__civ" style="--tc:' + esc(civ.color) + '"><span class="gmap-tip__sw"></span>' + esc(civ.name) + ' (' + cnt + (cnt === 1 ? ' pianeta' : ' pianeti') + ')</span>');
+          civLines.push('<span class="gmap-tip__civ" style="--tc:' + esc(civ.color) + '"><span class="gmap-tip__sw"></span>' + esc(civ.name) + '</span>');
         }
       }
       if (civLines.length) html += '<div class="gmap-tip__civs">' + civLines.join('') + '</div>';
