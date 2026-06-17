@@ -203,6 +203,10 @@
       this._raf = 0;
       this._needsRender = false;
       this._ctxSig = '';
+
+      this.mapLayer = 'detail';  // 'detail' | 'influence'
+      this._influenceCache = null;
+      this._influenceSig = '';
     }
 
     mount(container, galaxy, state, opts) {
@@ -232,6 +236,21 @@
       tip.style.display = 'none';
       container.appendChild(tip);
       this._tooltip = tip;
+
+      var self = this;
+      var layerBtn = document.createElement('button');
+      layerBtn.className = 'gmap-layer-toggle';
+      layerBtn.type = 'button';
+      layerBtn.textContent = '⬡ Imperi';
+      layerBtn.addEventListener('click', function () {
+        self.mapLayer = self.mapLayer === 'detail' ? 'influence' : 'detail';
+        layerBtn.textContent = self.mapLayer === 'detail' ? '⬡ Imperi' : '◈ Dettaglio';
+        layerBtn.classList.toggle('is-active', self.mapLayer === 'influence');
+        self._influenceCache = null;
+        self.requestRender();
+      });
+      container.appendChild(layerBtn);
+      this._layerBtn = layerBtn;
 
       this.canvas = canvas;
       this.ctx = canvas.getContext('2d');
@@ -265,6 +284,7 @@
       if (this._raf) cancelAnimationFrame(this._raf);
       this._anim = false;
       if (this._tooltip) { this._tooltip.remove(); this._tooltip = null; }
+      if (this._layerBtn) { this._layerBtn.remove(); this._layerBtn = null; }
       if (this.canvas) this.canvas.replaceWith(this.canvas.cloneNode(false));
       this.canvas = null;
       this.ctx = null;
@@ -1048,31 +1068,23 @@
       const regionAlpha = 1 - smoothstep(0.05, 0.95, reveal);
 
       if (regionAlpha > 0.01) this._drawRegions(ctx, regionAlpha);
+      const influenceMode = this.mapLayer === 'influence';
       if (reveal > 0.01) {
         this._drawEdges(ctx, reveal);
-        /* M12 (decisione #56): rotte commerciali interne come tessuto
-           galattico — linea pulsante tinta dalla risorsa, spessore ∝ portata,
-           glifo ☠ se la tratta è minacciata/interrotta. Sotto i nodi. */
-        this._drawTradeRoutes(ctx, reveal);
-        this._drawNodes(ctx, reveal);
-        /* M10 Fase A (decisione #47): confini delle civiltà AI. Visibili solo
-           sui sistemi che il giocatore ha DETECTED/EXPLORED (scoperta-guidata). */
-        this._drawCivChips(ctx, reveal);
-        /* M10 Fase B (decisione #52 §13.6): alone ambra tratteggiato sui
-           sistemi coesi noti — consorzio locale visibile a colpo d'occhio. */
-        this._drawCohesion(ctx, reveal);
-        /* M10 Fase E: covi pirata noti (DETECTED+) — bersagli raidabili. */
-        this._drawPirateNests(ctx, reveal);
-        /* M16 (decisione #81): tue stazioni spaziali (sempre note). */
-        this._drawStations(ctx, reveal);
-        /* M08 Fase B (decisione #46): markers flotte + rotte in transito.
-           M08 polish (decisione #61): drag&drop dal canvas per ordinare. */
-        this._drawFleets(ctx, reveal);
-        if (this._fleetPicker) this._drawFleetPickerOverlay(ctx, reveal);
-        /* Bug fix 2026-06-15 (feedback utente "nella mappa non si vede
-           alcun simbolo"): incursioni/raider in arrivo non avevano marker.
-           Disegnato sopra a tutto (sono minacce attive). */
-        this._drawIncursions(ctx, reveal);
+        if (influenceMode) {
+          this._drawInfluence(ctx, reveal);
+          this._drawNodes(ctx, reveal);
+        } else {
+          this._drawTradeRoutes(ctx, reveal);
+          this._drawNodes(ctx, reveal);
+          this._drawCivChips(ctx, reveal);
+          this._drawCohesion(ctx, reveal);
+          this._drawPirateNests(ctx, reveal);
+          this._drawStations(ctx, reveal);
+          this._drawFleets(ctx, reveal);
+          if (this._fleetPicker) this._drawFleetPickerOverlay(ctx, reveal);
+          this._drawIncursions(ctx, reveal);
+        }
       }
 
       this._emitContext(false);
@@ -1492,6 +1504,97 @@
           cy += chipS + rowGap;
         }
       }
+      ctx.restore();
+    }
+
+    /* Heatmap influenza imperi: blob radiali sfumati per civiltà,
+       intensità proporzionale al numero di pianeti per sistema. */
+    _drawInfluence(ctx, reveal) {
+      var game = root.ORION && root.ORION.game;
+      if (!game) return;
+      var g = this.galaxy;
+      var disc = this.state.discovery;
+      var DET = DISCOVERY.DETECTED;
+      var PLAYER_COLOR = '#5fa8ff';
+
+      var sig = (game.turnI || 0) + ':' + this.mapLayer;
+      if (this._influenceSig !== sig) {
+        this._influenceCache = null;
+        this._influenceSig = sig;
+      }
+
+      if (!this._influenceCache) {
+        var entries = [];
+        var civMap = {};
+
+        var cols = game.colonies || {};
+        var colKeys = Object.keys(cols);
+        for (var ci = 0; ci < colKeys.length; ci++) {
+          var k = colKeys[ci];
+          var c = cols[k];
+          if (!c || !c.colonized) continue;
+          var colon = k.indexOf(':');
+          if (colon < 0) continue;
+          var sid = Number(k.slice(0, colon));
+          if (isNaN(sid) || disc[sid] < DET) continue;
+          var key = PLAYER_COLOR + ':' + sid;
+          if (!civMap[key]) civMap[key] = { color: PLAYER_COLOR, sysId: sid, count: 0 };
+          civMap[key].count++;
+        }
+
+        var civs = game.civs || [];
+        for (var i = 0; i < civs.length; i++) {
+          var civ = civs[i];
+          if (!civ || !civ.alive || !Array.isArray(civ.planets)) continue;
+          for (var j = 0; j < civ.planets.length; j++) {
+            var pk = civ.planets[j];
+            var colon2 = pk.indexOf(':');
+            if (colon2 < 0) continue;
+            var sid2 = Number(pk.slice(0, colon2));
+            if (isNaN(sid2) || disc[sid2] < DET) continue;
+            var key2 = civ.color + ':' + sid2;
+            if (!civMap[key2]) civMap[key2] = { color: civ.color, sysId: sid2, count: 0 };
+            civMap[key2].count++;
+          }
+        }
+
+        var mapKeys = Object.keys(civMap);
+        for (var m = 0; m < mapKeys.length; m++) entries.push(civMap[mapKeys[m]]);
+        this._influenceCache = entries;
+      }
+
+      var entries2 = this._influenceCache;
+      if (!entries2.length) return;
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+
+      var baseRadius = Math.max(30, this.scale * 0.06);
+
+      for (var e = 0; e < entries2.length; e++) {
+        var ent = entries2[e];
+        var sys = g.systems[ent.sysId];
+        if (!sys) continue;
+        var p = this.project(sys.x, sys.y, sys.z || 0);
+        var blobR = baseRadius * (1 + (ent.count - 1) * 0.4);
+        if (p.x + blobR < 0 || p.x - blobR > this.cssW ||
+            p.y + blobR < 0 || p.y - blobR > this.cssH) continue;
+
+        var n = parseInt(ent.color.slice(1), 16);
+        var cr = (n >> 16) & 255, cg = (n >> 8) & 255, cb = n & 255;
+        var alpha = clamp(0.07 + ent.count * 0.03, 0.07, 0.18) * reveal;
+
+        var grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, blobR);
+        grad.addColorStop(0, 'rgba(' + cr + ',' + cg + ',' + cb + ',' + alpha + ')');
+        grad.addColorStop(0.6, 'rgba(' + cr + ',' + cg + ',' + cb + ',' + (alpha * 0.4) + ')');
+        grad.addColorStop(1, 'rgba(' + cr + ',' + cg + ',' + cb + ',0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, blobR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.globalCompositeOperation = 'source-over';
       ctx.restore();
     }
 
