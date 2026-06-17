@@ -99,6 +99,13 @@
       canvas.style.touchAction = 'none';
       container.appendChild(canvas);
 
+      var tip = document.createElement('div');
+      tip.className = 'sysview-tooltip';
+      tip.style.display = 'none';
+      container.appendChild(tip);
+      this._tooltip = tip;
+      this._chipHits = [];
+
       this.canvas = canvas;
       this.ctx = canvas.getContext('2d');
 
@@ -121,6 +128,7 @@
       else window.removeEventListener('resize', this._onResize);
       if (this._raf) cancelAnimationFrame(this._raf);
       this._anim = false;
+      if (this._tooltip) { this._tooltip.remove(); this._tooltip = null; }
       if (this.canvas) this.canvas.replaceWith(this.canvas.cloneNode(false));
       this.canvas = null;
       this.ctx = null;
@@ -267,6 +275,7 @@
           this.canvas.style.cursor = hk ? 'pointer' : 'grab';
           this.requestRender();
         }
+        this._updateChipTooltip(p);
         return;
       }
       const prev = this.pointers.get(e.pointerId);
@@ -325,6 +334,7 @@
 
     _onPointerLeave() {
       if (this.hoverKey !== null) { this.hoverKey = null; this.requestRender(); }
+      if (this._tooltip) this._tooltip.style.display = 'none';
       this.canvas.style.cursor = 'grab';
     }
 
@@ -463,6 +473,7 @@
       this._needsRender = false;
       const ctx = this.ctx;
       if (!ctx) return;
+      this._chipHits = [];
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
       ctx.clearRect(0, 0, this.cssW, this.cssH);
 
@@ -797,8 +808,8 @@
       if (!AI || !game) return;
       var sysId = this.system ? this.system.id : null;
       if (sysId == null) return;
-      var clamp = root.ORION.util.clamp;
-      var chipS = clamp(Math.round(r * 0.55), 4, 14);
+      var clampFn = root.ORION.util.clamp;
+      var chipS = clampFn(Math.round(r * 0.75), 5, 18);
 
       var isPlayerColony = false;
       var colKey = sysId + ':' + body.key;
@@ -817,6 +828,44 @@
       ctx.strokeStyle = 'rgba(0,0,0,0.55)';
       ctx.lineWidth = Math.max(0.6, chipS * 0.1);
       ctx.strokeRect(cx, cy, chipS, chipS);
+
+      if (this._chipHits) {
+        this._chipHits.push({
+          x: cx, y: cy, w: chipS, h: chipS,
+          bodyKey: body.key, bodyName: body.name,
+          isPlayer: isPlayerColony, civ: civ, color: color
+        });
+      }
+    }
+
+    _updateChipTooltip(ptr) {
+      var tip = this._tooltip;
+      if (!tip) return;
+      var hits = this._chipHits;
+      var hit = null;
+      for (var i = 0; i < hits.length; i++) {
+        var h = hits[i];
+        if (ptr.x >= h.x && ptr.x <= h.x + h.w && ptr.y >= h.y && ptr.y <= h.y + h.h) {
+          hit = h; break;
+        }
+      }
+      if (!hit) { tip.style.display = 'none'; return; }
+      var esc = root.ORION.util && root.ORION.util.escapeHtml ? root.ORION.util.escapeHtml : function (s) { return s; };
+      var html = '<span class="svtip__sw" style="--tc:' + esc(hit.color) + '"></span>';
+      if (hit.isPlayer) {
+        html += '<strong>Tua colonia</strong> — ' + esc(hit.bodyName);
+      } else if (hit.civ) {
+        html += '<strong>' + esc(hit.civ.name) + '</strong> — ' + esc(hit.bodyName);
+      }
+      tip.innerHTML = html;
+      tip.style.display = '';
+      var tx = ptr.x + 14;
+      var ty = ptr.y - 10;
+      if (tx + tip.offsetWidth > this.cssW - 8) tx = ptr.x - tip.offsetWidth - 10;
+      if (ty + tip.offsetHeight > this.cssH - 8) ty = this.cssH - tip.offsetHeight - 8;
+      if (ty < 4) ty = 4;
+      tip.style.left = tx + 'px';
+      tip.style.top = ty + 'px';
     }
 
     /* Disco planetario procedurale: base + dettaglio per tipo + terminatore

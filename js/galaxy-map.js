@@ -1484,7 +1484,7 @@
           colors.unshift(PLAYER_COLOR);
         }
 
-        const chipS = clamp(Math.round(r * 0.55), 4, 14);
+        const chipS = clamp(Math.round(r * 0.75), 5, 18);
         const gap = Math.max(1, Math.round(chipS * 0.2));
         const rowGap = Math.max(2, Math.round(chipS * 0.35));
         const startX = p.x + r + Math.max(4, Math.round(r * 0.4));
