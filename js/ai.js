@@ -192,7 +192,13 @@
     /* ICG §5.4 */
     ICG_PER_EVIL_EXPAND: 0.8,
     ICG_PER_GOOD_STABILIZE: 0.5,
-    ICG_DECAY: 0.02
+    ICG_DECAY: 0.02,
+
+    /* Contatto da presenza (decisione 2026-06-17): una flotta player in
+       orbita/docked nel sistema di una civ (o di un covo pirata noto)
+       formalizza il contatto in pochi Ι. Il grado di intel ottenuto
+       dipende dalla composizione della flotta più potente presente. */
+    CONTACT_PRESENCE_I: 4
   };
 
   /* ------------------------------------------------------------------
@@ -237,6 +243,143 @@
         reason: reason || 'formal-contact',
         impulso: game.timeImpulsi || 0
       });
+    }
+  }
+
+  /* Composizione → intel: classi più grosse + maggior numero = dossier più
+     completo. Lookup pesi mantenuto interno (l'AI conosce solo i kind, non
+     deve dipendere da fleet.js). */
+  const INTEL_SHIP_WEIGHT = {
+    explorer: 0.5, caccia: 1, intercettore: 1, corvetta: 2, fregata: 3,
+    incrociatore: 5, dreadnought: 6, ammiraglia: 7,
+    coloniale: 0, estrattore: 0
+  };
+  const INTEL_LEVEL = { fragmentary: 1, partial: 2, complete: 3 };
+  const INTEL_LEVEL_INV = [null, 'fragmentary', 'partial', 'complete'];
+  function fleetIntelScore(fleet) {
+    if (!fleet || !Array.isArray(fleet.ships)) return 0;
+    let s = 0;
+    for (let i = 0; i < fleet.ships.length; i++) {
+      const k = fleet.ships[i] && fleet.ships[i].kind;
+      s += (INTEL_SHIP_WEIGHT[k] != null ? INTEL_SHIP_WEIGHT[k] : 1);
+    }
+    return s;
+  }
+  function intelLevelFromScore(score) {
+    if (score >= 6) return 'complete';
+    if (score >= 3) return 'partial';
+    return 'fragmentary';
+  }
+  function intelLevelRank(level) { return INTEL_LEVEL[level] || 0; }
+
+  /* Tracciamento permanenza flotte player in sistemi rilevanti. Vive su
+     game._presence (lazy, non serializzato — campo derivato).
+       presence[civId|nest:sysId] = { sinceI, bestScore }
+     Quando (I - sinceI) >= CONTACT_PRESENCE_I scatta il contatto / la
+     ricognizione. Se la flotta esce dal sistema l'entry viene rimossa. */
+  function ensurePresence(game) {
+    if (!game._presence) game._presence = {};
+    return game._presence;
+  }
+  function processPresence(game, events) {
+    if (!game || !Array.isArray(game.fleets)) return;
+    const I = game.timeImpulsi || 0;
+    const presence = ensurePresence(game);
+
+    /* Step 1: raccogli flotte player presenti per sistema con score max. */
+    const fleetBySys = {};
+    for (let i = 0; i < game.fleets.length; i++) {
+      const f = game.fleets[i];
+      if (!f || !f.location) continue;
+      const st = f.location.status;
+      if (st !== 'orbiting' && st !== 'docked') continue;
+      const sid = f.location.systemId;
+      if (sid == null || sid < 0) continue;
+      const sc = fleetIntelScore(f);
+      if (fleetBySys[sid] == null || sc > fleetBySys[sid]) fleetBySys[sid] = sc;
+    }
+
+    /* Step 2: per ogni civ AI viva, controlla se ha pianeti in un sistema
+       con flotta player. Aggiorna timer / score. Se < contacted o intel
+       upgradabile, scatta promozione. */
+    const civs = game.civs || [];
+    const activeKeys = {};
+    for (let c = 0; c < civs.length; c++) {
+      const civ = civs[c];
+      if (!civ || !civ.alive) continue;
+      const sysOwned = civ.systems || derivedSystems(civ);
+      let bestSys = -1, bestScore = -1;
+      for (let s = 0; s < sysOwned.length; s++) {
+        const sid = sysOwned[s];
+        if (fleetBySys[sid] == null) continue;
+        if (fleetBySys[sid] > bestScore) { bestScore = fleetBySys[sid]; bestSys = sid; }
+      }
+      if (bestSys < 0) continue;
+      const key = 'civ:' + civ.id;
+      activeKeys[key] = true;
+      let entry = presence[key];
+      if (!entry || entry.sysId !== bestSys) {
+        presence[key] = { sysId: bestSys, sinceI: I, bestScore: bestScore };
+        continue;
+      }
+      if (bestScore > entry.bestScore) entry.bestScore = bestScore;
+      if ((I - entry.sinceI) < CFG.CONTACT_PRESENCE_I) continue;
+
+      const newLevel = intelLevelFromScore(entry.bestScore);
+      const newRank = intelLevelRank(newLevel);
+      const curRank = intelLevelRank(civ.intelLevel);
+      if (knowledgeRank(civ) < KNOWLEDGE.contacted) {
+        civ.intelLevel = newLevel;
+        markContact(game, civ, events, 'presence');
+      } else if (newRank > curRank) {
+        const prev = civ.intelLevel;
+        civ.intelLevel = newLevel;
+        if (events) events.push({
+          kind: 'civ-intel-upgraded', civName: civ.name, civColor: civ.color,
+          from: prev || 'fragmentary', to: newLevel,
+          regionLabel: regionLabelOfSystem(game.galaxy, bestSys),
+          impulso: I
+        });
+      }
+    }
+
+    /* Step 3: covi pirata noti. Stesso pattern. Salviamo intelLevel sul
+       nest stesso (additivo, non serializza nulla di nuovo). */
+    const nests = (game.piracy && game.piracy.nests) || [];
+    for (let n = 0; n < nests.length; n++) {
+      const nest = nests[n];
+      if (!nest || nest.sysId == null) continue;
+      const sc = fleetBySys[nest.sysId];
+      if (sc == null) continue;
+      const key = 'nest:' + nest.sysId;
+      activeKeys[key] = true;
+      let entry = presence[key];
+      if (!entry) {
+        presence[key] = { sysId: nest.sysId, sinceI: I, bestScore: sc };
+        continue;
+      }
+      if (sc > entry.bestScore) entry.bestScore = sc;
+      if ((I - entry.sinceI) < CFG.CONTACT_PRESENCE_I) continue;
+      const newLevel = intelLevelFromScore(entry.bestScore);
+      const newRank = intelLevelRank(newLevel);
+      const curRank = intelLevelRank(nest.intelLevel);
+      if (newRank > curRank) {
+        const prev = nest.intelLevel;
+        nest.intelLevel = newLevel;
+        if (events) events.push({
+          kind: 'pirate-nest-recon', sysId: nest.sysId,
+          regionLabel: regionLabelOfSystem(game.galaxy, nest.sysId),
+          from: prev || null, to: newLevel,
+          impulso: I
+        });
+      }
+    }
+
+    /* Step 4: pulisci entry di sistemi non più presidiati (così al ritorno
+       il timer riparte). */
+    const keys = Object.keys(presence);
+    for (let k = 0; k < keys.length; k++) {
+      if (!activeKeys[keys[k]]) delete presence[keys[k]];
     }
   }
   /* Avanzamento automatico contacted→known→familiar. Chiamato a ogni AI-tick
@@ -1545,6 +1688,10 @@
     addInteraction: addInteraction,
     markContact: markContact,
     maybePromoteKnowledge: maybePromoteKnowledge,
+    processPresence: processPresence,
+    fleetIntelScore: fleetIntelScore,
+    intelLevelFromScore: intelLevelFromScore,
+    intelLevelRank: intelLevelRank,
     visibleCivs: visibleCivs,
     materialize: materialize,
     demobilize: demobilize,

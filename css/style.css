@@ -7483,6 +7483,26 @@ select.main-menu__input { cursor: pointer; }
 .civ-grade--known     { color: #6fe0b8; }     /* verde: dossier completo */
 .civ-grade--familiar  { color: #f0c870; background: rgba(240, 200, 112, 0.15); }  /* oro: familiare */
 
+/* Chip "grado intel" (frammentario/parziale/completo). Indipendente dal
+   knowledge: una civ contattata può avere intel solo frammentario se la
+   flotta presente al primo contatto era esile. */
+.civ-intel {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 7px; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.02em;
+  border: 1px solid currentColor;
+}
+.civ-intel--fragmentary { color: #c89060; background: rgba(200, 144, 96, 0.10); }
+.civ-intel--partial     { color: #c8b060; background: rgba(200, 176, 96, 0.12); }
+.civ-intel--complete    { color: #7fc4ff; background: rgba(127, 196, 255, 0.10); }
+
+/* Allineamento "?" usato quando intel è frammentario. */
+.civ-chip--unknown {
+  color: var(--c-text-faint, #98a2b3);
+  background: rgba(152, 162, 179, 0.12);
+  border: 1px dashed rgba(152, 162, 179, 0.45);
+}
+
 /* Card collassata per gradi bassi (spotted/unknown). */
 .civ-card--unknown,
 .civ-card--spotted {

@@ -2296,6 +2296,13 @@
     if (root.ORION.colonyFigure && root.ORION.colonyFigure.retireOld) {
       root.ORION.colonyFigure.retireOld(game, events);
     }
+    /* Contatto-da-presenza (2026-06-17): una flotta player nel sistema di
+       una civ (o di un covo) formalizza il contatto in pochi Ι, e il grado
+       di intel dipende dalla composizione della flotta. Gira ogni Ι (non al
+       passo AI_EVERY_I) perché 3-4 Ι è la finestra desiderata. */
+    if (root.ORION.ai && root.ORION.ai.processPresence) {
+      root.ORION.ai.processPresence(game, events);
+    }
     /* M10 Fase A (decisione #47): civiltà AI in background. Simulazione
        AGGREGATA a cadenza interna (ogni AI_EVERY_I Impulsi, dopo il warm-up):
        espansione, guerre AI-vs-AI, nascita/morte (roster vivo), ICG §5.4,
