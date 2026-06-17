@@ -368,6 +368,32 @@ button { font-family: inherit; }
   padding-left: 8px; border-left: 2px solid rgba(120, 150, 220, 0.18);
 }
 .panel__note--accessory strong { color: var(--c-text-soft); }
+/* Feedback utente 2026-06-15: blocco costo colonizzazione integrato nella
+   action bar in basso (viewport__actionbar). Padding ridotto, sezioni più
+   compatte, dato che la card vive in spazio limitato. */
+.bodyinfo__cost {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--c-border);
+}
+.bodyinfo__cost .sysinfo__sub {
+  margin: 2px 0 4px;
+  font-size: 0.78rem;
+}
+.bodyinfo__cost .cost-table { margin: 2px 0 4px; }
+.bodyinfo__cost .cost-row {
+  font-size: 0.78rem;
+  padding: 2px 5px;
+}
+.bodyinfo__cost .panel__note {
+  font-size: 0.74rem;
+  margin: 3px 0;
+}
+.bodyinfo__cost .panel__note--accessory {
+  font-size: 0.72rem;
+  padding-left: 6px;
+  margin: 3px 0;
+}
 
 /* --- Lista di navigazione --- */
 .nav-item {
