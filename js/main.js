@@ -143,6 +143,63 @@ function isChronicleNoise(ev) {
   return ev && ev.kind && CHRONICLE_NOISE_KINDS.has(ev.kind);
 }
 
+/* Cronaca a due sezioni (sostituisce filtro Importanti/Tutto):
+   - 'galaxy': contatti civiltà, diplomazia, AI lontane (voci), pirati,
+     stazioni, flotte in viaggio/scoperte, occupazioni, scoperte/scansioni.
+   - 'colony': eventi interni dell'impero — carestie, rientri carestia,
+     waste, perdita popolazione, milestone capitali, colonie, ricerca,
+     vittorie, consiglio. */
+function chronicleCategoryFromKind(kind) {
+  if (!kind) return 'colony';
+  if (kind.indexOf('civ-') === 0) return 'galaxy';
+  if (kind.indexOf('diplo-') === 0) return 'galaxy';
+  if (kind.indexOf('pirate-') === 0) return 'galaxy';
+  if (kind.indexOf('fleet-') === 0) return 'galaxy';
+  if (kind.indexOf('station-') === 0) return 'galaxy';
+  if (kind.indexOf('siege-') === 0) return 'galaxy';
+  if (kind.indexOf('expedition-') === 0) return 'galaxy';
+  if (kind.indexOf('trade-') === 0) return 'galaxy';
+  if (kind.indexOf('agreement-') === 0) return 'galaxy';
+  if (kind.indexOf('raider-') === 0) return 'galaxy';
+  if (kind.indexOf('cohesion-') === 0) return 'galaxy';
+  if (kind.indexOf('dispatch-') === 0) return 'galaxy';
+  if (kind === 'system-occupied' || kind === 'system-released' ||
+      kind === 'system-cohesion-formed' || kind === 'system-cohesion-broken' ||
+      kind === 'scan-done' || kind === 'anomaly-depleted' ||
+      kind === 'commander-ranked' || kind === 'waste-deal-closed') return 'galaxy';
+  return 'colony';
+}
+/* Fallback per entry storiche senza `cat` (save pre-bump): deriva dalla
+   classe semantica `mod` (UI_GUIDE §7 — stessi colori usati nel rendering). */
+function chronicleCategoryFromMod(mod) {
+  if (mod === 'civ' || mod === 'fleet' || mod === 'explore') return 'galaxy';
+  return 'colony';
+}
+/* Stato non-letto per linguetta (aura pulsante quando arriva un evento
+   importante in una sezione non attiva). Vive in localStorage via uiprefs. */
+ORION.chronicleUnread = { galaxy: false, colony: false };
+ORION.chronicleSection = 'galaxy';
+
+/* Misteriosità voci AI lontane (decisione #34, R2):
+   - rank 0 (sconosciuta): nome e regione velati ("una potenza ignota",
+     "regioni non cartografate");
+   - rank 1 (avvistata): nome reale, regione attenuata ("regioni remote");
+   - rank ≥ 2 (contatto): testo pieno.
+   Si applica a civ-expand, civ-emerged, civ-war, civ-fallen — eventi che
+   possono parlare di civiltà mai incontrate direttamente. */
+function chronicleCivKnowRank(civName) {
+  if (!civName || !ORION.game || !Array.isArray(ORION.game.civs)) return 0;
+  const c = ORION.game.civs.find(function (x) { return x.name === civName; });
+  if (!c) return 0;
+  return (ORION.ai && ORION.ai.knowledgeRank) ? ORION.ai.knowledgeRank(c) : 3;
+}
+function chronicleMysteryCiv(civName, regionLabel) {
+  const rank = chronicleCivKnowRank(civName);
+  if (rank >= 2) return { name: escapeHtml(civName || '—'), region: escapeHtml(regionLabel || '—'), mystery: false };
+  if (rank >= 1) return { name: escapeHtml(civName || '—'), region: 'regioni remote', mystery: true };
+  return { name: 'una potenza ignota', region: 'regioni non cartografate', mystery: true };
+}
+
 /* Sezioni dell'accordion Plancia d'Impero (la cronaca è gestita a parte).
    Tenuta come unica fonte così aggiungere una sezione non rompe il toggle
    (bug #78: 'council' mancava qui → non si riapriva più). */
@@ -190,9 +247,20 @@ function loadUiPrefs() {
     if (d.empireDeckOpen != null) ORION.empireDeckOpen = !!d.empireDeckOpen;
     if (typeof d.lpTab === 'string') ORION.lpTab = d.lpTab;
     /* Filtro cronaca: 'important' (default) silenzia il rumore di routine
-       — solo eventi strategici/notevoli. 'all' mostra tutto come storico. */
+       — solo eventi strategici/notevoli. 'all' mostra tutto come storico.
+       Compat back: la cronaca ora è a due sezioni (Galassia/Colonie),
+       ma manteniamo il caricamento del campo per non perdere prefs vecchie. */
     if (d.chronicleFilter === 'all' || d.chronicleFilter === 'important') {
       ORION.chronicleFilter = d.chronicleFilter;
+    }
+    if (d.chronicleSection === 'galaxy' || d.chronicleSection === 'colony') {
+      ORION.chronicleSection = d.chronicleSection;
+    }
+    if (d.chronicleUnread && typeof d.chronicleUnread === 'object') {
+      ORION.chronicleUnread = {
+        galaxy: !!d.chronicleUnread.galaxy,
+        colony: !!d.chronicleUnread.colony
+      };
     }
     if (d.crewSidebarSort === 'xp' || d.crewSidebarSort === 'system' || d.crewSidebarSort === 'status') {
       ORION.crewSidebarSort = d.crewSidebarSort;
@@ -214,6 +282,8 @@ function saveUiPrefs() {
       empireDeckOpen: ORION.empireDeckOpen,
       lpTab: ORION.lpTab,
       chronicleFilter: ORION.chronicleFilter,
+      chronicleSection: ORION.chronicleSection,
+      chronicleUnread: ORION.chronicleUnread,
       crewSidebarSort: ORION.crewSidebarSort,
       crewCentralPrefs: ORION.crewCentralPrefs
     }));
@@ -10086,16 +10156,12 @@ function runAdvance(impulsi) {
 }
 
 function chronicleEvent(ev) {
-  /* Filtro rumore (feedback utente 2026-06-15): in modalità 'important'
-     gli eventi di routine (build, varo navi, lancio flotta, hop, mercantili,
-     governatore, insediamento, recovery, ecc.) non entrano in cronaca.
-     Decisione conservativa: l'evento viene scartato PRIMA di formattarsi —
-     non finisce neanche in game.chronicle (che è la fonte di verità per il
-     replay). Conseguenze positive: cronaca leggibile + risparmio sui 40
-     slot del cap. Conseguenza accettata: cambiando filtro a metà partita
-     non si recupera il pregresso silenziato (è UI, non storia: chi vuole
-     tutto deve scegliere 'all' prima). */
-  if (ORION.chronicleFilter === 'important' && isChronicleNoise(ev)) return;
+  /* Cronaca a 2 sezioni (Galassia/Colonie): il rumore di routine
+     (build, varo navi, lancio flotta, hop, mercantili, governatore,
+     insediamento, ecc.) viene SEMPRE scartato — la sidebar mostra solo
+     gli eventi che richiedono attenzione. I dettagli operativi vivono
+     nei pannelli dedicati (colonia, flotta, rotte). */
+  if (isChronicleNoise(ev)) return;
   const ds = ORION.time.format(ev.impulso);
   const pname = (ev.planet && ev.planet.name) || '—';
   // Decisione #26: aggiungiamo il tag di appartenenza accanto al nome
@@ -10447,10 +10513,16 @@ function chronicleEvent(ev) {
     const INTEL_LABEL = { fragmentary: 'parziale', partial: 'parziale', complete: 'completa' };
     pushChronicle(ds + ' — Ricognizione <strong>' + escapeHtml(INTEL_LABEL[ev.to] || ev.to) + '</strong> di un covo pirata nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">forza e livello stimati nella vista Civiltà ⬡</span>.', 'civ');
   } else if (ev.kind === 'civ-expand') {
-    /* Voce di cronaca "da lontano": effetto senza svelare la mappa. */
-    pushChronicle(ds + ' — Voci dal/dalla ' + escapeHtml(ev.regionLabel) + ': <strong>' + escapeHtml(ev.civName) + '</strong> ha annesso un nuovo sistema.', 'civ');
+    /* Voce di cronaca "da lontano": effetto senza svelare la mappa.
+       Misteriosità (#34): se la civ non è stata contattata, nome e regione
+       restano vaghi — "voci" è il registro corretto. */
+    const m = chronicleMysteryCiv(ev.civName, ev.regionLabel);
+    pushChronicle(ds + ' — Voci da' + (m.mystery ? ' ' : 'l/dalla ') + m.region + ': <strong>' + m.name + '</strong> ha annesso un nuovo sistema.', 'civ');
   } else if (ev.kind === 'civ-war') {
-    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.winner) + '</strong> strappa un sistema a <strong>' + escapeHtml(ev.loser) + '</strong> nel/nella ' + escapeHtml(ev.regionLabel) + '.', 'civ');
+    const mw = chronicleMysteryCiv(ev.winner, ev.regionLabel);
+    const ml = chronicleMysteryCiv(ev.loser, ev.regionLabel);
+    const regionLbl = (mw.mystery && ml.mystery) ? 'in regioni non cartografate' : ('nel/nella ' + escapeHtml(ev.regionLabel));
+    pushChronicle(ds + ' — <strong>' + mw.name + '</strong> strappa un sistema a <strong>' + ml.name + '</strong> ' + regionLbl + '.', 'civ');
     if (ORION.tutorial) ORION.tutorial.fire('civilizations');
   } else if (ev.kind === 'civ-battle') {
     /* M10 Fase D (decisione #47): guerra AI-vs-AI VISTA dal giocatore,
@@ -10464,9 +10536,14 @@ function chronicleEvent(ev) {
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
     if (ORION.tutorial) ORION.tutorial.fire('civilizations');
   } else if (ev.kind === 'civ-fallen') {
-    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.civName) + '</strong> è caduta: ridotta a zero sistemi, assorbita da <strong>' + escapeHtml(ev.conqueror) + '</strong>.', 'civ');
+    const mf = chronicleMysteryCiv(ev.civName, '');
+    const mc = chronicleMysteryCiv(ev.conqueror, '');
+    pushChronicle(ds + ' — <strong>' + mf.name + '</strong> è caduta: ridotta a zero sistemi, assorbita da <strong>' + mc.name + '</strong>.', 'civ');
   } else if (ev.kind === 'civ-emerged') {
-    pushChronicle(ds + ' — Una nuova potenza emerge nel/nella ' + escapeHtml(ev.regionLabel) + ': <strong>' + escapeHtml(ev.civName) + '</strong>.', 'civ');
+    const me = chronicleMysteryCiv(ev.civName, ev.regionLabel);
+    pushChronicle(ds + ' — ' + (me.mystery
+      ? 'Voci di una nuova potenza emergente da ' + me.region + ' · <em>identità non confermata</em>'
+      : 'Una nuova potenza emerge nel/nella ' + me.region + ': <strong>' + me.name + '</strong>') + '.', 'civ');
   } else if (ev.kind === 'pirate-raid') {
     pushChronicle(ds + ' — Predoni hanno colpito una rotta nel/nella ' + escapeHtml(ev.regionLabel) + '.', 'system');
   } else if (ev.kind === 'diplo-war') {
@@ -11354,25 +11431,37 @@ function renderLeftPanel() {
      Manteniamo sempre un <ul data-bind="chronicle"> presente nel DOM
      così che pushChronicle/restoreChronicleDom funzionino anche quando
      la lista è vuota al boot. */
-  const cron = (g.chronicle || []).slice(0, 40);
-  /* Filtro cronaca (feedback utente 2026-06-15): segmented control
-     "Importanti / Tutto" — il filtro vive a livello di ingresso
-     (chronicleEvent), quindi qui mostriamo SEMPRE tutto quanto già
-     accumulato in game.chronicle; il toggle determina cosa entrerà
-     d'ora in poi. Nessun re-filter del DOM = niente sorprese (le voci
-     già accettate restano). */
-  const cf = ORION.chronicleFilter || 'important';
-  const filterHtml =
-    '<div class="chron-filter" role="tablist" aria-label="Filtro cronaca">' +
-      '<button class="chron-filter__btn' + (cf === 'important' ? ' is-active' : '') + '" ' +
-        'data-chron-filter="important" type="button" ' +
-        'title="Solo eventi strategici (combattimento, diplomazia, civiltà, dispacci, figure, crisi, milestone). Nasconde build/varo/lancio/governatore/insediamento.">Importanti</button>' +
-      '<button class="chron-filter__btn' + (cf === 'all' ? ' is-active' : '') + '" ' +
-        'data-chron-filter="all" type="button" ' +
-        'title="Mostra ogni evento, incluse le voci di routine.">Tutto</button>' +
+  /* Cronaca a 2 sezioni (Galassia / Colonie) — sostituisce il vecchio
+     segmented control "Importanti / Tutto" che non filtrava il pregresso.
+     Galassia: voci/diplomazia/AI/flotte/stazioni/scoperte.
+     Colonie: avvisi interni (carestie, rientri, capitali, vittorie,
+     consiglio). Il rumore di routine (build/varo/hop/insediamento) è
+     escluso a monte in chronicleEvent → non finisce in nessuna sezione. */
+  const sec = (ORION.chronicleSection === 'colony') ? 'colony' : 'galaxy';
+  ORION.chronicleSection = sec;
+  const unread = ORION.chronicleUnread || { galaxy: false, colony: false };
+  const cronAll = (g.chronicle || []).slice(0, 40);
+  const cronFiltered = cronAll.filter(function (e) {
+    const cat = e.cat || chronicleCategoryFromMod(e.mod);
+    return cat === sec;
+  });
+  const sectionsHtml =
+    '<div class="chron-sections" role="tablist" aria-label="Sezioni cronaca">' +
+      '<button class="chron-sections__btn' + (sec === 'galaxy' ? ' is-active' : '') +
+        ((unread.galaxy && sec !== 'galaxy') ? ' has-alert' : '') + '" ' +
+        'data-chron-section="galaxy" type="button" ' +
+        'title="Voci dalla galassia: contatti, diplomazia, civiltà AI, flotte e scoperte.">Galassia' +
+        ((unread.galaxy && sec !== 'galaxy') ? '<span class="chron-sections__dot" aria-hidden="true"></span>' : '') +
+      '</button>' +
+      '<button class="chron-sections__btn' + (sec === 'colony' ? ' is-active' : '') +
+        ((unread.colony && sec !== 'colony') ? ' has-alert' : '') + '" ' +
+        'data-chron-section="colony" type="button" ' +
+        'title="Avvisi dalle colonie: carestie, rientri, milestone, consiglio.">Colonie' +
+        ((unread.colony && sec !== 'colony') ? '<span class="chron-sections__dot" aria-hidden="true"></span>' : '') +
+      '</button>' +
     '</div>';
-  const cronHtml = filterHtml + '<ul class="chronicle__log">' + (cron.length
-    ? cron.map(function (e) {
+  const cronHtml = sectionsHtml + '<ul class="chronicle__log">' + (cronFiltered.length
+    ? cronFiltered.map(function (e) {
         const mod = e.mod ? ' chronicle__entry--' + e.mod : '';
         return '<li class="chronicle__entry' + mod + '">' + e.html + '</li>';
       }).join('')
@@ -11471,7 +11560,10 @@ function renderLeftPanel() {
   if (councilBody) {
     lpTabs.push({ id: 'council', iconName: 'star', tone: 'amber', label: 'Consiglio', alert: councilProposals ? 'warn' : null });
   }
-  lpTabs.push({ id: 'chronicle', iconName: 'chronicle', tone: 'green', label: 'Cronaca', alert: null });
+  /* Aura sulla linguetta Cronaca: pulsa se c'è almeno una sezione con
+     eventi importanti non visti (e la tab Cronaca non è quella attiva). */
+  const chronUnreadAny = !!((ORION.chronicleUnread && (ORION.chronicleUnread.galaxy || ORION.chronicleUnread.colony)));
+  lpTabs.push({ id: 'chronicle', iconName: 'chronicle', tone: 'green', label: 'Cronaca', alert: chronUnreadAny ? 'info' : null });
 
   /* Linguetta attiva: se 'council' ma il Consiglio non è costituito, fallback. */
   let activeLp = ORION.lpTab;
@@ -11524,13 +11616,20 @@ function renderLeftPanel() {
   const ul = host.querySelector('.chronicle__log');
   if (ul) ul.setAttribute('data-bind', 'chronicle');
 
-  /* Filtro cronaca (feedback utente 2026-06-15): bind segmented control. */
-  host.querySelectorAll('[data-chron-filter]').forEach(function (b) {
+  /* Bind linguette sezione cronaca (Galassia/Colonie): cambio sezione +
+     reset aura "non letti" per la sezione appena aperta. */
+  host.querySelectorAll('[data-chron-section]').forEach(function (b) {
     b.addEventListener('click', function () {
-      const v = b.dataset.chronFilter;
-      if (v !== 'important' && v !== 'all') return;
-      if (ORION.chronicleFilter === v) return;
-      ORION.chronicleFilter = v;
+      const v = b.dataset.chronSection;
+      if (v !== 'galaxy' && v !== 'colony') return;
+      if (!ORION.chronicleUnread) ORION.chronicleUnread = { galaxy: false, colony: false };
+      ORION.chronicleUnread[v] = false;
+      if (ORION.chronicleSection === v) {
+        saveUiPrefs();
+        renderLeftPanel();
+        return;
+      }
+      ORION.chronicleSection = v;
       saveUiPrefs();
       renderLeftPanel();
     });
@@ -11540,10 +11639,16 @@ function renderLeftPanel() {
   const empBtn = host.querySelector('[data-action="empire-edit"]');
   if (empBtn) empBtn.addEventListener('click', openEmpireEditor);
 
-  /* Bind handlers — linguette: cambia ORION.lpTab e ridisegna. */
+  /* Bind handlers — linguette: cambia ORION.lpTab e ridisegna.
+     Aprendo la tab Cronaca azzeriamo l'aura della sezione attualmente
+     visualizzata (le voci stanno per essere lette). */
   host.querySelectorAll('[data-lp-tab]').forEach(function (b) {
     b.addEventListener('click', function () {
       ORION.lpTab = b.dataset.lpTab;
+      if (ORION.lpTab === 'chronicle' && ORION.chronicleUnread) {
+        const cur = ORION.chronicleSection || 'galaxy';
+        ORION.chronicleUnread[cur] = false;
+      }
       saveUiPrefs();
       renderLeftPanel();
     });
@@ -12894,22 +12999,48 @@ function resetChronicle(galaxy, startDS) {
   const homeTag = homeGrp && homeGrp.acronym ? ' <span class="name-tag">[' + homeGrp.acronym + ']</span>' : '';
   const html = startDS + ' — Galassia generata: ' + galaxy.count + ' sistemi. ' +
     'Origine nel sistema <strong>' + home.name + '</strong>' + homeTag + '.';
-  if (ORION.game) ORION.game.chronicle = [{ html: html, mod: 'system' }];
+  if (ORION.game) ORION.game.chronicle = [{ html: html, mod: 'system', cat: 'galaxy' }];
+  /* All'avvio partita resetta gli "unread" e fa partire dalla sezione Galassia. */
+  ORION.chronicleUnread = { galaxy: false, colony: false };
   const log = document.querySelector('[data-bind="chronicle"]');
   if (!log) return;
   log.innerHTML =
-    '<li class="chronicle__entry chronicle__entry--system">' + html + '</li>';
+    (ORION.chronicleSection === 'galaxy'
+      ? '<li class="chronicle__entry chronicle__entry--system">' + html + '</li>'
+      : '<li class="chronicle__entry chronicle__entry--system">Nessuna voce.</li>');
 }
 
-function pushChronicle(html, modifier) {
+function pushChronicle(html, modifier, category) {
+  /* `category` opzionale: se assente la deriviamo dal modifier (regola
+     di fallback per chiamate dirette non passate da chronicleEvent). */
+  const cat = (category === 'galaxy' || category === 'colony')
+    ? category
+    : chronicleCategoryFromMod(modifier || '');
   /* Persist nel game state: il DOM lo ricaviamo, ma la fonte di verità
      per il save (e il replay dopo F5) è game.chronicle[]. */
   if (ORION.game) {
     if (!Array.isArray(ORION.game.chronicle)) ORION.game.chronicle = [];
-    ORION.game.chronicle.unshift({ html: html, mod: modifier || '' });
+    ORION.game.chronicle.unshift({ html: html, mod: modifier || '', cat: cat });
     if (ORION.game.chronicle.length > MAX_CHRONICLE) {
       ORION.game.chronicle.length = MAX_CHRONICLE;
     }
+  }
+  /* Aura "non letti" sulla linguetta: l'utente sta guardando la cronaca
+     solo se la tab Cronaca è attiva E la sezione mostrata coincide con
+     la categoria dell'evento. In ogni altro caso → flag unread per la
+     categoria, così la linguetta pulsa. */
+  const looking = (ORION.lpTab === 'chronicle') && (ORION.chronicleSection === cat);
+  if (!looking) {
+    if (!ORION.chronicleUnread) ORION.chronicleUnread = { galaxy: false, colony: false };
+    const wasUnread = ORION.chronicleUnread[cat];
+    ORION.chronicleUnread[cat] = true;
+    if (!wasUnread) {
+      saveUiPrefs();
+      if (typeof renderLeftPanel === 'function') {
+        try { renderLeftPanel(); } catch (_) { /* niente */ }
+      }
+    }
+    return;
   }
   const log = document.querySelector('[data-bind="chronicle"]');
   if (!log) return;
@@ -12925,10 +13056,17 @@ function pushChronicle(html, modifier) {
 function restoreChronicleDom(game) {
   const log = document.querySelector('[data-bind="chronicle"]');
   if (!log || !game || !Array.isArray(game.chronicle)) return;
-  log.innerHTML = game.chronicle.map(function (e) {
-    const mod = e.mod ? ' chronicle__entry--' + e.mod : '';
-    return '<li class="chronicle__entry' + mod + '">' + e.html + '</li>';
-  }).join('');
+  const sec = ORION.chronicleSection || 'galaxy';
+  const filtered = game.chronicle.filter(function (e) {
+    const cat = e.cat || chronicleCategoryFromMod(e.mod);
+    return cat === sec;
+  });
+  log.innerHTML = (filtered.length
+    ? filtered.map(function (e) {
+        const mod = e.mod ? ' chronicle__entry--' + e.mod : '';
+        return '<li class="chronicle__entry' + mod + '">' + e.html + '</li>';
+      }).join('')
+    : '<li class="chronicle__entry chronicle__entry--system">Nessuna voce.</li>');
 }
 
 /* ---------------------------------------------------------------------
