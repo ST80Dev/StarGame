@@ -1357,12 +1357,26 @@
           continue;
         }
 
-        // indicatore pericolo (§5.3): piccolo arco sotto la stella, non un anello pieno
-        const dcol = this._dangerColor(s.danger, fade);
+        // indicatore pericolo (§5.3): arco neon sfumato sotto la stella
+        const drgb = this._dangerRGB(s.danger);
+        const dAlpha = 0.7 * fade;
+        const arcR = r + 2.5;
+        const arcW = Math.max(1.2, r * 0.25);
+        ctx.save();
         ctx.beginPath();
-        ctx.arc(p.x, p.y, r + 2.5, Math.PI * 0.3, Math.PI * 0.7);
-        ctx.strokeStyle = dcol; ctx.lineWidth = Math.max(1.2, r * 0.25);
+        ctx.arc(p.x, p.y, arcR, Math.PI * 0.3, Math.PI * 0.7);
+        ctx.shadowColor = 'rgba(' + drgb + ',' + (dAlpha * 0.7) + ')';
+        ctx.shadowBlur = Math.max(4, r * 0.5);
+        ctx.strokeStyle = 'rgba(' + drgb + ',' + (dAlpha * 0.45) + ')';
+        ctx.lineWidth = arcW + Math.max(2, r * 0.25);
         ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, arcR, Math.PI * 0.3, Math.PI * 0.7);
+        ctx.strokeStyle = 'rgba(' + drgb + ',' + dAlpha + ')';
+        ctx.lineWidth = arcW;
+        ctx.stroke();
+        ctx.restore();
 
         // corpo della stella (colore = tipo); depth fade
         const col = starColor(g, s.star);
@@ -2215,14 +2229,11 @@
       ctx.fillText(text, p.x, y);
     }
 
-    _dangerColor(d, fade) {
-      const a = 0.7 * (fade == null ? 1 : fade);
-      const ah = 0.75 * (fade == null ? 1 : fade);
-      const ax = 0.8 * (fade == null ? 1 : fade);
-      if (d <= 25) return 'rgba(79,224,138,' + a + ')';
-      if (d <= 50) return 'rgba(255,202,85,' + a + ')';
-      if (d <= 75) return 'rgba(255,157,60,' + ah + ')';
-      return 'rgba(255,92,108,' + ax + ')';
+    _dangerRGB(d) {
+      if (d <= 25) return '79,224,138';
+      if (d <= 50) return '255,202,85';
+      if (d <= 75) return '255,157,60';
+      return '255,92,108';
     }
   }
 
