@@ -2141,19 +2141,32 @@ function expeditionsForColony(colony) {
       if (!f || f.ownerColonyKey !== key) continue;
       if (!f.orders) continue;
       const t = f.orders.type;
+      /* Riconosce come "spedizione di esplorazione" anche le flotte
+         lanciate con il default del picker (returnHome=OFF, decisione
+         2026-06-16): l'ordine è `move-route` con `exploreEach:true` e
+         una sola tappa, un singolo scafo esploratore. Senza questo
+         riconoscimento, lanciare l'esplorazione default farebbe sparire
+         la scheda Esplorazione dal pannello colonia. */
+      const onlyExplorer = f.ships && f.ships.length === 1 &&
+                           f.ships[0] && f.ships[0].kind === 'explorer';
       const isExploreLike = (t === 'explore') ||
-        (t === 'return' && f.ships && f.ships.length === 1 &&
-         f.ships[0] && f.ships[0].kind === 'explorer' &&
+        (t === 'move-route' && f.orders.exploreEach === true && onlyExplorer) ||
+        (t === 'return' && onlyExplorer &&
          (f.orders._migratedFromExplore || f.orders._migratedFromExpedition));
       if (!isExploreLike) continue;
       const ship = f.ships && f.ships[0];
       const crew = f.crew && f.crew[0];
+      const isOutbound = (t === 'explore') || (t === 'move-route');
+      const wpTarget = (t === 'move-route' && f.orders.waypoints && f.orders.waypoints.length)
+        ? f.orders.waypoints[f.orders.waypoints.length - 1] : null;
       out.push({
         id: f.id,
         originColonyKey: key,
-        targetSystemId: (t === 'explore') ? f.orders.toSysId : (f.route && f.route[f.route.length - 1]),
-        status: (t === 'explore') ? 'outbound' : 'returning',
-        durationOut: (t === 'explore') ? (f.etaImpulsi || 0) : 0,
+        targetSystemId: (t === 'explore') ? f.orders.toSysId
+                      : (wpTarget != null) ? wpTarget
+                      : (f.route && f.route[f.route.length - 1]),
+        status: isOutbound ? 'outbound' : 'returning',
+        durationOut: isOutbound ? (f.etaImpulsi || 0) : 0,
         durationBack: (t === 'return') ? (f.etaImpulsi || 0) : null,
         shipWear: (ship && ship.wear) || 0,
         crewId: crew && crew.id,
