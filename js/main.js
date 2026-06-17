@@ -842,6 +842,22 @@ function colonizeHomePlanet(game, startDS) {
     popBase:  mods.startPopBase || 3
   };
   ORION.planet.colonizeHome(colony, planet, startDS, settlingOpts);
+  /* Scafo + equipaggio di partenza (decisione utente 2026-06-17): il
+     giocatore arriva sul mondo natale con la nave coloniale d'approdo,
+     così durante l'Insediamento può già esplorare i sistemi limitrofi e
+     fare i primi contatti mentre la colonia si stabilizza. Lo scout è
+     "speciale": non richiede Hangar/porto per essere lanciato, ma una
+     volta costruito il Cantiere navale occupa regolarmente 1 attracco
+     (gate canBuildShip). L'equipaggio nasce a xp=2 ("Operativi") — non
+     sono reclute, hanno portato qui la colonia. Nessun upkeep durante
+     `settling` (vedi crewPortConsumption e ship maintenance gate in
+     time.js). Se la nave/equipaggio si perde in spedizione, niente
+     refund: rischio consapevole del giocatore. */
+  if (!Array.isArray(colony.crews.explorer)) colony.crews.explorer = [];
+  colony.ships.explorer = (colony.ships.explorer || 0) + 1;
+  const T = ORION.time;
+  const starterCrewId = (T && T.nextCrewId) ? T.nextCrewId(game) : 'crew-home-starter';
+  colony.crews.explorer.push({ id: starterCrewId, xp: 2 });
   game.colonies[galaxy.homeId + ':' + homeBody.key] = colony;
   game.homePlanetKey = galaxy.homeId + ':' + homeBody.key;
   updateGlobalResourceHud();
