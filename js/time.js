@@ -663,16 +663,22 @@
        (riparazione/mantenimento) → drain metalli sulla colonia. Le navi
        dispiegate non pagano qui (riserva di viaggio a 4 risorse, viveri). */
     const F = root.ORION && root.ORION.fleet;
-    const shipMetMaint = (F && F.portMaintenance) ? F.portMaintenance(game, colony) : 0;
+    /* Decisione utente 2026-06-17: durante l'Insediamento lo scafo di partenza
+       (e qualunque altra nave eventualmente presente) NON paga manutenzione,
+       speculare al crewPortConsumption già gated più sotto. La fase coincide
+       con la stabilizzazione della colonia: niente drain di metalli/energia
+       finché phase === 'settling'. */
+    const settlingNow = (colony.phase === 'settling');
+    const shipMetMaint = (!settlingNow && F && F.portMaintenance) ? F.portMaintenance(game, colony) : 0;
     /* Bilanciamento 2026-06-16: manutenzione energetica delle navi capitali al
        porto (incrociatore/dreadnought/ammiraglia). 0 se nessuna capitale. */
-    const shipEnMaint = (F && F.portMaintenanceEn) ? F.portMaintenanceEn(game, colony) : 0;
+    const shipEnMaint = (!settlingNow && F && F.portMaintenanceEn) ? F.portMaintenanceEn(game, colony) : 0;
     /* Riparazione navi al porto (richiesta utente 2026-06-16): le flotte
        ferme al sistema di una colonia con Hangar recuperano wear nel
        tempo. Il costo metalli è proporzionale al wear effettivamente
        riparato, sommato al normale shipMetMaint sopra. Se wear=0 ovunque,
        costo=0 (niente drain inutile). */
-    const shipRepairMet = (F && F.tickPortRepair) ? F.tickPortRepair(game, colony) : 0;
+    const shipRepairMet = (!settlingNow && F && F.tickPortRepair) ? F.tickPortRepair(game, colony) : 0;
     /* Razioni equipaggio al porto (decisione 2026-06-15): drain cibo/acqua
        sulla colonia per crews idle + crews di flotte parcheggiate. Solo
        operational (durante settling, decisione #27, gli equipaggi non sono
