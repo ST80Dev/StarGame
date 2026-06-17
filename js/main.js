@@ -9476,7 +9476,7 @@ const DEFAULT_AUTOPAUSE = {
      atmosferico che precede il primo contatto. OFF di default — basta che
      compaia in cronaca senza interrompere; il vero contatto (`civ-contact`)
      resta auto-pausa ON. */
-  'civ-spotted': false,
+  'civ-spotted': true,
   'civ-contact': true,
   'civ-fallen': true,
   'civ-emerged': true,
