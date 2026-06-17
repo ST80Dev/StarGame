@@ -1582,11 +1582,11 @@
 
         var n = parseInt(ent.color.slice(1), 16);
         var cr = (n >> 16) & 255, cg = (n >> 8) & 255, cb = n & 255;
-        var alpha = clamp(0.07 + ent.count * 0.03, 0.07, 0.18) * reveal;
+        var alpha = clamp(0.18 + ent.count * 0.06, 0.18, 0.45) * reveal;
 
         var grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, blobR);
         grad.addColorStop(0, 'rgba(' + cr + ',' + cg + ',' + cb + ',' + alpha + ')');
-        grad.addColorStop(0.6, 'rgba(' + cr + ',' + cg + ',' + cb + ',' + (alpha * 0.4) + ')');
+        grad.addColorStop(0.5, 'rgba(' + cr + ',' + cg + ',' + cb + ',' + (alpha * 0.5) + ')');
         grad.addColorStop(1, 'rgba(' + cr + ',' + cg + ',' + cb + ',0)');
         ctx.fillStyle = grad;
         ctx.beginPath();
@@ -2241,57 +2241,63 @@
       if (!sys) { tip.style.display = 'none'; return; }
       var esc = root.ORION.util && root.ORION.util.escapeHtml ? root.ORION.util.escapeHtml : function (s) { return s; };
 
+      var disc = this.state.discovery || [];
+      var sysDisc = disc[sysId] || 0;
+      var DET = DISCOVERY.DETECTED;
+      var EXP = DISCOVERY.EXPLORED;
+
       var html = '<strong>' + esc(sys.name) + '</strong>';
       var grp = (game.galaxy.groups || []).find(function (g) { return g.id === sys.cluster; });
       if (grp) html += ' <span class="gmap-tip__region">· ' + esc(grp.name) + '</span>';
 
-      /* Civiltà presenti (giocatore + AI). */
-      var civLines = [];
-      var PLAYER_COLOR = '#5fa8ff';
-      var playerCount = 0;
-      var cols = game.colonies || {};
-      Object.keys(cols).forEach(function (k) {
-        var c = cols[k];
-        if (!c || !c.colonized) return;
-        var colon = k.indexOf(':');
-        if (colon < 0) return;
-        if (Number(k.slice(0, colon)) === sysId) playerCount++;
-      });
-      if (playerCount) {
-        civLines.push('<span class="gmap-tip__civ" style="--tc:' + PLAYER_COLOR + '"><span class="gmap-tip__sw"></span>Tu</span>');
-      }
-      var civs = game.civs || [];
-      for (var i = 0; i < civs.length; i++) {
-        var civ = civs[i];
-        if (!civ || !civ.alive || !Array.isArray(civ.planets)) continue;
-        var cnt = 0;
-        for (var j = 0; j < civ.planets.length; j++) {
-          var pk = civ.planets[j];
-          var colon = pk.indexOf(':');
-          if (colon > 0 && Number(pk.slice(0, colon)) === sysId) cnt++;
+      if (sysDisc >= DET) {
+        var civLines = [];
+        var PLAYER_COLOR = '#5fa8ff';
+        var playerCount = 0;
+        var cols = game.colonies || {};
+        Object.keys(cols).forEach(function (k) {
+          var c = cols[k];
+          if (!c || !c.colonized) return;
+          var colon = k.indexOf(':');
+          if (colon < 0) return;
+          if (Number(k.slice(0, colon)) === sysId) playerCount++;
+        });
+        if (playerCount) {
+          civLines.push('<span class="gmap-tip__civ" style="--tc:' + PLAYER_COLOR + '"><span class="gmap-tip__sw"></span>Tu</span>');
         }
-        if (cnt) {
-          civLines.push('<span class="gmap-tip__civ" style="--tc:' + esc(civ.color) + '"><span class="gmap-tip__sw"></span>' + esc(civ.name) + '</span>');
+        var civs = game.civs || [];
+        for (var i = 0; i < civs.length; i++) {
+          var civ = civs[i];
+          if (!civ || !civ.alive || !Array.isArray(civ.planets)) continue;
+          var cnt = 0;
+          for (var j = 0; j < civ.planets.length; j++) {
+            var pk = civ.planets[j];
+            var colon = pk.indexOf(':');
+            if (colon > 0 && Number(pk.slice(0, colon)) === sysId) cnt++;
+          }
+          if (cnt) {
+            civLines.push('<span class="gmap-tip__civ" style="--tc:' + esc(civ.color) + '"><span class="gmap-tip__sw"></span>' + esc(civ.name) + '</span>');
+          }
         }
-      }
-      if (civLines.length) html += '<div class="gmap-tip__civs">' + civLines.join('') + '</div>';
+        if (civLines.length) html += '<div class="gmap-tip__civs">' + civLines.join('') + '</div>';
 
-      /* Cohesion. */
-      if (game.cohesion && Array.isArray(game.cohesion.sysIds) && game.cohesion.sysIds.indexOf(sysId) >= 0) {
-        var COH = root.ORION.cohesion;
-        if (COH && COH.cohesionInfo) {
-          var info = COH.cohesionInfo(game, sysId);
-          var owners = info.owners.map(function (o) { return esc(o.name); }).join(' + ');
-          html += '<div class="gmap-tip__coh">⌬ Coeso: ' + owners + '</div>';
-        } else {
-          html += '<div class="gmap-tip__coh">⌬ Sistema coeso</div>';
+        if (game.cohesion && Array.isArray(game.cohesion.sysIds) && game.cohesion.sysIds.indexOf(sysId) >= 0) {
+          var COH = root.ORION.cohesion;
+          if (COH && COH.cohesionInfo) {
+            var info = COH.cohesionInfo(game, sysId);
+            var owners = info.owners.map(function (o) { return esc(o.name); }).join(' + ');
+            html += '<div class="gmap-tip__coh">⌬ Coeso: ' + owners + '</div>';
+          } else {
+            html += '<div class="gmap-tip__coh">⌬ Sistema coeso</div>';
+          }
         }
-      }
 
-      /* Pirati. */
-      if (game.piracy && Array.isArray(game.piracy.nests)) {
-        var nest = game.piracy.nests.find(function (n) { return n.sysId === sysId; });
-        if (nest) html += '<div class="gmap-tip__pirate">☠ Covo pirata</div>';
+        if (game.piracy && Array.isArray(game.piracy.nests)) {
+          var nest = game.piracy.nests.find(function (n) { return n.sysId === sysId; });
+          if (nest) html += '<div class="gmap-tip__pirate">☠ Covo pirata</div>';
+        }
+      } else if (sysDisc === 0) {
+        html += '<div class="gmap-tip__fog">Sistema inesplorato</div>';
       }
 
       tip.innerHTML = html;
