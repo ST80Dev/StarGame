@@ -336,6 +336,38 @@ button { font-family: inherit; }
 .panel__note-icon { font-size: 0.95rem; vertical-align: -0.18em; margin-right: 3px; }
 .panel__note-icon--warn { color: #f0d670; }
 .panel__note-icon--info { color: #80c8e6; }
+/* Feedback utente 2026-06-15: tabella costo colonizzazione con confronto
+   "richiesto / disponibile" e deficit evidenziato. Aiuta a programmare. */
+.cost-table { margin: 4px 0 8px; display: flex; flex-direction: column; gap: 3px; }
+.cost-row {
+  display: grid;
+  grid-template-columns: 5.6em 5.4em 4.4em 1fr;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-family: var(--font-data, inherit);
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: rgba(120, 150, 220, 0.06);
+}
+.cost-row__label { color: var(--c-text-soft); font-weight: 500; }
+.cost-row__req { color: var(--c-text); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.cost-row__have { color: var(--c-text-faint); text-align: right; font-variant-numeric: tabular-nums; }
+.cost-row__short { color: #e0556e; font-weight: 600; font-size: 0.78rem; }
+.cost-row--ok .cost-row__req { color: #9fd0a8; }
+.cost-row--short {
+  background: rgba(224, 85, 110, 0.10);
+  border-left: 2px solid #e0556e;
+}
+.sysinfo__sub-aux {
+  font-size: 0.72rem; color: var(--c-text-faint); font-weight: normal;
+  font-style: italic;
+}
+.panel__note--accessory {
+  font-size: 0.76rem; color: var(--c-text-faint); margin-top: 4px;
+  padding-left: 8px; border-left: 2px solid rgba(120, 150, 220, 0.18);
+}
+.panel__note--accessory strong { color: var(--c-text-soft); }
 
 /* --- Lista di navigazione --- */
 .nav-item {

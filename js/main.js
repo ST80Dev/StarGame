@@ -2375,31 +2375,84 @@ function renderPlanetColoniaTab(host, planet, colony) {
   const costMul = (homeColonized && !colony.isHomeBase && !homeInTrouble) ? 5 : 1;
 
   const stockHome = homeColonized ? home.stock : { met: 0, en: 0, food: 0, water: 0 };
+  /* Feedback utente 2026-06-15: l'utente vuole vedere a colpo d'occhio
+     cosa manca per far partire la colonizzazione. Costruisco una tabella
+     "richiesto / disponibile" col deficit evidenziato sulle voci mancanti.
+     Lo stock di riferimento è quello della HOME (chi paga di default è la
+     colonia origine della flotta — flusso #66 — ma la home è il payer più
+     comune e il riferimento più chiaro per la pianificazione). */
+  const reqCost = {
+    met:   Math.round(cost.met   * costMul),
+    en:    Math.round(cost.en    * costMul),
+    water: Math.round(cost.water * costMul),
+    food:  Math.round(cost.food  * costMul)
+  };
   const canPay =
-    stockHome.met   >= cost.met   * costMul &&
-    stockHome.en    >= cost.en    * costMul &&
-    stockHome.water >= cost.water * costMul &&
-    stockHome.food  >= cost.food  * costMul;
+    stockHome.met   >= reqCost.met &&
+    stockHome.en    >= reqCost.en &&
+    stockHome.water >= reqCost.water &&
+    stockHome.food  >= reqCost.food;
+  /* Riga "X / Y" con evidenza deficit. Se non basta, mostra "manca Δ". */
+  function costRow(label, key, glyph) {
+    const req = reqCost[key];
+    const have = Math.floor(stockHome[key] || 0);
+    const short = req - have;
+    const cls = short > 0 ? ' cost-row--short' : ' cost-row--ok';
+    const tail = short > 0
+      ? ' <span class="cost-row__short">manca ' + short + '</span>'
+      : '';
+    return '<div class="cost-row' + cls + '">' +
+      '<span class="cost-row__label">' + label + '</span>' +
+      '<span class="cost-row__req">' + req + ' ' + glyph + '</span>' +
+      '<span class="cost-row__have">/ ' + have + '</span>' +
+      tail +
+    '</div>';
+  }
+  /* Costo aggiuntivo nave Pioniere (se serve costruirne una). Lo mostro
+     solo se nessuna nave coloniale è disponibile in hangar/flotte. */
+  const F = ORION.fleet;
+  const anyColonialReady = F && (
+    (g.fleets || []).some(function (f) { return f && F.fleetHasColonial && F.fleetHasColonial(f); }) ||
+    Object.keys(g.colonies || {}).some(function (k) {
+      const c = g.colonies[k];
+      return c && c.ships && (c.ships.coloniale || 0) > 0;
+    })
+  );
+  const colonialClass = F && F.getClass ? F.getClass('coloniale') : null;
+  const pioneerNote = (!anyColonialReady && colonialClass && colonialClass.cost)
+    ? '<p class="panel__note panel__note--accessory">' +
+        '<strong>+ Nave Pioniere</strong> da costruire (Hangar lvl 1, ' + colonialClass.time + ' Ι): ' +
+        (colonialClass.cost.met || 0) + ' ' + resGlyph('met') + ' · ' +
+        (colonialClass.cost.en || 0) + ' ' + resGlyph('en') + ' · ' +
+        (colonialClass.cost.water || 0) + ' ' + resGlyph('water') + ' · ' +
+        (colonialClass.cost.food || 0) + ' ' + resGlyph('food') +
+      '</p>'
+    : '';
 
   host.innerHTML =
     '<div class="sysinfo">' +
       '<p class="panel__note">Tutti i corpi sono colonizzabili, ma con caratteristiche diverse. La prima colonia condiziona tutto.</p>' +
       '<p class="sysinfo__sub">Potenziale risorse</p>' +
       potentialBars(planet) +
-      '<p class="sysinfo__sub">Costo colonizzazione</p>' +
+      '<p class="sysinfo__sub">Costo colonizzazione' + (homeColonized ? ' <span class="sysinfo__sub-aux">(stock della capitale)</span>' : '') + '</p>' +
+      '<div class="cost-table">' +
+        costRow('Metalli', 'met', resGlyph('met')) +
+        costRow('Energia', 'en', resGlyph('en')) +
+        costRow('Acqua', 'water', resGlyph('water')) +
+        costRow('Cibo', 'food', resGlyph('food')) +
+      '</div>' +
       '<dl class="sysinfo__list">' +
-        row('Metalli',  Math.round(cost.met   * costMul)) +
-        row('Energia',  Math.round(cost.en    * costMul)) +
-        row('Acqua',    Math.round(cost.water * costMul)) +
-        row('Cibo',     Math.round(cost.food  * costMul)) +
         row('Impulsi',  Math.round(cost.impulsi)) +
         row('Ostilità ' + hostilityNoun(planet), hostility) +
       '</dl>' +
+      pioneerNote +
+      '<p class="panel__note panel__note--accessory"><strong>+ Provviste viaggio</strong> coloni: <strong>30</strong> ' + resGlyph('food') + ' · <strong>15</strong> ' + resGlyph('water') + ' per ogni livello demografico imbarcato (slider nel selettore).</p>' +
       (costMul > 1 ? '<p class="panel__note">×' + costMul + ' perché la colonia primaria è ancora produttiva.</p>' : '') +
       (homeInTrouble ? '<p class="panel__note panel__note--warn"><span class="ui-icon panel__note-icon panel__note-icon--warn" aria-hidden="true">' + ((ORION.icon && ORION.icon('warning')) || '') + '</span> Crisi sulla colonia primaria: costo di migrazione ridotto.</p>' : '') +
       (reasons.length ? '<p class="panel__note">' + reasons.join(' ') + '</p>' : '') +
       '<button class="btn btn--mini btn--enter" data-action="colonize" type="button"' +
         (canPay && def.habitable ? '' : ' disabled') + '>◉ Colonizza ▸</button>' +
+      (canPay ? '' : '<p class="panel__note panel__note--warn">Risorse insufficienti per partire — accumula quelle in rosso prima.</p>') +
       '<p class="panel__note">Le spedizioni coloniali richiedono ' + cost.impulsi + ' Impulsi di viaggio. Avanza il tempo per veder arrivare la nave.</p>' +
     '</div>';
 
