@@ -6965,7 +6965,9 @@ function renderCivView(stage) {
       }
     }
 
-    return '<li class="civ-card civ-card--' + (c.knowledge || 'unknown') + '" style="--civ-color:' + escapeHtml(c.color) + '">' +
+    return '<li class="civ-card civ-card--' + (c.knowledge || 'unknown') + '"' +
+      ' data-civ-id="' + escapeHtml(String(c.id)) + '"' +
+      ' style="--civ-color:' + escapeHtml(c.color) + '">' +
       head + body + '</li>';
   }
 
@@ -7211,6 +7213,20 @@ function renderCivView(stage) {
       renderCivView(stage);
     });
   });
+
+  /* Dossier civiltà / Diplomazia da un pianeta straniero: il chiamante setta
+     ORION.pendingCivFocus = civId; qui scrolliamo sulla card e la
+     evidenziamo per pochi secondi. */
+  const focusId = ORION.pendingCivFocus;
+  ORION.pendingCivFocus = null;
+  if (focusId != null) {
+    const card = stage.querySelector('[data-civ-id="' + String(focusId).replace(/"/g, '\\"') + '"]');
+    if (card) {
+      try { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { card.scrollIntoView(); }
+      card.classList.add('civ-card--focus');
+      setTimeout(function () { card.classList.remove('civ-card--focus'); }, 2200);
+    }
+  }
 }
 
 /* M12 Fase A2 (#56 §15.3): blocco "Commercio" nella card civiltà. */
@@ -12219,9 +12235,15 @@ function renderContextActionBar(ctx) {
     if (ORION.currentPlanet) tryColonize(ORION.currentPlanet);
   });
   const dBtn = host.querySelector('[data-action="ctx-civ-dossier"]');
-  if (dBtn) dBtn.addEventListener('click', function () { navigateView('civ'); });
+  if (dBtn) dBtn.addEventListener('click', function () {
+    ORION.pendingCivFocus = dBtn.dataset.civ || null;
+    navigateView('civ');
+  });
   const dipBtn = host.querySelector('[data-action="ctx-diplomacy"]');
-  if (dipBtn) dipBtn.addEventListener('click', function () { navigateView('civ'); });
+  if (dipBtn) dipBtn.addEventListener('click', function () {
+    ORION.pendingCivFocus = dipBtn.dataset.civ || null;
+    navigateView('civ');
+  });
   const aBtn = host.querySelector('[data-action="ctx-attack"]');
   if (aBtn) aBtn.addEventListener('click', function () {
     /* Decisione intra-sistema: passa anche bodyKey per ingaggio mirato. */

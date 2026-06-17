@@ -7459,6 +7459,17 @@ select.main-menu__input { cursor: pointer; }
 .civ-card--spotted {
   opacity: 0.85;
 }
+/* Evidenziazione temporanea quando si arriva dalla vista pianeta tramite
+   "Dossier civiltà" / "Diplomazia": pulse del bordo nel colore della civ
+   per ~2s, così la card giusta è subito riconoscibile. */
+.civ-card--focus {
+  animation: civ-card-focus-pulse 2.2s ease-out;
+}
+@keyframes civ-card-focus-pulse {
+  0%   { box-shadow: 0 0 0 0 var(--civ-color, #f0c870); }
+  20%  { box-shadow: 0 0 0 4px var(--civ-color, #f0c870); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); }
+}
 .civ-card__hint { margin: 4px 0 0; font-size: 0.78rem; }
 .civ-card__chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 3px 0 5px; }
 /* Nudge "early-game pacing" 2026-06-15: bottone "📍 Mostra sulla mappa"
