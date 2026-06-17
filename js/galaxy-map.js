@@ -1569,20 +1569,21 @@
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
 
-      var baseRadius = Math.max(30, this.scale * 0.06);
+      var baseRadius = Math.max(50, this.scale * 0.09);
+      var zoomComp = clamp(1.0 / Math.max(this.scale * 0.003, 0.3), 1.0, 2.5);
 
       for (var e = 0; e < entries2.length; e++) {
         var ent = entries2[e];
         var sys = g.systems[ent.sysId];
         if (!sys) continue;
         var p = this.project(sys.x, sys.y, sys.z || 0);
-        var blobR = baseRadius * (1 + (ent.count - 1) * 0.4);
+        var blobR = baseRadius * (1 + (ent.count - 1) * 0.4) * zoomComp;
         if (p.x + blobR < 0 || p.x - blobR > this.cssW ||
             p.y + blobR < 0 || p.y - blobR > this.cssH) continue;
 
         var n = parseInt(ent.color.slice(1), 16);
         var cr = (n >> 16) & 255, cg = (n >> 8) & 255, cb = n & 255;
-        var alpha = clamp(0.18 + ent.count * 0.06, 0.18, 0.45) * reveal;
+        var alpha = clamp(0.18 + ent.count * 0.06, 0.18, 0.45) * reveal * clamp(zoomComp * 0.65, 0.65, 1.4);
 
         var grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, blobR);
         grad.addColorStop(0, 'rgba(' + cr + ',' + cg + ',' + cb + ',' + alpha + ')');
