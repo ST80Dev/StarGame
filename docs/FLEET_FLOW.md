@@ -168,7 +168,9 @@ di ricognizione → dossier continuo su entrambi, hands-free.
 ## 6. Impatto sul modello dati (additivo, lazy)
 
 - `fleet.queue = []` — step successivi all'ordine corrente (`fleet.orders` resta lo step attivo).
-- `body.giacimento = { res, riserva, rate }` — marca corpi sfruttabili (generalizza `survey`).
+- **Giacimenti su corpi** (decisione A): derivati dal seed via `ORION.anomaly.bodyGiacimento(body)`.
+  Corpi non colonizzabili sfruttabili: **cintura → met**, **gigante gassoso → en** (stesso modello
+  `perBody` di raccolta delle anomalie; nessun campo nuovo nel save, il sito vive in `game.anomalies`).
 - `fleetStance(f)` — helper di etichetta derivata (nessun nuovo campo persistito).
 - Allerta minacce: **sempre attiva** per ora (toggle per-flotta rinviato).
 - Schema: bump con sub-migrazione lazy (`queue` lazy-init), non distruttiva.
