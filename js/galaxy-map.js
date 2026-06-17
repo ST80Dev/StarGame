@@ -227,6 +227,12 @@
       canvas.style.touchAction = 'none';
       container.appendChild(canvas);
 
+      const tip = document.createElement('div');
+      tip.className = 'gmap-tooltip';
+      tip.style.display = 'none';
+      container.appendChild(tip);
+      this._tooltip = tip;
+
       this.canvas = canvas;
       this.ctx = canvas.getContext('2d');
 
@@ -258,6 +264,7 @@
       window.removeEventListener('keyup', this._onKeyUp);
       if (this._raf) cancelAnimationFrame(this._raf);
       this._anim = false;
+      if (this._tooltip) { this._tooltip.remove(); this._tooltip = null; }
       if (this.canvas) this.canvas.replaceWith(this.canvas.cloneNode(false));
       this.canvas = null;
       this.ctx = null;
@@ -652,7 +659,10 @@
         if (hs !== this.hoverSystem || hg !== this.hoverGroup || hc !== this.hoverCluster) {
           this.hoverSystem = hs; this.hoverGroup = hg; this.hoverCluster = hc;
           this.canvas.style.cursor = (hs >= 0 || hg >= 0) ? 'pointer' : 'grab';
+          this._updateTooltip(hs, p);
           this.requestRender();
+        } else if (hs >= 0) {
+          this._positionTooltip(p);
         }
         return;
       }
@@ -769,6 +779,7 @@
         this.hoverSystem = -1; this.hoverGroup = -1; this.hoverCluster = -1;
         this.requestRender();
       }
+      if (this._tooltip) this._tooltip.style.display = 'none';
       this.canvas.style.cursor = 'grab';
     }
 
@@ -1046,14 +1057,10 @@
         this._drawNodes(ctx, reveal);
         /* M10 Fase A (decisione #47): confini delle civiltà AI. Visibili solo
            sui sistemi che il giocatore ha DETECTED/EXPLORED (scoperta-guidata). */
-        this._drawCivOwnership(ctx, reveal);
+        this._drawCivChips(ctx, reveal);
         /* M10 Fase B (decisione #52 §13.6): alone ambra tratteggiato sui
            sistemi coesi noti — consorzio locale visibile a colpo d'occhio. */
         this._drawCohesion(ctx, reveal);
-        /* M10 Fase B punto 4 (decisione #52 §13.6): marker planetari sotto
-           i nodi — proprietà al pianeta (non al sistema), riflesso del modello
-           `civ.planets[]`. */
-        this._drawPlanetMarkers(ctx, reveal);
         /* M10 Fase E: covi pirata noti (DETECTED+) — bersagli raidabili. */
         this._drawPirateNests(ctx, reveal);
         /* M16 (decisione #81): tue stazioni spaziali (sempre note). */
@@ -1389,57 +1396,24 @@
       ctx.globalAlpha = 1;
     }
 
-    /* M10 Fase A (decisione #47): anello di proprietà colorato per le
-       civiltà AI. Disegnato SOLO sui sistemi noti al giocatore (DETECTED+),
-       coerente con la visibilità scoperta-guidata. Niente hull/territori
-       pieni in Fase A: un anello netto per sistema posseduto, come per le
-       colonie del giocatore — il "dossier" e i confini ricchi sono Fase B. */
-    _drawCivOwnership(ctx, reveal) {
-      const game = root.ORION && root.ORION.game;
-      if (!game || !Array.isArray(game.civs) || !game.civs.length) return;
-      const g = this.galaxy;
-      const disc = this.state.discovery;
-      const DET = DISCOVERY.DETECTED;
-      ctx.save();
-      ctx.globalAlpha = reveal;
-      for (let c = 0; c < game.civs.length; c++) {
-        const civ = game.civs[c];
-        if (!civ || !civ.alive) continue;
-        for (let s = 0; s < civ.systems.length; s++) {
-          const sid = civ.systems[s];
-          if (disc[sid] < DET) continue;          // ignoto al giocatore → non mostrare
-          const sys = g.systems[sid];
-          if (!sys) continue;
-          const p = this.project(sys.x, sys.y, sys.z || 0);
-          if (p.x < -30 || p.x > this.cssW + 30 || p.y < -30 || p.y > this.cssH + 30) continue;
-          const r = this.nodeRadius(p.parallax);
-          // anello di proprietà nel colore della civiltà
-          this._ring(ctx, p, r + 4.5, hexA(civ.color, 0.9), 1.6);
-          this._ring(ctx, p, r + 7.5, hexA(civ.color, 0.35), 1);
-        }
-      }
-      ctx.restore();
-    }
-
-    /* M10 Fase B punto 4 (decisione #52 §13.6): marker planetari sotto i
-       nodi. La proprietà è al PIANETA (non al sistema) → un sistema con due
-       proprietari diversi mostra due dots distinti. Sistemi DETECTED+ only. */
-    _drawPlanetMarkers(ctx, reveal) {
+    /* Chips quadrati a destra del nodo: ogni riga = una civiltà (o il
+       giocatore), ogni quadratino nella riga = un pianeta posseduto in quel
+       sistema. Righe impilate verticalmente. DETECTED+ only. */
+    _drawCivChips(ctx, reveal) {
       const game = root.ORION && root.ORION.game;
       if (!game) return;
       const g = this.galaxy;
       const disc = this.state.discovery;
       const DET = DISCOVERY.DETECTED;
+      const PLAYER_COLOR = '#5fa8ff';
 
-      /* Raccogli proprietà per sysId: list di { color, kind } per ogni pianeta
-         (uno per ogni pianeta posseduto). */
+      /* Raccogli ownership per sistema: Map<sysId, Array<{color, count}>>
+         raggruppato per colore (= per civiltà). Ordine: giocatore prima. */
       const ownership = {};
-      function addOwner(sid, color) {
-        if (!ownership[sid]) ownership[sid] = [];
-        if (ownership[sid].length >= 10) return;   // cap visivo a 10 dots
-        ownership[sid].push(color);
+      function addPlanet(sid, color) {
+        if (!ownership[sid]) ownership[sid] = {};
+        ownership[sid][color] = (ownership[sid][color] || 0) + 1;
       }
-      /* Player colonies. */
       const cols = game.colonies || {};
       Object.keys(cols).forEach(function (k) {
         const c = cols[k];
@@ -1447,9 +1421,8 @@
         const colon = k.indexOf(':');
         if (colon < 0) return;
         const sid = Number(k.slice(0, colon));
-        if (!isNaN(sid)) addOwner(sid, '#5fa8ff');   // ciano player (UI_GUIDE)
+        if (!isNaN(sid)) addPlanet(sid, PLAYER_COLOR);
       });
-      /* Civ planets (canonical 'sysId:bodyKey'). */
       const civs = game.civs || [];
       for (let i = 0; i < civs.length; i++) {
         const civ = civs[i];
@@ -1459,37 +1432,49 @@
           const colon = pk.indexOf(':');
           if (colon < 0) continue;
           const sid = Number(pk.slice(0, colon));
-          if (!isNaN(sid)) addOwner(sid, civ.color);
+          if (!isNaN(sid)) addPlanet(sid, civ.color);
         }
       }
 
       ctx.save();
       ctx.globalAlpha = reveal;
-      Object.keys(ownership).forEach(function (key) {
-        const sid = Number(key);
-        if (disc[sid] < DET) return;
+      const sids = Object.keys(ownership);
+      for (let si = 0; si < sids.length; si++) {
+        const sid = Number(sids[si]);
+        if (disc[sid] < DET) continue;
         const sys = g.systems[sid];
-        if (!sys) return;
+        if (!sys) continue;
         const p = this.project(sys.x, sys.y, sys.z || 0);
-        if (p.x < -30 || p.x > this.cssW + 30 || p.y < -30 || p.y > this.cssH + 30) return;
+        if (p.x < -30 || p.x > this.cssW + 30 || p.y < -30 || p.y > this.cssH + 30) continue;
         const r = this.nodeRadius(p.parallax);
-        const colors = ownership[sid];
-        const dotR = Math.max(1.6, r * 0.20);
-        const gap = dotR * 2 + 1.2;
-        const totalW = (colors.length - 1) * gap;
-        const cy = p.y + r + dotR + 5;
-        const startX = p.x - totalW / 2;
-        for (let i = 0; i < colors.length; i++) {
-          const cx = startX + i * gap;
-          ctx.beginPath();
-          ctx.arc(cx, cy, dotR, 0, Math.PI * 2);
-          ctx.fillStyle = colors[i];
-          ctx.fill();
-          ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-          ctx.lineWidth = 0.8;
-          ctx.stroke();
+
+        const byColor = ownership[sid];
+        const colors = Object.keys(byColor);
+        if (colors.indexOf(PLAYER_COLOR) >= 0) {
+          colors.splice(colors.indexOf(PLAYER_COLOR), 1);
+          colors.unshift(PLAYER_COLOR);
         }
-      }, this);
+
+        const chipS = Math.max(3, Math.round(r * 0.38));
+        const gap = 1;
+        const rowGap = 2;
+        const startX = p.x + r + 5;
+        var cy = p.y - ((colors.length - 1) * (chipS + rowGap)) / 2;
+
+        for (var ci = 0; ci < colors.length; ci++) {
+          var col = colors[ci];
+          var count = Math.min(byColor[col], 6);
+          ctx.fillStyle = col;
+          ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+          ctx.lineWidth = 0.6;
+          for (var pi = 0; pi < count; pi++) {
+            var cx = startX + pi * (chipS + gap);
+            ctx.fillRect(cx, cy, chipS, chipS);
+            ctx.strokeRect(cx, cy, chipS, chipS);
+          }
+          cy += chipS + rowGap;
+        }
+      }
       ctx.restore();
     }
 
@@ -2111,6 +2096,87 @@
       /* Animation tick: continua a richiedere render finché picker è attivo. */
       this.requestRender();
       ctx.restore();
+    }
+
+    /* ---- Tooltip informativo al hover su un sistema ---- */
+    _positionTooltip(ptr) {
+      const tip = this._tooltip;
+      if (!tip || tip.style.display === 'none') return;
+      var tx = ptr.x + 14;
+      var ty = ptr.y - 10;
+      if (tx + tip.offsetWidth > this.cssW - 8) tx = ptr.x - tip.offsetWidth - 10;
+      if (ty + tip.offsetHeight > this.cssH - 8) ty = this.cssH - tip.offsetHeight - 8;
+      if (ty < 4) ty = 4;
+      tip.style.left = tx + 'px';
+      tip.style.top = ty + 'px';
+    }
+
+    _updateTooltip(sysId, ptr) {
+      const tip = this._tooltip;
+      if (!tip) return;
+      if (sysId < 0) { tip.style.display = 'none'; return; }
+      const game = root.ORION && root.ORION.game;
+      if (!game || !game.galaxy) { tip.style.display = 'none'; return; }
+      const sys = game.galaxy.systems[sysId];
+      if (!sys) { tip.style.display = 'none'; return; }
+      var esc = root.ORION.util && root.ORION.util.escapeHtml ? root.ORION.util.escapeHtml : function (s) { return s; };
+
+      var html = '<strong>' + esc(sys.name) + '</strong>';
+      var grp = (game.galaxy.groups || []).find(function (g) { return g.id === sys.cluster; });
+      if (grp) html += ' <span class="gmap-tip__region">· ' + esc(grp.name) + '</span>';
+
+      /* Civiltà presenti (giocatore + AI). */
+      var civLines = [];
+      var PLAYER_COLOR = '#5fa8ff';
+      var playerCount = 0;
+      var cols = game.colonies || {};
+      Object.keys(cols).forEach(function (k) {
+        var c = cols[k];
+        if (!c || !c.colonized) return;
+        var colon = k.indexOf(':');
+        if (colon < 0) return;
+        if (Number(k.slice(0, colon)) === sysId) playerCount++;
+      });
+      if (playerCount) {
+        civLines.push('<span class="gmap-tip__civ" style="--tc:' + PLAYER_COLOR + '"><span class="gmap-tip__sw"></span>Tu (' + playerCount + (playerCount === 1 ? ' colonia' : ' colonie') + ')</span>');
+      }
+      var civs = game.civs || [];
+      for (var i = 0; i < civs.length; i++) {
+        var civ = civs[i];
+        if (!civ || !civ.alive || !Array.isArray(civ.planets)) continue;
+        var cnt = 0;
+        for (var j = 0; j < civ.planets.length; j++) {
+          var pk = civ.planets[j];
+          var colon = pk.indexOf(':');
+          if (colon > 0 && Number(pk.slice(0, colon)) === sysId) cnt++;
+        }
+        if (cnt) {
+          civLines.push('<span class="gmap-tip__civ" style="--tc:' + esc(civ.color) + '"><span class="gmap-tip__sw"></span>' + esc(civ.name) + ' (' + cnt + (cnt === 1 ? ' pianeta' : ' pianeti') + ')</span>');
+        }
+      }
+      if (civLines.length) html += '<div class="gmap-tip__civs">' + civLines.join('') + '</div>';
+
+      /* Cohesion. */
+      if (game.cohesion && Array.isArray(game.cohesion.sysIds) && game.cohesion.sysIds.indexOf(sysId) >= 0) {
+        var COH = root.ORION.cohesion;
+        if (COH && COH.cohesionInfo) {
+          var info = COH.cohesionInfo(game, sysId);
+          var owners = info.owners.map(function (o) { return esc(o.name); }).join(' + ');
+          html += '<div class="gmap-tip__coh">⌬ Coeso: ' + owners + '</div>';
+        } else {
+          html += '<div class="gmap-tip__coh">⌬ Sistema coeso</div>';
+        }
+      }
+
+      /* Pirati. */
+      if (game.piracy && Array.isArray(game.piracy.nests)) {
+        var nest = game.piracy.nests.find(function (n) { return n.sysId === sysId; });
+        if (nest) html += '<div class="gmap-tip__pirate">☠ Covo pirata</div>';
+      }
+
+      tip.innerHTML = html;
+      tip.style.display = '';
+      this._positionTooltip(ptr);
     }
 
     _ring(ctx, p, radius, color, width) {

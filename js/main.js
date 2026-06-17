@@ -6862,14 +6862,19 @@ function renderCivView(stage) {
     if (rank < KNOWLEDGE.spotted && factionDef) {
       body = '<p class="panel__note civ-card__hint">Fazione fissa della galassia · ruolo sempre noto. Per il dossier servono interazioni dirette.</p>';
     }
-    /* CONTACTED+ — dossier base. */
+    /* CONTACTED+ — dossier base. Il grado di intel (fragmentary/partial/
+       complete) attenua i dettagli per chi è stato contattato con una
+       flotta esile. Default 'complete' per backward compat con civ
+       contattate prima dell'introduzione del meccanismo. */
     if (rank >= KNOWLEDGE.contacted) {
+      const intelLvl = c.intelLevel || 'complete';
+      const intelRank = ORION.ai.intelLevelRank ? ORION.ai.intelLevelRank(intelLvl) : 3;
       const disp = Math.round(c.disposition || 0);
       const dispLabel = ORION.ai.dispositionLabel(disp);
       const pct = Math.max(0, Math.min(100, (disp + 100) / 2));
       const dispCls = disp <= -15 ? 'neg' : (disp >= 15 ? 'pos' : 'mid');
       let relChip = '', dipActions = '';
-      if (DIP) {
+      if (DIP && intelRank >= 2) {
         const drel = DIP.effectiveRelation(g, c);
         relChip = '<span class="dip-relchip ' + DIP.relationStateClass(drel) + '" title="Stato diplomatico">' +
           escapeHtml(DIP.relationLabel(drel)) + '</span>';
@@ -6897,10 +6902,21 @@ function renderCivView(stage) {
             escapeHtml(fed.color) + '">⬢ ' + escapeHtml(fed.name) + '</span>';
         }
       }
-      const alignChip = '<span class="civ-chip civ-chip--' + c.alignment + '">' + (ALIGN_LABEL[c.alignment] || c.alignment) + '</span>';
+      /* Allineamento mostrato come "?" in modalità frammentaria. */
+      const alignChip = (intelRank >= 2)
+        ? '<span class="civ-chip civ-chip--' + c.alignment + '">' + (ALIGN_LABEL[c.alignment] || c.alignment) + '</span>'
+        : '<span class="civ-chip civ-chip--unknown" title="Intel insufficiente: manda una flotta più potente">Allineamento ?</span>';
+
+      /* Chip intel: indicatore visivo del grado di dossier ottenuto. */
+      const INTEL_LABEL = { fragmentary: 'Frammentario', partial: 'Parziale', complete: 'Completo' };
+      const intelChip = '<span class="civ-intel civ-intel--' + intelLvl +
+        '" title="Dossier ' + escapeHtml(INTEL_LABEL[intelLvl] || intelLvl) +
+        '. Aumenta la presenza nel loro sistema con una flotta più potente per affinarlo.">' +
+        '⌖ ' + escapeHtml(INTEL_LABEL[intelLvl] || intelLvl) + '</span>';
+
       /* M11 Fase B parziale: dispaccio AI pendente — banner con accetta/rifiuta. */
       let offerHtml = '';
-      if (c.pendingOffer && DIP) {
+      if (c.pendingOffer && DIP && intelRank >= 2) {
         const off = c.pendingOffer;
         const lab = DIP.offerLabel(off.actionId);
         const ttl = Math.max(0, (off.expiresAt || 0) - (g.timeImpulsi || 0));
@@ -6912,22 +6928,35 @@ function renderCivView(stage) {
           '<button type="button" class="dip-btn dip-btn--danger" data-dip-offer="' + escapeHtml(c.id) + '" data-dip-resp="reject">Rifiuta</button>' +
         '</div>';
       }
-      body = '<div class="civ-card__chips">' + alignChip + relChip + fedChip + '</div>' +
+
+      /* Sede + disposizione: visibili da partial in su. In fragmentary
+         restano nascoste, sostituite da un hint. */
+      const seatRow = (intelRank >= 2)
+        ? '<div class="civ-card__row"><span class="civ-card__k">Sede</span><span>' +
+            escapeHtml(seat.tierLabel || '—') + (seat.name ? ' · ' + escapeHtml(seat.name) : '') + '</span></div>'
+        : '';
+      const dispBlock = (intelRank >= 2)
+        ? '<div class="civ-disp">' +
+            '<div class="civ-disp__top"><span class="civ-card__k">Disposizione verso di te</span>' +
+              '<span class="civ-disp__label civ-disp__label--' + dispCls + '">' + dispLabel + '</span></div>' +
+            '<div class="civ-disp__bar"><span class="civ-disp__mid" aria-hidden="true"></span>' +
+              '<span class="civ-disp__fill civ-disp__fill--' + dispCls + '" style="width:' + pct.toFixed(0) + '%"></span></div>' +
+          '</div>'
+        : '<p class="panel__note civ-card__hint">Dossier <strong>frammentario</strong>. La flotta presente ha raccolto solo l\'essenziale — ' +
+            '<strong>manda una flotta più potente</strong> (corvette, fregate, navi capitali) nel loro sistema per ottenere disposizione, sede e diplomazia.</p>';
+
+      body = '<div class="civ-card__chips">' + alignChip + relChip + fedChip + intelChip + '</div>' +
         offerHtml +
-        '<div class="civ-card__row"><span class="civ-card__k">Sede</span><span>' +
-          escapeHtml(seat.tierLabel || '—') + (seat.name ? ' · ' + escapeHtml(seat.name) : '') + '</span></div>' +
-        '<div class="civ-disp">' +
-          '<div class="civ-disp__top"><span class="civ-card__k">Disposizione verso di te</span>' +
-            '<span class="civ-disp__label civ-disp__label--' + dispCls + '">' + dispLabel + '</span></div>' +
-          '<div class="civ-disp__bar"><span class="civ-disp__mid" aria-hidden="true"></span>' +
-            '<span class="civ-disp__fill civ-disp__fill--' + dispCls + '" style="width:' + pct.toFixed(0) + '%"></span></div>' +
-        '</div>' +
+        seatRow +
+        dispBlock +
         dipActions +
-        civTradeHtml(g, c) +
-        civWasteHtml(g, c);
+        ((intelRank >= 2) ? civTradeHtml(g, c) + civWasteHtml(g, c) : '');
     }
-    /* KNOWN+ — vocazione + tratto + intel forza. */
-    if (rank >= KNOWLEDGE.known) {
+    /* KNOWN+ — vocazione + tratto + intel forza. Vincolato a intel
+       'complete': anche se le interazioni promuovono a known, i dettagli
+       interni richiedono una buona presenza di flotta. */
+    const intelRankForExtras = ORION.ai.intelLevelRank ? ORION.ai.intelLevelRank(c.intelLevel || 'complete') : 3;
+    if (rank >= KNOWLEDGE.known && intelRankForExtras >= 3) {
       const vocLabel = (ORION.ai.VOCATIONS && c.vocation && ORION.ai.VOCATIONS[c.vocation]) ? ORION.ai.VOCATIONS[c.vocation].label : '—';
       const affLabel = (ORION.ai.AFFINITIES && c.affinity && ORION.ai.AFFINITIES[c.affinity]) ? ORION.ai.AFFINITIES[c.affinity].label : '—';
       const known = ORION.ai.knownSystemsCount(g, c);
@@ -6965,7 +6994,9 @@ function renderCivView(stage) {
       }
     }
 
-    return '<li class="civ-card civ-card--' + (c.knowledge || 'unknown') + '" style="--civ-color:' + escapeHtml(c.color) + '">' +
+    return '<li class="civ-card civ-card--' + (c.knowledge || 'unknown') + '"' +
+      ' data-civ-id="' + escapeHtml(String(c.id)) + '"' +
+      ' style="--civ-color:' + escapeHtml(c.color) + '">' +
       head + body + '</li>';
   }
 
@@ -7211,6 +7242,20 @@ function renderCivView(stage) {
       renderCivView(stage);
     });
   });
+
+  /* Dossier civiltà / Diplomazia da un pianeta straniero: il chiamante setta
+     ORION.pendingCivFocus = civId; qui scrolliamo sulla card e la
+     evidenziamo per pochi secondi. */
+  const focusId = ORION.pendingCivFocus;
+  ORION.pendingCivFocus = null;
+  if (focusId != null) {
+    const card = stage.querySelector('[data-civ-id="' + String(focusId).replace(/"/g, '\\"') + '"]');
+    if (card) {
+      try { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { card.scrollIntoView(); }
+      card.classList.add('civ-card--focus');
+      setTimeout(function () { card.classList.remove('civ-card--focus'); }, 2200);
+    }
+  }
 }
 
 /* M12 Fase A2 (#56 §15.3): blocco "Commercio" nella card civiltà. */
@@ -9460,8 +9505,10 @@ const DEFAULT_AUTOPAUSE = {
      atmosferico che precede il primo contatto. OFF di default — basta che
      compaia in cronaca senza interrompere; il vero contatto (`civ-contact`)
      resta auto-pausa ON. */
-  'civ-spotted': false,
+  'civ-spotted': true,
   'civ-contact': true,
+  'civ-intel-upgraded': false,
+  'pirate-nest-recon': false,
   'civ-fallen': true,
   'civ-emerged': true,
   'civ-expand': false,
@@ -9879,6 +9926,8 @@ function showEventOverlay(events) {
     'capital-decommissioned': 'Vecchia capitale decommissionata',
     'civ-spotted': 'Civiltà avvistata',
     'civ-contact': 'Primo contatto con una civiltà',
+    'civ-intel-upgraded': 'Dossier civiltà aggiornato',
+    'pirate-nest-recon': 'Ricognizione covo pirata',
     'civ-expand': 'Civiltà AI: espansione',
     'civ-war': 'Guerra tra civiltà',
     'civ-battle': 'Battaglia tra civiltà (vista)',
@@ -10379,17 +10428,24 @@ function chronicleEvent(ev) {
     pushChronicle(ds + ' — <strong>Ricerca completata</strong>: <strong>' + escapeHtml(ev.name || ev.techId) + '</strong> · ' + blurb + '.', 'planet');
     if (ORION.tutorial) ORION.tutorial.fire('research-overview');
   } else if (ev.kind === 'civ-contact') {
-    /* M10 Fase A (decisione #47): primo contatto con una civiltà AI.
-       La scheda-dossier vera arriva in Fase B; qui è una voce di cronaca. */
-    pushChronicle(ds + ' — <strong>Primo contatto</strong> con <strong>' + escapeHtml(ev.civName) + '</strong> nel/nella ' + escapeHtml(ev.regionLabel) + ' · <em>' + escapeHtml(ev.traitLabel) + '</em> · <span class="chronicle__hint">dossier nella vista Civiltà ⬡</span>.', 'civ');
+    /* Primo contatto. Il tratto è noto solo se intel >= partial; altrimenti
+       si mostra "tratto ignoto". Il messaggio si adatta al reason. */
+    const reasonHint = (ev.reason === 'presence')
+      ? 'La tua flotta presente ha colto i primi segnali · dossier nella vista Civiltà ⬡'
+      : 'dossier nella vista Civiltà ⬡';
+    const traitFrag = ev.traitLabel ? ' · <em>' + escapeHtml(ev.traitLabel) + '</em>' : '';
+    pushChronicle(ds + ' — <strong>Primo contatto</strong> con <strong>' + escapeHtml(ev.civName) + '</strong> nel/nella ' + escapeHtml(ev.regionLabel) + traitFrag + ' · <span class="chronicle__hint">' + reasonHint + '</span>.', 'civ');
     if (ORION.tutorial) ORION.tutorial.fire('civilizations');
   } else if (ev.kind === 'civ-spotted') {
-    /* M10 Fase B punto 2 (decisione #52 §13.10): "Avvistata" — esplori un
-       loro sistema, ma nessun atto formale è ancora avvenuto. La vista
-       Civiltà ⬡ mostra solo nome + sigla regione fino al contatto vero.
-       Nudge "early-game pacing" 2026-06-15: aggiunto suggerimento esplicito
-       su come passare a contatto formale (esplora un loro sistema). */
-    pushChronicle(ds + ' — Civiltà <strong>' + escapeHtml(ev.civName) + '</strong> avvistata nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">esplora un loro sistema per il contatto formale (dossier completo nella vista Civiltà ⬡)</span>.', 'civ');
+    /* "Avvistata": esplori un loro sistema, nessun atto formale ancora.
+       Mantieni una flotta nel loro sistema per 3-4 Ι → contatto automatico. */
+    pushChronicle(ds + ' — Civiltà <strong>' + escapeHtml(ev.civName) + '</strong> avvistata nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">mantieni una flotta nel loro sistema per il contatto formale</span>.', 'civ');
+  } else if (ev.kind === 'civ-intel-upgraded') {
+    const INTEL_LABEL = { fragmentary: 'frammentario', partial: 'parziale', complete: 'completo' };
+    pushChronicle(ds + ' — Dossier su <strong>' + escapeHtml(ev.civName) + '</strong> aggiornato: <strong>' + escapeHtml(INTEL_LABEL[ev.to] || ev.to) + '</strong> (era ' + escapeHtml(INTEL_LABEL[ev.from] || ev.from || '—') + ') · <span class="chronicle__hint">flotta più potente nel loro sistema</span>.', 'civ');
+  } else if (ev.kind === 'pirate-nest-recon') {
+    const INTEL_LABEL = { fragmentary: 'parziale', partial: 'parziale', complete: 'completa' };
+    pushChronicle(ds + ' — Ricognizione <strong>' + escapeHtml(INTEL_LABEL[ev.to] || ev.to) + '</strong> di un covo pirata nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">forza e livello stimati nella vista Civiltà ⬡</span>.', 'civ');
   } else if (ev.kind === 'civ-expand') {
     /* Voce di cronaca "da lontano": effetto senza svelare la mappa. */
     pushChronicle(ds + ' — Voci dal/dalla ' + escapeHtml(ev.regionLabel) + ': <strong>' + escapeHtml(ev.civName) + '</strong> ha annesso un nuovo sistema.', 'civ');
@@ -12219,9 +12275,15 @@ function renderContextActionBar(ctx) {
     if (ORION.currentPlanet) tryColonize(ORION.currentPlanet);
   });
   const dBtn = host.querySelector('[data-action="ctx-civ-dossier"]');
-  if (dBtn) dBtn.addEventListener('click', function () { navigateView('civ'); });
+  if (dBtn) dBtn.addEventListener('click', function () {
+    ORION.pendingCivFocus = dBtn.dataset.civ || null;
+    navigateView('civ');
+  });
   const dipBtn = host.querySelector('[data-action="ctx-diplomacy"]');
-  if (dipBtn) dipBtn.addEventListener('click', function () { navigateView('civ'); });
+  if (dipBtn) dipBtn.addEventListener('click', function () {
+    ORION.pendingCivFocus = dipBtn.dataset.civ || null;
+    navigateView('civ');
+  });
   const aBtn = host.querySelector('[data-action="ctx-attack"]');
   if (aBtn) aBtn.addEventListener('click', function () {
     /* Decisione intra-sistema: passa anche bodyKey per ingaggio mirato. */

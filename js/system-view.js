@@ -784,9 +784,38 @@
       if (isSel) this._reticle(ctx, p, r + 6, '#ff9d3c');
       else if (isHover) this._ring(ctx, p, r + 5, 'rgba(216,226,255,0.85)', 1.4);
 
+      this._drawOwnerChip(ctx, p, r, body);
+
       if (r > 3.5 || isSel || isHover || body.homeWorld) {
         this._label(ctx, p, body.name, r, isSel || isHover || body.homeWorld);
       }
+    }
+
+    _drawOwnerChip(ctx, p, r, body) {
+      var AI = root.ORION.ai;
+      var game = root.ORION.game;
+      if (!AI || !game) return;
+      var sysId = this.system ? this.system.id : null;
+      if (sysId == null) return;
+      var chipS = Math.max(4, Math.round(r * 0.35));
+
+      var isPlayerColony = false;
+      var colKey = sysId + ':' + body.key;
+      var col = game.colonies && game.colonies[colKey];
+      if (col && col.colonized) isPlayerColony = true;
+
+      var civ = AI.civForPlanet ? AI.civForPlanet(game, sysId, body.key) : null;
+
+      if (!isPlayerColony && !civ) return;
+
+      var color = isPlayerColony ? '#5fa8ff' : civ.color;
+      var cx = p.x + r + 3;
+      var cy = p.y - r;
+      ctx.fillStyle = color;
+      ctx.fillRect(cx, cy, chipS, chipS);
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+      ctx.lineWidth = 0.6;
+      ctx.strokeRect(cx, cy, chipS, chipS);
     }
 
     /* Disco planetario procedurale: base + dettaglio per tipo + terminatore
