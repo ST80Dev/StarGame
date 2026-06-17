@@ -2141,19 +2141,32 @@ function expeditionsForColony(colony) {
       if (!f || f.ownerColonyKey !== key) continue;
       if (!f.orders) continue;
       const t = f.orders.type;
+      /* Riconosce come "spedizione di esplorazione" anche le flotte
+         lanciate con il default del picker (returnHome=OFF, decisione
+         2026-06-16): l'ordine è `move-route` con `exploreEach:true` e
+         una sola tappa, un singolo scafo esploratore. Senza questo
+         riconoscimento, lanciare l'esplorazione default farebbe sparire
+         la scheda Esplorazione dal pannello colonia. */
+      const onlyExplorer = f.ships && f.ships.length === 1 &&
+                           f.ships[0] && f.ships[0].kind === 'explorer';
       const isExploreLike = (t === 'explore') ||
-        (t === 'return' && f.ships && f.ships.length === 1 &&
-         f.ships[0] && f.ships[0].kind === 'explorer' &&
+        (t === 'move-route' && f.orders.exploreEach === true && onlyExplorer) ||
+        (t === 'return' && onlyExplorer &&
          (f.orders._migratedFromExplore || f.orders._migratedFromExpedition));
       if (!isExploreLike) continue;
       const ship = f.ships && f.ships[0];
       const crew = f.crew && f.crew[0];
+      const isOutbound = (t === 'explore') || (t === 'move-route');
+      const wpTarget = (t === 'move-route' && f.orders.waypoints && f.orders.waypoints.length)
+        ? f.orders.waypoints[f.orders.waypoints.length - 1] : null;
       out.push({
         id: f.id,
         originColonyKey: key,
-        targetSystemId: (t === 'explore') ? f.orders.toSysId : (f.route && f.route[f.route.length - 1]),
-        status: (t === 'explore') ? 'outbound' : 'returning',
-        durationOut: (t === 'explore') ? (f.etaImpulsi || 0) : 0,
+        targetSystemId: (t === 'explore') ? f.orders.toSysId
+                      : (wpTarget != null) ? wpTarget
+                      : (f.route && f.route[f.route.length - 1]),
+        status: isOutbound ? 'outbound' : 'returning',
+        durationOut: isOutbound ? (f.etaImpulsi || 0) : 0,
         durationBack: (t === 'return') ? (f.etaImpulsi || 0) : null,
         shipWear: (ship && ship.wear) || 0,
         crewId: crew && crew.id,
@@ -4694,7 +4707,7 @@ function closeExpeditionPicker() {
 
 function doLaunchExpedition(colony, targetSystemId, opts) {
   opts = opts || {};
-  const returnHome = opts.returnHome !== false;   // default ON (modello explore)
+  const returnHome = opts.returnHome === true;    // default OFF (richiesta utente 2026-06-17)
   const g = ORION.game;
   const key = colony.systemId + ':' + colony.bodyKey;
   /* Decisione #60: lancio come flotta con ordine explore (sostituisce
@@ -7994,7 +8007,7 @@ function openFleetDetail(fleetId, opts) {
     creating: !fleet,
     renaming: false,
     ordOpen: !!opts.orders,
-    ord: { tripType: null, target: null, waypoints: [], opt: { returnHome: true, exploreEach: false } }
+    ord: { tripType: null, target: null, waypoints: [], opt: { returnHome: false, exploreEach: false } }
   };
 
   const host = ensureFleetOverlayHost('fleet-detail');
@@ -8782,7 +8795,7 @@ function openFleetDetail(fleetId, opts) {
       persistGame(g);
       fleet = nf;
       D.creating = false;
-      D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: true, exploreEach: false } };
+      D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: false, exploreEach: false } };
       render();
     });
 
@@ -8847,7 +8860,7 @@ function openFleetDetail(fleetId, opts) {
         if (ORION.tutorial) ORION.tutorial.fire('fleet-orders');
       } else {
         /* Annulla → mantiene l'ordine corrente e ridisabilita i pulsanti. */
-        D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: true, exploreEach: false } };
+        D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: false, exploreEach: false } };
       }
       render();
     });
@@ -8856,7 +8869,7 @@ function openFleetDetail(fleetId, opts) {
     const ordCancel = host.querySelector('[data-act="ord-cancel"]');
     if (ordCancel) ordCancel.addEventListener('click', function () {
       D.ordOpen = false;
-      D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: true, exploreEach: false } };
+      D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: false, exploreEach: false } };
       render();
     });
     /* I bind condivisi su trip/pick-target/add-wp/rm-wp/opt-* stanno
@@ -9013,7 +9026,7 @@ function openFleetDetail(fleetId, opts) {
       escapeHtml(orderLabel({ orders: order })) + '.', 'explore');
     persistGame(g);
     D.ordOpen = false;
-    D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: true, exploreEach: false } };
+    D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: false, exploreEach: false } };
     render();
   }
 
