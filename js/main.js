@@ -10218,8 +10218,18 @@ function bodyDotColor(b) {
 const PREFS_LS_KEY = 'orion.prefs';
 const DEFAULT_PREFS = {
   confirmActions: true,   // chiede conferma su build/demolisci/colonizza/...
-  surfaceLevel: 'medio-scuro'  // luminosità superfici (regolabile per ambiente)
+  surfaceLevel: 'medio-scuro', // luminosità superfici (regolabile per ambiente)
+  cinematics: 'piene'     // scenografia accadimenti: piene | ridotte | off
 };
+
+/* Cinematiche degli accadimenti (Fase 1). reduced-motion le forza a "off"
+   lato ORION.cinematics; qui resta la sola preferenza utente. */
+const CINEMATICS_LEVELS = {
+  'piene':   { label: 'Piene' },
+  'ridotte': { label: 'Ridotte' },
+  'off':     { label: 'Off' }
+};
+const CINEMATICS_ORDER = ['piene', 'ridotte', 'off'];
 ORION.prefs = Object.assign({}, DEFAULT_PREFS);
 
 /* Livelli di luminosità delle superfici (decisione #67). Un solo knob
@@ -10250,6 +10260,7 @@ function loadPrefs() {
     else ORION.prefs = Object.assign({}, DEFAULT_PREFS);
   } catch (_) { ORION.prefs = Object.assign({}, DEFAULT_PREFS); }
   if (!SURFACE_LEVELS[ORION.prefs.surfaceLevel]) ORION.prefs.surfaceLevel = 'medio-scuro';
+  if (!CINEMATICS_LEVELS[ORION.prefs.cinematics]) ORION.prefs.cinematics = 'piene';
   applySurfaceLevel(ORION.prefs.surfaceLevel);
 }
 function savePrefs() {
@@ -10364,6 +10375,20 @@ function openPrefsModal() {
           '<span class="prefs-row__hint">Regola lo sfondo di schede e pannelli in base alla luce attorno a te ' +
           '(più scuro al buio, più chiaro in ambienti luminosi). Non influisce sulla partita.</span>' +
         '</div>' +
+        '<div class="prefs-row prefs-row--levels">' +
+          '<span class="prefs-row__label">Cinematiche degli accadimenti</span>' +
+          '<div class="prefs-levels" role="group" aria-label="Cinematiche">' +
+            CINEMATICS_ORDER.map(function (id) {
+              return '<button type="button" class="prefs-level' +
+                (id === ORION.prefs.cinematics ? ' is-active' : '') +
+                '" data-cine-level="' + id + '">' + escapeHtml(CINEMATICS_LEVELS[id].label) + '</button>';
+            }).join('') +
+          '</div>' +
+          '<span class="prefs-row__hint">Effetti scenografici sugli eventi (rivelazione di un sistema inesplorato, ' +
+          'partenza di una flotta in iperspazio). <strong>Piene</strong>: tutti gli effetti · ' +
+          '<strong>Ridotte</strong>: solo micro-effetti leggeri · <strong>Off</strong>: nessuno. ' +
+          'Se il sistema richiede animazioni ridotte vengono disattivate comunque. Non influisce sulla partita.</span>' +
+        '</div>' +
       '</div>' +
     '</div>';
   host.hidden = false;
@@ -10382,6 +10407,18 @@ function openPrefsModal() {
       savePrefs();
       host.querySelectorAll('[data-surface-level]').forEach(function (x) {
         x.classList.toggle('is-active', x.dataset.surfaceLevel === id);
+      });
+    });
+  });
+  /* Cinematiche: preferenza pura (effetto al prossimo evento), persisti + stato attivo. */
+  host.querySelectorAll('[data-cine-level]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const id = b.dataset.cineLevel;
+      if (!CINEMATICS_LEVELS[id]) return;
+      ORION.prefs.cinematics = id;
+      savePrefs();
+      host.querySelectorAll('[data-cine-level]').forEach(function (x) {
+        x.classList.toggle('is-active', x.dataset.cineLevel === id);
       });
     });
   });
@@ -10693,6 +10730,7 @@ function playTick() {
   /* Avanza 1 Ι: stesso loop di `runAdvance(1)`, ma controlliamo gli eventi
      per decidere se l'utente vuole essere fermato. */
   const res = runAdvance(1);
+  if (ORION.cinematics && res) ORION.cinematics.onEvents(res.events);
   if (res && res.events && shouldAutoPause(res.events)) {
     stopPlay();
     showEventOverlay(res.events);
@@ -10704,6 +10742,7 @@ function playTick() {
    singolo Impulso → l'utente si accorge di cosa è successo in quell'Ι. */
 function manualAdvance(impulsi) {
   const res = runAdvance(impulsi);
+  if (ORION.cinematics && res) ORION.cinematics.onEvents(res.events);
   if (res && res.events && shouldAutoPause(res.events)) {
     showEventOverlay(res.events);
   }
@@ -15287,6 +15326,9 @@ function boot() {
   initSaveControls();
   initTutorialControls();
   initPrefsControls();
+  /* Cinematiche (Fase 1): aggancia la navigazione così il regista può portare
+     alla vista del sistema appena esplorato senza dipendere da main.js. */
+  if (ORION.cinematics) ORION.cinematics.bind({ openSystem: function (id) { openSystem(id); } });
   initMobileNav();
   initMainMenu();
   showMainMenu('home');
