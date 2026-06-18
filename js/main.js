@@ -8766,8 +8766,9 @@ function openFleetDetail(fleetId, opts) {
         'Le altre missioni (Attacca · Estrai · Ricognizione · Colonizza) arrivano nel prossimo aggiornamento.</p>' +
     '</div>';
 
-    /* Sezione viveri (slider capienza serbatoio). */
-    const supSec = (nShips > 0) ? secSupplyDraft(crewReq) : '';
+    /* Sezione viveri (slider capienza serbatoio) — SEMPRE presente per non far
+       saltare l'altezza del modal; disabilitata finché non c'è una nave. */
+    const supSec = secSupplyDraft(crewReq, nShips > 0);
 
     const body =
       destSec +
@@ -8830,9 +8831,10 @@ function openFleetDetail(fleetId, opts) {
      stimato del pieno. Riusa data-bind dello slider di secSupply così il
      binder esistente (in bind()) lo intercetta — in modalità creazione
      scrive in D.draft.viveriCap invece che su fleet.viveriCap. */
-  function secSupplyDraft(crewReq) {
+  function secSupplyDraft(crewReq, enabled) {
     const F = ORION.fleet;
     if (!F.viveriCapOf || !F.setViveriCap) return '';
+    const dis = !enabled;
     const min = F.VIVERI_CAP_MIN || 50;
     const max = F.VIVERI_CAP_MAX || 1500;
     const def = F.VIVERI_CAP || 250;
@@ -8848,11 +8850,11 @@ function openFleetDetail(fleetId, opts) {
     const w = Math.ceil(crew * rate.water * cap);
     const costStr = '⛭ ' + m + ' · ⚡ ' + e + ' · ❖ ' + f + ' · ≈ ' + w;
     const hint = 'Capienza serbatoio: scegli quanta autonomia caricare al pieno alla partenza. Costo proporzionale a equipaggio (' + crew + ') × Ι caricati.';
-    return '<div class="fdetail__sec fdetail__sec--supply">' +
-      secHead('forces', 'amber', 'Viveri alla partenza') +
+    return '<div class="fdetail__sec fdetail__sec--supply' + (dis ? ' is-locked' : '') + '">' +
+      secHead('forces', 'amber', 'Viveri alla partenza', dis ? 'aggiungi una nave' : '') +
       '<div class="fleet-viveri-cap" title="' + escapeHtml(hint) + '">' +
         '<label class="fleet-viveri-cap__lbl">Capienza serbatoio · <strong data-bind="vcap-val">' + cap + '</strong> Ι</label>' +
-        '<input type="range" min="' + min + '" max="' + max + '" step="10" value="' + cap + '" data-bind="vcap-slider">' +
+        '<input type="range" min="' + min + '" max="' + max + '" step="10" value="' + cap + '" data-bind="vcap-slider"' + (dis ? ' disabled' : '') + '>' +
         '<div class="fleet-viveri-cap__cost">Pieno completo: <span data-bind="vcap-cost">' + costStr + '</span></div>' +
       '</div>' +
     '</div>';

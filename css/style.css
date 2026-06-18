@@ -5984,6 +5984,10 @@ select.main-menu__input { cursor: pointer; }
 .fdest__civ { color: var(--c-bad, #f08296); text-shadow: 0 0 3px currentColor; font-weight: 600; }
 .fdest__hint { font-size: 0.76rem; color: var(--c-text-faint, #98a3c8); display: inline-flex; align-items: center; gap: 4px; }
 
+/* Sezione viveri bloccata finché non c'è una nave (no salto di layout, 2.3b). */
+.fdetail__sec--supply.is-locked { opacity: 0.5; }
+.fdetail__sec--supply.is-locked input[type="range"] { cursor: not-allowed; }
+
 /* Composizione flotta a due pannelli — a disposizione → in flotta (Stadio 2.2).
    Click per spostare un'unità (niente drag&drop: parità touch/mouse). */
 .fcompose { display: flex; align-items: stretch; gap: 8px; }
