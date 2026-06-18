@@ -8551,9 +8551,22 @@ function openFleetDetail(fleetId, opts) {
       return rank >= 2 ? c.name : 'Ignota';
     }
     const capId = capSysId();
+    /* Distanza dalla capitale in SALTI (BFS sul grafo), per ordinare e mostrare. */
+    function hopsFromCap(s) {
+      if (s === capId) return 0;
+      const p = ORION.fleet.computePath ? ORION.fleet.computePath(g.galaxy, capId, s) : null;
+      return p ? (p.length - 1) : null;
+    }
     const knownSys = [];
     for (let i = 0; i < g.galaxy.systems.length; i++) { if ((disc[i] || 0) >= DISC.DETECTED) knownSys.push(i); }
-    knownSys.sort(function (a, b) { return sysDist(capId, a) - sysDist(capId, b); });
+    const hopsMap = {};
+    knownSys.forEach(function (s) { hopsMap[s] = hopsFromCap(s); });
+    knownSys.sort(function (a, b) {
+      const ha = hopsMap[a] == null ? 1e9 : hopsMap[a];
+      const hb = hopsMap[b] == null ? 1e9 : hopsMap[b];
+      if (ha !== hb) return ha - hb;
+      return sysDist(capId, a) - sysDist(capId, b);
+    });
     if (!D.dest) D.dest = { sysId: null, bodyKey: null };
     if (D.dest.sysId == null || (disc[D.dest.sysId] || 0) < DISC.DETECTED) {
       const nonCap = knownSys.filter(function (s) { return s !== capId; });
@@ -8688,20 +8701,41 @@ function openFleetDetail(fleetId, opts) {
     /* ===== Sezione DESTINAZIONE (primo passo, Stadio 2.3a) ===== */
     const destSysOpts = knownSys.map(function (s) {
       const nm = (g.galaxy.systems[s] && g.galaxy.systems[s].name) || ('Sistema ' + s);
+      const h = hopsMap[s];
+      const hop = (h === 0) ? 'capitale' : (h != null ? (h + ' salti') : 'irr.');
       const cn = knownCivsInSystem(s).length;
       return '<option value="' + s + '"' + (s === D.dest.sysId ? ' selected' : '') + '>' +
-        escapeHtml(nm) + (cn ? ' · ' + cn + ' AI' : '') + '</option>';
+        escapeHtml(nm) + ' · ' + hop + (cn ? ' · ' + cn + ' AI' : '') + '</option>';
     }).join('');
+    /* Selettore corpi: pianeti + LUNE (annidate in body.moons) + giganti/cinture,
+       differenziati per tipo con glifo (Stadio 2.3b, feedback utente). */
+    function bodyTypeGlyph(type) {
+      const d = ORION.system && ORION.system.BODY_TYPES ? ORION.system.BODY_TYPES[type] : null;
+      const cat = d ? d.cat : '';
+      return cat === 'gas' ? '⬡' : cat === 'belt' ? '≈' : cat === 'moon' ? '◌' : '◉';
+    }
+    function bodyTypeLabel(type) {
+      const d = ORION.system && ORION.system.BODY_TYPES ? ORION.system.BODY_TYPES[type] : null;
+      return d ? d.label : type;
+    }
+    function bodyOption(b, isMoon) {
+      const g0 = bodyTypeGlyph(b.type);
+      const pre = isMoon ? '  ' : '';
+      return '<option value="' + escapeHtml(b.key) + '"' + (String(D.dest.bodyKey || '') === String(b.key) ? ' selected' : '') + '>' +
+        pre + g0 + ' ' + escapeHtml(b.name || b.key) + ' · ' + escapeHtml(bodyTypeLabel(b.type)) + '</option>';
+    }
     let destBodyHtml = '';
     const destExplored = (disc[D.dest.sysId] || 0) >= DISC.EXPLORED;
     if (destExplored && ORION.system && ORION.system.generate) {
       let dbodies = [];
       try { const dsys = ORION.system.generate(g.galaxy, D.dest.sysId); dbodies = (dsys && dsys.bodies) || []; } catch (e) { dbodies = []; }
       if (dbodies.length) {
-        const bopts = '<option value="">— orbita generica —</option>' + dbodies.map(function (b) {
-          return '<option value="' + escapeHtml(b.key) + '"' + (String(D.dest.bodyKey || '') === String(b.key) ? ' selected' : '') + '>' +
-            escapeHtml(b.name || b.key) + '</option>';
-        }).join('');
+        let bopts = '<option value="">— orbita generica —</option>';
+        dbodies.forEach(function (b) {
+          if (!b || !b.key) return;
+          bopts += bodyOption(b, false);
+          (b.moons || []).forEach(function (m) { if (m && m.key) bopts += bodyOption(m, true); });
+        });
         destBodyHtml = '<select class="fdetail__select" data-bind="dest-body" aria-label="Corpo di destinazione">' + bopts + '</select>';
       }
     } else if (!destExplored) {
