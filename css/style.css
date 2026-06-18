@@ -5823,7 +5823,7 @@ select.main-menu__input { cursor: pointer; }
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
   width: 100%;
-  max-width: 560px;
+  max-width: 720px;
   max-height: 92vh;
   display: flex;
   flex-direction: column;
@@ -5873,6 +5873,13 @@ select.main-menu__input { cursor: pointer; }
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 .fdetail__foot [data-act="dissolve"] { margin-right: auto; }
+/* Pulsanti footer modal più compatti (feedback utente): meno font e padding,
+   larghezza al contenuto — niente bottoni enormi per Annulla/Conferma. */
+.fdetail__foot .btn {
+  font-size: 0.76rem;
+  padding: 4px 10px;
+  flex: 0 0 auto;
+}
 
 /* posizione in tempo reale */
 .fdetail__pos {

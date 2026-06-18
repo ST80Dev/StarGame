@@ -8890,11 +8890,11 @@ function openFleetDetail(fleetId, opts) {
     const destTarget = ORION.fleetTarget ? ORION.fleetTarget.describe(g, D.dest.sysId, D.dest.bodyKey) : null;
     const rawActs = (ORION.fleet.actionsFor && destTarget) ? ORION.fleet.actionsFor(destTarget, draftFleet) : [];
     const MISSION_META = {
-      move:     { ic: 'send',      tone: 'cyan',   lab: 'Sposta' },
-      attack:   { ic: 'sword',     tone: 'pink',   lab: 'Attacca' },
-      extract:  { ic: 'resources', tone: 'amber',  lab: 'Estrai' },
-      recon:    { ic: 'spy',       tone: 'violet', lab: 'Ricognizione' },
-      colonize: { ic: 'home',      tone: 'amber',  lab: 'Colonizza' }
+      move:     { ic: 'send',      tone: 'cyan',   lab: 'Sposta',       arr: 'Solo spostamento' },
+      attack:   { ic: 'sword',     tone: 'pink',   lab: 'Attacca',      arr: 'Attacca' },
+      extract:  { ic: 'resources', tone: 'amber',  lab: 'Estrai',       arr: 'Estrai' },
+      recon:    { ic: 'spy',       tone: 'violet', lab: 'Ricognizione', arr: 'Ricognizione' },
+      colonize: { ic: 'home',      tone: 'amber',  lab: 'Colonizza',    arr: 'Colonizza' }
     };
     const GATE_LABEL = { coloniale: 'nave coloniale', estrattore: 'estrattore', fuoco: 'potenza di fuoco' };
     const misOpts = [{ id: 'move', available: true, gate: null, future: false }];
@@ -8906,7 +8906,7 @@ function openFleetDetail(fleetId, opts) {
       return a.available && !a.future && MISSION_META[a.id];
     }).map(function (a) { return a.id; });
     if (!D.mission || selectableIds.indexOf(D.mission) < 0) {
-      /* Default suggerito: Colonizza se possibile, altrimenti Sposta. */
+      /* Default suggerito: Colonizza se possibile, altrimenti solo spostamento. */
       D.mission = selectableIds.indexOf('colonize') >= 0 ? 'colonize' : 'move';
     }
     const misChips = misOpts.map(function (a) {
@@ -8914,14 +8914,14 @@ function openFleetDetail(fleetId, opts) {
       const disabled = !a.available || a.future;
       const sel = (D.mission === a.id) && !disabled;
       const gateTxt = (!a.available && a.gate) ? (GATE_LABEL[a.gate] || a.gate) : '';
-      const title = gateTxt ? 'Serve: ' + gateTxt : meta.lab;
+      const title = gateTxt ? 'Serve: ' + gateTxt : meta.arr;
       const sfx = gateTxt ? ' <span class="fdetail__chip-note">' + escapeHtml(gateTxt) + '</span>' : '';
       return '<button class="fdetail__chip' + (sel ? ' is-active' : '') + '" type="button" data-mission="' + a.id + '"' +
         (disabled ? ' disabled' : '') + ' title="' + escapeHtml(title) + '">' +
-        uiIcon(meta.ic, meta.tone) + ' ' + meta.lab + sfx + '</button>';
+        uiIcon(meta.ic, meta.tone) + ' ' + meta.arr + sfx + '</button>';
     }).join('');
     const misSec = '<div class="fdetail__sec fdetail__sec--ord is-editing">' +
-      secHead('fleet', 'cyan', 'Missione', MISSION_META[D.mission] ? MISSION_META[D.mission].lab : 'Sposta') +
+      secHead('send', 'cyan', 'Sposta — e all’arrivo', MISSION_META[D.mission] ? MISSION_META[D.mission].arr : 'Solo spostamento') +
       '<div class="fdetail__chips">' + misChips + '</div>' +
     '</div>';
 
@@ -13633,11 +13633,11 @@ function openFleetReorder(fleetId) {
   function bodyGlyph(type) { const d = ORION.system && ORION.system.BODY_TYPES ? ORION.system.BODY_TYPES[type] : null; const cat = d ? d.cat : ''; return cat === 'gas' ? '⬡' : cat === 'belt' ? '≈' : cat === 'moon' ? '◌' : '◉'; }
   function bodyTypeLabel(type) { const d = ORION.system && ORION.system.BODY_TYPES ? ORION.system.BODY_TYPES[type] : null; return d ? d.label : type; }
   const MISSION_META = {
-    move: { ic: 'send', tone: 'cyan', lab: 'Sposta' },
-    attack: { ic: 'sword', tone: 'pink', lab: 'Attacca' },
-    extract: { ic: 'resources', tone: 'amber', lab: 'Estrai' },
-    recon: { ic: 'spy', tone: 'violet', lab: 'Ricognizione' },
-    colonize: { ic: 'home', tone: 'amber', lab: 'Colonizza' }
+    move: { ic: 'send', tone: 'cyan', lab: 'Sposta', arr: 'Solo spostamento' },
+    attack: { ic: 'sword', tone: 'pink', lab: 'Attacca', arr: 'Attacca' },
+    extract: { ic: 'resources', tone: 'amber', lab: 'Estrai', arr: 'Estrai' },
+    recon: { ic: 'spy', tone: 'violet', lab: 'Ricognizione', arr: 'Ricognizione' },
+    colonize: { ic: 'home', tone: 'amber', lab: 'Colonizza', arr: 'Colonizza' }
   };
   const GATE_LABEL = { coloniale: 'nave coloniale', estrattore: 'estrattore', fuoco: 'potenza di fuoco' };
   const knownSys = [];
@@ -13705,7 +13705,7 @@ function openFleetReorder(fleetId) {
       const sel = R.mission === a.id && !disabled;
       const gate = (!a.available && a.gate) ? (GATE_LABEL[a.gate] || a.gate) : '';
       const sfx = gate ? ' <span class="fdetail__chip-note">' + escapeHtml(gate) + '</span>' : '';
-      return '<button class="fdetail__chip' + (sel ? ' is-active' : '') + '" type="button" data-ro-mission="' + a.id + '"' + (disabled ? ' disabled' : '') + ' title="' + escapeHtml(gate ? 'Serve: ' + gate : meta.lab) + '">' + uiIcon(meta.ic, meta.tone) + ' ' + meta.lab + sfx + '</button>';
+      return '<button class="fdetail__chip' + (sel ? ' is-active' : '') + '" type="button" data-ro-mission="' + a.id + '"' + (disabled ? ' disabled' : '') + ' title="' + escapeHtml(gate ? 'Serve: ' + gate : meta.arr) + '">' + uiIcon(meta.ic, meta.tone) + ' ' + meta.arr + sfx + '</button>';
     }).join('');
     let eta = '—';
     if (R.dest.sysId === fromSys) eta = 'intra-sistema';
@@ -13724,7 +13724,7 @@ function openFleetReorder(fleetId) {
             '<span class="fsum__chip">' + uiIcon('clock', 'amber') + ' ' + escapeHtml(eta) + '</span></div>' +
           '<div class="fdetail__sec fdetail__sec--dest is-editing"><div class="fdetail__sec-h">' + uiIcon('pin', 'cyan') + ' Destinazione</div>' +
             '<div class="fdetail__origin"><select class="fdetail__select" data-bind="ro-system" aria-label="Sistema di destinazione">' + sysOpts + '</select>' + bodyHtml + '</div>' + aiLine + '</div>' +
-          '<div class="fdetail__sec fdetail__sec--ord is-editing"><div class="fdetail__sec-h">' + uiIcon('fleet', 'cyan') + ' Missione</div><div class="fdetail__chips">' + chips + '</div></div>' +
+          '<div class="fdetail__sec fdetail__sec--ord is-editing"><div class="fdetail__sec-h">' + uiIcon('send', 'cyan') + ' Sposta — e all’arrivo</div><div class="fdetail__chips">' + chips + '</div></div>' +
         '</div>' +
         '<div class="fdetail__foot">' +
           '<button class="btn btn--mini" data-ro-close type="button">Annulla</button>' +
