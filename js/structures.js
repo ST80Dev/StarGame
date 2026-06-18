@@ -312,16 +312,18 @@
       expandsSlots: { terrestre: 12, oceanico: 12, forestale: 12,
                       desertico: 7, vulcanico: 7, ghiacciato: 7 }
     },
-    /* M15 — Bacino orbitale (decisione #41): cantiere pesante per le navi
-       capitali. L'Hangar planetario (#41) basta per l'Incrociatore (lvl 4),
+    /* M15 — Bacino di costruzione (decisione #41): cantiere pesante PLANETARIO
+       per le navi grandi. L'Hangar (#41) basta per l'Incrociatore (lvl 4),
        ma Dreadnought e Nave Ammiraglia richiedono questa infrastruttura
        dedicata. Aggiunge cantieri (slip) e attracchi di grossa stazza,
        SOMMATI a quelli dell'Hangar in expedition.js. lvl 1 → Dreadnought,
-       lvl 2 → Ammiraglia. Richiede un Hangar già evoluto (lvl 3). M16
-       introdurrà la variante orbitale su stazione, di stazza maggiore. */
+       lvl 2 → Ammiraglia. Richiede un Hangar già evoluto (lvl 3).
+       NB (rinomina 2026-06-18): era "Bacino orbitale" — è a terra, non in
+       orbita; l'id resta `bacino-orbitale` per compatibilità save. La
+       costruzione orbitale leggera/media vive sulla Stazione (M16). */
     {
-      id: 'bacino-orbitale', name: 'Bacino orbitale', cat: 'militare', glyph: '⊠',
-      desc: 'Cantiere pesante per navi capitali. lvl 1 sblocca il Dreadnought, lvl 2 la Nave Ammiraglia. Aggiunge cantieri e attracchi di grossa stazza.',
+      id: 'bacino-orbitale', name: 'Bacino di costruzione', cat: 'militare', glyph: '⊠',
+      desc: 'Cantiere pesante per le navi grandi. lvl 1 sblocca il Dreadnought, lvl 2 la Nave Ammiraglia. Aggiunge cantieri e attracchi di grossa stazza.',
       cost: { met: 1300, en: 580, food: 80 }, time: 120,
       upkeep: { en: 9, met: 5 },   // bilanciamento 2026-06-16: en 6→9, met 3→5
       rates: {},
@@ -336,6 +338,29 @@
         docks:      [12, 24]    // attracchi pesati
       },
       hooks: ['fleet']          // gancio M15/M16
+    },
+    /* M16 — Porto orbitale (decisione utente 2026-06-18): scalo orbitale che
+       APPARTIENE alla colonia. NON costruisce navi: aggiunge solo posti
+       d'attracco (surplus, SOMMATO a Hangar+Bacino in expedition.js) per
+       ricoverare le flotte di casa oltre la capienza a terra. Le navi
+       attraccate qui si riforniscono e riparano come a un porto di colonia
+       (sono nel sistema della colonia). È il gemello "domestico" della
+       Stazione: il Porto è legato a un pianeta, la Stazione è indipendente. */
+    {
+      id: 'porto-orbitale', name: 'Porto orbitale', cat: 'militare', glyph: '⚓',
+      desc: 'Scalo orbitale della colonia. Aggiunge posti d\'attracco per le flotte (oltre Hangar e Bacino) e le rifornisce/ripara. Non costruisce navi.',
+      cost: { met: 240, en: 110 }, time: 45,
+      upkeep: { en: 3, met: 1 },
+      rates: {},
+      slots: 2, maxLevel: 5,
+      bodyTypes: HABITABLE,
+      requires: ['struct:cantiere-navale:2'],   // serve un Hangar già avviato
+      /* Solo attracchi (niente buildSlots): il Porto non costruisce. Sommati
+         agli attracchi di Hangar+Bacino in expedition.js (portoCap). */
+      hangarCapacity: {
+        docks: [8, 14, 22, 32, 44]
+      },
+      hooks: ['fleet']
     }
   ];
 

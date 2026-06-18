@@ -117,8 +117,8 @@
     const L = Math.max(1, level | 0);
     return table[Math.min(L, table.length) - 1] || 0;
   }
-  /* M15 — il Bacino orbitale aggiunge capacità (cantieri + attracchi) per le
-     navi capitali, SOMMATA all'Hangar (#41). Letta dal proprio hangarCapacity. */
+  /* M15 — il Bacino di costruzione aggiunge capacità (cantieri + attracchi) per
+     le navi grandi, SOMMATA all'Hangar (#41). Letta dal proprio hangarCapacity. */
   function bacinoCap(colony, kind) {
     const ent = colony && colony.structures && colony.structures['bacino-orbitale'];
     if (!ent) return 0;
@@ -126,6 +126,18 @@
     const def = S && S.get('bacino-orbitale');
     const hc = def && def.hangarCapacity;
     const table = (hc && Array.isArray(hc[kind])) ? hc[kind] : (kind === 'buildSlots' ? [1, 2] : [12, 24]);
+    return _capForLevel(table, ent.level || 1);
+  }
+  /* M16 — il Porto orbitale aggiunge SOLO attracchi (surplus di posti),
+     sommati a Hangar+Bacino. Non costruisce: niente buildSlots. */
+  function portoCap(colony, kind) {
+    if (kind !== 'docks') return 0;
+    const ent = colony && colony.structures && colony.structures['porto-orbitale'];
+    if (!ent) return 0;
+    const S = root.ORION && root.ORION.structures;
+    const def = S && S.get('porto-orbitale');
+    const hc = def && def.hangarCapacity;
+    const table = (hc && Array.isArray(hc.docks)) ? hc.docks : [8, 14, 22, 32, 44];
     return _capForLevel(table, ent.level || 1);
   }
   function hangarBuildSlots(colony) {
@@ -136,7 +148,7 @@
   function hangarDockCapacity(colony) {
     const ent = colony && colony.structures && colony.structures['cantiere-navale'];
     let n = ent ? _capForLevel(hangarCapTable('docks'), ent.level || 1) : 0;
-    return n + bacinoCap(colony, 'docks');
+    return n + bacinoCap(colony, 'docks') + portoCap(colony, 'docks');
   }
   /* Peso d'attracco di una classe nave (#41 → M15): le capitali pesano più
      di 1. Fallback 1 se ORION.fleet non è caricato (test headless). */
@@ -264,7 +276,7 @@
     const slots = hangarBuildSlots(colony);
     const active = activeCantieriUse(colony);
     if (active >= slots) {
-      return { ok: false, reason: 'Cantieri saturi (' + active + '/' + slots + '). Espandi l\'Hangar o il Bacino orbitale.' };
+      return { ok: false, reason: 'Cantieri saturi (' + active + '/' + slots + '). Espandi l\'Hangar o il Bacino di costruzione.' };
     }
     const docks = hangarDockCapacity(colony);
     const bound = totalShipsBound(game, colony, colonyKey).total;
