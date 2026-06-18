@@ -221,6 +221,7 @@
       this.onFleetPicked = opts.onFleetPicked || null;
       this.onFleetOrderRequest = opts.onFleetOrderRequest || null;
       this.onFleetPickerCancel = opts.onFleetPickerCancel || null;
+      this.onAiFleetPicked = opts.onAiFleetPicked || null;   // M18.x
       this._fleetPicker = null;
 
       container.innerHTML = '';
@@ -544,6 +545,50 @@
       return best;
     }
 
+    /* M18.x — posizione schermo di una flotta AI (stessa geometria di
+       _drawAiFleets). */
+    _aiFleetScreenPos(af) {
+      const g = this.galaxy;
+      if (af.status === 'in-transit' && Array.isArray(af.route) && af.routeIdx + 1 < af.route.length) {
+        const fromS = g.systems[af.route[af.routeIdx]];
+        const toS = g.systems[af.route[af.routeIdx + 1]];
+        if (!fromS || !toS) return null;
+        let total = (typeof af.legTotal === 'number' && af.legTotal > 0) ? af.legTotal : 60;
+        const remain = Math.max(0, af.etaImpulsi || 0);
+        if (remain > total) total = remain;
+        const t = total > 0 ? clamp(1 - remain / total, 0, 1) : 1;
+        const wx = fromS.x + (toS.x - fromS.x) * t;
+        const wy = fromS.y + (toS.y - fromS.y) * t;
+        const wz = (fromS.z || 0) + ((toS.z || 0) - (fromS.z || 0)) * t;
+        return this.project(wx, wy, wz);
+      }
+      const s = g.systems[af.systemId];
+      if (!s) return null;
+      const p = this.project(s.x, s.y, s.z || 0);
+      const hash = hashStr(af.id || 'a');
+      const ang = (hash % 360) * Math.PI / 180;
+      const rad = 16 + ((hash >> 8) % 6);
+      return { x: p.x + Math.cos(ang) * rad, y: p.y + Math.sin(ang) * rad, depth: p.depth, parallax: p.parallax };
+    }
+
+    /* M18.x — hit-test marker flotta AI RILEVATA. Ritorna aifleetId o null. */
+    pickAiFleet(sx, sy) {
+      const game = root.ORION && root.ORION.game;
+      if (!game || !Array.isArray(game.aiFleets) || !game.aiFleets.length) return null;
+      let best = null, bestD = Infinity;
+      const R = 14;
+      for (let i = 0; i < game.aiFleets.length; i++) {
+        const af = game.aiFleets[i];
+        if (!af || !af.detected) continue;
+        const pos = this._aiFleetScreenPos(af);
+        if (!pos) continue;
+        const dx = pos.x - sx, dy = pos.y - sy;
+        const d = dx * dx + dy * dy;
+        if (d <= R * R && d < bestD) { bestD = d; best = af.id; }
+      }
+      return best;
+    }
+
     /* Entra/esce dalla modalità "scegli destinazione" per una flotta.
        `reachable` = Set<sysId> raggiungibili (BFS dal chiamante). */
     setFleetPickerMode(fleetId, reachable) {
@@ -777,6 +822,13 @@
       }
       /* Stato idle: prima prova picking flotta, poi sistema/gruppo. */
       if (this.nodeReveal() >= 0.5) {
+        /* M18.x — marker flotta AI rilevata: priorità sulle tue flotte solo
+           se non c'è una tua flotta più vicina (le tue restano selezionabili). */
+        const aiId = this.pickAiFleet(sx, sy);
+        if (aiId != null && this.pickFleet(sx, sy) == null) {
+          if (this.onAiFleetPicked) this.onAiFleetPicked(aiId, sx, sy);
+          return;
+        }
         const fleetId = this.pickFleet(sx, sy);
         if (fleetId != null) {
           /* Polish post-wizard: passiamo anche le coordinate screen, così

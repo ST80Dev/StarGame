@@ -6279,6 +6279,61 @@ select.main-menu__input { cursor: pointer; }
   padding: 6px 10px;
   font-size: 0.86em;
 }
+/* M18.x — inseguimento flotte AI: azioni in riga (Segui/Intercetta/Scorta),
+   selettore flotta, hint e righe contatto. Civiltà AI = rosa (UI_GUIDE §1). */
+.fleet-info-popup__actions--row {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+.fleet-info-popup__actions--row .btn {
+  width: auto;
+  flex: 1 1 auto;
+}
+.fleet-info-popup__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 0.86em;
+}
+.fleet-info-popup__row > span {
+  color: var(--c-muted, #8a93b8);
+  font-weight: 600;
+}
+.fleet-info-popup__row select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.fleet-info-popup__hint {
+  margin: 6px 0 0;
+  font-size: 0.82em;
+  color: var(--c-muted, #8a93b8);
+}
+.fleet-info-popup__contact {
+  padding: 8px 0 6px;
+  border-top: 1px solid rgba(240, 130, 150, 0.18);
+}
+.fleet-info-popup__contact:first-of-type {
+  border-top: none;
+}
+.fleet-info-popup__contact-head {
+  font-size: 0.88em;
+  margin-bottom: 6px;
+}
+.fleet-info-popup__contact-sub {
+  display: block;
+  color: var(--c-muted, #8a93b8);
+  font-size: 0.85em;
+  margin-top: 2px;
+}
+.fleet-info-popup__contact .fleet-info-popup__actions {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+.fleet-info-popup__contact .fleet-info-popup__actions .btn {
+  width: auto;
+  flex: 1 1 auto;
+}
 
 .fleet-manage-table {
   width: 100%;
