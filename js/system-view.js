@@ -79,6 +79,13 @@
       this._onResize = this.resize.bind(this);
       this._raf = 0;
       this._needsRender = false;
+
+      /* Cinematiche (Fase 1): coda di effetti transitori disegnati sopra la
+         scena, mossi da un rAF temporaneo che si autospegne (come _animTick →
+         coerente con "render on-demand, niente loop continuo"). */
+      this._fx = [];
+      this._fxRaf = 0;
+      this._fleetPos = {};   // ultima posizione schermo nota per marker flotta
     }
 
     mount(container, system, opts) {
@@ -127,6 +134,8 @@
       if (this._ro) { this._ro.disconnect(); this._ro = null; }
       else window.removeEventListener('resize', this._onResize);
       if (this._raf) cancelAnimationFrame(this._raf);
+      if (this._fxRaf) cancelAnimationFrame(this._fxRaf);
+      this._fxRaf = 0; this._fx = [];
       this._anim = false;
       if (this._tooltip) { this._tooltip.remove(); this._tooltip = null; }
       if (this.canvas) this.canvas.replaceWith(this.canvas.cloneNode(false));
@@ -479,7 +488,7 @@
 
       this._drawDust(ctx);
 
-      if (!this.detected()) { this._drawLocked(ctx); return; }
+      if (!this.detected()) { this._drawLocked(ctx); this._drawFx(ctx); return; }
 
       const star = this.worldToScreen(0, 0);
       this._drawOrbits(ctx, star);
@@ -488,6 +497,172 @@
       this._drawBodies(ctx, star);
       if (this.revealed()) this._drawAnomalyMarkers(ctx);
       this._drawFleets(ctx);
+      this._drawFx(ctx);
+    }
+
+    /* ---- Cinematiche transitorie (Fase 1) ---------------------------------
+       Le `play*` accodano un effetto e accendono il rAF; il regista
+       (ORION.cinematics) decide SE chiamarle in base a preferenza utente e
+       reduced-motion, quindi qui non si ri-controlla la modalità. */
+    _startFx() {
+      if (this._fxRaf) return;
+      const self = this;
+      const tick = function (t) {
+        const now = (typeof t === 'number') ? t : self._now();
+        self._fx = self._fx.filter(function (fx) { return (now - fx.start) < fx.dur; });
+        self.render();
+        if (self._fx.length) self._fxRaf = requestAnimationFrame(tick);
+        else { self._fxRaf = 0; self.render(); }   // frame finale pulito
+      };
+      this._fxRaf = requestAnimationFrame(tick);
+    }
+
+    /* Dissolvenza nebbia→rivelazione del sistema (+ glow di coda sulle
+       anomalie). La scena è già disegnata "rivelata": qui sopra ci passa un
+       velo che si dirada dal centro stella verso i bordi. */
+    playReveal() {
+      if (!this.ctx) return;
+      for (let i = 0; i < this._fx.length; i++) if (this._fx[i].type === 'reveal') return;
+      this._fx.push({ type: 'reveal', start: this._now(), dur: 1300 });
+      this._startFx();
+    }
+
+    /* Partenza di una flotta: il marker "chiude i portelloni" (si compatta),
+       lampo, poi scia d'iperspazio verso l'esterno del sistema. */
+    playFleetDeparture(fleetId) {
+      if (!this.ctx) return;
+      const cx = this.offsetX, cy = this.offsetY;   // stella = world(0,0)
+      let pos = this._fleetPos && this._fleetPos[fleetId];
+      if (!pos) {
+        /* Fallback deterministico se la flotta non era a schermo: un punto su
+           un'orbita media, angolo derivato dall'id (no Math.random, #5). */
+        let h = 0; const s = String(fleetId || '');
+        for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+        const ang = (Math.abs(h) % 1000) / 1000 * Math.PI * 2;
+        const rr = Math.min(this.cssW, this.cssH) * 0.28;
+        pos = { x: cx + Math.cos(ang) * rr, y: cy + Math.sin(ang) * rr };
+      }
+      const dx = pos.x - cx, dy = pos.y - cy;
+      const d = Math.hypot(dx, dy) || 1;
+      this._fx.push({
+        type: 'departure', start: this._now(), dur: 720,
+        x: pos.x, y: pos.y, ux: dx / d, uy: dy / d
+      });
+      this._startFx();
+    }
+
+    _drawFx(ctx) {
+      if (!this._fx || !this._fx.length) return;
+      const now = this._now();
+      for (let i = 0; i < this._fx.length; i++) {
+        const fx = this._fx[i];
+        const p = clamp((now - fx.start) / fx.dur, 0, 1);
+        if (fx.type === 'reveal') this._fxReveal(ctx, p);
+        else if (fx.type === 'departure') this._fxDeparture(ctx, fx, p);
+      }
+    }
+
+    _fxReveal(ctx, p) {
+      const cx = this.offsetX, cy = this.offsetY;
+      const ease = p * p * (3 - 2 * p);          // smoothstep
+      const a = 1 - ease;                         // opacità del velo
+      const diag = Math.hypot(this.cssW, this.cssH);
+      // velo che si schiarisce dal centro verso i bordi
+      if (a > 0.002) {
+        const R = diag * (0.35 + 0.85 * ease);
+        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+        g.addColorStop(0, 'rgba(8,12,28,' + (a * 0.30).toFixed(3) + ')');
+        g.addColorStop(0.6, 'rgba(8,12,28,' + (a * 0.80).toFixed(3) + ')');
+        g.addColorStop(1, 'rgba(5,8,20,' + (a * 0.96).toFixed(3) + ')');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, this.cssW, this.cssH);
+      }
+      // anello di scansione che si espande
+      const ringP = clamp(p * 1.1, 0, 1);
+      const ringA = (1 - ringP) * 0.5;
+      if (ringA > 0.01) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(120,210,235,' + ringA.toFixed(3) + ')';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(cx, cy, ringP * diag * 0.55, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      }
+      // coda: glow una-tantum sui marker anomalia (ultimo tratto)
+      if (p > 0.55 && this.revealed() && this.system && this.system.anomalies) {
+        const gp = clamp((p - 0.55) / 0.45, 0, 1);
+        const pulse = Math.sin(gp * Math.PI);     // 0→1→0
+        if (pulse > 0.01) {
+          const A = this.system.anomalies;
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          for (let i = 0; i < A.length; i++) {
+            const an = A[i];
+            const w = { x: Math.cos(an.angle) * an.orbit, y: Math.sin(an.angle) * an.orbit };
+            const pp = this.worldToScreen(w.x, w.y);
+            const col = an.kind === 'reliquie' ? '255,202,85' : an.kind === 'nebulosa' ? '183,155,255' : '154,166,204';
+            const rad = 16 * pulse;
+            const g = ctx.createRadialGradient(pp.x, pp.y, 0, pp.x, pp.y, rad);
+            g.addColorStop(0, 'rgba(' + col + ',' + (0.6 * pulse).toFixed(3) + ')');
+            g.addColorStop(1, 'rgba(' + col + ',0)');
+            ctx.fillStyle = g;
+            ctx.beginPath(); ctx.arc(pp.x, pp.y, rad, 0, Math.PI * 2); ctx.fill();
+          }
+          ctx.restore();
+        }
+      }
+    }
+
+    _fxDeparture(ctx, fx, p) {
+      const x = fx.x, y = fx.y, ux = fx.ux, uy = fx.uy;
+      // 1) "portelloni che si chiudono": il marker si compatta
+      const close = clamp(p / 0.35, 0, 1);
+      const mr = 5 * (1 - 0.5 * close);
+      const fade = 1 - clamp((p - 0.35) / 0.65, 0, 1);
+      if (fade > 0.01) {
+        ctx.save();
+        ctx.globalAlpha = fade;
+        ctx.fillStyle = '#cfe8ff';
+        ctx.strokeStyle = 'rgba(8,12,24,0.85)'; ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(x, y - mr); ctx.lineTo(x + mr, y);
+        ctx.lineTo(x, y + mr); ctx.lineTo(x - mr, y); ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        ctx.restore();
+      }
+      // 2) scia d'iperspazio + lampo al momento del salto
+      if (p > 0.30) {
+        const sp = clamp((p - 0.30) / 0.70, 0, 1);
+        const len = sp * 64;
+        const tail = 18 + sp * 24;
+        const px = -uy, py = ux;   // perpendicolare → scie parallele
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.lineCap = 'round';
+        for (let k = -1; k <= 1; k++) {
+          const ox = px * k * 3, oy = py * k * 3;
+          const hx = x + ox + ux * len, hy = y + oy + uy * len;
+          const tx = hx - ux * tail, ty = hy - uy * tail;
+          const g = ctx.createLinearGradient(tx, ty, hx, hy);
+          const a = (1 - sp) * 0.9;
+          g.addColorStop(0, 'rgba(127,208,240,0)');
+          g.addColorStop(1, 'rgba(196,232,255,' + a.toFixed(3) + ')');
+          ctx.strokeStyle = g;
+          ctx.lineWidth = (k === 0) ? 2.2 : 1.3;
+          ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy); ctx.stroke();
+        }
+        if (p > 0.30 && p < 0.60) {
+          const fp = 1 - Math.abs((p - 0.45) / 0.15);
+          if (fp > 0) {
+            const fr = 12 * fp;
+            const fg = ctx.createRadialGradient(x, y, 0, x, y, fr * 2);
+            fg.addColorStop(0, 'rgba(214,240,255,' + (0.7 * fp).toFixed(3) + ')');
+            fg.addColorStop(1, 'rgba(214,240,255,0)');
+            ctx.fillStyle = fg;
+            ctx.beginPath(); ctx.arc(x, y, fr * 2, 0, Math.PI * 2); ctx.fill();
+          }
+        }
+        ctx.restore();
+      }
     }
 
     /* Decisione utente: flotte del giocatore DENTRO questo sistema. Disegna
@@ -645,6 +820,10 @@
           ctx.restore();
         }
         this._fleetHit.push({ id: f.id, x: mx, y: my });
+        /* Memorizza l'ultima posizione nota (NON azzerata tra i frame): serve
+           alla cinematica di partenza, che scatta quando la flotta è già in
+           transito e quindi non più disegnata qui. */
+        this._fleetPos[f.id] = { x: mx, y: my };
         const st = f.location.status;
         const col = (st === 'in-transit') ? '#7fd0f0' : (st === 'docked') ? '#9fd0a8' : '#f0d670';
         ctx.save();
