@@ -6542,9 +6542,8 @@ function renderFleetView(stage) {
   }
   function fleetStatusLabel(f) {
     if (!f || !f.location) return '—';
-    if (f.location.status === 'docked') return 'all\'attracco';
     if (f.location.status === 'in-transit') return 'in viaggio (arrivo in ' + (f.etaImpulsi | 0) + ' ' + iU() + ')';
-    return 'in orbita';
+    return ORION.fleet.berthLabel(ORION.fleet.berthOf(ORION.game, f));
   }
   function orderLabel(f) {
     const o = f && f.orders;
@@ -6904,7 +6903,14 @@ function fleetWearHtml(fleet) {
   const st = peak >= 80 ? 'crit' : peak >= 50 ? 'low' : 'ok';
   const peakStr = (peak !== avg) ? ' · peak ' + peak + '%' : '';
   const label = 'Usura ' + avg + '%' + peakStr;
-  return '<div class="fleet-wear fleet-wear--' + st + '" title="Usura scafi della flotta: media e picco. Singolo scafo ≥80% → rientro forzato; ripara al porto/stazione lvl≥2.">' +
+  /* Riparazione solo ATTRACCATA (hangar o stazione): in orbita-parcheggio
+     niente refit (decisione utente 2026-06-18). */
+  const orbitParked = ORION.fleet && ORION.fleet.berthOf &&
+    ORION.fleet.berthOf(ORION.game, fleet) === 'orbit';
+  const repairHint = orbitParked
+    ? ' ⚠ In orbita-parcheggio NON si ripara: attracca in hangar o alla stazione.'
+    : '';
+  return '<div class="fleet-wear fleet-wear--' + st + '" title="Usura scafi della flotta: media e picco. Singolo scafo ≥80% → rientro forzato. Si ripara solo ATTRACCATA (hangar colonia o stazione orbitale lvl≥2), non in orbita.' + repairHint + '">' +
     '<span class="fleet-wear__ico ui-icon ui-icon--amber" aria-hidden="true">⚒</span> ' +
     '<span class="fleet-wear__lbl">' + label + '</span>' +
     '<span class="fleet-wear__bar"><span class="fleet-wear__fill" style="width:' + avg + '%"></span></span>' +
@@ -8410,9 +8416,8 @@ function openFleetDetail(fleetId, opts) {
   function sysName(id) { const s = g.galaxy.systems[id]; return s ? s.name : '—'; }
   function statusLabel(f) {
     const loc = f && f.location; if (!loc) return '—';
-    if (loc.status === 'docked') return 'all’attracco';
     if (loc.status === 'in-transit') return 'in viaggio · ' + (f.etaImpulsi | 0) + ' ' + iU();
-    return 'in orbita';
+    return ORION.fleet.berthLabel(ORION.fleet.berthOf(g, f));
   }
   function orderLabel(f) {
     const o = f && f.orders;
@@ -11782,7 +11787,10 @@ function renderLeftPanel() {
     const sysId = (f.location && f.location.systemId >= 0) ? f.location.systemId : -1;
     const sysName = sysId >= 0 ? g.galaxy.systems[sysId].name : '—';
     const status = (f.location && f.location.status) || 'idle';
-    const statusLbl = status === 'docked' ? 'attracco' : status === 'in-transit' ? 'viaggio' : 'orbita';
+    const berth = (status === 'docked' || status === 'orbiting') ? ORION.fleet.berthOf(g, f) : null;
+    const statusLbl = status === 'docked' ? (berth === 'station' ? 'stazione' : 'hangar')
+                    : status === 'in-transit' ? 'viaggio'
+                    : (berth === 'orbit' ? 'parcheggio' : 'orbita');
     const cls = status === 'docked' ? 'ok' : status === 'in-transit' ? 'info' : 'warn';
     const fleetIcon = (ORION.icon && ORION.icon('fleet')) || '';
     /* Decisione utente 2026-06-16: pillola usura/viveri su una SECONDA riga,
@@ -13080,9 +13088,8 @@ function openFleetInfoPopup(fleetId, screenX, screenY) {
   const orderInfo = describeFleetOrder(g, fleet);
   /* Posizione corrente */
   const posSys = g.galaxy.systems[fleet.location.systemId];
-  const posStatus = fleet.location.status === 'docked' ? 'all\'attracco'
-                  : fleet.location.status === 'in-transit' ? 'in viaggio'
-                  : 'in orbita';
+  const posStatus = fleet.location.status === 'in-transit' ? 'in viaggio'
+                  : ORION.fleet.berthLabel(ORION.fleet.berthOf(g, fleet));
 
   node.innerHTML =
     '<header class="fleet-info-popup__head">' +
