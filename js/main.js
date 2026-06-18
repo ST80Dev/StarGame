@@ -540,6 +540,9 @@ function newGame(seed, opts) {
     incursions: [],
     battles: [],
     warState: { morale: 1.0, pressure: 0 },
+    /* M18.x (richiesta utente 2026-06-18): flotte ambientali AI fisiche in
+       volo sulla mappa (esploratori/estrattori/trasporti). */
+    aiFleets: [],
     /* M09 Fase B (decisione #49): stato di sconfitta (null/esilio/gameover)
        + accumulatore verbi morali (→ piste reputation). */
     defeated: null,
@@ -667,6 +670,8 @@ function newGame(seed, opts) {
        stato di guerra (retro-compat: schema < 9 → vuoti/morale pieno). */
     if (Array.isArray(saved.incursions)) ORION.game.incursions = saved.incursions.slice();
     if (Array.isArray(saved.battles)) ORION.game.battles = saved.battles.slice();
+    /* M18.x (richiesta utente 2026-06-18): flotte ambientali AI in volo. */
+    if (Array.isArray(saved.aiFleets)) ORION.game.aiFleets = saved.aiFleets.slice();
     if (saved.warState && typeof saved.warState === 'object') ORION.game.warState = saved.warState;
     /* M09 Fase B: sconfitta + verbi morali. */
     if (saved.defeated !== undefined) ORION.game.defeated = saved.defeated;
@@ -1170,7 +1175,8 @@ function renderGalaxyView(stage) {
     // del feedback utente "se ci clicco mi deve dare le info precise".
     onFleetPicked: (fleetId, sx, sy) => openFleetInfoPopup(fleetId, sx, sy),
     onFleetOrderRequest: (req) => applyFleetOrderFromMap(req),
-    onFleetPickerCancel: () => exitFleetPicker(true)
+    onFleetPickerCancel: () => exitFleetPicker(true),
+    onAiFleetPicked: (aiFleetId, sx, sy) => openAiFleetPopup(aiFleetId, sx, sy)   // M18.x
   });
 
   setNavActive('galaxy');
@@ -10548,6 +10554,15 @@ const DEFAULT_AUTOPAUSE = {
   'pirate-nest-recon': false,
   'civ-fallen': true,
   'civ-emerged': true,
+  /* M18.x (richiesta utente 2026-06-18): flotte ambientali AI. Il
+     rilevamento generico è atmosferico (OFF, niente interruzioni);
+     l'avvicinamento a una colonia e la scaramuccia sono notevoli (ON). */
+  'aifleet-detected': false,
+  'aifleet-approach': true,
+  'aifleet-crossed': false,
+  'aifleet-skirmish': true,
+  'aifleet-destroyed': true,
+  'follow-lost': false,
   'civ-expand': false,
   'civ-war': false,
   'civ-battle': false,
@@ -10973,6 +10988,12 @@ function showEventOverlay(events) {
     'civ-battle': 'Battaglia tra civiltà (vista)',
     'civ-fallen': 'Civiltà caduta',
     'civ-emerged': 'Nuova civiltà emersa',
+    'aifleet-detected': 'Flotta non identificata rilevata',
+    'aifleet-approach': 'Flotta in avvicinamento alla colonia',
+    'aifleet-crossed': 'Flotta altrui incrociata',
+    'aifleet-skirmish': 'Scaramuccia con flotta altrui',
+    'aifleet-destroyed': 'Flotta altrui intercettata e dispersa',
+    'follow-lost': 'Contatto perso',
     'pirate-raid': 'Razzia pirata',
     'pirate-cleared': 'Covo pirata sgominato',
     'pirate-raid-won': 'Covo pirata colpito',
@@ -11485,6 +11506,35 @@ function chronicleEvent(ev) {
     /* "Avvistata": esplori un loro sistema, nessun atto formale ancora.
        Mantieni una flotta nel loro sistema per 3-4 Ι → contatto automatico. */
     pushChronicle(ds + ' — Civiltà <strong>' + escapeHtml(ev.civName) + '</strong> avvistata nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">mantieni una flotta nel loro sistema per il contatto formale</span>.', 'civ');
+  } else if (ev.kind === 'aifleet-detected') {
+    /* M18.x: i sensori (colonia/flotta) hanno captato una flotta altrui in
+       volo. Identità svelata solo con intel piena; altrimenti "non
+       identificata" (misteriosità #34). */
+    const whoFrag = ev.civName ? (' di <strong>' + escapeHtml(ev.civName) + '</strong>') : '';
+    const compFrag = ev.compKnown ? (' · missione di <em>' + escapeHtml(ev.missionLabel) + '</em>') : '';
+    const hint = ev.nearColony
+      ? 'rilevata dai sensori di colonia — avvicina una flotta per scrutarne la composizione'
+      : 'incrociata dai sensori di flotta — può essere seguita';
+    pushChronicle(ds + ' — Flotta non identificata' + whoFrag + ' rilevata nel/nella ' + escapeHtml(ev.regionLabel) + compFrag + ' · <span class="chronicle__hint">' + hint + '</span>.', 'civ');
+  } else if (ev.kind === 'aifleet-approach') {
+    const who = ev.civName ? ('<strong>' + escapeHtml(ev.civName) + '</strong>') : 'Una flotta non identificata';
+    pushChronicle(ds + ' — ' + who + ' (' + escapeHtml(ev.missionLabel) + ') è giunta nelle vicinanze di una tua colonia nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">valuta scorta, scrutinio o intercettazione</span>.', 'civ');
+  } else if (ev.kind === 'aifleet-crossed') {
+    /* M18.x: incrocio passivo — info raccolte senza fermarsi. L'utente può
+       decidere di "Segui" per saperne di più. */
+    const whoFrag = ev.civName ? (' di <strong>' + escapeHtml(ev.civName) + '</strong>') : '';
+    const compFrag = ev.compKnown ? (' (missione di <em>' + escapeHtml(ev.missionLabel) + '</em>)') : ' (composizione ignota)';
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName || 'La tua flotta') + '</strong> ha incrociato una flotta' + whoFrag + compFrag + ' nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">puoi dare l\'ordine «Segui» per scrutarla meglio</span>.', 'civ');
+  } else if (ev.kind === 'aifleet-skirmish') {
+    const who = ev.civName ? ('<strong>' + escapeHtml(ev.civName) + '</strong>') : 'una flotta ostile';
+    const hitFrag = ev.shipsHit > 0 ? (ev.shipsHit + ' scafi colpiti') : 'nessun danno serio';
+    pushChronicle(ds + ' — Scaramuccia: <strong>' + escapeHtml(ev.fleetName || 'la tua flotta') + '</strong> ha incrociato ' + who + ' nel/nella ' + escapeHtml(ev.regionLabel) + ' (' + hitFrag + ') · <span class="chronicle__hint">flotta avversaria sganciata — ripara e valuta il rientro</span>.', 'civ');
+  } else if (ev.kind === 'aifleet-destroyed') {
+    const who = ev.civName ? ('<strong>' + escapeHtml(ev.civName) + '</strong>') : 'una flotta non identificata';
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName || 'La tua flotta') + '</strong> ha intercettato e disperso ' + who + ' nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">contatto eliminato</span>.', 'civ');
+  } else if (ev.kind === 'follow-lost') {
+    const why = ev.reason === 'noroute' ? 'nessuna rotta verso il contatto' : 'il contatto si è dileguato';
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName || 'La tua flotta') + '</strong> ha perso il contatto inseguito (' + why + ') · <span class="chronicle__hint">flotta in attesa di nuovi ordini</span>.', 'civ');
   } else if (ev.kind === 'civ-intel-upgraded') {
     const INTEL_LABEL = { fragmentary: 'frammentario', partial: 'parziale', complete: 'completo' };
     pushChronicle(ds + ' — Dossier su <strong>' + escapeHtml(ev.civName) + '</strong> aggiornato: <strong>' + escapeHtml(INTEL_LABEL[ev.to] || ev.to) + '</strong> (era ' + escapeHtml(INTEL_LABEL[ev.from] || ev.from || '—') + ') · <span class="chronicle__hint">flotta più potente nel loro sistema</span>.', 'civ');
@@ -13606,6 +13656,9 @@ function openFleetInfoPopup(fleetId, screenX, screenY) {
       '<button class="btn btn--mini btn--primary btn--with-icon" data-action="fleet-info-detail" type="button">' + uiIcon('settings', 'cyan') + ' Dettaglio</button>' +
       '<button class="btn btn--mini btn--with-icon" data-action="fleet-info-wizard" type="button">' + uiIcon('fleet', 'cyan') + ' Ordini</button>' +
       '<button class="btn btn--mini btn--with-icon" data-action="fleet-info-pick" type="button">' + uiIcon('pin', 'cyan') + ' Rotta da mappa</button>' +
+      ((ORION.aifleet && ORION.aifleet.detectedFleets(g).length)
+        ? '<button class="btn btn--mini btn--with-icon" data-action="fleet-info-follow" type="button">' + uiIcon('spy', 'pink') + ' Segui contatto</button>'
+        : '') +
     '</div>';
 
   document.body.appendChild(node);
@@ -13636,10 +13689,187 @@ function openFleetInfoPopup(fleetId, screenX, screenY) {
     closeFleetInfoPopup();
     enterFleetPicker(fleetId);
   });
+  const followBtn = node.querySelector('[data-action="fleet-info-follow"]');
+  if (followBtn) followBtn.addEventListener('click', function () {
+    closeFleetInfoPopup();
+    openFollowContactChooser(fleetId);
+  });
   /* Chiudi su click esterno (al successivo evento, per non chiudere subito). */
   setTimeout(function () {
     document.addEventListener('click', _maybeCloseFleetInfoPopup, true);
     document.addEventListener('keydown', _fleetInfoEscHandler);
+  }, 0);
+}
+
+/* ===================================================================
+   M18.x — INSEGUIMENTO FLOTTE AI (richiesta utente 2026-06-18).
+   Popup contestuale sul marker di una flotta AI rilevata (click su mappa)
+   + chooser "Segui contatto" dai comandi di una tua flotta. Tre ordini:
+   Segui · Intercetta · Scorta. Riusa la classe .fleet-info-popup (nessun
+   CSS nuovo) e i bottoni .btn--mini (UI_GUIDE §6).
+   =================================================================== */
+function closeAiFleetPopup() {
+  const n = document.getElementById('ai-fleet-popup');
+  if (n && n.parentNode) n.parentNode.removeChild(n);
+  document.removeEventListener('click', _maybeCloseAiFleetPopup, true);
+  document.removeEventListener('keydown', _aiFleetEscHandler);
+}
+function _maybeCloseAiFleetPopup(e) {
+  const n = document.getElementById('ai-fleet-popup');
+  if (n && !n.contains(e.target)) closeAiFleetPopup();
+}
+function _aiFleetEscHandler(e) { if (e.key === 'Escape') closeAiFleetPopup(); }
+
+/* Applica un ordine di inseguimento (mode ∈ shadow/intercept/escort). */
+function assignFollowOrder(fleetId, aiFleetId, mode) {
+  const g = ORION.game;
+  if (!g || !ORION.aifleet) return;
+  const r = ORION.aifleet.setFollow(g, fleetId, aiFleetId, mode);
+  if (!r.ok) { showToast(r.reason || 'Ordine non possibile'); return; }
+  const fleet = (g.fleets || []).filter(function (f) { return f.id === fleetId; })[0];
+  showToast((fleet ? fleet.name : 'Flotta') + ': ' + r.modeLabel + ' contatto');
+  closeAiFleetPopup();
+  if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+}
+
+/* Righe-azione (Segui/Intercetta/Scorta) per un contatto, legate a un
+   selettore di flotta `getFleetId`. */
+function aiFollowActionsHtml() {
+  return '<div class="fleet-info-popup__actions fleet-info-popup__actions--row">' +
+    '<button class="btn btn--mini btn--primary" data-ai-mode="shadow" type="button" title="Pedina a distanza, raccogli intel">' + uiIcon('spy', 'violet') + ' Segui</button>' +
+    '<button class="btn btn--mini" data-ai-mode="intercept" type="button" title="Raggiungi e ingaggia se ostile">' + uiIcon('sword', 'pink') + ' Intercetta</button>' +
+    '<button class="btn btn--mini" data-ai-mode="escort" type="button" title="Accompagna una flotta non ostile">' + uiIcon('fleet', 'cyan') + ' Scorta</button>' +
+  '</div>';
+}
+
+function openAiFleetPopup(aiFleetId, screenX, screenY) {
+  const g = ORION.game;
+  if (!g || !ORION.aifleet) return;
+  const af = ORION.aifleet.byId(g, aiFleetId);
+  if (!af) { showToast('Contatto non più disponibile'); return; }
+  closeFleetInfoPopup();
+  closeAiFleetPopup();
+
+  const comp = ORION.aifleet.composition(af);
+  const label = ORION.aifleet.label(g, af);
+  const posSys = g.galaxy.systems[af.systemId];
+  const intelPct = Math.round((af.intel || 0) * 100);
+  const fleets = (g.fleets || []).filter(function (f) { return f && f.ships && f.ships.length; });
+
+  const node = document.createElement('div');
+  node.className = 'fleet-info-popup';
+  node.id = 'ai-fleet-popup';
+  node.setAttribute('role', 'dialog');
+  node.setAttribute('aria-label', 'Contatto ' + label);
+
+  let body =
+    '<header class="fleet-info-popup__head">' +
+      '<h3 class="fleet-info-popup__name">' + uiIcon('fleet', 'pink') + ' ' + escapeHtml(label) + '</h3>' +
+      '<button class="btn btn--mini btn--icon-only" data-action="ai-close" type="button" aria-label="Chiudi">' +
+        '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+      '</button>' +
+    '</header>' +
+    '<dl class="fleet-info-popup__meta">' +
+      '<div><dt>Posizione</dt><dd>' + escapeHtml(posSys ? posSys.name : '—') + (af.status === 'in-transit' ? ' · in viaggio' : ' · in orbita') + '</dd></div>' +
+      '<div><dt>Composizione</dt><dd>' + escapeHtml(comp.text) + '</dd></div>' +
+      '<div><dt>Intel</dt><dd>' + intelPct + '%</dd></div>' +
+    '</dl>';
+
+  if (!fleets.length) {
+    body += '<p class="fleet-info-popup__hint">Nessuna tua flotta disponibile per inseguire questo contatto.</p>';
+  } else {
+    const opts = fleets.map(function (f) {
+      const s = g.galaxy.systems[f.location.systemId];
+      return '<option value="' + escapeHtml(f.id) + '">' + escapeHtml(f.name) + (s ? ' — ' + escapeHtml(s.name) : '') + '</option>';
+    }).join('');
+    body +=
+      '<label class="fleet-info-popup__row"><span>Con la flotta</span>' +
+        '<select data-ai-fleet-select class="main-menu__select">' + opts + '</select>' +
+      '</label>' +
+      aiFollowActionsHtml();
+  }
+  node.innerHTML = body;
+  document.body.appendChild(node);
+
+  /* Posizionamento (come openFleetInfoPopup). */
+  const margin = 12, rectW = 270, rectH = 230;
+  let x = (screenX || 0) + 16, y = (screenY || 0) - 16;
+  if (x + rectW > window.innerWidth - margin) x = (screenX || 0) - rectW - 16;
+  if (x < margin) x = margin;
+  if (y + rectH > window.innerHeight - margin) y = window.innerHeight - rectH - margin;
+  if (y < margin) y = margin;
+  node.style.left = x + 'px';
+  node.style.top = y + 'px';
+
+  node.querySelector('[data-action="ai-close"]').addEventListener('click', closeAiFleetPopup);
+  if (fleets.length) {
+    const sel = node.querySelector('[data-ai-fleet-select]');
+    node.querySelectorAll('[data-ai-mode]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        assignFollowOrder(sel.value, aiFleetId, b.getAttribute('data-ai-mode'));
+      });
+    });
+  }
+  setTimeout(function () {
+    document.addEventListener('click', _maybeCloseAiFleetPopup, true);
+    document.addEventListener('keydown', _aiFleetEscHandler);
+  }, 0);
+  if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('ai-fleet-follow');
+}
+
+/* Chooser dei contatti rilevati, legato a una TUA flotta (entry "dai
+   comandi flotta"): elenca le flotte AI note, ognuna con Segui/Intercetta/
+   Scorta. Riusa .fleet-info-popup, centrato. */
+function openFollowContactChooser(fleetId) {
+  const g = ORION.game;
+  if (!g || !ORION.aifleet) return;
+  closeAiFleetPopup();
+  const contacts = ORION.aifleet.detectedFleets(g);
+  if (!contacts.length) { showToast('Nessun contatto rilevato'); return; }
+  const fleet = (g.fleets || []).filter(function (f) { return f.id === fleetId; })[0];
+  if (!fleet) { showToast('Flotta non trovata'); return; }
+
+  const node = document.createElement('div');
+  node.className = 'fleet-info-popup';
+  node.id = 'ai-fleet-popup';
+  node.setAttribute('role', 'dialog');
+  node.setAttribute('aria-label', 'Contatti rilevati');
+
+  const rows = contacts.map(function (af) {
+    const comp = ORION.aifleet.composition(af);
+    const s = g.galaxy.systems[af.systemId];
+    return '<div class="fleet-info-popup__contact" data-ai-id="' + escapeHtml(af.id) + '">' +
+      '<div class="fleet-info-popup__contact-head">' + escapeHtml(ORION.aifleet.label(g, af)) +
+        ' <span class="fleet-info-popup__contact-sub">' + escapeHtml(comp.text) + (s ? ' · ' + escapeHtml(s.name) : '') + '</span></div>' +
+      '<div class="fleet-info-popup__actions">' +
+        '<button class="btn btn--mini btn--primary" data-ai-mode="shadow" type="button">Segui</button>' +
+        '<button class="btn btn--mini" data-ai-mode="intercept" type="button">Intercetta</button>' +
+        '<button class="btn btn--mini" data-ai-mode="escort" type="button">Scorta</button>' +
+      '</div></div>';
+  }).join('');
+
+  node.innerHTML =
+    '<header class="fleet-info-popup__head">' +
+      '<h3 class="fleet-info-popup__name">' + uiIcon('spy', 'pink') + ' ' + escapeHtml(fleet.name) + ' · contatti</h3>' +
+      '<button class="btn btn--mini btn--icon-only" data-action="ai-close" type="button" aria-label="Chiudi">' +
+        '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+      '</button>' +
+    '</header>' + rows;
+
+  document.body.appendChild(node);
+  node.style.left = Math.max(12, (window.innerWidth - 280) / 2) + 'px';
+  node.style.top = Math.max(12, (window.innerHeight - 320) / 2) + 'px';
+
+  node.querySelector('[data-action="ai-close"]').addEventListener('click', closeAiFleetPopup);
+  node.querySelectorAll('.fleet-info-popup__contact').forEach(function (row) {
+    const aiId = row.getAttribute('data-ai-id');
+    row.querySelectorAll('[data-ai-mode]').forEach(function (b) {
+      b.addEventListener('click', function () { assignFollowOrder(fleetId, aiId, b.getAttribute('data-ai-mode')); });
+    });
+  });
+  setTimeout(function () {
+    document.addEventListener('click', _maybeCloseAiFleetPopup, true);
+    document.addEventListener('keydown', _aiFleetEscHandler);
   }, 0);
 }
 

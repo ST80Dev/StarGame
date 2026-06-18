@@ -86,6 +86,21 @@
         'e degli adiacenti sono visibili da subito. L\'esplorazione vera arriverà con le flotte.</p>'
     },
     {
+      id: 'ai-fleet-follow',
+      tag: 'Contatti',
+      title: 'Flotte altrui e inseguimento',
+      body:
+        '<p>Le altre civiltà muovono <strong>flotte</strong> tra i sistemi (esploratori, estrattori, trasporti). ' +
+        'I sensori delle tue <strong>colonie</strong> e delle tue <strong>flotte</strong> le rilevano quando ti passano vicino: ' +
+        'gli scafi da ricognizione (esploratore, intercettore) vedono prima e meglio. Un contatto rilevato appare come ' +
+        '<strong>rombo rosa</strong> sulla mappa (con <strong>?</strong> finché non ne conosci la composizione).</p>' +
+        '<p>Cliccando il rombo — o dai comandi di una tua flotta — puoi dare tre ordini:</p>' +
+        '<ul><li><strong>Segui</strong>: pedini a distanza e raccogli intel (pedinare nel loro territorio li infastidisce).</li>' +
+        '<li><strong>Intercetta</strong>: raggiungi e ingaggia, se la civiltà è ostile.</li>' +
+        '<li><strong>Scorta</strong>: accompagni una flotta non ostile (gesto amichevole).</li></ul>' +
+        '<p>Anche solo <em>incrociare</em> una flotta con la tua, senza fermarti, ti dà qualche informazione.</p>'
+    },
+    {
       id: 'system',
       tag: 'Sistema',
       title: 'Sistema stellare',

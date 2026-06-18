@@ -55,7 +55,7 @@
      DETECTED) — l'esplorazione storica del save pre-fix è persa, ma il
      nuovo gioco la preserva e una recovery best-effort prova a dedurla
      da colonie/flotte/spedizioni/cronaca. */
-  const SCHEMA_VERSION = 31;
+  const SCHEMA_VERSION = 32;
 
   const STORAGE_KEY = 'orion.saves.v3';
   /* Chiavi legacy assorbite e cancellate alla prima migrazione. */
@@ -247,7 +247,11 @@
          vivono in eventSchedule (già serializzato sopra). */
       crises: Array.isArray(game.crises) ? game.crises : [],
       crisisMeta: (game.crisisMeta && typeof game.crisisMeta === 'object') ? game.crisisMeta : { icgTier: 0 },
-      anomalies: (game.anomalies && typeof game.anomalies === 'object') ? game.anomalies : {}
+      anomalies: (game.anomalies && typeof game.anomalies === 'object') ? game.anomalies : {},
+      /* M18.x (richiesta utente 2026-06-18): flotte ambientali AI in volo
+         (schema 32, additivo). Save vecchi → lista vuota: si ripopola dal
+         seed giocando. */
+      aiFleets: Array.isArray(game.aiFleets) ? game.aiFleets : []
     };
   }
 
@@ -709,6 +713,13 @@
     if ((payload.schema || 30) < 31) {
       if (!Array.isArray(payload.wasteDeals)) payload.wasteDeals = [];
       payload.schema = 31;
+    }
+    /* v31 → v32 (M18.x, richiesta utente 2026-06-18): flotte ambientali AI
+       in volo. Save vecchi → lista vuota (nessuna flotta retroattiva); il
+       generatore le ripopola dal seed dal prossimo tick. */
+    if ((payload.schema || 31) < 32) {
+      if (!Array.isArray(payload.aiFleets)) payload.aiFleets = [];
+      payload.schema = 32;
     }
     return payload;
   }
