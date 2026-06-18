@@ -1071,6 +1071,10 @@
        appartiene al piano precedente). L'avanzamento interno della coda
        passa opts.fromQueue=true per non auto-cancellarsi. */
     if (!opts || !opts.fromQueue) fleet.queue = [];
+    /* M18.x — un ordine MANUALE annulla l'inseguimento di una flotta AI
+       (Segui/Intercetta/Scorta). Il controller aifleet.js ri-instrada
+       passando opts.fromFollow=true per non auto-cancellarsi. */
+    if ((!opts || !opts.fromFollow) && fleet.follow) fleet.follow = null;
     /* Stadio 1.6: ogni nuovo ordine apre un nuovo segmento di viaggio →
        riarma il tiro incidente (uno per segmento). Gli ordini intra/idle non
        tireranno comunque (gate in tick: rotta > 1, non intra). */

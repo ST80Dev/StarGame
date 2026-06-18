@@ -61,7 +61,18 @@
     SKIRMISH_CHANCE: 0.35,
     SKIRMISH_WARMUP_SOFT: 500, // sotto: chance scalata (early più mansueto)
     SKIRMISH_DMG_CAP: 0.22,    // frazione max di hp tolta a uno scafo/scaramuccia
-    HOSTILE_DISPOSITION: -30   // predoni sotto questa disposizione = malevoli
+    HOSTILE_DISPOSITION: -30,  // predoni sotto questa disposizione = malevoli
+
+    /* Inseguimento (richiesta utente 2026-06-18): tre ordini distinti su
+       una flotta AI RILEVATA — Segui (osserva), Intercetta (ingaggia se
+       ostile), Scorta (accompagna una flotta non ostile). */
+    CROSS_INTEL_BUMP: 0.08,    // info raccolte incrociando SENZA fermarsi
+    FOLLOW_INTEL_GAIN: 0.26,   // intel/Impulso mentre pedini co-locato (rapido)
+    DISPO_EVERY_I: 24,         // throttle degli effetti di disposizione
+    SHADOW_DISPO_PEN: 2.5,     // disposizione persa pedinando nel loro territorio
+    ESCORT_DISPO_GAIN: 1.6,    // goodwill scortando una flotta non ostile
+    STRIKE_RETURN_CAP: 0.20,   // danno di ritorno max alla flotta che intercetta
+    STRIKE_WIN_RATIO: 0.6      // intercetti vinti se fp player ≥ fp AI × questo
   };
 
   /* Archetipi di MISSIONE ambientale. Le flotte sono per natura LEGGERE
@@ -519,6 +530,163 @@
   }
 
   /* ------------------------------------------------------------------
+     INCROCI & INSEGUIMENTO (richiesta utente 2026-06-18).
+     ------------------------------------------------------------------ */
+  function findAi(game, id) {
+    const arr = game.aiFleets || [];
+    for (let i = 0; i < arr.length; i++) if (arr[i] && arr[i].id === id) return arr[i];
+    return null;
+  }
+  function civById(game, id) {
+    const arr = game.civs || [];
+    for (let i = 0; i < arr.length; i++) if (arr[i] && arr[i].id === id) return arr[i];
+    return null;
+  }
+  function nudgeDisposition(civ, delta) {
+    if (!civ) return;
+    civ.disposition = Math.max(-100, Math.min(100, (civ.disposition || 0) + delta));
+  }
+  function inCivTerritory(civ, sysId) {
+    return !!(civ && Array.isArray(civ.systems) && civ.systems.indexOf(sysId) >= 0);
+  }
+  /* Flotta player co-locata con una flotta AI (stesso nodo, non in transito). */
+  function playerFleetAt(game, af) {
+    const nodes = presenceNodes(af);
+    const fleets = game.fleets || [];
+    const out = [];
+    for (let i = 0; i < fleets.length; i++) {
+      const f = fleets[i];
+      if (!f || !f.location || f.location.status === 'in-transit') continue;
+      if (nodes.indexOf(f.location.systemId) >= 0) out.push(f);
+    }
+    return out;
+  }
+
+  /* "Quando incrocio raccolgo qualche info" — anche senza fermarsi. Alla
+     PRIMA co-locazione di una tua flotta con una flotta AI, una nota di
+     cronaca con quel che sai + un piccolo bump d'intel. */
+  function processCrossings(game, fleetsAi, events) {
+    const I = game.timeImpulsi || 0;
+    for (let i = 0; i < fleetsAi.length; i++) {
+      const af = fleetsAi[i];
+      if (!af || af._dead) continue;
+      const here = playerFleetAt(game, af);
+      if (!here.length) continue;
+      if (!Array.isArray(af.crossedBy)) af.crossedBy = [];
+      for (let j = 0; j < here.length; j++) {
+        const pf = here[j];
+        if (af.crossedBy.indexOf(pf.id) >= 0) continue;
+        af.crossedBy.push(pf.id);
+        af.detected = true;
+        af.intel = Math.min(1, (af.intel || 0) + CFG.CROSS_INTEL_BUMP);
+        events.push({
+          kind: 'aifleet-crossed',
+          aifleetId: af.id, fleetId: pf.id, fleetName: pf.name,
+          sysId: pf.location.systemId, regionLabel: regionLabel(game, pf.location.systemId),
+          missionLabel: MISSIONS[af.mission].label,
+          civName: af.intel >= CFG.INTEL_FULL ? af.civName : null,
+          compKnown: af.intel >= CFG.INTEL_PARTIAL,
+          impulso: I
+        });
+      }
+    }
+  }
+
+  /* Intercettazione vinta dal giocatore (ordine 'intercept' su civ ostile,
+     una volta raggiunta). Proporzionata: la flottiglia AI è leggera → di
+     norma il giocatore prevale; danno di ritorno limitato e floor 1 (#22). */
+  function playerStrike(game, pf, af, events) {
+    const C = classesRef();
+    const afFp = af.fp || 0;
+    const pfFp = fleetFp(pf.ships) || 1;
+    const ratio = afFp / (afFp + pfFp);
+    for (let i = 0; i < pf.ships.length; i++) {
+      const sh = pf.ships[i];
+      const cls = C[sh.kind];
+      const maxHp = (cls && cls.hp) || sh.hp || 20;
+      const dmg = Math.min(CFG.STRIKE_RETURN_CAP, 0.05 + 0.2 * ratio) * maxHp;
+      sh.hp = Math.max(1, (sh.hp != null ? sh.hp : maxHp) - dmg);
+      sh.wear = Math.min(1, (sh.wear || 0) + 0.05);
+    }
+    const won = afFp === 0 || pfFp >= afFp * CFG.STRIKE_WIN_RATIO;
+    af._dead = true;
+    events.push({
+      kind: won ? 'aifleet-destroyed' : 'aifleet-skirmish',
+      aifleetId: af.id, fleetId: pf.id, fleetName: pf.name,
+      sysId: pf.location.systemId, regionLabel: regionLabel(game, pf.location.systemId),
+      civName: af.intel >= CFG.INTEL_PARTIAL ? af.civName : null,
+      outcome: won ? 'win' : 'draw',
+      impulso: game.timeImpulsi || 0
+    });
+    pf.follow = null; // intercettazione: ordine one-shot, concluso
+  }
+
+  /* Controller degli ordini di inseguimento. Gira a OGNI Impulso: riusa il
+     normale ordine `move` (setOrder) per re-instradare la flotta player
+     verso la posizione corrente della flotta AI bersaglio. */
+  function processFollowing(game, fleetsAi, events) {
+    const I = game.timeImpulsi || 0;
+    const fleets = game.fleets || [];
+    for (let k = 0; k < fleets.length; k++) {
+      const pf = fleets[k];
+      if (!pf || !pf.follow) continue;
+      const af = findAi(game, pf.follow.aiFleetId);
+      if (!af || af._dead) {
+        events.push({ kind: 'follow-lost', fleetId: pf.id, fleetName: pf.name, reason: 'gone', impulso: I });
+        pf.follow = null;
+        continue;
+      }
+      const civ = civById(game, af.civId);
+      const playerSys = pf.location && pf.location.systemId;
+      const coLoc = playerSys != null && pf.location.status !== 'in-transit'
+                 && presenceNodes(af).indexOf(playerSys) >= 0;
+
+      if (!coLoc) {
+        /* Insegui: punta al nodo verso cui la flotta AI è diretta. */
+        const dest = (af.status === 'in-transit' && af.routeIdx + 1 < af.route.length)
+          ? af.route[af.routeIdx + 1] : af.systemId;
+        if (dest != null && pf.follow.dest !== dest && ORION.fleet && ORION.fleet.setOrder) {
+          const r = ORION.fleet.setOrder(game, pf, { type: 'move', toSysId: dest }, { fromFollow: true });
+          if (r && r.ok) { pf.follow.dest = dest; }
+          else {
+            events.push({ kind: 'follow-lost', fleetId: pf.id, fleetName: pf.name, reason: 'noroute', impulso: I });
+            pf.follow = null;
+          }
+        }
+        continue;
+      }
+
+      /* Co-locato: osserva (intel rapido) e applica il comportamento per modo. */
+      af.detected = true;
+      af.intel = Math.min(1, (af.intel || 0) + CFG.FOLLOW_INTEL_GAIN);
+      af.shadowedBy = pf.id;
+      /* Sosta col bersaglio: ferma la flotta (non vagare). */
+      if (pf.orders && pf.orders.type !== 'idle' && pf.location.status === 'orbiting') {
+        ORION.fleet.setOrder(game, pf, { type: 'idle' }, { fromFollow: true });
+      }
+
+      const hostile = civHostileToPlayer(civ);
+      const mode = pf.follow.mode;
+      const throttled = (I - (pf.follow.lastDispoI || -9999)) >= CFG.DISPO_EVERY_I;
+
+      if (mode === 'intercept') {
+        if (hostile) { playerStrike(game, pf, af, events); }
+        else { af.intel = 1; /* non ostile: ispezione → dossier pieno, niente scontro */ }
+      } else if (mode === 'escort') {
+        if (!hostile) {
+          af.escortedBy = pf.id; // predisposizione difesa da terzi (latente)
+          if (throttled) { nudgeDisposition(civ, CFG.ESCORT_DISPO_GAIN); pf.follow.lastDispoI = I; }
+        }
+      } else { /* shadow */
+        if (inCivTerritory(civ, playerSys) && throttled) {
+          nudgeDisposition(civ, -CFG.SHADOW_DISPO_PEN);
+          pf.follow.lastDispoI = I;
+        }
+      }
+    }
+  }
+
+  /* ------------------------------------------------------------------
      TICK — chiamato a OGNI Impulso da time.js. Cadenza interna per le
      decisioni (spawn); movimento + rilevamento ogni Impulso.
      ------------------------------------------------------------------ */
@@ -532,7 +700,12 @@
     /* 1) Spawn (solo sulla cadenza decisioni). */
     if ((I % CFG.EVERY_I) === 0) maybeSpawn(game, events);
 
-    if (!game.aiFleets.length) return;
+    if (!game.aiFleets.length) {
+      /* Nessuna flotta AI: eventuali ordini di inseguimento perdono il
+         contatto (gestito da processFollowing su lista vuota). */
+      processFollowing(game, [], events);
+      return;
+    }
 
     /* 2) Movimento + rilevamento + ostilità. */
     const cov = buildCoverage(game);
@@ -548,7 +721,10 @@
       if (dissolve) continue;
       survivors.push(af);
     }
-    game.aiFleets = survivors;
+    /* 3) Incroci (info passiva) + inseguimenti (Segui/Intercetta/Scorta). */
+    processCrossings(game, survivors, events);
+    processFollowing(game, survivors, events);
+    game.aiFleets = survivors.filter(function (af) { return !af._dead; });
   }
 
   /* ------------------------------------------------------------------
@@ -558,6 +734,7 @@
     if (!game || !Array.isArray(game.aiFleets)) return [];
     return game.aiFleets.filter(function (af) { return af && af.detected; });
   }
+  function byId(game, aiFleetId) { return findAi(game, aiFleetId); }
   /* Descrizione composizione graduata dall'intel (per scrutinio Fase 2). */
   function composition(af) {
     if (!af) return { level: 'none', text: '—' };
@@ -569,12 +746,48 @@
     }
     return { level: 'fragmentary', text: 'contatto non identificato' };
   }
+  /* Etichetta sintetica del contatto per la UI (rispetta l'intel). */
+  function label(game, af) {
+    if (!af) return 'Contatto perduto';
+    const who = (af.intel >= CFG.INTEL_FULL && af.civName) ? af.civName : 'Flotta non identificata';
+    return who + ' · ' + MISSIONS[af.mission].label;
+  }
+
+  /* ------------------------------------------------------------------
+     API ORDINI (chiamata dalla UI: mappa / pannello flotta).
+     mode ∈ 'shadow' (Segui) · 'intercept' (Intercetta) · 'escort' (Scorta).
+     ------------------------------------------------------------------ */
+  const MODES = { shadow: 'Segui', intercept: 'Intercetta', escort: 'Scorta' };
+  function setFollow(game, fleetId, aiFleetId, mode) {
+    ensure(game);
+    const pf = (game.fleets || []).filter(function (f) { return f && f.id === fleetId; })[0];
+    if (!pf) return { ok: false, reason: 'Flotta inesistente' };
+    const af = findAi(game, aiFleetId);
+    if (!af) return { ok: false, reason: 'Contatto non più disponibile' };
+    if (!af.detected) return { ok: false, reason: 'Flotta non rilevata' };
+    if (!MODES[mode]) mode = 'shadow';
+    if (mode === 'intercept' && fleetFp(pf.ships) <= 0) {
+      return { ok: false, reason: 'Flotta disarmata: non può intercettare' };
+    }
+    pf.follow = { mode: mode, aiFleetId: aiFleetId, dest: null, lastDispoI: -99999 };
+    return { ok: true, mode: mode, modeLabel: MODES[mode], af: af };
+  }
+  function clearFollow(game, fleetId) {
+    const pf = (game.fleets || []).filter(function (f) { return f && f.id === fleetId; })[0];
+    if (pf) pf.follow = null;
+    return { ok: true };
+  }
 
   ORION.aifleet = {
     tick: tick,
     ensure: ensure,
     detectedFleets: detectedFleets,
+    byId: byId,
     composition: composition,
+    label: label,
+    setFollow: setFollow,
+    clearFollow: clearFollow,
+    MODES: MODES,
     MISSIONS: MISSIONS,
     CFG: CFG
   };

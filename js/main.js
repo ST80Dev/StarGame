@@ -10521,7 +10521,10 @@ const DEFAULT_AUTOPAUSE = {
      l'avvicinamento a una colonia e la scaramuccia sono notevoli (ON). */
   'aifleet-detected': false,
   'aifleet-approach': true,
+  'aifleet-crossed': false,
   'aifleet-skirmish': true,
+  'aifleet-destroyed': true,
+  'follow-lost': false,
   'civ-expand': false,
   'civ-war': false,
   'civ-battle': false,
@@ -10947,7 +10950,10 @@ function showEventOverlay(events) {
     'civ-emerged': 'Nuova civiltà emersa',
     'aifleet-detected': 'Flotta non identificata rilevata',
     'aifleet-approach': 'Flotta in avvicinamento alla colonia',
+    'aifleet-crossed': 'Flotta altrui incrociata',
     'aifleet-skirmish': 'Scaramuccia con flotta altrui',
+    'aifleet-destroyed': 'Flotta altrui intercettata e dispersa',
+    'follow-lost': 'Contatto perso',
     'pirate-raid': 'Razzia pirata',
     'pirate-cleared': 'Covo pirata sgominato',
     'pirate-raid-won': 'Covo pirata colpito',
@@ -11473,10 +11479,22 @@ function chronicleEvent(ev) {
   } else if (ev.kind === 'aifleet-approach') {
     const who = ev.civName ? ('<strong>' + escapeHtml(ev.civName) + '</strong>') : 'Una flotta non identificata';
     pushChronicle(ds + ' — ' + who + ' (' + escapeHtml(ev.missionLabel) + ') è giunta nelle vicinanze di una tua colonia nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">valuta scorta, scrutinio o intercettazione</span>.', 'civ');
+  } else if (ev.kind === 'aifleet-crossed') {
+    /* M18.x: incrocio passivo — info raccolte senza fermarsi. L'utente può
+       decidere di "Segui" per saperne di più. */
+    const whoFrag = ev.civName ? (' di <strong>' + escapeHtml(ev.civName) + '</strong>') : '';
+    const compFrag = ev.compKnown ? (' (missione di <em>' + escapeHtml(ev.missionLabel) + '</em>)') : ' (composizione ignota)';
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName || 'La tua flotta') + '</strong> ha incrociato una flotta' + whoFrag + compFrag + ' nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">puoi dare l\'ordine «Segui» per scrutarla meglio</span>.', 'civ');
   } else if (ev.kind === 'aifleet-skirmish') {
     const who = ev.civName ? ('<strong>' + escapeHtml(ev.civName) + '</strong>') : 'una flotta ostile';
     const hitFrag = ev.shipsHit > 0 ? (ev.shipsHit + ' scafi colpiti') : 'nessun danno serio';
     pushChronicle(ds + ' — Scaramuccia: <strong>' + escapeHtml(ev.fleetName || 'la tua flotta') + '</strong> ha incrociato ' + who + ' nel/nella ' + escapeHtml(ev.regionLabel) + ' (' + hitFrag + ') · <span class="chronicle__hint">flotta avversaria sganciata — ripara e valuta il rientro</span>.', 'civ');
+  } else if (ev.kind === 'aifleet-destroyed') {
+    const who = ev.civName ? ('<strong>' + escapeHtml(ev.civName) + '</strong>') : 'una flotta non identificata';
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName || 'La tua flotta') + '</strong> ha intercettato e disperso ' + who + ' nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">contatto eliminato</span>.', 'civ');
+  } else if (ev.kind === 'follow-lost') {
+    const why = ev.reason === 'noroute' ? 'nessuna rotta verso il contatto' : 'il contatto si è dileguato';
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName || 'La tua flotta') + '</strong> ha perso il contatto inseguito (' + why + ') · <span class="chronicle__hint">flotta in attesa di nuovi ordini</span>.', 'civ');
   } else if (ev.kind === 'civ-intel-upgraded') {
     const INTEL_LABEL = { fragmentary: 'frammentario', partial: 'parziale', complete: 'completo' };
     pushChronicle(ds + ' — Dossier su <strong>' + escapeHtml(ev.civName) + '</strong> aggiornato: <strong>' + escapeHtml(INTEL_LABEL[ev.to] || ev.to) + '</strong> (era ' + escapeHtml(INTEL_LABEL[ev.from] || ev.from || '—') + ') · <span class="chronicle__hint">flotta più potente nel loro sistema</span>.', 'civ');
