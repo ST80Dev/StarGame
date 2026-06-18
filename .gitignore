@@ -10,5 +10,6 @@ Thumbs.db
 *.log
 node_modules/
 
-# Claude Code worktrees (agent isolation, ephemeral)
-.claude/
+# Claude Code worktrees (agent isolation, ephemeral) — ma versiona le skill di sviluppo
+.claude/*
+!.claude/skills/
