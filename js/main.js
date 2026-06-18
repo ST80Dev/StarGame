@@ -8769,10 +8769,11 @@ function openFleetDetail(fleetId, opts) {
       '</div>' + aiLine +
     '</div>';
 
-    /* ===== Sezione MISSIONE (Stadio 2.4) — guidata da fleetTarget+actionsFor.
+    /* ===== Sezione MISSIONE (Stadio 2.4/2.4b) — guidata da fleetTarget+actionsFor.
        "Sposta" sempre disponibile; le azioni valide per l'oggetto (Attacca/
-       Estrai/Ricognizione) compaiono solo se la composizione le consente.
-       Colonizza è ancora gestita dal pannello pianeta → qui segnalata in arrivo. */
+       Estrai/Ricognizione/Colonizza) compaiono solo se valide E se la
+       composizione le consente. Colonizza diventa il default suggerito quando
+       hai una coloniale su un corpo colonizzabile. */
     const draftFleet = buildDraftFleet();
     const destTarget = ORION.fleetTarget ? ORION.fleetTarget.describe(g, D.dest.sysId, D.dest.bodyKey) : null;
     const rawActs = (ORION.fleet.actionsFor && destTarget) ? ORION.fleet.actionsFor(destTarget, draftFleet) : [];
@@ -8790,20 +8791,19 @@ function openFleetDetail(fleetId, opts) {
       misOpts.push(a);
     });
     const selectableIds = misOpts.filter(function (a) {
-      return a.available && !a.future && MISSION_META[a.id] && a.id !== 'colonize';
+      return a.available && !a.future && MISSION_META[a.id];
     }).map(function (a) { return a.id; });
-    if (!D.mission) D.mission = 'move';
-    if (selectableIds.indexOf(D.mission) < 0) D.mission = 'move';
+    if (!D.mission || selectableIds.indexOf(D.mission) < 0) {
+      /* Default suggerito: Colonizza se possibile, altrimenti Sposta. */
+      D.mission = selectableIds.indexOf('colonize') >= 0 ? 'colonize' : 'move';
+    }
     const misChips = misOpts.map(function (a) {
       const meta = MISSION_META[a.id]; if (!meta) return '';
-      const wip = (a.id === 'colonize');
-      const disabled = !a.available || a.future || wip;
+      const disabled = !a.available || a.future;
       const sel = (D.mission === a.id) && !disabled;
       const gateTxt = (!a.available && a.gate) ? (GATE_LABEL[a.gate] || a.gate) : '';
-      const title = wip ? 'Colonizza: per ora usa il pannello del pianeta (integrazione in arrivo)'
-        : (gateTxt ? 'Serve: ' + gateTxt : meta.lab);
-      const sfx = wip ? ' <span class="fdetail__chip-note">in arrivo</span>'
-        : (gateTxt ? ' <span class="fdetail__chip-note">' + escapeHtml(gateTxt) + '</span>' : '');
+      const title = gateTxt ? 'Serve: ' + gateTxt : meta.lab;
+      const sfx = gateTxt ? ' <span class="fdetail__chip-note">' + escapeHtml(gateTxt) + '</span>' : '';
       return '<button class="fdetail__chip' + (sel ? ' is-active' : '') + '" type="button" data-mission="' + a.id + '"' +
         (disabled ? ' disabled' : '') + ' title="' + escapeHtml(title) + '">' +
         uiIcon(meta.ic, meta.tone) + ' ' + meta.lab + sfx + '</button>';
@@ -8817,7 +8817,33 @@ function openFleetDetail(fleetId, opts) {
        saltare l'altezza del modal; disabilitata finché non c'è una nave. */
     const supSec = secSupplyDraft(crewReq, nShips > 0);
 
+    /* ===== Riepilogo viaggio (sticky, Stadio 2.5) — live su ogni render. ===== */
+    const sumSysName = (g.galaxy.systems[D.dest.sysId] || {}).name || ('Sistema ' + D.dest.sysId);
+    let sumBodyName = '';
+    if (D.dest.bodyKey) {
+      try { const ds = ORION.system.generate(g.galaxy, D.dest.sysId); const b = ORION.system.findBody(ds, D.dest.bodyKey); if (b) sumBodyName = ' · ' + (b.name || b.key); } catch (e) { /* */ }
+    }
+    const sumMisLab = MISSION_META[D.mission] ? MISSION_META[D.mission].lab : 'Sposta';
+    let sumEta = '—';
+    if (nShips > 0) {
+      const oSys = sysIdOf(D.newColonyKey);
+      if (oSys === D.dest.sysId) sumEta = 'intra-sistema';
+      else {
+        const p = ORION.fleet.computePath ? ORION.fleet.computePath(g.galaxy, oSys, D.dest.sysId) : null;
+        sumEta = p ? (ORION.fleet.routeImpulsi(g.galaxy, draftFleet, p) + ' Ι') : 'irraggiungibile';
+      }
+    }
+    const sumVcap = (D.draft.viveriCap != null) ? D.draft.viveriCap : (ORION.fleet.VIVERI_CAP || 250);
+    const riepilogo = '<div class="fdetail__summary">' +
+      '<span class="fsum__chip">' + uiIcon('pin', 'cyan') + ' ' + escapeHtml(sumSysName) + escapeHtml(sumBodyName) + '</span>' +
+      '<span class="fsum__chip">' + uiIcon('send', 'cyan') + ' ' + escapeHtml(sumMisLab) + '</span>' +
+      '<span class="fsum__chip ' + (crewOk ? 'is-ok' : 'is-crit') + '">' + nShips + ' navi · eq ' + crewSel + '/' + crewReq + '</span>' +
+      '<span class="fsum__chip">' + uiIcon('clock', 'amber') + ' ' + escapeHtml(sumEta) + '</span>' +
+      '<span class="fsum__chip">' + uiIcon('resources', 'amber') + ' ' + sumVcap + ' Ι</span>' +
+    '</div>';
+
     const body =
+      riepilogo +
       destSec +
       '<div class="fdetail__sec">' + secHead('roster', 'amber', 'Origine', 'colonia più vicina') +
         '<div class="fdetail__origin">' +
@@ -8831,12 +8857,16 @@ function openFleetDetail(fleetId, opts) {
       misSec +
       '<p class="fdetail__hint">' + uiIcon('info', 'soft') + ' Il nome si adatterà alla missione. <strong>Annulla</strong> non crea nulla.</p>';
 
-    /* Validazione globale: serve composizione + destinazione. */
-    const draftOrder = (nShips > 0) ? buildCreateOrder() : null;
-    const canCreate = nShips > 0 && !!draftOrder;
+    /* Validazione globale: composizione + destinazione (o corpo colonizzabile). */
+    const isColonize = D.mission === 'colonize';
+    const draftOrder = (nShips > 0 && !isColonize) ? buildCreateOrder() : null;
+    const colonizeReady = isColonize && D.dest && D.dest.sysId != null && !!D.dest.bodyKey;
+    const canCreate = nShips > 0 && crewOk && (isColonize ? colonizeReady : !!draftOrder);
     const disabledReason = (nShips <= 0)
       ? 'Aggiungi almeno una nave'
-      : (!draftOrder ? 'Scegli una destinazione' : '');
+      : (!crewOk ? 'Equipaggio insufficiente'
+                 : (isColonize ? (colonizeReady ? '' : 'Scegli un corpo colonizzabile')
+                               : (!draftOrder ? 'Scegli una destinazione' : '')));
 
     const footer =
       '<div class="fdetail__sum">' + sumChips + '</div>' +
@@ -9469,20 +9499,17 @@ function openFleetDetail(fleetId, opts) {
       const draftCrew = Array.isArray(draft.crew) ? draft.crew : [];
       let nShips = 0; Object.keys(draft.ships).forEach(function (k) { nShips += draft.ships[k] || 0; });
       if (nShips <= 0) { showToast('Aggiungi almeno una nave alla flotta'); return; }
-      /* L'ordine è obbligatorio in creazione: lo costruiamo PRIMA di
-         materializzare (la flotta-bozza è già nello stub, quindi
-         buildOrder() ragiona sul sistema d'origine corretto). */
-      const order = buildCreateOrder();
-      if (!order) { showToast('Scegli una destinazione'); return; }
-      /* Materializza solo ora: createFleet + assegnazioni + setOrder in
-         un colpo. Rollback completo se qualcosa fallisce (#22). */
+      /* Missione: colonize usa il flusso dedicato (costo per-pianeta); le
+         altre costruiscono un ordine standard. */
+      const isColonize = (D.mission === 'colonize');
+      const order = isColonize ? null : buildCreateOrder();
+      if (!isColonize && !order) { showToast('Scegli una destinazione'); return; }
+      if (isColonize && !(D.dest && D.dest.bodyKey != null)) { showToast('Scegli un corpo colonizzabile'); return; }
+      /* Materializza solo ora: createFleet + assegnazioni + ordine in un colpo.
+         Rollback completo se qualcosa fallisce (#22). */
       const r = ORION.fleet.createFleet(g, colKey, null);
       if (!r.ok) { showToast(r.reason); return; }
       const nf = r.fleet;
-      /* Applica la capienza serbatoio scelta dal giocatore (slider in
-         renderNew). createFleet nasce già al pieno: dopo setViveriCap
-         risincronizziamo `viveri` al nuovo cap così la flotta parte al
-         pieno della capienza scelta. */
       if (D.draft.viveriCap != null && ORION.fleet.setViveriCap) {
         ORION.fleet.setViveriCap(nf, D.draft.viveriCap);
         nf.viveri = nf.viveriCap;
@@ -9493,16 +9520,28 @@ function openFleetDetail(fleetId, opts) {
         const ar = ORION.fleet.assignShips(g, nf, colKey, k, n);
         if (!ar.ok) failed = ar.reason;
       });
-      /* Equipaggi SCELTI per id (#76). */
       for (let ci = 0; ci < draftCrew.length && !failed; ci++) {
         const ac = ORION.fleet.assignCrewById(g, nf, colKey, draftCrew[ci]);
         if (!ac.ok) failed = ac.reason;
       }
-      if (!failed) {
-        const so = ORION.fleet.setOrder(g, nf, order);
-        if (!so.ok) failed = so.reason;
-      }
       if (failed) { ORION.fleet.dissolveFleet(g, nf); showToast(failed); return; }
+
+      if (isColonize) {
+        /* Riusa doColonize (costo §6.2 + ordine colonize + rollback). */
+        let planet = null;
+        try { const dsys = ORION.system.generate(g.galaxy, D.dest.sysId); planet = ORION.planet.generate(g.galaxy, dsys, D.dest.bodyKey); } catch (e) { planet = null; }
+        if (!planet) { ORION.fleet.dissolveFleet(g, nf); showToast('Pianeta non valido'); return; }
+        doColonize(planet, nf, 0);   // mostra il toast in caso di costo/ordine ko
+        if (!nf.orders || nf.orders.type !== 'colonize') { ORION.fleet.dissolveFleet(g, nf); return; }
+        persistGame(g);
+        fleet = nf; D.creating = false;
+        D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: false, exploreEach: false } };
+        closeDetail();
+        return;
+      }
+
+      const so = ORION.fleet.setOrder(g, nf, order);
+      if (!so.ok) { ORION.fleet.dissolveFleet(g, nf); showToast(so.reason); return; }
       /* Auto-rename + penalità coesione coerenti con `doConfirmOrder`. */
       maybeAutoRenameFleet(g, nf, order);
       if (ORION.cohesion && ORION.cohesion.applyTravelPenalty && order.type !== 'idle' && order.type !== 'return') {
@@ -9517,8 +9556,6 @@ function openFleetDetail(fleetId, opts) {
       fleet = nf;
       D.creating = false;
       D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: false, exploreEach: false } };
-      /* "Crea e parti" è l'azione finale: chiudiamo la modal — niente
-         re-render sul dettaglio della flotta appena nata. */
       closeDetail();
     });
 

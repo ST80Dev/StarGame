@@ -5996,6 +5996,25 @@ select.main-menu__input { cursor: pointer; }
 .fcrew-count.is-ok { color: var(--c-good, #6fe0b8); }
 .fcrew-count.is-crit { color: var(--c-bad, #f08296); }
 
+/* Riepilogo viaggio sticky in cima al modal (Stadio 2.5). */
+.fdetail__summary {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 8px 10px; margin: 0 0 8px;
+  background: rgb(var(--c-surface-rgb) / 0.96);
+  border-bottom: 1px solid var(--c-border, rgba(255, 255, 255, 0.14));
+  backdrop-filter: blur(4px);
+}
+.fsum__chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.76rem; padding: 3px 8px; border-radius: 999px;
+  background: rgb(var(--c-surface-rgb) / 0.6);
+  border: 1px solid var(--c-border-soft, rgba(255, 255, 255, 0.1));
+  font-family: var(--font-data, monospace);
+}
+.fsum__chip.is-ok { color: var(--c-good, #6fe0b8); border-color: rgba(111, 224, 184, 0.4); }
+.fsum__chip.is-crit { color: var(--c-bad, #f08296); border-color: rgba(240, 130, 150, 0.4); }
+
 /* Composizione flotta a due pannelli — a disposizione → in flotta (Stadio 2.2).
    Click per spostare un'unità (niente drag&drop: parità touch/mouse). */
 .fcompose { display: flex; align-items: stretch; gap: 8px; }
