@@ -550,8 +550,9 @@
         '<p><strong>Quando il porto si satura</strong> (limite raggiunto): non puoi costruire altre navi finché non lanci ' +
         'una spedizione (libera attracco) o espandi l\'Hangar. Le navi che rientrano e non hanno posto restano in ' +
         '"orbita parcheggio" (nessuna penalità oggi — sarà M09: esposte a cattura).</p>' +
-        '<p><strong>Ganci futuri:</strong> il <em>Porto stellare orbitale</em> (M16) darà capacità di attracco molto più ampia; ' +
-        'il <em>Bacino orbitale</em> (M15) servirà alle grandi navi (incrociatori/dreadnought/ammiraglie).</p>' +
+        '<p><strong>Più attracchi:</strong> il <em>Porto orbitale</em> (struttura di colonia) aggiunge molti posti d\'attracco ' +
+        'in più, per ricoverare le flotte di casa oltre la capienza a terra; il <em>Bacino di costruzione</em> serve alle ' +
+        'grandi navi (incrociatori/dreadnought/ammiraglie) e somma i suoi attracchi pesanti.</p>' +
         '<p><strong>Concatenazione:</strong> l\'<em>Accademia militare</em> forma gli equipaggi che servono per usare le navi.</p>'
     },
     {
@@ -584,14 +585,15 @@
         '<p>Richiede la <strong>tecnologia degli scudi</strong> (M13): per ora è un gancio, sbloccabile con l\'albero tech.</p>'
     },
     {
-      id: 'struct:bacino-orbitale', tag: 'Strutture · ⊠', title: 'Bacino orbitale',
+      id: 'struct:bacino-orbitale', tag: 'Strutture · ⊠', title: 'Bacino di costruzione',
       body:
-        '<p>Cantiere pesante per le <strong>navi capitali</strong> (M15): l\'Hangar planetario basta per l\'Incrociatore, ma ' +
+        '<p>Cantiere pesante per le <strong>navi grandi</strong>: l\'Hangar basta per l\'Incrociatore, ma ' +
         'Dreadnought e Nave Ammiraglia richiedono questa infrastruttura. <strong>lvl 1 → Dreadnought · lvl 2 → Ammiraglia</strong>.</p>' +
-        '<p>Aggiunge <strong>cantieri</strong> (slip per build capitali) e <strong>attracchi di grossa stazza</strong>, sommati ' +
-        'a quelli dell\'Hangar — servono perché le capitali pesano molto sul porto.</p>' +
+        '<p>Aggiunge <strong>cantieri</strong> (slip per build grandi) e <strong>attracchi di grossa stazza</strong>, sommati ' +
+        'a quelli dell\'Hangar — servono perché le navi grandi pesano molto sul porto.</p>' +
         '<p>Richiede un <strong>Hangar di costruzione già evoluto (lvl 3)</strong>. È grande e costoso (4 slot/livello): ' +
-        'è un investimento da civiltà militare matura. M16 porterà la variante orbitale su stazione, di stazza maggiore.</p>'
+        'è un investimento da civiltà militare matura. È <strong>planetario</strong> (a terra): la costruzione orbitale ' +
+        'leggera/media vive invece sulla <em>Stazione</em>.</p>'
     },
     {
       id: 'struct:centro-abitativo', tag: 'Strutture · ⌂', title: 'Centro abitativo',
@@ -951,7 +953,7 @@
           '<li><strong>◅ Corvetta</strong> — hp 80, fp 12, spd 1.0 · scorta multiruolo, equilibrata.</li>' +
           '<li><strong>◣ Fregata</strong> — hp 160, fp 25, spd 0.85 · linea di battaglia, lenta ma cara da abbattere.</li>' +
           '<li><strong>◆ Incrociatore</strong> — hp 300, fp 45, spd 0.8 · capitale media (Hangar lvl 4).</li>' +
-          '<li><strong>⬢ Dreadnought</strong> — hp 650, fp 95, spd 0.65 · capitale pesante (Bacino orbitale).</li>' +
+          '<li><strong>⬢ Dreadnought</strong> — hp 650, fp 95, spd 0.65 · capitale pesante (Bacino di costruzione).</li>' +
           '<li><strong>❖ Nave Ammiraglia</strong> — hp 1000, fp 140, spd 0.7 · unica per civiltà, +fuoco/scafo a tutta la flotta.</li>' +
           '<li><strong>◉ Pioniere coloniale</strong> — hp 70, fp 0, spd 0.8 · trasporto colonizzatore (vedi lezione dedicata).</li>' +
         '</ul>' +
@@ -965,14 +967,16 @@
         '<p>Le navi capitali ribaltano una battaglia ma sono <strong>rare e costose</strong> (GDD §12.1). Tre classi:</p>' +
         '<ul>' +
           '<li><strong>◆ Incrociatore</strong> — capitale media. Si costruisce all\'<strong>Hangar lvl 4</strong>, nessuna struttura extra.</li>' +
-          '<li><strong>⬢ Dreadnought</strong> — capitale pesante. Richiede il <strong>Bacino orbitale ⊠ lvl 1</strong>. Build ~200 Ι.</li>' +
-          '<li><strong>❖ Nave Ammiraglia</strong> — <strong>una sola per civiltà</strong>. Richiede il <strong>Bacino orbitale lvl 2</strong>. Dà +15% fuoco e +10% scafo a <em>tutta</em> la flotta in cui naviga.</li>' +
+          '<li><strong>⬢ Dreadnought</strong> — capitale pesante. Richiede il <strong>Bacino di costruzione ⊠ lvl 1</strong>. Build ~200 Ι.</li>' +
+          '<li><strong>❖ Nave Ammiraglia</strong> — <strong>una sola per civiltà</strong>. Richiede il <strong>Bacino di costruzione lvl 2</strong>. Dà +15% fuoco e +10% scafo a <em>tutta</em> la flotta in cui naviga.</li>' +
         '</ul>' +
         '<p><strong>Figure (M14):</strong> più la nave è grande, più <strong>ufficiali</strong> può ospitare la flotta — ' +
         'nessuna capitale 1 · Incrociatore 2 · Dreadnought/Ammiraglia 3. Max un bonus per ruolo (Comandante +fuoco, ' +
         'Ingegnere −viaggio/viveri +scafo, Stratega imboscata). Assegnali col pulsante <strong>★ Ufficiali</strong>.</p>' +
-        '<p><strong>Attracchi:</strong> le capitali pesano molto sul porto (un Dreadnought come 6 navi). Il Bacino orbitale ' +
+        '<p><strong>Attracchi:</strong> le capitali pesano molto sul porto (un Dreadnought come 6 navi). Il Bacino di costruzione ' +
         'aggiunge cantieri e attracchi di grossa stazza, sommati all\'Hangar.</p>' +
+        '<p><strong>Dove si fanno:</strong> le navi grandi si costruiscono <strong>solo su colonia</strong> (Hangar + Bacino). ' +
+        'Le Stazioni assemblano solo navi leggere/medie (≤ Fregata): le capitali le porti al fronte facendole volare.</p>' +
         '<p>Le perdite di una capitale sono pesanti: tienile scortate e usa la formazione difensiva sulle flotte che le contengono.</p>'
     },
     {
@@ -991,9 +995,11 @@
           'e respinge i predoni.</li>' +
           '<li><strong>Hub commerciale</strong> — ogni stazione operativa aggiunge rotte e <em>throughput</em> alle tue rotte ' +
           'interne (oltre i Mercati planetari).</li>' +
-          '<li><strong>Cantiere orbitale</strong> — una stazione di <strong>livello alto</strong> (≥3) fa da <em>Bacino orbitale</em> ' +
-          'per una colonia vicina: le permette di varare i <strong>capitali</strong> (Dreadnought lvl 3 · Ammiraglia lvl 4) anche ' +
-          'senza Bacino planetario.</li>' +
+          '<li><strong>Attracchi</strong> — la stazione ricovera le flotte (posti d\'attracco propri): un appoggio per la flotta ' +
+          'dove non hai colonie. Le navi attraccate si riforniscono e riparano.</li>' +
+          '<li><strong>Cantiere leggero/medio</strong> — assembla navi <strong>fino alla Fregata</strong> da una <em>riserva di ' +
+          'metalli</em> (riempita dalla linea di rifornimento; costo in solo metallo). Se la riserva è a secco la build va in ' +
+          '<em>pausa</em>. Le <strong>navi grandi</strong> restano esclusiva delle colonie (Hangar + Bacino).</li>' +
         '</ul>' +
         '<p>Cresce di <strong>livello come una struttura</strong>; la <strong>linea di rifornimento</strong> dalla colonia riempie ' +
         'il serbatoio; se <em>isolata</em> le funzioni degradano (mai autodistruzione).</p>' +

@@ -64,7 +64,24 @@
     REFUEL_COST: 0.08,
 
     /* Soglie di stato del serbatoio (frazione del cap). */
-    LOW_FRAC: 0.25
+    LOW_FRAC: 0.25,
+
+    /* ----------------------------------------------------------------
+       CANTIERE LEGGERO/MEDIO (decisione utente 2026-06-18). La Stazione
+       NON è una colonia: non produce risorse, ma può ASSEMBLARE navi
+       leggere/medie (fino alla Fregata) da una RISERVA DI METALLI dedicata,
+       riempita dalla stessa linea di rifornimento del serbatoio. Le navi
+       grandi (Incrociatore/Dread/Ammiraglia) restano esclusiva delle
+       colonie (Hangar+Bacino). Recovery-friendly (#22): se la riserva si
+       svuota la costruzione si METTE IN PAUSA, non fallisce.
+       ---------------------------------------------------------------- */
+    /* Classi assemblabili alla stazione (≤ Fregata, niente capitali né
+       coloniale: la colonizzazione resta legata alle colonie). */
+    SHIPYARD_CLASSES: ['explorer', 'estrattore', 'caccia', 'intercettore', 'corvetta', 'fregata'],
+    /* Slip (cantieri paralleli) per livello stazione. idx = level (1..4). */
+    BUILD_SLOTS_BY_LEVEL: [0, 1, 1, 2, 2],
+    MET_RESERVE_CAP_BASE: 250,   // tetto riserva metalli per modulo (× livello)
+    MET_REFILL_RATE: 8           // metallo/Ι versato dalla linea (× livello, 1:1 dallo stock colono)
   };
 
   /* ------------------------------------------------------------------ */
@@ -193,7 +210,12 @@
       hp: 0,
       supply: 0,
       supplyState: 'ok',
-      owner: null                // null = giocatore; <civId> = catturata (#81 Fase B)
+      owner: null,               // null = giocatore; <civId> = catturata (#81 Fase B)
+      /* Cantiere leggero/medio (2026-06-18): riserva metalli + coda build +
+         flotta-cantiere dove confluiscono gli scafi assemblati. Additivi/lazy. */
+      metReserve: 0,
+      buildQueue: [],
+      yardFleetId: null
     };
     game.stations.push(st);
     return { ok: true, station: st };
@@ -308,27 +330,136 @@
     return giveI;
   }
 
-  /* ------------------------------------------------------------------
-     M16 Fase B (#81): CANTIERE ORBITALE. Una stazione di livello alto fa da
-     "Bacino orbitale" (variante M15) per una colonia entro raggio di
-     rifornimento: soddisfa il requisito `bacino-orbitale` dei capitali, così
-     una colonia senza Bacino planetario può vararli appoggiandosi alla
-     stazione. Mappa: Dreadnought (bacino lvl 1) → stazione lvl ≥ 3 ·
-     Ammiraglia (bacino lvl 2) → stazione lvl ≥ 4.
-     ------------------------------------------------------------------ */
-  var ORBITAL_BACINO_LEVEL = { 1: 3, 2: 4 };
-  function orbitalShipyardFor(game, colonyKey, neededBacinoLevel) {
-    var colony = game.colonies && game.colonies[colonyKey];
-    if (!colony) return false;
-    var needLvl = ORBITAL_BACINO_LEVEL[neededBacinoLevel] || (neededBacinoLevel + 2);
-    var list = listOf(game);
-    for (var i = 0; i < list.length; i++) {
-      var st = list[i];
-      if (!st || !isPlayerStation(st) || st.phase === 'building' || st.level < needLvl) continue;
-      if (st.supplyState === 'isolated') continue;       // husk isolata non produce
-      if (hopsBetween(game.galaxy, colony.systemId, st.systemId) <= CFG.SUPPLY_RANGE) return true;
+  /* ==================================================================
+     CANTIERE LEGGERO/MEDIO (decisione utente 2026-06-18). Sostituisce il
+     vecchio "cantiere orbitale per capitali" (orbitalShipyardFor, rimosso):
+     le navi grandi ora si costruiscono SOLO su colonia (Hangar + Bacino di
+     costruzione). La Stazione assembla scafi ≤ Fregata da una RISERVA DI
+     METALLI, riempita dalla linea di rifornimento; il costo è in solo
+     metallo (l'energia è astratta nei reattori della stazione). NON è una
+     colonia: non produce risorse, solo assembla. Determinismo (#5): no RNG.
+     Recovery-friendly (#22): se la riserva è a secco la build si PAUSA.
+     ================================================================== */
+  function buildSlotsFor(station) {
+    if (!station) return 0;
+    var lvl = Math.max(0, Math.min(station.level | 0, CFG.BUILD_SLOTS_BY_LEVEL.length - 1));
+    return CFG.BUILD_SLOTS_BY_LEVEL[lvl] || 0;
+  }
+  function metReserveCap(level) { return Math.round(CFG.MET_RESERVE_CAP_BASE * Math.max(1, level)); }
+  function canBuildClass(kind) { return CFG.SHIPYARD_CLASSES.indexOf(kind) >= 0; }
+  function shipMetCost(kind) {
+    var F = ORION.fleet, cls = F && F.getClass && F.getClass(kind);
+    return (cls && cls.cost && cls.cost.met) ? cls.cost.met : 0;
+  }
+  function shipBuildTime(kind) {
+    var F = ORION.fleet, cls = F && F.getClass && F.getClass(kind);
+    return (cls && cls.time) ? cls.time : 10;
+  }
+  function activeShipyardBuilds(station) {
+    return (station && Array.isArray(station.buildQueue)) ? station.buildQueue.length : 0;
+  }
+  /* Si può accodare uno scafo? Gate su classe (≤ Fregata) e slip liberi. La
+     riserva metalli NON blocca l'accodamento (la build attende il metallo). */
+  function canBuildShipAt(game, station, kind) {
+    if (!station || !isPlayerStation(station)) return { ok: false, reason: 'Stazione non disponibile' };
+    if (station.phase === 'building' || station.level < 1) return { ok: false, reason: 'Stazione non operativa' };
+    if (!canBuildClass(kind)) return { ok: false, reason: 'La stazione assembla solo navi leggere/medie (≤ Fregata)' };
+    var slots = buildSlotsFor(station);
+    if (slots <= 0) return { ok: false, reason: 'Nessun cantiere a questo livello' };
+    var active = activeShipyardBuilds(station);
+    if (active >= slots) {
+      return { ok: false, reason: 'Cantieri saturi (' + active + '/' + slots + '). Potenzia la stazione.' };
     }
-    return false;
+    return { ok: true, metCost: shipMetCost(kind), time: shipBuildTime(kind) };
+  }
+  function startShipBuild(game, station, kind) {
+    var chk = canBuildShipAt(game, station, kind);
+    if (!chk.ok) return chk;
+    if (!Array.isArray(station.buildQueue)) station.buildQueue = [];
+    station.buildQueue.push({ kind: kind, left: chk.time, total: chk.time, metCost: chk.metCost });
+    return { ok: true };
+  }
+  function cancelShipBuild(game, station, idx) {
+    if (!station || !Array.isArray(station.buildQueue)) return { ok: false };
+    if (idx < 0 || idx >= station.buildQueue.length) return { ok: false };
+    station.buildQueue.splice(idx, 1);
+    return { ok: true };
+  }
+
+  /* Colonia "proprietaria" della flotta di cantiere: la fondatrice se viva,
+     altrimenti una qualsiasi colonia operativa (per dare un owner ai libri). */
+  function resolveOwnerColonyKey(game, station) {
+    var cols = game.colonies || {};
+    var own = cols[station.ownerColonyKey];
+    if (own && own.colonized && own.phase !== 'settling') return station.ownerColonyKey;
+    for (var k in cols) {
+      var c = cols[k];
+      if (c && c.colonized && c.phase !== 'settling') return k;
+    }
+    return null;
+  }
+  /* Flotta-cantiere: le navi assemblate si accumulano in una flotta ormeggiata
+     alla stazione (berth 'station'). Riusata se esiste ancora, altrimenti
+     creata. Ritorna null se non c'è alcuna colonia che faccia da owner. */
+  function yardFleetFor(game, station) {
+    var F = ORION.fleet;
+    if (!F || !F.createFleet) return null;
+    var fleets = game.fleets || [];
+    if (station.yardFleetId) {
+      for (var i = 0; i < fleets.length; i++) {
+        var f = fleets[i];
+        if (f && f.id === station.yardFleetId && f.location &&
+            f.location.systemId === station.systemId && f.location.status === 'docked') return f;
+      }
+    }
+    var ownerKey = resolveOwnerColonyKey(game, station);
+    if (!ownerKey) return null;
+    var cr = F.createFleet(game, ownerKey, 'Cantiere ' + (station.name || 'stazione'));
+    if (!cr.ok || !cr.fleet) return null;
+    var fl = cr.fleet;
+    fl.location = { systemId: station.systemId, status: 'docked', berth: 'station', bodyKey: null };
+    station.yardFleetId = fl.id;
+    return fl;
+  }
+  function nextCrewIdFor(game) {
+    var T = ORION.time;
+    if (T && T.nextCrewId) return T.nextCrewId(game);
+    if (!game.idSeq) game.idSeq = {};
+    game.idSeq.crew = (game.idSeq.crew | 0) + 1;
+    return 'crew-' + game.idSeq.crew;
+  }
+  /* Avanza le build attive (una per slip): consumo metallo "a goccia"
+     (metCost/total per Ι); se la riserva è a secco la build si pausa. A
+     completamento, la nave entra nella flotta-cantiere con equipaggio
+     reclute (la stazione la arma). Emette 'station-ship-built' (silenzioso). */
+  function tickShipyard(game, station, events) {
+    if (!Array.isArray(station.buildQueue) || !station.buildQueue.length) return;
+    var slots = buildSlotsFor(station);
+    var built = [];
+    for (var i = 0; i < station.buildQueue.length && i < slots; i++) {
+      var job = station.buildQueue[i];
+      var total = Math.max(1, job.total || 1);
+      var perI = (job.metCost || 0) / total;
+      if ((station.metReserve || 0) < perI) continue;          // a secco → pausa
+      station.metReserve = Math.max(0, (station.metReserve || 0) - perI);
+      job.left = (job.left || 0) - 1;
+      if (job.left <= 0) built.push(job);
+    }
+    for (var b = 0; b < built.length; b++) {
+      var done = built[b];
+      var idx = station.buildQueue.indexOf(done);
+      if (idx >= 0) station.buildQueue.splice(idx, 1);
+      var fl = yardFleetFor(game, station);
+      if (fl && ORION.fleet.addNewShip) {
+        ORION.fleet.addNewShip(game, fl, done.kind);
+        if (!Array.isArray(fl.crew)) fl.crew = [];
+        fl.crew.push({ id: nextCrewIdFor(game), xp: 0 });
+        if (events) events.push({
+          kind: 'station-ship-built', stationId: station.id, name: station.name,
+          systemId: station.systemId, shipKind: done.kind, impulso: game.timeImpulsi
+        });
+      }
+    }
   }
 
   /* ------------------------------------------------------------------
@@ -392,6 +523,17 @@
         refilled = refillFrom(supplier, st, want);
       }
 
+      // 2b) Riserva metalli del cantiere (decisione 2026-06-18): la stessa
+      //     colonia rifornitrice versa metallo (1:1) fino al tetto del livello.
+      var metCap = metReserveCap(st.level);
+      if (supplier && supplier.stock && (st.metReserve || 0) < metCap) {
+        var wantMet = Math.min(CFG.MET_REFILL_RATE * st.level, metCap - (st.metReserve || 0), supplier.stock.met || 0);
+        if (wantMet > 0) {
+          supplier.stock.met = Math.max(0, (supplier.stock.met || 0) - wantMet);
+          st.metReserve = (st.metReserve || 0) + wantMet;
+        }
+      }
+
       // 3) Upkeep: esercizio drena il serbatoio
       var drain = CFG.UPKEEP * st.level;
       st.supply = Math.max(0, (st.supply || 0) - drain);
@@ -424,6 +566,11 @@
           root.ORION.fleet.tickStationRepair) {
         root.ORION.fleet.tickStationRepair(game, st);
       }
+
+      // 7) Cantiere leggero/medio: avanza le build attive (consumo riserva
+      //    metalli; pausa se a secco). Anche se isolata, finché c'è metallo
+      //    residuo la build può progredire (recovery-friendly).
+      tickShipyard(game, st, events);
     }
   }
 
@@ -467,7 +614,15 @@
     var list = listOf(game), m = Infinity;
     for (var i = 0; i < list.length; i++) {
       var st = list[i];
-      if (st && st.phase === 'building' && st.buildLeft > 0) m = Math.min(m, st.buildLeft);
+      if (!st) continue;
+      if (st.phase === 'building' && st.buildLeft > 0) m = Math.min(m, st.buildLeft);
+      // Cantiere leggero/medio: includi gli scafi negli slip attivi (lower
+      // bound; se in pausa per metallo a secco il risveglio anticipato è innocuo).
+      var slots = buildSlotsFor(st);
+      var q = st.buildQueue || [];
+      for (var j = 0; j < q.length && j < slots; j++) {
+        if (q[j] && q[j].left > 0) m = Math.min(m, q[j].left);
+      }
     }
     return m;
   }
@@ -483,8 +638,12 @@
     canBuild: canBuild, build: build, canUpgrade: canUpgrade, upgrade: upgrade,
     demolish: demolish, cancelBuild: cancelBuild,
     isOperationalPort: isOperationalPort, refuelCapacity: refuelCapacity, drawRefuel: drawRefuel,
-    orbitalShipyardFor: orbitalShipyardFor,
     defenseStats: defenseStats, supplyColonyFor: supplyColonyFor,
+    /* Cantiere leggero/medio (M16, 2026-06-18). */
+    buildSlotsFor: buildSlotsFor, metReserveCap: metReserveCap,
+    canBuildClass: canBuildClass, shipMetCost: shipMetCost, shipBuildTime: shipBuildTime,
+    activeShipyardBuilds: activeShipyardBuilds, canBuildShipAt: canBuildShipAt,
+    startShipBuild: startShipBuild, cancelShipBuild: cancelShipBuild,
     tick: tick, minBuildLeft: minBuildLeft
   };
 }(typeof window !== 'undefined' ? window : this));

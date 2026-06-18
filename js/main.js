@@ -134,6 +134,8 @@ const CHRONICLE_NOISE_KINDS = new Set([
   'anomaly-depleted',
   /* Stazione upgrade è informativo (la costruzione e gli attacchi restano). */
   'station-upgraded', 'station-resupplied',
+  /* Scafo leggero/medio assemblato alla stazione: routine come 'ship-built'. */
+  'station-ship-built',
   /* Raider che svanisce senza colpire: atmosferico. */
   'raider-fizzle'
 ]);
@@ -5989,7 +5991,8 @@ function renderStationsView(stage) {
           '</div>' +
           '<div class="station-actions">' + upgBtn +
             '<button class="btn btn--mini btn--danger" data-action="station-demolish" data-id="' + st.id + '" type="button">Smantella</button>' +
-          '</div>';
+          '</div>' +
+          stationYardHtml(st);
       }
 
       const capturedCls = ST.isPlayerStation(st) ? '' : ' is-captured';
@@ -6051,6 +6054,106 @@ function renderStationsView(stage) {
       persistGame(g); renderStationsView(stage); updateGlobalResourceHud();
     });
   });
+  /* Cantiere leggero/medio: assembla / annulla scafo. */
+  stage.querySelectorAll('[data-action="station-build"]').forEach(function (b) {
+    if (b.disabled) return;
+    b.addEventListener('click', function () { openStationShipPicker(stage, b.dataset.id); });
+  });
+  stage.querySelectorAll('[data-action="station-build-cancel"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const st = ST.stationById(g, b.dataset.id);
+      ST.cancelShipBuild(g, st, Number(b.dataset.idx));
+      persistGame(g); renderStationsView(stage);
+    });
+  });
+}
+
+/* Pannello "Cantiere leggero/medio" di una stazione operativa: riserva
+   metalli + slip + coda di assemblaggio. Vuoto se il livello non offre slip. */
+function stationYardHtml(st) {
+  const ST = ORION.station, F = ORION.fleet;
+  if (!ST || !ST.buildSlotsFor) return '';
+  const slots = ST.buildSlotsFor(st);
+  if (slots <= 0) return '';
+  const metCap = ST.metReserveCap(st.level);
+  const metFrac = metCap > 0 ? Math.max(0, Math.min(1, (st.metReserve || 0) / metCap)) : 0;
+  const q = st.buildQueue || [];
+  let qHtml = '';
+  if (q.length) {
+    qHtml = '<ul class="station-yard__queue">' + q.map(function (job, i) {
+      const cls = (F && F.getClass(job.kind)) || { name: job.kind, glyph: '◈' };
+      const prog = job.total > 0 ? Math.max(0, Math.min(1, 1 - (job.left || 0) / job.total)) : 0;
+      const perI = (job.metCost || 0) / Math.max(1, job.total);
+      const paused = (i < slots) && ((st.metReserve || 0) < perI);
+      return '<li class="station-yard__job">' +
+        '<span class="struct-item__glyph">' + cls.glyph + '</span> ' + escapeHtml(cls.name) +
+        ' · ' + Math.ceil(job.left || 0) + ' ' + iU() +
+        (paused ? ' · <span class="is-crit">in pausa (metallo)</span>' : '') +
+        '<div class="station-bar"><div class="station-bar__fill station-bar__fill--build" style="width:' + Math.round(prog * 100) + '%"></div></div>' +
+        '<button class="btn btn--mini btn--danger" data-action="station-build-cancel" data-id="' + st.id + '" data-idx="' + i + '" type="button">×</button>' +
+      '</li>';
+    }).join('') + '</ul>';
+  }
+  return '<div class="station-yard">' +
+    '<div class="station-stat">' +
+      '<span class="station-stat__lbl">Riserva metalli</span>' +
+      '<div class="station-bar"><div class="station-bar__fill station-bar__fill--met" style="width:' + Math.round(metFrac * 100) + '%"></div></div>' +
+      '<span class="station-stat__val">' + Math.round(st.metReserve || 0) + ' / ' + metCap + ' ' + resIcon('met') + '</span>' +
+    '</div>' +
+    '<div class="station-yard__head">Cantiere leggero/medio · ' + q.length + '/' + slots + ' slip</div>' +
+    qHtml +
+    '<button class="btn btn--mini btn--enter" data-action="station-build" data-id="' + st.id + '"' +
+      (q.length >= slots ? ' disabled' : '') + ' type="button">+ Assembla scafo</button>' +
+  '</div>';
+}
+
+/* Picker delle classi assemblabili alla stazione (≤ Fregata). Costo in solo
+   metallo (attinto dalla riserva nel tempo). */
+function openStationShipPicker(stage, stationId) {
+  const g = ORION.game, ST = ORION.station, F = ORION.fleet;
+  if (!g || !ST || !F) return;
+  const st = ST.stationById(g, stationId);
+  if (!st) return;
+
+  const ov = document.createElement('div');
+  ov.className = 'fleet-create-overlay';
+  function close() { ov.remove(); document.removeEventListener('keydown', onKey); }
+  function onKey(e) { if (e.key === 'Escape') close(); }
+
+  const classes = (ST.CFG.SHIPYARD_CLASSES || []).map(function (k) { return F.getClass(k); }).filter(Boolean);
+  const rows = classes.map(function (cls) {
+    const chk = ST.canBuildShipAt(g, st, cls.id);
+    const met = ST.shipMetCost(cls.id), time = ST.shipBuildTime(cls.id);
+    return '<li class="station-cand">' +
+      '<span class="station-cand__name"><span class="struct-item__glyph">' + cls.glyph + '</span> ' + escapeHtml(cls.name) + '</span>' +
+      '<span class="station-cand__hops">' + met + ' ' + resIcon('met') + ' · ' + time + ' ' + iU() + '</span>' +
+      '<button class="btn btn--mini btn--enter" data-kind="' + cls.id + '"' + (chk.ok ? '' : ' disabled title="' + escapeHtml(chk.reason || '') + '"') + ' type="button">Assembla</button>' +
+    '</li>';
+  }).join('');
+
+  ov.innerHTML =
+    '<div class="fleet-create-overlay__panel">' +
+      '<header class="fleet-create-overlay__head">' +
+        '<h3>Cantiere · ' + escapeHtml(st.name || 'stazione') + '</h3>' +
+        '<button class="btn btn--mini" data-close type="button">✕</button>' +
+      '</header>' +
+      '<p class="sysinfo__sub">La stazione assembla navi leggere/medie dalla riserva di metalli (le navi grandi si fanno solo su colonia). Il costo è in solo metallo.</p>' +
+      '<ul class="station-cand-list">' + rows + '</ul>' +
+    '</div>';
+
+  ov.querySelector('[data-close]').addEventListener('click', close);
+  ov.querySelectorAll('[data-kind]').forEach(function (b) {
+    if (b.disabled) return;
+    b.addEventListener('click', function () {
+      const r = ST.startShipBuild(g, st, b.dataset.kind);
+      if (!r.ok) { showToast(r.reason || 'Assemblaggio rifiutato'); return; }
+      persistGame(g); close(); renderStationsView(stage);
+    });
+  });
+
+  document.body.appendChild(ov);
+  document.addEventListener('keydown', onKey);
+  ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
 }
 
 function stationCostStr(c) {
@@ -6542,9 +6645,8 @@ function renderFleetView(stage) {
   }
   function fleetStatusLabel(f) {
     if (!f || !f.location) return '—';
-    if (f.location.status === 'docked') return 'all\'attracco';
     if (f.location.status === 'in-transit') return 'in viaggio (arrivo in ' + (f.etaImpulsi | 0) + ' ' + iU() + ')';
-    return 'in orbita';
+    return ORION.fleet.berthLabel(ORION.fleet.berthOf(ORION.game, f));
   }
   function orderLabel(f) {
     const o = f && f.orders;
@@ -6904,7 +7006,14 @@ function fleetWearHtml(fleet) {
   const st = peak >= 80 ? 'crit' : peak >= 50 ? 'low' : 'ok';
   const peakStr = (peak !== avg) ? ' · peak ' + peak + '%' : '';
   const label = 'Usura ' + avg + '%' + peakStr;
-  return '<div class="fleet-wear fleet-wear--' + st + '" title="Usura scafi della flotta: media e picco. Singolo scafo ≥80% → rientro forzato; ripara al porto/stazione lvl≥2.">' +
+  /* Riparazione solo ATTRACCATA (hangar o stazione): in orbita-parcheggio
+     niente refit (decisione utente 2026-06-18). */
+  const orbitParked = ORION.fleet && ORION.fleet.berthOf &&
+    ORION.fleet.berthOf(ORION.game, fleet) === 'orbit';
+  const repairHint = orbitParked
+    ? ' ⚠ In orbita-parcheggio NON si ripara: attracca in hangar o alla stazione.'
+    : '';
+  return '<div class="fleet-wear fleet-wear--' + st + '" title="Usura scafi della flotta: media e picco. Singolo scafo ≥80% → rientro forzato. Si ripara solo ATTRACCATA (hangar colonia o stazione orbitale lvl≥2), non in orbita.' + repairHint + '">' +
     '<span class="fleet-wear__ico ui-icon ui-icon--amber" aria-hidden="true">⚒</span> ' +
     '<span class="fleet-wear__lbl">' + label + '</span>' +
     '<span class="fleet-wear__bar"><span class="fleet-wear__fill" style="width:' + avg + '%"></span></span>' +
@@ -8414,9 +8523,8 @@ function openFleetDetail(fleetId, opts) {
   function sysName(id) { const s = g.galaxy.systems[id]; return s ? s.name : '—'; }
   function statusLabel(f) {
     const loc = f && f.location; if (!loc) return '—';
-    if (loc.status === 'docked') return 'all’attracco';
     if (loc.status === 'in-transit') return 'in viaggio · ' + (f.etaImpulsi | 0) + ' ' + iU();
-    return 'in orbita';
+    return ORION.fleet.berthLabel(ORION.fleet.berthOf(g, f));
   }
   function orderLabel(f) {
     const o = f && f.orders;
@@ -10784,6 +10892,7 @@ function showEventOverlay(events) {
     'fleet-launched': 'Flotta: salto iperspaziale',
     'capital-built': 'Nave capitale varata',
     'station-built': 'Stazione completata',
+    'station-ship-built': 'Stazione: scafo assemblato',
     'station-upgraded': 'Stazione potenziata',
     'station-attacked': 'Stazione sotto attacco',
     'station-captured': 'Stazione catturata',
@@ -11043,6 +11152,15 @@ function chronicleEvent(ev) {
     const sk = ev.shipKind || 'explorer';
     const scls = (ORION.fleet && ORION.fleet.getClass(sk)) || { name: 'scafo esploratore' };
     pushChronicle(ds + ' — Nuova <strong>' + scls.name + '</strong> pronta al varo su ' + pname + ptag + '.', 'planet');
+  } else if (ev.kind === 'station-ship-built') {
+    /* M16: scafo leggero/medio assemblato al cantiere di una stazione. */
+    const sk = ev.shipKind || 'caccia';
+    const scls = (ORION.fleet && ORION.fleet.getClass(sk)) || { name: 'scafo' };
+    const sName = (ev.systemId != null && ORION.game.galaxy.systems[ev.systemId])
+      ? ORION.game.galaxy.systems[ev.systemId].name : '—';
+    pushChronicle(ds + ' — Nuovo <strong>' + escapeHtml(scls.name) + '</strong> assemblato alla stazione <strong>' +
+      escapeHtml(ev.name || 'orbitale') + '</strong> in ' + escapeHtml(sName) +
+      (ev.systemId != null ? systemTagHtml(ev.systemId) : '') + '.', 'fleet');
   } else if (ev.kind === 'capital-built') {
     /* M15: varo di una nave capitale — evento notevole (auto-pausa ON). */
     const sk = ev.shipKind || 'incrociatore';
@@ -12105,7 +12223,10 @@ function renderLeftPanel() {
     const sysId = (f.location && f.location.systemId >= 0) ? f.location.systemId : -1;
     const sysName = sysId >= 0 ? g.galaxy.systems[sysId].name : '—';
     const status = (f.location && f.location.status) || 'idle';
-    const statusLbl = status === 'docked' ? 'attracco' : status === 'in-transit' ? 'viaggio' : 'orbita';
+    const berth = (status === 'docked' || status === 'orbiting') ? ORION.fleet.berthOf(g, f) : null;
+    const statusLbl = status === 'docked' ? (berth === 'station' ? 'stazione' : 'hangar')
+                    : status === 'in-transit' ? 'viaggio'
+                    : (berth === 'orbit' ? 'parcheggio' : 'orbita');
     const cls = status === 'docked' ? 'ok' : status === 'in-transit' ? 'info' : 'warn';
     const fleetIcon = (ORION.icon && ORION.icon('fleet')) || '';
     /* Decisione utente 2026-06-16: pillola usura/viveri su una SECONDA riga,
@@ -13421,9 +13542,8 @@ function openFleetInfoPopup(fleetId, screenX, screenY) {
   const orderInfo = describeFleetOrder(g, fleet);
   /* Posizione corrente */
   const posSys = g.galaxy.systems[fleet.location.systemId];
-  const posStatus = fleet.location.status === 'docked' ? 'all\'attracco'
-                  : fleet.location.status === 'in-transit' ? 'in viaggio'
-                  : 'in orbita';
+  const posStatus = fleet.location.status === 'in-transit' ? 'in viaggio'
+                  : ORION.fleet.berthLabel(ORION.fleet.berthOf(g, fleet));
 
   node.innerHTML =
     '<header class="fleet-info-popup__head">' +

@@ -170,6 +170,147 @@
     return (c && c.dockWeight) ? c.dockWeight : 1;
   }
 
+  /* ==================================================================
+     POSTI D'ATTRACCO PER FLOTTE — parcheggio reale (decisione utente
+     2026-06-18). Una flotta che arriva/sosta a una tua colonia (o tua
+     stazione) "parcheggia" secondo una cascata di capacità:
+       1) Hangar a terra (Cantiere navale) se c'è posto;
+       2) altrimenti Stazione orbitale operativa se ha posto;
+       3) altrimenti resta in ORBITA-parcheggio.
+     Il "dove" vive in `location.berth ∈ {'hangar','station','orbit'}`,
+     additivo/lazy: i save vecchi lo derivano (vedi berthOf) → niente bump.
+
+     Regole (richiesta utente):
+       - In orbita-parcheggio la flotta è RIFORNITA (viveri) ma NON si
+         ripara: la riparazione avviene solo attraccata (hangar o stazione).
+       - Capacità hangar parcheggio = attracchi (docks) + cantieri
+         (buildSlots): le navi in COSTRUZIONE prenotano già il loro posto
+         per quando saranno pronte. Lvl 1 → 4 + 2 = 6. Sta al giocatore
+         riservarsi gli slot in base a quante ne sta costruendo.
+       - L'occupazione è PESATA sulla stazza (dockWeightOf, #41): le navi
+         capitali pesano più di 1.
+       - L'occupazione attracchi decide il parcheggio ma NON blocca la
+         costruzione (decisione #69 invariata: canBuildShip conta solo le
+         navi a terra/in coda).
+     Capacità stazione: base NON minimale (chi fonda una stazione ha già
+     una flotta ampia, mid-game) e cresce col livello. Tarabile. */
+  const STATION_BERTH_CAP_BY_LEVEL = [0, 10, 16, 24, 32]; // idx = station.level (1..4)
+
+  function _exp() { return root.ORION && root.ORION.expedition; }
+
+  /* Peso d'attracco totale di una flotta (somma delle sue navi). */
+  function dockWeightOfFleet(fleet) {
+    if (!fleet || !Array.isArray(fleet.ships)) return 0;
+    let w = 0;
+    for (let i = 0; i < fleet.ships.length; i++) {
+      w += dockWeightOf(fleet.ships[i] && fleet.ships[i].kind);
+    }
+    return w;
+  }
+  /* Posti parcheggio dell'Hangar = attracchi + cantieri (vedi sopra). */
+  function hangarBerthCapacity(colony) {
+    const E = _exp();
+    if (!E) return 0;
+    const docks = E.hangarDockCapacity ? E.hangarDockCapacity(colony) : 0;
+    const slots = E.hangarBuildSlots ? E.hangarBuildSlots(colony) : 0;
+    return docks + slots;
+  }
+  /* Posti d'attracco della Stazione orbitale, per livello. */
+  function stationBerthCapacity(station) {
+    if (!station) return 0;
+    const lvl = Math.max(0, Math.min(station.level | 0, STATION_BERTH_CAP_BY_LEVEL.length - 1));
+    return STATION_BERTH_CAP_BY_LEVEL[lvl] || 0;
+  }
+  function operationalStationAt(game, sysId) {
+    const S = root.ORION && root.ORION.station;
+    if (!S || !S.stationAt) return null;
+    const st = S.stationAt(game, sysId);
+    return (st && S.isOperationalPort && S.isOperationalPort(st)) ? st : null;
+  }
+  /* Peso occupato dalle FLOTTE ormeggiate in un berth dato del sistema
+     (escludendo `self`, la flotta che sta cercando posto). */
+  function fleetBerthWeightAt(game, sysId, berth, self) {
+    let w = 0;
+    const fleets = (game && game.fleets) || [];
+    for (let i = 0; i < fleets.length; i++) {
+      const f = fleets[i];
+      if (!f || f === self || !f.location) continue;
+      if (f.location.systemId !== sysId) continue;
+      if (f.location.status !== 'docked') continue;
+      if (berthOf(game, f) !== berth) continue;
+      w += dockWeightOfFleet(f);
+    }
+    return w;
+  }
+  /* berthOf — dove è ormeggiata/parcheggiata una flotta. Esplicito da
+     location.berth; per i save vecchi (campo assente) lo DERIVA: docked a
+     una tua colonia → 'hangar'; docked a una tua stazione → 'station'; in
+     orbita a un tuo porto → 'orbit'; altrimenti null (orbita generica o
+     territorio altrui / in viaggio). */
+  function berthOf(game, fleet) {
+    if (!fleet || !fleet.location) return null;
+    const st = fleet.location.status;
+    if (st !== 'docked' && st !== 'orbiting') return null;   // in-transit → nessun berth
+    if (fleet.location.berth) return fleet.location.berth;
+    const sysId = fleet.location.systemId;
+    if (st === 'docked') {
+      if (ownColonyAt(game, sysId)) return 'hangar';
+      if (operationalStationAt(game, sysId)) return 'station';
+      return 'hangar';   // docked storico senza porto noto → assimila a terra
+    }
+    /* orbiting */
+    if (ownColonyAt(game, sysId) || operationalStationAt(game, sysId)) return 'orbit';
+    return null;
+  }
+  /* Etichetta umana del berth (per la UI). Distingue hangar / stazione /
+     orbita-parcheggio dal generico "in orbita". */
+  function berthLabel(berth) {
+    if (berth === 'hangar') return 'in hangar';
+    if (berth === 'station') return 'alla stazione orbitale';
+    if (berth === 'orbit') return 'in orbita (parcheggio)';
+    return 'in orbita';
+  }
+  /* parkAtArrival — cascata hangar→stazione→orbita all'arrivo/sosta in un
+     sistema. Imposta location.status + berth + bodyKey. Ritorna il berth
+     scelto ('hangar'|'station'|'orbit') o null (orbita generica, nessun
+     tuo porto qui). */
+  function parkAtArrival(game, fleet, sysId) {
+    if (!fleet || !fleet.location) return null;
+    const w = dockWeightOfFleet(fleet);
+    /* 1) Hangar a terra: capacità = docks + buildSlots; usato = navi a
+       terra + in coda (totalShipsBound) + flotte già in hangar. */
+    const colony = ownColonyAt(game, sysId);
+    if (colony) {
+      const E = _exp();
+      const cap = hangarBerthCapacity(colony);
+      const colonyKey = ownColonyKeyAt(game, sysId);
+      const bound = (E && E.totalShipsBound) ? E.totalShipsBound(game, colony, colonyKey).total : 0;
+      const used = bound + fleetBerthWeightAt(game, sysId, 'hangar', fleet);
+      if (used + w <= cap) {
+        fleet.location.status = 'docked';
+        fleet.location.bodyKey = null;
+        fleet.location.berth = 'hangar';
+        return 'hangar';
+      }
+    }
+    /* 2) Stazione orbitale operativa. */
+    const station = operationalStationAt(game, sysId);
+    if (station) {
+      const sused = fleetBerthWeightAt(game, sysId, 'station', fleet);
+      if (sused + w <= stationBerthCapacity(station)) {
+        fleet.location.status = 'docked';
+        fleet.location.bodyKey = null;
+        fleet.location.berth = 'station';
+        return 'station';
+      }
+    }
+    /* 3) Orbita-parcheggio (porto saturo) o orbita generica (nessun porto). */
+    fleet.location.status = 'orbiting';
+    fleet.location.bodyKey = null;
+    fleet.location.berth = (colony || station) ? 'orbit' : null;
+    return fleet.location.berth;
+  }
+
   /* Costanti del viaggio inter-sistema. Coerenti con expedition.js M07
      (decisione #32): un hop sub-luce dura 40-80 Ι (+ scaling danger). M13
      introdurrà i 3 tier di iperguida (×3, ×8, ×20). */
@@ -562,6 +703,20 @@
       });
     }
     return { ok: true };
+  }
+
+  /* addNewShip — materializza UNA nave nuova (classe `kind`) direttamente
+     nell'array di una flotta, senza passare dal counter di una colonia.
+     Usata dal cantiere della Stazione (M16): la stazione assembla scafi
+     leggeri/medi da una riserva di metalli e li consegna a una flotta
+     ormeggiata. Ritorna l'entità nave creata, o null se classe ignota. */
+  function addNewShip(game, fleet, kind) {
+    const cls = CLASSES[kind];
+    if (!fleet || !cls) return null;
+    if (!Array.isArray(fleet.ships)) fleet.ships = [];
+    const ship = { id: nextShipId(game), kind: kind, hp: cls.hp, wear: 0 };
+    fleet.ships.push(ship);
+    return ship;
   }
 
   /* unassignShips — riporta `count` navi della classe dalla flotta al
@@ -1267,8 +1422,8 @@
           const d = dissolveFleet(game, fleet);
           if (d.ok) return { ok: true, dissolved: true };
         }
-        fleet.location.status = 'docked';
-        fleet.location.bodyKey = null;
+        /* Non scout: parcheggia con la cascata (hangar → stazione → orbita). */
+        parkAtArrival(game, fleet, fleet.location.systemId);
         fleet.location.intra = null;
         fleet.etaImpulsi = 0;
         return { ok: true };
@@ -1334,6 +1489,7 @@
     }
     const toSys = fleet.route[nextIdx];
     fleet.location.status = 'in-transit';
+    fleet.location.berth = null;   // in viaggio: nessun posto d'attracco occupato
     let t = tempoLeg(galaxy, from, toSys, fleetMinSpeed(fleet));
     /* Bonus Comandante Navigatore (#43): −15% durata viaggio. */
     if (ORION.commander && ORION.commander.fleetSpeedMul) {
@@ -1667,12 +1823,12 @@
     }
   }
 
-  /* Riparazione al porto di una colonia (richiesta utente 2026-06-16).
-     Chiamata dal tick di colonia (time.js) per Ι. Riduce il wear delle navi
-     delle flotte docked/orbiting nel sistema della colonia. Tasso scalato
-     sul livello Hangar; ritorna il costo metalli da scaricare sulla stock.
-     Niente effetti se la colonia non ha Hangar (senza struttura non c'è
-     refit). Niente costo per navi già pristine (wear=0). */
+  /* Riparazione al porto di una colonia (richiesta utente 2026-06-16,
+     gating 2026-06-18). Chiamata dal tick di colonia (time.js) per Ι. Ripara
+     SOLO le navi delle flotte attraccate IN HANGAR (berth 'hangar'): in
+     orbita-parcheggio si rifornisce ma NON si ripara (richiesta utente). Tasso
+     scalato sul livello Hangar; ritorna il costo metalli da scaricare sulla
+     stock. Niente refit senza Hangar; niente costo per navi pristine (wear=0). */
   function tickPortRepair(game, colony) {
     if (!colony || !colony.structures || !game) return 0;
     const hangar = colony.structures['cantiere-navale'];
@@ -1684,8 +1840,7 @@
     let metCost = 0;
     (game.fleets || []).forEach(function (f) {
       if (!f || !f.location || f.location.systemId !== sysId) return;
-      const st = f.location.status;
-      if (st !== 'docked' && st !== 'orbiting') return;
+      if (f.location.status !== 'docked' || berthOf(game, f) !== 'hangar') return;
       (f.ships || []).forEach(function (s) {
         const cur = s.wear || 0;
         if (cur <= 0) return;
@@ -1698,8 +1853,10 @@
   }
 
   /* Riparazione presso una stazione orbitale (M16) operativa di livello ≥ 2.
-     Chiamata dal tick stazione (station.js). Tasso fisso. Niente costo
-     esposto qui — la stazione ha il suo supply pool gestito altrove. */
+     Chiamata dal tick stazione (station.js). Ripara SOLO le navi delle flotte
+     ATTRACCATE alla stazione (berth 'station'): in orbita-parcheggio niente
+     refit (gating 2026-06-18). Tasso fisso; niente costo esposto qui — la
+     stazione ha il suo supply pool gestito altrove. */
   function tickStationRepair(game, station) {
     if (!game || !station || station.phase !== 'operational' || (station.level | 0) < 2) return 0;
     const sysId = station.systemId;
@@ -1707,8 +1864,7 @@
     let totalRepaired = 0;
     (game.fleets || []).forEach(function (f) {
       if (!f || !f.location || f.location.systemId !== sysId) return;
-      const st = f.location.status;
-      if (st !== 'docked' && st !== 'orbiting') return;
+      if (f.location.status !== 'docked' || berthOf(game, f) !== 'station') return;
       (f.ships || []).forEach(function (s) {
         const cur = s.wear || 0;
         if (cur <= 0) return;
@@ -2089,11 +2245,13 @@
          TUA colonia ci si ORMEGGIA — la flotta non "appartiene" più alla sola
          colonia d'origine: atterra dove la mandi (riusa `move`, niente nuovi
          ordini). L'attacco resta in orbita per ingaggiare al tick successivo. */
-      if (order.type === 'move' && ownColonyAt(game, arrivedAt)) {
-        fleet.location.status = 'docked';
-        fleet.location.bodyKey = null;
+      if (order.type === 'move' &&
+          (ownColonyAt(game, arrivedAt) || operationalStationAt(game, arrivedAt))) {
+        /* Cascata di parcheggio: hangar → stazione → orbita (vedi parkAtArrival). */
+        parkAtArrival(game, fleet, arrivedAt);
       } else {
         fleet.location.status = 'orbiting';
+        fleet.location.berth = null;
         if (order.type === 'attack' && order.bodyKey) {
           fleet.location.bodyKey = order.bodyKey;
         }
@@ -2230,11 +2388,6 @@
       _autoRevealAt(arrivedAt);
       const colony = game.colonies && game.colonies[fleet.ownerColonyKey];
       const docked = !!(colony && colony.systemId === arrivedAt);
-      if (docked) {
-        fleet.location.status = 'docked';
-      } else {
-        fleet.location.status = 'orbiting';
-      }
       fleet.etaImpulsi = 0;
       fleet.route = [arrivedAt];
       fleet.routeIdx = 0;
@@ -2304,6 +2457,10 @@
         });
         return;
       }
+      /* Flotta non-scout in rientro: parcheggia con la cascata di capacità
+         (hangar → stazione → orbita). Se non c'è un tuo porto qui resta in
+         orbita generica (parkAtArrival → berth null). */
+      parkAtArrival(game, fleet, arrivedAt);
       events.push({
         kind: 'fleet-route-complete',
         fleetId: fleet.id, fleetName: fleet.name,
@@ -2572,9 +2729,17 @@
   }
 
   function finishCompound(game, fleet, events, reason) {
-    fleet.location.status = 'orbiting';
+    const sysId = fleet.location.systemId;
+    /* Se la rotta termina su un tuo porto, applica la cascata di parcheggio
+       (hangar → stazione → orbita); altrimenti orbita generica. */
+    if (ownColonyAt(game, sysId) || operationalStationAt(game, sysId)) {
+      parkAtArrival(game, fleet, sysId);
+    } else {
+      fleet.location.status = 'orbiting';
+      fleet.location.berth = null;
+    }
     fleet.etaImpulsi = 0;
-    fleet.route = [fleet.location.systemId];
+    fleet.route = [sysId];
     fleet.routeIdx = 0;
     fleet.orders = { type: 'idle' };
     events.push({
@@ -2904,6 +3069,7 @@
     isReachable: isReachable,
     createFleet: createFleet,
     assignShips: assignShips,
+    addNewShip: addNewShip,
     unassignShips: unassignShips,
     assignCrew: assignCrew,
     assignCrewById: assignCrewById,
@@ -2930,6 +3096,15 @@
     tickPortRepair: tickPortRepair,
     tickStationRepair: tickStationRepair,
     forceReturnForWear: forceReturnForWear,
+    /* Posti d'attracco / parcheggio (decisione utente 2026-06-18). */
+    berthOf: berthOf,
+    berthLabel: berthLabel,
+    parkAtArrival: parkAtArrival,
+    dockWeightOfFleet: dockWeightOfFleet,
+    hangarBerthCapacity: hangarBerthCapacity,
+    stationBerthCapacity: stationBerthCapacity,
+    operationalStationAt: operationalStationAt,
+    STATION_BERTH_CAP_BY_LEVEL: STATION_BERTH_CAP_BY_LEVEL,
     WEAR_TRANSIT_BASE: WEAR_TRANSIT_BASE,
     WEAR_RETURN_THRESHOLD: WEAR_RETURN_THRESHOLD,
     REPAIR_RATE_BY_HANGAR: REPAIR_RATE_BY_HANGAR,

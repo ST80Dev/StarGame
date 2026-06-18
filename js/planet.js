@@ -811,20 +811,16 @@
     if (!hasStructLevel(colony, 'cantiere-navale', reqLvl)) {
       return { ok: false, reason: 'Hangar di costruzione lvl ' + reqLvl + ' richiesto per ' + (cls ? cls.name : kind) };
     }
-    /* M15 — Dreadnought/Ammiraglia richiedono il Bacino orbitale (#41). */
+    /* M15 — Dreadnought/Ammiraglia richiedono il Bacino di costruzione (#41).
+       Decisione utente 2026-06-18: le navi grandi si costruiscono SOLO su
+       colonia (Hangar + Bacino), non più via stazione (cantiere orbitale
+       rimosso). La Stazione assembla solo navi leggere/medie (≤ Fregata). */
     if (cls && cls.requiresStruct) {
       const rs = cls.requiresStruct;
-      let satisfied = hasStructLevel(colony, rs.id, rs.level || 1);
-      /* M16 Fase B (#81): un Bacino ORBITALE (stazione di livello alto entro
-         raggio) soddisfa il requisito dei capitali al posto di quello planetario. */
-      if (!satisfied && rs.id === 'bacino-orbitale' && game &&
-          root.ORION.station && root.ORION.station.orbitalShipyardFor) {
-        satisfied = root.ORION.station.orbitalShipyardFor(game, colonyKey, rs.level || 1);
-      }
-      if (!satisfied) {
+      if (!hasStructLevel(colony, rs.id, rs.level || 1)) {
         const sdef = root.ORION && root.ORION.structures && root.ORION.structures.get(rs.id);
         const sname = sdef ? sdef.name : rs.id;
-        return { ok: false, reason: sname + ' lvl ' + (rs.level || 1) + ' richiesto per ' + cls.name + ' (anche un cantiere orbitale vicino)' };
+        return { ok: false, reason: sname + ' lvl ' + (rs.level || 1) + ' richiesto per ' + cls.name };
       }
     }
     /* M15 — Nave Ammiraglia unica per civiltà (GDD §12.1). */
