@@ -13468,7 +13468,7 @@ function openFleetInfoPopup(fleetId, screenX, screenY) {
   });
   node.querySelector('[data-action="fleet-info-wizard"]').addEventListener('click', function () {
     closeFleetInfoPopup();
-    openFleetDetail(fleetId, { orders: true });
+    openFleetReorder(fleetId);   // Stadio 3.2: riordino col nuovo modello
   });
   node.querySelector('[data-action="fleet-info-pick"]').addEventListener('click', function () {
     closeFleetInfoPopup();
@@ -13479,6 +13479,170 @@ function openFleetInfoPopup(fleetId, screenX, screenY) {
     document.addEventListener('click', _maybeCloseFleetInfoPopup, true);
     document.addEventListener('keydown', _fleetInfoEscHandler);
   }, 0);
+}
+
+/* Stadio 3.2 — Riordino di una flotta ESISTENTE col nuovo modello
+   (Destinazione + Missione via fleetTarget/actionsFor). Modal additivo:
+   non tocca l'editor "Dettaglio" (renderExisting). Niente composizione: la
+   flotta ha già navi/equipaggio; si sceglie solo dove e cosa fare. */
+function openFleetReorder(fleetId) {
+  const g = ORION.game;
+  if (!g) return;
+  const fleet = (g.fleets || []).filter(function (f) { return f.id === fleetId; })[0];
+  if (!fleet) { showToast('Flotta non trovata'); return; }
+  const F = ORION.fleet;
+  const DISC = (ORION.galaxy && ORION.galaxy.DISCOVERY) || { DETECTED: 1, EXPLORED: 2 };
+  const disc = (g.state && g.state.discovery) || {};
+  const fromSys = fleet.location.systemId;
+  function sysName2(id) { const s = g.galaxy.systems[id]; return s ? s.name : ('Sistema ' + id); }
+  function hops(s) { if (s === fromSys) return 0; const p = F.computePath ? F.computePath(g.galaxy, fromSys, s) : null; return p ? p.length - 1 : null; }
+  function knownCivs(sysId) {
+    const out = [];
+    (g.civs || []).forEach(function (c) {
+      if (!c || !c.alive || !Array.isArray(c.systems)) return;
+      if (c.systems.indexOf(sysId) < 0) return;
+      if ((ORION.ai && ORION.ai.knowledgeRank ? ORION.ai.knowledgeRank(c) : 2) >= 1) out.push(c);
+    });
+    if (!out.length && ORION.ai && ORION.ai.civForSystem) {
+      const c = ORION.ai.civForSystem(g, sysId);
+      if (c && c.alive && (ORION.ai.knowledgeRank ? ORION.ai.knowledgeRank(c) : 2) >= 1) out.push(c);
+    }
+    return out;
+  }
+  function civName(c) { return (ORION.ai && ORION.ai.knowledgeRank ? ORION.ai.knowledgeRank(c) : 2) >= 2 ? c.name : 'Ignota'; }
+  function bodyGlyph(type) { const d = ORION.system && ORION.system.BODY_TYPES ? ORION.system.BODY_TYPES[type] : null; const cat = d ? d.cat : ''; return cat === 'gas' ? '⬡' : cat === 'belt' ? '≈' : cat === 'moon' ? '◌' : '◉'; }
+  function bodyTypeLabel(type) { const d = ORION.system && ORION.system.BODY_TYPES ? ORION.system.BODY_TYPES[type] : null; return d ? d.label : type; }
+  const MISSION_META = {
+    move: { ic: 'send', tone: 'cyan', lab: 'Sposta' },
+    attack: { ic: 'sword', tone: 'pink', lab: 'Attacca' },
+    extract: { ic: 'resources', tone: 'amber', lab: 'Estrai' },
+    recon: { ic: 'spy', tone: 'violet', lab: 'Ricognizione' },
+    colonize: { ic: 'home', tone: 'amber', lab: 'Colonizza' }
+  };
+  const GATE_LABEL = { coloniale: 'nave coloniale', estrattore: 'estrattore', fuoco: 'potenza di fuoco' };
+  const knownSys = [];
+  for (let i = 0; i < g.galaxy.systems.length; i++) if ((disc[i] || 0) >= DISC.DETECTED) knownSys.push(i);
+  const hopsMap = {}; knownSys.forEach(function (s) { hopsMap[s] = hops(s); });
+  knownSys.sort(function (a, b) { const ha = hopsMap[a] == null ? 1e9 : hopsMap[a], hb = hopsMap[b] == null ? 1e9 : hopsMap[b]; return ha - hb; });
+  const R = { dest: { sysId: null, bodyKey: null }, mission: null };
+  const cur = fleet.orders && fleet.orders.toSysId;
+  if (cur != null && (disc[cur] || 0) >= DISC.DETECTED) { R.dest.sysId = cur; R.dest.bodyKey = fleet.orders.bodyKey || null; }
+  else { const nh = knownSys.filter(function (s) { return s !== fromSys; }); R.dest.sysId = nh.length ? nh[0] : (knownSys[0] != null ? knownSys[0] : fromSys); }
+
+  const host = ensureFleetOverlayHost('fleet-detail');
+  host.hidden = false;
+  host.onclick = function (e) { if (e.target === host) closeFleetOverlay(); };
+
+  function buildOrder() {
+    const sys = R.dest.sysId, bk = R.dest.bodyKey || null, m = R.mission || 'move';
+    if (m === 'attack') return { type: 'attack', toSysId: sys, bodyKey: bk };
+    if (m === 'recon') return { type: 'recon', toSysId: sys, bodyKey: bk };
+    if (m === 'extract') {
+      let kind = null;
+      if (bk && ORION.system && ORION.anomaly && ORION.anomaly.bodyGiacimento) {
+        try { const ds = ORION.system.generate(g.galaxy, sys); const b = ORION.system.findBody(ds, bk); const gi = b && ORION.anomaly.bodyGiacimento(b); if (gi) kind = gi.kind; } catch (e) { /* */ }
+      }
+      if (!kind && ORION.fleetTarget) kind = ORION.fleetTarget.describe(g, sys, bk).anomalyKind;
+      if (!kind) return null;
+      return { type: 'survey', toSysId: sys, anomalyKind: kind, bodyKey: bk };
+    }
+    return { type: 'move', toSysId: sys, bodyKey: bk };
+  }
+  function render() {
+    const sysOpts = knownSys.map(function (s) {
+      const nm = sysName2(s); const h = hopsMap[s]; const hop = h === 0 ? 'qui' : (h != null ? h + ' salti' : 'irr.');
+      const cn = knownCivs(s).length;
+      return '<option value="' + s + '"' + (s === R.dest.sysId ? ' selected' : '') + '>' + escapeHtml(nm) + ' · ' + hop + (cn ? ' · ' + cn + ' AI' : '') + '</option>';
+    }).join('');
+    let bodyHtml = '';
+    const explored = (disc[R.dest.sysId] || 0) >= DISC.EXPLORED;
+    if (explored && ORION.system && ORION.system.generate) {
+      let bodies = []; try { const ds = ORION.system.generate(g.galaxy, R.dest.sysId); bodies = (ds && ds.bodies) || []; } catch (e) { bodies = []; }
+      if (bodies.length) {
+        let bopts = '<option value="">— orbita generica —</option>';
+        bodies.forEach(function (b) {
+          if (!b || !b.key) return;
+          bopts += '<option value="' + escapeHtml(b.key) + '"' + (String(R.dest.bodyKey || '') === String(b.key) ? ' selected' : '') + '>' + bodyGlyph(b.type) + ' ' + escapeHtml(b.name || b.key) + ' · ' + escapeHtml(bodyTypeLabel(b.type)) + '</option>';
+          (b.moons || []).forEach(function (m) { if (m && m.key) bopts += '<option value="' + escapeHtml(m.key) + '"' + (String(R.dest.bodyKey || '') === String(m.key) ? ' selected' : '') + '>  ' + bodyGlyph(m.type) + ' ' + escapeHtml(m.name || m.key) + ' · ' + escapeHtml(bodyTypeLabel(m.type)) + '</option>'; });
+        });
+        bodyHtml = '<select class="fdetail__select" data-bind="ro-body" aria-label="Corpo di destinazione">' + bopts + '</select>';
+      }
+    } else if (!explored) {
+      bodyHtml = '<span class="fdest__hint">' + uiIcon('info', 'soft') + ' Sistema non esplorato: corpo non selezionabile.</span>';
+    }
+    const dc = knownCivs(R.dest.sysId);
+    let aiLine = dc.length ? '<div class="fdest__ai">' + uiIcon('civ', 'pink') + ' AI nel sistema: <strong>' + dc.length + '</strong> · ' + dc.map(function (c) { return '<span class="fdest__civ">' + escapeHtml(civName(c)) + '</span>'; }).join(' ') + '</div>' : '<div class="fdest__ai fdest__ai--none">Nessuna AI nota nel sistema</div>';
+    if (R.dest.bodyKey && ORION.ai && ORION.ai.civForPlanet) { const bc = ORION.ai.civForPlanet(g, R.dest.sysId, R.dest.bodyKey); if (bc) aiLine += '<div class="fdest__ai">' + uiIcon('civ', 'pink') + ' Sul corpo: <span class="fdest__civ">' + escapeHtml(civName(bc)) + '</span></div>'; }
+    const target = ORION.fleetTarget ? ORION.fleetTarget.describe(g, R.dest.sysId, R.dest.bodyKey) : null;
+    const rawActs = (F.actionsFor && target) ? F.actionsFor(target, fleet) : [];
+    const opts = [{ id: 'move', available: true, gate: null, future: false }];
+    rawActs.forEach(function (a) { if (a.id === 'dock' || a.id === 'defend-ally') return; opts.push(a); });
+    const selable = opts.filter(function (a) { return a.available && !a.future && MISSION_META[a.id]; }).map(function (a) { return a.id; });
+    if (!R.mission || selable.indexOf(R.mission) < 0) R.mission = selable.indexOf('colonize') >= 0 ? 'colonize' : 'move';
+    const chips = opts.map(function (a) {
+      const meta = MISSION_META[a.id]; if (!meta) return '';
+      const disabled = !a.available || a.future;
+      const sel = R.mission === a.id && !disabled;
+      const gate = (!a.available && a.gate) ? (GATE_LABEL[a.gate] || a.gate) : '';
+      const sfx = gate ? ' <span class="fdetail__chip-note">' + escapeHtml(gate) + '</span>' : '';
+      return '<button class="fdetail__chip' + (sel ? ' is-active' : '') + '" type="button" data-ro-mission="' + a.id + '"' + (disabled ? ' disabled' : '') + ' title="' + escapeHtml(gate ? 'Serve: ' + gate : meta.lab) + '">' + uiIcon(meta.ic, meta.tone) + ' ' + meta.lab + sfx + '</button>';
+    }).join('');
+    let eta = '—';
+    if (R.dest.sysId === fromSys) eta = 'intra-sistema';
+    else { const p = F.computePath(g.galaxy, fromSys, R.dest.sysId); eta = p ? (F.routeImpulsi(g.galaxy, fleet, p) + ' Ι') : 'irraggiungibile'; }
+    const order = buildOrder();
+    const isCol = R.mission === 'colonize';
+    const ready = isCol ? !!R.dest.bodyKey : !!order;
+    host.innerHTML =
+      '<div class="fdetail__panel" role="document">' +
+        '<header class="fdetail__head"><div class="fdetail__title">' + uiIcon('fleet', 'cyan') +
+          '<h2>Riordina ' + escapeHtml(fleet.name) + '</h2></div>' +
+          '<button class="fdetail__x btn--icon-only" data-ro-close type="button" aria-label="Chiudi">' + uiIcon('close') + '</button></header>' +
+        '<div class="fdetail__body">' +
+          '<div class="fdetail__summary"><span class="fsum__chip">' + uiIcon('pin', 'cyan') + ' da ' + escapeHtml(sysName2(fromSys)) + '</span>' +
+            '<span class="fsum__chip">' + uiIcon('send', 'cyan') + ' ' + escapeHtml(MISSION_META[R.mission] ? MISSION_META[R.mission].lab : 'Sposta') + '</span>' +
+            '<span class="fsum__chip">' + uiIcon('clock', 'amber') + ' ' + escapeHtml(eta) + '</span></div>' +
+          '<div class="fdetail__sec fdetail__sec--dest is-editing"><div class="fdetail__sec-h">' + uiIcon('pin', 'cyan') + ' Destinazione</div>' +
+            '<div class="fdetail__origin"><select class="fdetail__select" data-bind="ro-system" aria-label="Sistema di destinazione">' + sysOpts + '</select>' + bodyHtml + '</div>' + aiLine + '</div>' +
+          '<div class="fdetail__sec fdetail__sec--ord is-editing"><div class="fdetail__sec-h">' + uiIcon('fleet', 'cyan') + ' Missione</div><div class="fdetail__chips">' + chips + '</div></div>' +
+        '</div>' +
+        '<div class="fdetail__foot">' +
+          '<button class="btn btn--mini" data-ro-close type="button">Annulla</button>' +
+          '<button class="btn btn--mini btn--primary btn--with-icon" data-ro-confirm type="button"' + (ready ? '' : ' disabled') + '>' + uiIcon('check', 'cyan') + ' Conferma ordine</button>' +
+        '</div>' +
+      '</div>';
+    bindRO();
+  }
+  function bindRO() {
+    host.querySelectorAll('[data-ro-close]').forEach(function (b) { b.addEventListener('click', closeFleetOverlay); });
+    const ss = host.querySelector('[data-bind="ro-system"]');
+    if (ss) ss.addEventListener('change', function () { R.dest.sysId = Number(ss.value); R.dest.bodyKey = null; render(); });
+    const bs = host.querySelector('[data-bind="ro-body"]');
+    if (bs) bs.addEventListener('change', function () { R.dest.bodyKey = bs.value || null; render(); });
+    host.querySelectorAll('[data-ro-mission]').forEach(function (b) { if (b.disabled) return; b.addEventListener('click', function () { R.mission = b.dataset.roMission; render(); }); });
+    const cf = host.querySelector('[data-ro-confirm]');
+    if (cf) cf.addEventListener('click', doConfirmRO);
+  }
+  function doConfirmRO() {
+    if (R.mission === 'colonize') {
+      let planet = null;
+      try { const ds = ORION.system.generate(g.galaxy, R.dest.sysId); planet = ORION.planet.generate(g.galaxy, ds, R.dest.bodyKey); } catch (e) { planet = null; }
+      if (!planet) { showToast('Pianeta non valido'); return; }
+      doColonize(planet, fleet, 0);
+      if (!fleet.orders || fleet.orders.type !== 'colonize') return; // doColonize ha già mostrato il motivo
+    } else {
+      const order = buildOrder();
+      if (!order) { showToast('Definisci destinazione e missione'); return; }
+      const r = F.setOrder(g, fleet, order);
+      if (!r.ok) { showToast(r.reason || 'Ordine rifiutato'); return; }
+      maybeAutoRenameFleet(g, fleet, order);
+    }
+    persistGame(g);
+    closeFleetOverlay();
+    if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+    showToast(fleet.name + ' · nuovo ordine impartito');
+  }
+  render();
 }
 
 function _maybeCloseFleetInfoPopup(e) {
