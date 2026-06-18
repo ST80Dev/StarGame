@@ -8392,6 +8392,10 @@ function openFleetDetail(fleetId, opts) {
        "Crea e parti" atomicizza tutto. */
     draft: { ships: {}, crew: [] },
     creating: !fleet,
+    /* Stadio 3: destinazione/missione pre-compilate da mappa (ingresso
+       destination-first). null → renderNew sceglie il default. */
+    dest: opts.dest ? { sysId: opts.dest.sysId, bodyKey: opts.dest.bodyKey || null } : null,
+    mission: opts.mission || null,
     renaming: false,
     ordOpen: !!opts.orders,
     ord: { tripType: null, target: null, waypoints: [], opt: { returnHome: false, exploreEach: false } }
@@ -13095,6 +13099,11 @@ function renderContextActionBar(ctx) {
         icnHtml('planet', 'blue') + ' Apri ' + escapeHtml(body.name) +
       '</button>');
 
+      /* Stadio 3: ingresso destination-first dalla mappa → apre il modal
+         flotta con questo corpo come destinazione pre-compilata. */
+      buttons.push('<button class="actionbar__btn btn--with-icon" data-action="ctx-send-fleet" data-sys="' + sysId + '" data-body="' + escapeHtml(ctx.bodyKey) + '" title="Apri il compositore flotta per mandare una flotta qui">' +
+        icnHtml('send', 'cyan') + ' Manda flotta qui</button>');
+
       if (isFree && habitable && planet && planet.colCost) {
         const home = g.colonies[g.homePlanetKey];
         const homeColonized = !!(home && home.colonized);
@@ -13139,6 +13148,11 @@ function renderContextActionBar(ctx) {
     const isFree = !isMine && !isForeign;
     const def = ORION.system && ORION.system.BODY_TYPES ? ORION.system.BODY_TYPES[planet.type] : null;
     const habitable = !!(def && def.habitable);
+
+    /* Stadio 3: ingresso destination-first dalla mappa/pianeta → apre il
+       compositore flotta con questo corpo come destinazione. */
+    buttons.push('<button class="actionbar__btn btn--with-icon" data-action="ctx-send-fleet" data-sys="' + sysId + '" data-body="' + escapeHtml(planet.bodyKey) + '" title="Apri il compositore flotta per mandare una flotta qui">' +
+      icnHtml('send', 'cyan') + ' Manda flotta qui</button>');
 
     if (isFree && habitable && !colony.colonizing && !colony.colonized) {
       /* Feedback utente 2026-06-15: anche al livello pianeta (vista pianeta
@@ -13233,6 +13247,14 @@ function renderContextActionBar(ctx) {
   const gBtn = host.querySelector('[data-action="ctx-garrison"]');
   if (gBtn) gBtn.addEventListener('click', function () {
     openGarrisonPicker(parseInt(gBtn.dataset.sys, 10), gBtn.dataset.body || null);
+  });
+  /* Stadio 3: "Manda flotta qui" → compositore con destinazione pre-compilata. */
+  host.querySelectorAll('[data-action="ctx-send-fleet"]').forEach(function (sf) {
+    sf.addEventListener('click', function () {
+      const sysId = parseInt(sf.dataset.sys, 10);
+      if (isNaN(sysId)) return;
+      openFleetDetail(null, { dest: { sysId: sysId, bodyKey: sf.dataset.body || null } });
+    });
   });
   /* PR-N: nuovi handler per livello SISTEMA con corpo selezionato. */
   const oBtn = host.querySelector('[data-action="ctx-open-body"]');
