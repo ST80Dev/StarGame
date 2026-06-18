@@ -540,6 +540,9 @@ function newGame(seed, opts) {
     incursions: [],
     battles: [],
     warState: { morale: 1.0, pressure: 0 },
+    /* M18.x (richiesta utente 2026-06-18): flotte ambientali AI fisiche in
+       volo sulla mappa (esploratori/estrattori/trasporti). */
+    aiFleets: [],
     /* M09 Fase B (decisione #49): stato di sconfitta (null/esilio/gameover)
        + accumulatore verbi morali (→ piste reputation). */
     defeated: null,
@@ -667,6 +670,8 @@ function newGame(seed, opts) {
        stato di guerra (retro-compat: schema < 9 → vuoti/morale pieno). */
     if (Array.isArray(saved.incursions)) ORION.game.incursions = saved.incursions.slice();
     if (Array.isArray(saved.battles)) ORION.game.battles = saved.battles.slice();
+    /* M18.x (richiesta utente 2026-06-18): flotte ambientali AI in volo. */
+    if (Array.isArray(saved.aiFleets)) ORION.game.aiFleets = saved.aiFleets.slice();
     if (saved.warState && typeof saved.warState === 'object') ORION.game.warState = saved.warState;
     /* M09 Fase B: sconfitta + verbi morali. */
     if (saved.defeated !== undefined) ORION.game.defeated = saved.defeated;
@@ -10511,6 +10516,12 @@ const DEFAULT_AUTOPAUSE = {
   'pirate-nest-recon': false,
   'civ-fallen': true,
   'civ-emerged': true,
+  /* M18.x (richiesta utente 2026-06-18): flotte ambientali AI. Il
+     rilevamento generico è atmosferico (OFF, niente interruzioni);
+     l'avvicinamento a una colonia e la scaramuccia sono notevoli (ON). */
+  'aifleet-detected': false,
+  'aifleet-approach': true,
+  'aifleet-skirmish': true,
   'civ-expand': false,
   'civ-war': false,
   'civ-battle': false,
@@ -10934,6 +10945,9 @@ function showEventOverlay(events) {
     'civ-battle': 'Battaglia tra civiltà (vista)',
     'civ-fallen': 'Civiltà caduta',
     'civ-emerged': 'Nuova civiltà emersa',
+    'aifleet-detected': 'Flotta non identificata rilevata',
+    'aifleet-approach': 'Flotta in avvicinamento alla colonia',
+    'aifleet-skirmish': 'Scaramuccia con flotta altrui',
     'pirate-raid': 'Razzia pirata',
     'pirate-cleared': 'Covo pirata sgominato',
     'pirate-raid-won': 'Covo pirata colpito',
@@ -11446,6 +11460,23 @@ function chronicleEvent(ev) {
     /* "Avvistata": esplori un loro sistema, nessun atto formale ancora.
        Mantieni una flotta nel loro sistema per 3-4 Ι → contatto automatico. */
     pushChronicle(ds + ' — Civiltà <strong>' + escapeHtml(ev.civName) + '</strong> avvistata nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">mantieni una flotta nel loro sistema per il contatto formale</span>.', 'civ');
+  } else if (ev.kind === 'aifleet-detected') {
+    /* M18.x: i sensori (colonia/flotta) hanno captato una flotta altrui in
+       volo. Identità svelata solo con intel piena; altrimenti "non
+       identificata" (misteriosità #34). */
+    const whoFrag = ev.civName ? (' di <strong>' + escapeHtml(ev.civName) + '</strong>') : '';
+    const compFrag = ev.compKnown ? (' · missione di <em>' + escapeHtml(ev.missionLabel) + '</em>') : '';
+    const hint = ev.nearColony
+      ? 'rilevata dai sensori di colonia — avvicina una flotta per scrutarne la composizione'
+      : 'incrociata dai sensori di flotta — può essere seguita';
+    pushChronicle(ds + ' — Flotta non identificata' + whoFrag + ' rilevata nel/nella ' + escapeHtml(ev.regionLabel) + compFrag + ' · <span class="chronicle__hint">' + hint + '</span>.', 'civ');
+  } else if (ev.kind === 'aifleet-approach') {
+    const who = ev.civName ? ('<strong>' + escapeHtml(ev.civName) + '</strong>') : 'Una flotta non identificata';
+    pushChronicle(ds + ' — ' + who + ' (' + escapeHtml(ev.missionLabel) + ') è giunta nelle vicinanze di una tua colonia nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">valuta scorta, scrutinio o intercettazione</span>.', 'civ');
+  } else if (ev.kind === 'aifleet-skirmish') {
+    const who = ev.civName ? ('<strong>' + escapeHtml(ev.civName) + '</strong>') : 'una flotta ostile';
+    const hitFrag = ev.shipsHit > 0 ? (ev.shipsHit + ' scafi colpiti') : 'nessun danno serio';
+    pushChronicle(ds + ' — Scaramuccia: <strong>' + escapeHtml(ev.fleetName || 'la tua flotta') + '</strong> ha incrociato ' + who + ' nel/nella ' + escapeHtml(ev.regionLabel) + ' (' + hitFrag + ') · <span class="chronicle__hint">flotta avversaria sganciata — ripara e valuta il rientro</span>.', 'civ');
   } else if (ev.kind === 'civ-intel-upgraded') {
     const INTEL_LABEL = { fragmentary: 'frammentario', partial: 'parziale', complete: 'completo' };
     pushChronicle(ds + ' — Dossier su <strong>' + escapeHtml(ev.civName) + '</strong> aggiornato: <strong>' + escapeHtml(INTEL_LABEL[ev.to] || ev.to) + '</strong> (era ' + escapeHtml(INTEL_LABEL[ev.from] || ev.from || '—') + ') · <span class="chronicle__hint">flotta più potente nel loro sistema</span>.', 'civ');

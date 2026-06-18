@@ -135,6 +135,42 @@
   }
   const CLASS_ORDER = ['explorer', 'estrattore', 'caccia', 'intercettore', 'corvetta', 'fregata', 'incrociatore', 'dreadnought', 'ammiraglia', 'coloniale'];
 
+  /* ============================================================
+     SENSORI / RADAR (M18.x — flotte ambientali AI, richiesta utente
+     2026-06-18). Ogni classe ha una "qualità sensori" 0..1: gli scafi
+     da ricognizione (esploratore/intercettore) leggono lo spazio meglio
+     delle navi da linea, lente e rumorose. Mappa SEPARATA dal catalogo
+     CLASSES (additiva, diff minimo, nessuna migrazione: derivata, non
+     persistita). Consumata da aifleet.js per il rilevamento delle
+     flotte altrui e la stima della loro composizione. */
+  const SENSOR_BY_CLASS = {
+    explorer: 1.0, intercettore: 0.9, ammiraglia: 0.9, dreadnought: 0.7,
+    caccia: 0.7, incrociatore: 0.6, corvetta: 0.6, fregata: 0.5,
+    estrattore: 0.4, coloniale: 0.3
+  };
+  function shipSensor(kind) {
+    return SENSOR_BY_CLASS[kind] != null ? SENSOR_BY_CLASS[kind] : 0.5;
+  }
+  /* Capacità sensoriale aggregata di una flotta: la guida lo scafo col
+     sensore migliore (la ricognizione la fa la nave più adatta), con un
+     piccolo bonus dalla numerosità (più occhi). `range` = hop di copertura
+     attorno alla flotta (1 se ha uno scafo da ricognizione, altrimenti 0). */
+  function fleetSensor(fleet) {
+    if (!fleet || !Array.isArray(fleet.ships) || !fleet.ships.length) {
+      return { power: 0, range: 0, recon: false };
+    }
+    let best = 0, recon = false, n = 0;
+    for (let i = 0; i < fleet.ships.length; i++) {
+      const k = fleet.ships[i].kind;
+      const v = shipSensor(k);
+      if (v > best) best = v;
+      if (k === 'explorer' || k === 'intercettore') recon = true;
+      n++;
+    }
+    const power = Math.min(1.2, best + Math.min(0.18, 0.05 * Math.log(1 + n)));
+    return { power: power, range: recon ? 1 : 0, recon: recon };
+  }
+
   /* M15: una flotta contiene una nave di questa classe? */
   function fleetHasKind(fleet, kind) {
     if (!fleet || !Array.isArray(fleet.ships)) return false;
@@ -3119,6 +3155,10 @@
     setFormation: setFormation,
     fleetHasColonial: fleetHasColonial,
     fleetHasExtractor: fleetHasExtractor,
+    /* M18.x — sensori/radar (flotte ambientali AI). */
+    shipSensor: shipSensor,
+    fleetSensor: fleetSensor,
+    SENSOR_BY_CLASS: SENSOR_BY_CLASS,
     /* Stadio 1 — modello comandi (docs/FLEET_FLOW.md). */
     fleetStance: fleetStance,
     canTargetBody: canTargetBody,

@@ -2317,6 +2317,14 @@
     if (root.ORION.ai && root.ORION.ai.tick) {
       root.ORION.ai.tick(game, events);
     }
+    /* M18.x (richiesta utente 2026-06-18): flotte ambientali AI fisiche
+       (esploratori/estrattori/trasporti) che viaggiano sulla mappa fin
+       dall'early game + rilevamento via sensori di colonie/flotte. Strato
+       LEGGERO separato dalle incursioni ostili (sopra). Movimento ogni
+       Impulso; spawn a cadenza interna. Determinismo: RNG da seed. */
+    if (root.ORION.aifleet && root.ORION.aifleet.tick) {
+      root.ORION.aifleet.tick(game, events);
+    }
     /* M11 Fase A (decisione #51): diplomazia. Deriva lenta della reputazione
        verso il target morale (light/dark) + scadenza tregue → guerra.
        Determinismo: zero RNG. */
