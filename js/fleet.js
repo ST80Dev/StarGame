@@ -207,10 +207,13 @@
     }
     return w;
   }
-  /* Posti parcheggio dell'Hangar = attracchi + cantieri (vedi sopra). */
+  /* Posti parcheggio dell'Hangar = attracchi + cantieri. Delega all'unica
+     fonte di verità (expedition.hangarBerthCapacity) per restare allineato
+     a canBuildShip e alla UI. Fallback locale se expedition non è caricato. */
   function hangarBerthCapacity(colony) {
     const E = _exp();
     if (!E) return 0;
+    if (E.hangarBerthCapacity) return E.hangarBerthCapacity(colony);
     const docks = E.hangarDockCapacity ? E.hangarDockCapacity(colony) : 0;
     const slots = E.hangarBuildSlots ? E.hangarBuildSlots(colony) : 0;
     return docks + slots;
