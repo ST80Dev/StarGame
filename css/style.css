@@ -8424,3 +8424,35 @@ select.main-menu__input { cursor: pointer; }
 .recap-row__site { font-size: 0.86rem; }
 .recap-row__loot { font-family: var(--font-display); color: #a8e6c0; white-space: nowrap; }
 .recap-note { font-size: 0.76rem; color: var(--c-text-faint); margin: 4px 0 10px; }
+
+/* =====================================================================
+   Cinematiche — sequenza d'apertura ("Primo Salto" / "Ritorno")
+   Overlay a pieno schermo che ospita la tela decorativa (galassie lontane)
+   e il pulsante "Salta intro". I view reali (mappa/sistema/pianeta) animano
+   SOTTO; questo strato è quasi del tutto trasparente. z 240: sopra stage e
+   HUD, sotto le modali (prefs 320 / conferme 400) — che non si aprono
+   durante l'intro. (UI_GUIDE §3/§8: rispetta prefers-reduced-motion lato JS.)
+   ===================================================================== */
+.cinematic-overlay {
+  position: fixed; inset: 0; z-index: 240;
+  pointer-events: auto; cursor: pointer;
+  /* niente background: lo stage deve restare visibile durante il volo */
+}
+.cinematic-overlay__canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none;
+}
+.cinematic-overlay__skip {
+  position: absolute; right: 18px; bottom: 16px;
+  pointer-events: auto;
+  font-family: var(--font-display);
+  font-size: 0.8rem; letter-spacing: 0.04em;
+  color: var(--c-text-faint);
+  background: rgba(var(--c-bg-deep-rgb) / 0.6);
+  border: 1px solid rgba(var(--c-surface-rgb) / 0.9);
+  border-radius: 6px; padding: 6px 12px;
+  cursor: pointer; transition: color 0.15s ease, border-color 0.15s ease;
+}
+.cinematic-overlay__skip:hover {
+  color: var(--c-text); border-color: #2fe6e0;
+}

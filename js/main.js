@@ -1550,8 +1550,11 @@ function openSystem(id) {
   updateSystemUI(system, null);
   updateEmpireDeck();   /* #62: scena = sistema → nascondi Dashboard Impero */
 
-  /* M06.6: tutorial — prima apertura di un sistema. */
-  if (ORION.tutorial) ORION.tutorial.fire('system');
+  /* M06.6: tutorial — prima apertura di un sistema. Soppresso durante la
+     sequenza d'apertura (non deve comparire sopra il volo cinematico). */
+  if (ORION.tutorial && !(ORION.cinematics && ORION.cinematics.active && ORION.cinematics.active())) {
+    ORION.tutorial.fire('system');
+  }
 }
 
 function closeSystem() {
@@ -1902,8 +1905,11 @@ function openPlanet(sysId, bodyKey) {
   updatePlanetUI();
   updateEmpireDeck();   /* #62: scena = pianeta → nascondi Dashboard Impero */
 
-  /* M06.6: tutorial — prima apertura di un pianeta. */
-  if (ORION.tutorial) ORION.tutorial.fire('planet');
+  /* M06.6: tutorial — prima apertura di un pianeta. Soppresso durante la
+     sequenza d'apertura (compare a fine intro col welcome). */
+  if (ORION.tutorial && !(ORION.cinematics && ORION.cinematics.active && ORION.cinematics.active())) {
+    ORION.tutorial.fire('planet');
+  }
 }
 
 function closePlanet() {
@@ -14647,7 +14653,7 @@ function loadPayloadAsGame(payload) {
      applica il delta (colonie/tempo/cronaca/mode). Coerente con
      seed+delta (decisione #5). */
   newGame(payload.seed, { payload: payload });
-  enterGame();
+  enterGame({ intro: 'load' });
   showToast('Partita caricata');
   closeSaveModal();
 }
@@ -14698,7 +14704,8 @@ function migrateLegacyCrewIds(game) {
   });
 }
 
-function enterGame() {
+function enterGame(opts) {
+  opts = opts || {};
   if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; } if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
   if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
   if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
@@ -14726,10 +14733,34 @@ function enterGame() {
   renderDxPanel();
   /* M06.6: tutorial — la "?" diventa attiva solo dentro partita. */
   updateTutorialButton();
-  /* Welcome: prima trigger della partita (solo se tutorial attivo e non già vista). */
-  if (ORION.tutorial) ORION.tutorial.fire('welcome');
   /* PR mobile: mostra la bottom tab bar ora che la partita è attiva. */
   updateMobileNav();
+  /* Sequenza d'apertura (intro cinematica). Se attiva, posticipa il welcome
+     a fine intro (così non compare sopra il volo); le lezioni 'system'/
+     'planet' restano soppresse durante la cinematica (vedi openSystem/
+     openPlanet). Con cinematiche OFF o reduced-motion → comportamento storico
+     (welcome subito, nessun volo). */
+  const introKind = opts.intro;   // 'new' | 'load' | undefined
+  const cine = ORION.cinematics;
+  if (introKind && cine && cine.playIntro && cine.mode && cine.mode() !== 'off') {
+    const g = ORION.game;
+    let homeBody = null;
+    if (g.homePlanetKey) {
+      const parts = String(g.homePlanetKey).split(':');
+      if (parts.length === 2) homeBody = parts[1];
+    }
+    cine.playIntro({
+      kind: introKind,
+      homeSystemId: g.galaxy ? g.galaxy.homeId : null,
+      homeGroupId: g.galaxy ? g.galaxy.homeGroupId : null,
+      homeBodyKey: homeBody,
+      capitalSystemId: g.galaxy ? g.galaxy.homeId : null,
+      onDone: function () { if (ORION.tutorial && introKind === 'new') ORION.tutorial.fire('welcome'); }
+    });
+  } else {
+    /* Welcome: prima trigger della partita (solo se tutorial attivo e non già vista). */
+    if (ORION.tutorial) ORION.tutorial.fire('welcome');
+  }
 }
 
 function escapeHtml(s) { return ORION.util.escapeHtml(s); }
@@ -14829,7 +14860,7 @@ function renderMainMenuHome(body) {
   const cont = body.querySelector('[data-action="menu-continue"]');
   if (cont && hasAuto) cont.addEventListener('click', function () {
     newGame(auto.seed, { payload: auto });
-    enterGame();
+    enterGame({ intro: 'load' });
     showToast('Partita ripresa');
   });
   const ng = body.querySelector('[data-action="menu-new"]');
@@ -15178,7 +15209,7 @@ function startGameWithEmpire(empire) {
   /* Reset preview + form per la prossima apertura */
   ORION.menuPreview = null;
   ORION.menuForm = { seed: null, preset: presetId, ironman: !!presetMods.ironman, tutorial: !!ORION.menuForm.tutorial };
-  enterGame();
+  enterGame({ intro: 'new' });
   showToast(formatEmpire(ORION.game.empire) + ' · ' + ORION.names.galaxyName(ORION.game.seed));
 }
 
@@ -15328,7 +15359,10 @@ function boot() {
   initPrefsControls();
   /* Cinematiche (Fase 1): aggancia la navigazione così il regista può portare
      alla vista del sistema appena esplorato senza dipendere da main.js. */
-  if (ORION.cinematics) ORION.cinematics.bind({ openSystem: function (id) { openSystem(id); } });
+  if (ORION.cinematics) ORION.cinematics.bind({
+    openSystem: function (id) { openSystem(id); },
+    openPlanet: function (sysId, bodyKey) { openPlanet(sysId, bodyKey); }
+  });
   initMobileNav();
   initMainMenu();
   showMainMenu('home');
