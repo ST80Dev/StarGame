@@ -8527,21 +8527,46 @@ function openFleetDetail(fleetId, opts) {
         escapeHtml(systemNameFromKey(g, k)) + '</option>';
     }).join('');
 
-    /* Composizione navi — solo classi con disponibilità a terra o in carrello. */
-    let shipRows = '';
+    /* Composizione navi — due pannelli (a disposizione → in flotta), click
+       per spostare un'unità (Stadio 2.2, niente drag&drop: parità touch).
+       Riusa gli handler data-draft-ship-add/rem (già wired). */
+    let availTiles = '', fleetTiles = '';
     ORION.fleet.classList().forEach(function (cls) {
       const avail = (colony && colony.ships[cls.id]) || 0;
       const inCart = D.draft.ships[cls.id] || 0;
+      const ground = avail - inCart;
       if (avail <= 0 && inCart <= 0) return;
-      shipRows += '<div class="fdetail__crow">' +
-        '<span class="fdetail__crow-n">' + fleetShipIcon(cls.id) + ' ' + escapeHtml(cls.name) + '</span>' +
-        '<span class="fdetail__crow-c">in flotta <strong>' + inCart + '</strong> · a terra ' + (avail - inCart) + '</span>' +
-        '<span class="fdetail__crow-b">' +
-          '<button class="btn btn--mini" data-draft-ship-add="' + cls.id + '" type="button"' + (inCart >= avail ? ' disabled' : '') + '>+</button>' +
-          '<button class="btn btn--mini" data-draft-ship-rem="' + cls.id + '" type="button"' + (inCart <= 0 ? ' disabled' : '') + '>−</button>' +
-        '</span></div>';
+      if (ground > 0) {
+        availTiles +=
+          '<button class="fcompose__tile" type="button" data-draft-ship-add="' + cls.id + '" ' +
+            'title="Aggiungi ' + escapeHtml(cls.name) + ' alla flotta">' +
+            '<span class="fcompose__glyph">' + fleetShipIcon(cls.id) + '</span>' +
+            '<span class="fcompose__name">' + escapeHtml(cls.name) + '</span>' +
+            '<span class="fcompose__cnt">×' + ground + '</span></button>';
+      }
+      if (inCart > 0) {
+        fleetTiles +=
+          '<button class="fcompose__tile is-active" type="button" data-draft-ship-rem="' + cls.id + '" ' +
+            'title="Togli ' + escapeHtml(cls.name) + ' dalla flotta">' +
+            '<span class="fcompose__glyph">' + fleetShipIcon(cls.id) + '</span>' +
+            '<span class="fcompose__name">' + escapeHtml(cls.name) + '</span>' +
+            '<span class="fcompose__cnt">×' + inCart + '</span></button>';
+      }
     });
-    if (!shipRows) shipRows = '<p class="fdetail__empty">Nessuna nave a terra: costruiscile all’Hangar di questa colonia.</p>';
+    if (!availTiles) availTiles = '<p class="fdetail__empty">Nessuna nave a terra: costruiscile all’Hangar di questa colonia.</p>';
+    if (!fleetTiles) fleetTiles = '<p class="fcompose__empty">Clicca una nave a sinistra per aggiungerla.</p>';
+    const shipRows =
+      '<div class="fcompose">' +
+        '<div class="fcompose__col">' +
+          '<div class="fcompose__col-h">A disposizione</div>' +
+          '<div class="fcompose__list">' + availTiles + '</div>' +
+        '</div>' +
+        '<div class="fcompose__arrow" aria-hidden="true">▸</div>' +
+        '<div class="fcompose__col">' +
+          '<div class="fcompose__col-h">In flotta</div>' +
+          '<div class="fcompose__list fcompose__list--fleet">' + fleetTiles + '</div>' +
+        '</div>' +
+      '</div>';
 
     /* Equipaggio — selezione PER GRADO (mutua i chip della tab Esplorazione,
        #76): vedi quali livelli hai e quanti, e scegli QUALI imbarcare. */
@@ -8605,7 +8630,7 @@ function openFleetDetail(fleetId, opts) {
     const body =
       '<div class="fdetail__sec">' + secHead('roster', 'amber', 'Colonia origine') +
         '<select class="fdetail__select" data-bind="new-colony">' + optsHtml + '</select></div>' +
-      '<div class="fdetail__sec">' + secHead('fleet', 'cyan', 'Navi', 'dalle navi a terra') + shipRows + '</div>' +
+      '<div class="fdetail__sec">' + secHead('fleet', 'cyan', 'Navi', 'clic per spostare') + shipRows + '</div>' +
       '<div class="fdetail__sec">' + secHead('forces', 'amber', 'Equipaggio', 'in flotta ' + crewSel + '/' + crewReq) + crewBody + '</div>' +
       supSec +
       ordSec +

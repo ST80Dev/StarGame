@@ -5969,6 +5969,49 @@ select.main-menu__input { cursor: pointer; }
 .fdetail__crow-b .btn--mini { min-width: 24px; padding: 1px 6px; }
 .fdetail__vets { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
 
+/* Composizione flotta a due pannelli — a disposizione → in flotta (Stadio 2.2).
+   Click per spostare un'unità (niente drag&drop: parità touch/mouse). */
+.fcompose { display: flex; align-items: stretch; gap: 8px; }
+.fcompose__col { flex: 1 1 0; min-width: 0; }
+.fcompose__col-h {
+  font-family: var(--font-display, sans-serif);
+  font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--c-text-faint, #98a3c8); margin-bottom: 4px;
+}
+.fcompose__list {
+  display: flex; flex-direction: column; gap: 5px; padding: 6px; min-height: 72px;
+  background: rgb(var(--c-surface-rgb) / 0.45);
+  border: 1px solid var(--c-border-soft, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-sm, 6px);
+}
+.fcompose__list--fleet { border-color: rgba(47, 230, 224, 0.3); }
+.fcompose__tile {
+  display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
+  padding: 6px 8px; font-size: 0.82rem;
+  background: rgb(var(--c-surface-rgb) / 0.6);
+  border: 1px solid var(--c-border-soft, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-sm, 6px);
+  color: var(--c-text, #e6ecff); cursor: pointer;
+  transition: var(--transition, 200ms ease);
+}
+.fcompose__tile:hover { border-color: rgba(47, 230, 224, 0.5); }
+.fcompose__tile.is-active {
+  border-color: var(--c-accent, #2fe6e0);
+  box-shadow: inset 2px 0 0 var(--c-accent, #2fe6e0);
+}
+.fcompose__glyph { flex: 0 0 auto; display: inline-flex; }
+.fcompose__name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fcompose__cnt { flex: 0 0 auto; font-family: var(--font-data, monospace); font-size: 0.94em; color: var(--c-text-faint, #98a3c8); }
+.fcompose__arrow {
+  align-self: center; flex: 0 0 auto;
+  color: var(--c-accent, #2fe6e0); text-shadow: 0 0 3px currentColor; font-size: 1.1rem;
+}
+.fcompose__empty { margin: 0; padding: 8px 4px; font-size: 0.76rem; color: var(--c-text-faint, #98a3c8); text-align: center; }
+@media (max-width: 760px) {
+  .fcompose { flex-direction: column; }
+  .fcompose__arrow { transform: rotate(90deg); }
+}
+
 /* formazione: segmento a 3 */
 .fdetail__seg-row { display: flex; gap: 0; }
 .fdetail__seg {
