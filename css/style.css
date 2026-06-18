@@ -5991,6 +5991,11 @@ select.main-menu__input { cursor: pointer; }
 /* Nota inline nei chip missione (gate non soddisfatto / in arrivo) — 2.4. */
 .fdetail__chip-note { font-size: 0.7rem; opacity: 0.75; font-style: italic; }
 
+/* Contatore equipaggio: rosso finché insufficiente, verde quando adeguato. */
+.fcrew-count { font-weight: 600; }
+.fcrew-count.is-ok { color: var(--c-good, #6fe0b8); }
+.fcrew-count.is-crit { color: var(--c-bad, #f08296); }
+
 /* Composizione flotta a due pannelli — a disposizione → in flotta (Stadio 2.2).
    Click per spostare un'unità (niente drag&drop: parità touch/mouse). */
 .fcompose { display: flex; align-items: stretch; gap: 8px; }

@@ -8657,6 +8657,13 @@ function openFleetDetail(fleetId, opts) {
         '</div>' +
       '</div>';
 
+    /* Fabbisogno equipaggio (calcolato prima dei chip per il cap di selezione). */
+    let nShips = 0, crewReq = 0;
+    Object.keys(D.draft.ships).forEach(function (k) {
+      const n = D.draft.ships[k] || 0; nShips += n;
+      const cls = ORION.fleet.getClass(k); crewReq += (cls && cls.crew ? cls.crew : 0) * n;
+    });
+
     /* Equipaggio — selezione PER GRADO (mutua i chip della tab Esplorazione,
        #76): vedi quali livelli hai e quanti, e scegli QUALI imbarcare. */
     const crewList = (colony && colony.crews && Array.isArray(colony.crews.explorer)) ? colony.crews.explorer.slice() : [];
@@ -8673,25 +8680,28 @@ function openFleetDetail(fleetId, opts) {
           return '<span class="fcrew-inv__item">' + escapeHtml(l) + ' ×' + byGrade[l] + '</span>';
         }).join('') + '</div>'
       : '';
+    const crewSel = D.draft.crew.length;
+    /* Cap selezione: non si imbarca piu' equipaggio di quanto serve alle navi
+       scelte (0 navi → nessuna selezione). I chip non selezionati si bloccano
+       una volta raggiunto il fabbisogno; quelli selezionati restano (per togliere). */
+    const crewAtCap = crewReq <= 0 || crewSel >= crewReq;
     const crewChips = crewList.slice().sort(function (a, b) { return (b.xp || 0) - (a.xp || 0); }).map(function (c) {
       const sel = D.draft.crew.indexOf(c.id) >= 0;
       const lbl = crewGradeLabel(c.xp || 0);
-      return '<button class="exp-crew-chip' + (sel ? ' is-selected' : '') + '" type="button" data-draft-crew-toggle="' + escapeHtml(String(c.id)) + '" ' +
-        'title="' + (sel ? 'Rimuovi dalla flotta' : 'Imbarca') + ' · ' + escapeHtml(lbl) + ' · xp ' + (c.xp || 0) + '">' +
+      const lockAdd = !sel && crewAtCap;
+      const tip = lockAdd
+        ? (crewReq <= 0 ? 'Aggiungi prima una nave' : 'Equipaggio già al completo per le navi scelte')
+        : ((sel ? 'Rimuovi dalla flotta' : 'Imbarca') + ' · ' + lbl + ' · xp ' + (c.xp || 0));
+      return '<button class="exp-crew-chip' + (sel ? ' is-selected' : '') + '" type="button" data-draft-crew-toggle="' + escapeHtml(String(c.id)) + '"' +
+        (lockAdd ? ' disabled' : '') + ' title="' + escapeHtml(tip) + '">' +
         '<span class="exp-crew-chip__rank">' + escapeHtml(lbl) + '</span>' +
         '<span class="exp-crew-chip__xp">xp ' + (c.xp || 0) + '</span></button>';
     }).join('');
     const crewBody = crewList.length
       ? invLine + '<div class="exp-crew-select fcrew-pick">' + crewChips + '</div>'
       : '<p class="fdetail__empty">Nessun equipaggio a terra: formane in <em>Accademia militare</em>.</p>';
-    const crewSel = D.draft.crew.length;
 
-    /* Riepilogo: n. navi + fabbisogno equipaggio per gli ordini. */
-    let nShips = 0, crewReq = 0;
-    Object.keys(D.draft.ships).forEach(function (k) {
-      const n = D.draft.ships[k] || 0; nShips += n;
-      const cls = ORION.fleet.getClass(k); crewReq += (cls && cls.crew ? cls.crew : 0) * n;
-    });
+    /* Riepilogo: stato equipaggio (nShips/crewReq calcolati sopra). */
     const crewOk = crewSel >= crewReq;
     const sumChips =
       '<span class="fdetail__sumchip">' + nShips + ' navi</span>' +
@@ -8815,7 +8825,8 @@ function openFleetDetail(fleetId, opts) {
           '<select class="fdetail__select" data-bind="new-colony" aria-label="Colonia di origine"' + (multiCol ? '' : ' disabled') + '>' + colOptsHtml + '</select>' +
         '</div></div>' +
       '<div class="fdetail__sec">' + secHead('fleet', 'cyan', 'Navi', 'clic per spostare') + shipRows + '</div>' +
-      '<div class="fdetail__sec">' + secHead('forces', 'amber', 'Equipaggio', 'in flotta ' + crewSel + '/' + crewReq) + crewBody + '</div>' +
+      '<div class="fdetail__sec">' + secHead('forces', 'amber', 'Equipaggio',
+        '<span class="fcrew-count ' + (crewOk ? 'is-ok' : 'is-crit') + '">in flotta ' + crewSel + '/' + crewReq + '</span>') + crewBody + '</div>' +
       supSec +
       misSec +
       '<p class="fdetail__hint">' + uiIcon('info', 'soft') + ' Il nome si adatterà alla missione. <strong>Annulla</strong> non crea nulla.</p>';
@@ -9437,7 +9448,17 @@ function openFleetDetail(fleetId, opts) {
         if (!Array.isArray(D.draft.crew)) D.draft.crew = [];
         const id = b.dataset.draftCrewToggle;
         const i = D.draft.crew.indexOf(id);
-        if (i >= 0) D.draft.crew.splice(i, 1); else D.draft.crew.push(id);
+        if (i >= 0) { D.draft.crew.splice(i, 1); }
+        else {
+          /* Cap: non oltre il fabbisogno equipaggio delle navi scelte. */
+          let req = 0;
+          Object.keys(D.draft.ships).forEach(function (k) {
+            const n = D.draft.ships[k] || 0; const cls = ORION.fleet.getClass(k);
+            req += (cls && cls.crew ? cls.crew : 0) * n;
+          });
+          if (D.draft.crew.length >= req) return;
+          D.draft.crew.push(id);
+        }
         render();
       });
     });
