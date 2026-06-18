@@ -8522,10 +8522,33 @@ function openFleetDetail(fleetId, opts) {
     if (!Array.isArray(D.draft.crew)) D.draft.crew = [];
     const colony = g.colonies[D.newColonyKey];
     if (colony && ORION.fleet.ensureColonyShipKinds) ORION.fleet.ensureColonyShipKinds(colony);
-    const optsHtml = elig.map(function (k) {
-      return '<option value="' + escapeHtml(k) + '"' + (k === D.newColonyKey ? ' selected' : '') + '>' +
-        escapeHtml(systemNameFromKey(g, k)) + '</option>';
+    /* Origine in due passi (feedback utente): SISTEMA a sx, COLONIA a dx —
+       gestisce il caso di più colonie nello stesso sistema. */
+    function sysIdOf(k) { return Number(String(k).split(':')[0]); }
+    function colonyLabel(k) {
+      const parts = String(k).split(':'); const sid = Number(parts[0]); const bk = parts[1];
+      try {
+        const sys = ORION.system.generate(g.galaxy, sid);
+        const pl = ORION.planet.generate(g.galaxy, sys, bk);
+        if (pl && pl.name) return pl.name;
+      } catch (e) { /* fallback */ }
+      return 'Corpo ' + bk;
+    }
+    const curSysId = sysIdOf(D.newColonyKey);
+    /* Sistemi distinti con almeno una colonia idonea (ordine stabile). */
+    const sysIds = [];
+    elig.forEach(function (k) { const s = sysIdOf(k); if (sysIds.indexOf(s) < 0) sysIds.push(s); });
+    const sysOptsHtml = sysIds.map(function (s) {
+      const nm = (g.galaxy.systems[s] && g.galaxy.systems[s].name) || ('Sistema ' + s);
+      return '<option value="' + s + '"' + (s === curSysId ? ' selected' : '') + '>' + escapeHtml(nm) + '</option>';
     }).join('');
+    /* Colonie idonee nel sistema scelto. */
+    const colsInSys = elig.filter(function (k) { return sysIdOf(k) === curSysId; });
+    const colOptsHtml = colsInSys.map(function (k) {
+      return '<option value="' + escapeHtml(k) + '"' + (k === D.newColonyKey ? ' selected' : '') + '>' +
+        escapeHtml(colonyLabel(k)) + '</option>';
+    }).join('');
+    const multiCol = colsInSys.length > 1;
 
     /* Composizione navi — due pannelli (a disposizione → in flotta), click
        per spostare un'unità (Stadio 2.2, niente drag&drop: parità touch).
@@ -8628,8 +8651,11 @@ function openFleetDetail(fleetId, opts) {
     const supSec = (nShips > 0) ? secSupplyDraft(crewReq) : '';
 
     const body =
-      '<div class="fdetail__sec">' + secHead('roster', 'amber', 'Colonia origine') +
-        '<select class="fdetail__select" data-bind="new-colony">' + optsHtml + '</select></div>' +
+      '<div class="fdetail__sec">' + secHead('roster', 'amber', 'Origine', multiCol ? 'sistema · colonia' : '') +
+        '<div class="fdetail__origin">' +
+          '<select class="fdetail__select" data-bind="new-system" aria-label="Sistema di origine">' + sysOptsHtml + '</select>' +
+          '<select class="fdetail__select" data-bind="new-colony" aria-label="Colonia di origine"' + (multiCol ? '' : ' disabled') + '>' + colOptsHtml + '</select>' +
+        '</div></div>' +
       '<div class="fdetail__sec">' + secHead('fleet', 'cyan', 'Navi', 'clic per spostare') + shipRows + '</div>' +
       '<div class="fdetail__sec">' + secHead('forces', 'amber', 'Equipaggio', 'in flotta ' + crewSel + '/' + crewReq) + crewBody + '</div>' +
       supSec +
@@ -9177,6 +9203,13 @@ function openFleetDetail(fleetId, opts) {
       b.addEventListener('click', closeDetail);
     });
     /* --- nuova flotta (#88: carrello + Conferma/Annulla) --- */
+    const newSysSel = host.querySelector('[data-bind="new-system"]');
+    if (newSysSel) newSysSel.addEventListener('change', function () {
+      const sid = Number(newSysSel.value);
+      const elig = eligibleColonies();
+      const first = elig.filter(function (k) { return Number(String(k).split(':')[0]) === sid; })[0];
+      if (first) { D.newColonyKey = first; D.draft = { ships: {}, crew: [] }; render(); }
+    });
     const newColSel = host.querySelector('[data-bind="new-colony"]');
     if (newColSel) newColSel.addEventListener('change', function () {
       D.newColonyKey = newColSel.value; D.draft = { ships: {}, crew: [] }; render();

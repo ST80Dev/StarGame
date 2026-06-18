@@ -5969,6 +5969,11 @@ select.main-menu__input { cursor: pointer; }
 .fdetail__crow-b .btn--mini { min-width: 24px; padding: 1px 6px; }
 .fdetail__vets { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
 
+/* Origine in due passi: sistema | colonia (Stadio 2.2 follow-up). */
+.fdetail__origin { display: flex; gap: 8px; }
+.fdetail__origin .fdetail__select { flex: 1 1 0; min-width: 0; }
+@media (max-width: 760px) { .fdetail__origin { flex-direction: column; } }
+
 /* Composizione flotta a due pannelli — a disposizione → in flotta (Stadio 2.2).
    Click per spostare un'unità (niente drag&drop: parità touch/mouse). */
 .fcompose { display: flex; align-items: stretch; gap: 8px; }
