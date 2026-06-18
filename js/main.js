@@ -8676,7 +8676,7 @@ function openFleetDetail(fleetId, opts) {
     const crewChips = crewList.slice().sort(function (a, b) { return (b.xp || 0) - (a.xp || 0); }).map(function (c) {
       const sel = D.draft.crew.indexOf(c.id) >= 0;
       const lbl = crewGradeLabel(c.xp || 0);
-      return '<button class="exp-crew-chip' + (sel ? ' is-active' : '') + '" type="button" data-draft-crew-toggle="' + escapeHtml(String(c.id)) + '" ' +
+      return '<button class="exp-crew-chip' + (sel ? ' is-selected' : '') + '" type="button" data-draft-crew-toggle="' + escapeHtml(String(c.id)) + '" ' +
         'title="' + (sel ? 'Rimuovi dalla flotta' : 'Imbarca') + ' · ' + escapeHtml(lbl) + ' · xp ' + (c.xp || 0) + '">' +
         '<span class="exp-crew-chip__rank">' + escapeHtml(lbl) + '</span>' +
         '<span class="exp-crew-chip__xp">xp ' + (c.xp || 0) + '</span></button>';
