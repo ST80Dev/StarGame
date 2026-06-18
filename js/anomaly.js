@@ -61,8 +61,28 @@
     /* Cintura asteroidale: corpo §6.3, esposta come sito harvest (richiesta
        utente 2026-06-16). Riserva maggiore delle altre — è una risorsa
        industriale ricorrente, non un'anomalia "rara". */
-    cintura:  { harvest: true, res: 'met', cap: 600, perBody: true }
+    cintura:  { harvest: true, res: 'met', cap: 600, perBody: true },
+    /* Decisione A (Stadio 1, docs/FLEET_FLOW.md): GIACIMENTI su corpi non
+       colonizzabili. Il gigante gassoso è sfruttabile (energia) — stesso
+       modello perBody della cintura. Risponde a "estrarre da pianeta non
+       colonizzabile" senza inventare meccaniche nuove. */
+    gassoso:  { harvest: true, res: 'en', cap: 500, perBody: true }
   };
+
+  /* Corpi (non colonizzabili) che espongono un giacimento sfruttabile:
+     body.type → kind harvest. Cintura (met) + gigante gassoso (en). */
+  const BODY_GIACIMENTO = { cintura: 'cintura', gassoso: 'gassoso' };
+
+  /* Helper esposto: il corpo ha un giacimento? → { kind, res, cap } | null.
+     Usato da actionsFor (gate Estrai) e dall'ingresso-da-mappa. Deterministico
+     dal tipo del corpo (seed-derived), non legge lo stato di gioco. */
+  function bodyGiacimento(body) {
+    if (!body || !body.type) return null;
+    const kind = BODY_GIACIMENTO[body.type];
+    if (!kind) return null;
+    const def = KINDS[kind];
+    return { kind: kind, res: def.res, cap: def.cap };
+  }
 
   function ensure(game) {
     if (!game) return;
@@ -142,20 +162,22 @@
         game.anomalies[key] = { sysId: sysId, kind: kind, res: def.res, cap: def.cap, reserve: def.cap, lowFlag: false, harvested: 0 };
       }
     });
-    /* Cinture asteroidali (richiesta utente 2026-06-16): UN sito per ogni
-       corpo di tipo `cintura` nel sistema. La cintura è un CORPO §6.3, non
-       una anomalia, ma il modello harvest §17.3 si applica naturalmente
-       (riserva ricorrente di metalli). */
+    /* Giacimenti su CORPI (decisione A): UN sito per ogni corpo non
+       colonizzabile sfruttabile (cintura → met, gigante gassoso → en).
+       Il corpo è §6.3, ma il modello harvest §17.3 si applica naturalmente
+       (riserva ricorrente). Generalizza il vecchio loop solo-cinture. */
     const bodies = (sys && sys.bodies) || [];
-    const beltDef = KINDS.cintura;
     for (let j = 0; j < bodies.length; j++) {
       const b = bodies[j];
-      if (!b || b.type !== 'cintura' || !b.key) continue;
-      const bk = siteKey(sysId, 'cintura', b.key);
+      if (!b || !b.key) continue;
+      const kind = BODY_GIACIMENTO[b.type];
+      if (!kind) continue;
+      const gdef = KINDS[kind];
+      const bk = siteKey(sysId, kind, b.key);
       if (game.anomalies[bk]) continue;
       game.anomalies[bk] = {
-        sysId: sysId, kind: 'cintura', bodyKey: b.key,
-        res: beltDef.res, cap: beltDef.cap, reserve: beltDef.cap,
+        sysId: sysId, kind: kind, bodyKey: b.key,
+        res: gdef.res, cap: gdef.cap, reserve: gdef.cap,
         lowFlag: false, harvested: 0
       };
     }
@@ -366,6 +388,7 @@
     ensureSites: ensureSites,
     tick: tick,
     nextEventDelta: nextEventDelta,
-    knownSites: knownSites
+    knownSites: knownSites,
+    bodyGiacimento: bodyGiacimento
   };
 })(typeof window !== 'undefined' ? window : this);

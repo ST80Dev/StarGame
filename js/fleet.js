@@ -864,7 +864,7 @@
      ordini di movimento) calcola la rotta BFS. NON consuma Impulsi: la
      marcia avanza nel tick.
      ------------------------------------------------------------------ */
-  function setOrder(game, fleet, order) {
+  function setOrder(game, fleet, order, opts) {
     if (!fleet) return { ok: false, reason: 'Flotta inesistente' };
     if (!order || !order.type) return { ok: false, reason: 'Ordine non valido' };
     if (fleet.ships.length === 0) return { ok: false, reason: 'Flotta vuota' };
@@ -873,6 +873,14 @@
     /* Qualunque nuovo ordine annulla l'intento offensivo precedente
        (M09 — decisione #49): re-ordinare una flotta cancella l'attacco. */
     fleet.attackTarget = null;
+    /* Stadio 1.4: un ordine MANUALE resetta il piano accodato (la coda
+       appartiene al piano precedente). L'avanzamento interno della coda
+       passa opts.fromQueue=true per non auto-cancellarsi. */
+    if (!opts || !opts.fromQueue) fleet.queue = [];
+    /* Stadio 1.6: ogni nuovo ordine apre un nuovo segmento di viaggio →
+       riarma il tiro incidente (uno per segmento). Gli ordini intra/idle non
+       tireranno comunque (gate in tick: rotta > 1, non intra). */
+    fleet._incidentRolled = false;
     if (type === 'idle') {
       fleet.orders = { type: 'idle' };
       fleet.route = [];
@@ -895,14 +903,39 @@
     if (type === 'move' || type === 'explore') {
       const to = order.toSysId;
       if (to == null) return { ok: false, reason: 'Sistema di destinazione assente' };
-      const path = computePath(game.galaxy, fleet.location.systemId, to);
+      /* Stadio 1.5 — M2: `move` con bodyKey è una manovra verso un CORPO
+         preciso. Inter-sistema: M1 fino al sistema, poi all'arrivo M2 verso
+         il corpo (handler d'arrivo). Intra-sistema (to == sistema corrente):
+         solo M2. Senza bodyKey resta M1 puro (orbita generica). */
+      const bodyKey = (type === 'move' && order.bodyKey != null) ? String(order.bodyKey) : null;
+      const currentSys = fleet.location.systemId;
+      if (to === currentSys) {
+        /* M2 puro (stesso sistema). */
+        if (bodyKey == null) {
+          /* Già in orbita generica: niente da percorrere. */
+          fleet.orders = { type: 'idle' };
+          fleet.route = [currentSys]; fleet.routeIdx = 0; fleet.etaImpulsi = 0;
+          return { ok: true };
+        }
+        fleet.orders = { type: 'move', toSysId: to, bodyKey: bodyKey };
+        const intraI = intraTravelI(game, fleet, bodyKey);
+        if (intraI > 0) {
+          beginIntraTransit(game, fleet, bodyKey, intraI);
+        } else {
+          /* Già al corpo. */
+          fleet.route = [currentSys]; fleet.routeIdx = 0;
+          fleet.location.status = 'orbiting'; fleet.location.bodyKey = bodyKey;
+          fleet.etaImpulsi = 0;
+          fleet.orders = { type: 'idle' };
+        }
+        return { ok: true };
+      }
+      const path = computePath(game.galaxy, currentSys, to);
       if (!path) return { ok: false, reason: 'Nessuna rotta verso il sistema target' };
-      fleet.orders = { type: type, toSysId: to };
+      fleet.orders = { type: type, toSysId: to, bodyKey: bodyKey };
       fleet.route = path;
       fleet.routeIdx = 0;
       fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
-      /* Decisione #60: reset flag incidente all'avvio di un nuovo explore. */
-      if (type === 'explore') fleet._incidentRolled = false;
       return { ok: true };
     }
 
@@ -1021,6 +1054,41 @@
            system-view risolve via orders.anomalyKind. */
         fleet.location.bodyKey = order.bodyKey || null;
         fleet.etaImpulsi = 0;
+        return { ok: true };
+      }
+      const path = computePath(game.galaxy, currentSys, to);
+      if (!path) return { ok: false, reason: 'Nessuna rotta verso il sistema target' };
+      fleet.orders = baseOrder;
+      fleet.route = path;
+      fleet.routeIdx = 0;
+      fleet.etaImpulsi = startNextLeg(game.galaxy, fleet);
+      return { ok: true };
+    }
+
+    /* Stadio 1.5 — ordine `recon` (Ricognizione): la flotta raggiunge il
+       sistema (di una civ AI / covo) e RESTA in orbita a costruire il dossier
+       (ai.processPresence accumula l'intel per presenza, qualunque ordine; qui
+       l'intento è esplicito e impegna la flotta). Opzionale bodyKey per
+       ancorarsi a un pianeta AI. Continuativa → step terminale. */
+    if (type === 'recon') {
+      const to = order.toSysId;
+      if (to == null) return { ok: false, reason: 'Sistema target assente' };
+      const sys = game.galaxy.systems[to];
+      if (!sys) return { ok: false, reason: 'Sistema target inesistente' };
+      const currentSys = fleet.location.systemId;
+      const bodyKey = order.bodyKey != null ? String(order.bodyKey) : null;
+      const baseOrder = { type: 'recon', toSysId: to, bodyKey: bodyKey };
+      if (to === currentSys) {
+        fleet.orders = baseOrder;
+        const intraI = bodyKey != null ? intraTravelI(game, fleet, bodyKey) : 0;
+        if (intraI > 0) {
+          beginIntraTransit(game, fleet, bodyKey, intraI);
+        } else {
+          fleet.route = [currentSys]; fleet.routeIdx = 0;
+          fleet.location.status = 'orbiting';
+          fleet.location.bodyKey = bodyKey;
+          fleet.etaImpulsi = 0;
+        }
         return { ok: true };
       }
       const path = computePath(game.galaxy, currentSys, to);
@@ -1285,29 +1353,29 @@
   }
 
   /* ------------------------------------------------------------------
-     Incidenti su ordine 'explore' (decisione #60, migrazione M07→M08).
-     Porta dentro fleet.js le 4 tipologie di incidente di expedition.js
-     (50% ritardo / 30% usura / 15% critico / 5% scoperta fortuita).
+     Incidenti di VIAGGIO (Stadio 1.6 — docs/FLEET_FLOW.md). Generalizza il
+     vecchio incidente solo-explore (decisione #60) a QUALSIASI segmento di
+     movimento inter-sistema, con rischio PROPORZIONALE agli Ι TOTALI del
+     viaggio (non per leg). Un solo tiro per segmento (gated _incidentRolled).
+     Le manovre intra-sistema (M2) NON tirano (rischio nullo, sistema noto).
+     4 tipologie (50% ritardo / 30% usura / 15% critico / 5% scoperta fortuita).
      RNG deterministico da seed:fleet-incident:<fleet.id> — replay-safe.
-     Si tira 1 sola volta per esplorazione (gated da fleet._incidentRolled).
      Recovery-friendly (#22): l'avaria critica perde lo scafo ma l'equipaggio
-     si salva sempre (riprodotto dal pattern expedition.js).
+     si salva sempre. (Probabilità tunabili in M20.)
      ------------------------------------------------------------------ */
-  function _dangerForExplore(galaxy, fleet) {
-    let sysId = fleet.location.systemId;
-    if (fleet.orders && fleet.orders.type === 'explore' && fleet.orders.toSysId != null) {
-      sysId = fleet.orders.toSysId;
-    }
+  const INCIDENT_RISK_PER_I = 0.0035;   // rischio per Ι di viaggio
+  const INCIDENT_RISK_MAX = 0.55;       // cap sul rischio per segmento
+  function _dangerForTravel(galaxy, fleet) {
+    let sysId = (fleet.orders && fleet.orders.toSysId != null)
+      ? fleet.orders.toSysId : fleet.location.systemId;
     const s = galaxy && galaxy.systems && galaxy.systems[sysId];
     if (!s) return 0.5;
     return Math.max(0, Math.min(1, (s.danger || 0) / 100));
   }
-  function _accidentChanceForExplore(game, fleet) {
-    const d = _dangerForExplore(game.galaxy, fleet);
-    let c;
-    if (d <= 0.33) c = 0.05;
-    else if (d <= 0.66) c = 0.15;
-    else c = 0.30;
+  function _accidentChanceForTravel(game, fleet, totalI) {
+    const d = _dangerForTravel(game.galaxy, fleet);
+    /* Rischio ∝ Ι totali, modulato dal danger del bersaglio. */
+    let c = INCIDENT_RISK_PER_I * (totalI || 0) * (0.6 + 0.9 * d);
     const xp = (fleet.crew && fleet.crew[0] && fleet.crew[0].xp) || 0;
     c *= 1 - Math.min(0.20, xp * 0.02);
     if (ORION.ai && ORION.ai.pirateThreat && fleet.orders && fleet.orders.toSysId != null) {
@@ -1317,17 +1385,17 @@
     if (ORION.cohesion && ORION.cohesion.expeditionRiskBonus && fleet.orders && fleet.orders.toSysId != null) {
       c += ORION.cohesion.expeditionRiskBonus(game, fleet.orders.toSysId);
     }
-    return Math.max(0, c);
+    return Math.max(0, Math.min(INCIDENT_RISK_MAX, c));
   }
-  function _rollExploreIncident(game, fleet, events) {
+  function _rollTravelIncident(game, fleet, events) {
     if (fleet._incidentRolled) return;
     fleet._incidentRolled = true;
-    if (!fleet.orders || fleet.orders.type !== 'explore') return;
     if (!ORION.rng || !ORION.rng.makeRng) return;
-    const rng = ORION.rng.makeRng((game.seed || '') + ':fleet-incident:' + fleet.id);
-    const chance = _accidentChanceForExplore(game, fleet);
+    const totalI = routeImpulsi(game.galaxy, fleet, fleet.route);
+    const rng = ORION.rng.makeRng((game.seed || '') + ':fleet-incident:' + fleet.id + ':' + (game.timeImpulsi || 0));
+    const chance = _accidentChanceForTravel(game, fleet, totalI);
     if (rng.float() >= chance) return;
-    const danger = _dangerForExplore(game.galaxy, fleet);
+    const danger = _dangerForTravel(game.galaxy, fleet);
     const r = rng.float();
     const ship = fleet.ships && fleet.ships[0];
     if (r < 0.50) {
@@ -1698,7 +1766,7 @@
     let waypoints = null;
     switch (order.type) {
       case 'move': case 'explore': case 'transfer':
-      case 'attack': case 'garrison': case 'colonize': case 'survey':
+      case 'attack': case 'garrison': case 'colonize': case 'survey': case 'recon':
         if (order.toSysId != null) waypoints = [order.toSysId];
         break;
       case 'move-route': waypoints = order.waypoints || []; break;
@@ -1825,8 +1893,12 @@
     } else if (order.type === 'attack') {
       fleet.attackTarget = sysId;
       fleet.attackBodyKey = toBk;
+    } else if (order.type === 'move') {
+      /* Stadio 1.5 — M2 completata: la flotta orbita il corpo, step concluso
+         → idle (la coda può avanzare). */
+      fleet.orders = { type: 'idle' };
     }
-    /* garrison/survey: resta orbiting, l'ordine prosegue attivo. */
+    /* garrison/survey/recon: resta orbiting, l'ordine prosegue attivo. */
   }
 
   /* ------------------------------------------------------------------
@@ -1842,13 +1914,24 @@
        tutte le classi, scalato sul danger del sistema. Sostituisce il lump-sum
        all'arrivo dell'esploratore (rimosso più sotto). */
     applyTransitWear(game, fleet);
-    if (fleet.orders.type === 'idle') return;
+    if (fleet.orders.type === 'idle') {
+      /* Stadio 1.4: la flotta è "settled" (fine di uno step non continuativo).
+         Se c'è una coda, applica il prossimo step (M1→M2→azione). Gli ordini
+         continuativi (survey/garrison/colonize) non passano da idle → restano
+         terminali e la coda non avanza, come da design. */
+      if (Array.isArray(fleet.queue) && fleet.queue.length) {
+        applyNextQueued(game, fleet, events);
+      }
+      return;
+    }
 
-    /* Decisione #60: incident roll una sola volta all'avvio dell'explore
-       outbound (mentre in-transit). */
-    if (fleet.orders.type === 'explore' && !fleet._incidentRolled &&
-        fleet.location && fleet.location.status === 'in-transit') {
-      _rollExploreIncident(game, fleet, events);
+    /* Stadio 1.6: rischio di viaggio ∝ Ι totali, una sola volta per segmento
+       INTER-sistema (rotta > 1, non per leg). Le manovre intra (location.intra)
+       e le soste non tirano. Vale per qualsiasi ordine di movimento. */
+    if (!fleet._incidentRolled && fleet.location &&
+        fleet.location.status === 'in-transit' && !fleet.location.intra &&
+        Array.isArray(fleet.route) && fleet.route.length > 1) {
+      _rollTravelIncident(game, fleet, events);
     }
 
     /* Fase B: per i nuovi ordini con dwell, il countdown di sosta avviene
@@ -1917,6 +2000,7 @@
         fleet.route = [arrivedAt];
         fleet.routeIdx = 0;
         fleet.orders = { type: 'idle' };
+        fleet.queue = [];   /* Stadio 1.4: scarta il piano residuo: ridecidi dopo lo scontro. */
         fleet.combatResolvedAt = null;
         events.push({
           kind: 'fleet-intercepted',
@@ -1978,6 +2062,26 @@
 
     if (order.type === 'move' || order.type === 'attack') {
       _autoRevealAt(arrivedAt);
+      /* Stadio 1.5 — M1+M2 in un solo `move`: se l'ordine porta un bodyKey e
+         il sistema NON è una tua colonia, l'arrivo (M1 completato) avvia la
+         manovra intra verso il corpo (M2). L'ordine resta `move`: arriveIntra
+         lo chiude a idle quando raggiunge il corpo. */
+      if (order.type === 'move' && order.bodyKey != null && !ownColonyAt(game, arrivedAt)) {
+        const intraI = intraTravelI(game, fleet, order.bodyKey);
+        events.push({
+          kind: 'fleet-arrived', fleetId: fleet.id, fleetName: fleet.name,
+          systemId: arrivedAt, bodyKey: null, impulso: game.timeImpulsi
+        });
+        if (intraI > 0) {
+          beginIntraTransit(game, fleet, order.bodyKey, intraI);
+        } else {
+          fleet.location.status = 'orbiting';
+          fleet.location.bodyKey = order.bodyKey;
+          fleet.etaImpulsi = 0; fleet.route = [arrivedAt]; fleet.routeIdx = 0;
+          fleet.orders = { type: 'idle' };
+        }
+        return;
+      }
       /* L'attacco mantiene `fleet.attackTarget` (+ opzionale
          `fleet.attackBodyKey`): all'arrivo la flotta orbita e
          processSkirmishes ingaggia il bersaglio al tick successivo. */
@@ -2025,6 +2129,26 @@
         impulso: game.timeImpulsi
       });
       /* L'ordine garrison rimane attivo. */
+      return;
+    }
+
+    /* Stadio 1.5 — arrivo `recon`: orbita e RESTA attivo; l'intel/dossier si
+       accumula per presenza (ai.processPresence). bodyKey opzionale (ancora
+       a un pianeta AI). Terminale: la coda non avanza. */
+    if (order.type === 'recon') {
+      _autoRevealAt(arrivedAt);
+      fleet.location.status = 'orbiting';
+      fleet.location.bodyKey = order.bodyKey || null;
+      fleet.etaImpulsi = 0;
+      fleet.route = [arrivedAt];
+      fleet.routeIdx = 0;
+      events.push({
+        kind: 'fleet-arrived',
+        fleetId: fleet.id, fleetName: fleet.name,
+        systemId: arrivedAt, bodyKey: order.bodyKey || null,
+        impulso: game.timeImpulsi
+      });
+      /* L'ordine recon rimane attivo. */
       return;
     }
 
@@ -2616,6 +2740,155 @@
     return !!computePath(galaxy, fromSysId, toSysId);
   }
 
+  /* ==================================================================
+     STADIO 1 — Modello comandi (fonte di verità: docs/FLEET_FLOW.md)
+     Funzioni PURE e additive: non cambiano il comportamento esistente,
+     sono consumate da UI (modal) e mappa per offrire/validare gli step.
+     ================================================================== */
+
+  /* La flotta può estrarre (rate > 0)? Estrattore = rate pieno, esploratore
+     = fallback minimo. Le reliquie non richiedono nulla (per presenza). */
+  function fleetHasExtractor(fleet) {
+    if (!fleet || !Array.isArray(fleet.ships)) return false;
+    for (let i = 0; i < fleet.ships.length; i++) {
+      const k = fleet.ships[i] && fleet.ships[i].kind;
+      if (k === 'estrattore' || k === 'explorer') return true;
+    }
+    return false;
+  }
+
+  /* Etichetta di stato derivata (fleetStance) da (status, bodyKey, orders,
+     composizione). Niente nuovo campo persistito: pura derivazione. Il nome
+     del corpo lo aggiunge il chiamante (questa funzione non tocca la galassia).
+       code ∈ port | transit | extracting | recon | defending | orbiting | holding */
+  const STANCE_LABEL = {
+    port: 'In porto',
+    transit: 'In viaggio',
+    extracting: 'In estrazione',
+    recon: 'In ricognizione',
+    defending: 'In difesa',
+    orbiting: 'In orbita',
+    holding: 'In sosta'
+  };
+  function fleetStance(fleet) {
+    if (!fleet || !fleet.location) return { code: 'holding', label: STANCE_LABEL.holding, bodyKey: null };
+    const loc = fleet.location;
+    const ord = fleet.orders || {};
+    const body = loc.bodyKey || null;
+    if (loc.status === 'docked') return { code: 'port', label: STANCE_LABEL.port, bodyKey: body };
+    if (loc.status === 'in-transit') return { code: 'transit', label: STANCE_LABEL.transit, bodyKey: null };
+    /* orbiting */
+    if (ord.type === 'survey' || ord.type === 'estrai') return { code: 'extracting', label: STANCE_LABEL.extracting, bodyKey: body };
+    if (ord.type === 'recon') return { code: 'recon', label: STANCE_LABEL.recon, bodyKey: body };
+    if (body) {
+      if (fleetHasGunsLocal(fleet)) return { code: 'defending', label: STANCE_LABEL.defending, bodyKey: body };
+      return { code: 'orbiting', label: STANCE_LABEL.orbiting, bodyKey: body };
+    }
+    return { code: 'holding', label: STANCE_LABEL.holding, bodyKey: null };
+  }
+
+  /* M2 (manovra intra-sistema verso un corpo) è proponibile solo se il
+     sistema di destinazione è ESPLORATO: senza, i corpi non sono noti
+     (gate di conoscenza). Un sistema solo *detected* accetta solo M1. */
+  function canTargetBody(target) {
+    return !!(target && target.explored);
+  }
+
+  /* actionsFor — la tabella master in codice. Funzione PURA di un
+     descrittore NORMALIZZATO del bersaglio (lo costruisce il chiamante dai
+     sottosistemi vivi) + flotta. Ritorna le Azioni di 3° livello con il loro
+     stato di disponibilità (gateFlotta soddisfatto o no) senza filtrarle, così
+     l'UI può mostrarle disabilitate con la motivazione.
+       target = {
+         kind,         // 'system'|'planet'|'moon'|'anomaly'|'nest'|'body'
+         explored,     // sistema esplorato?
+         ownColony,    // è una TUA colonia?
+         colonizable,  // colonizzabile e libero?
+         giacimento,   // corpo sfruttabile (Estrai)?
+         anomalyKind,  // 'detriti'|'nebulosa'|'reliquie'|null
+         aiPresent,    // civ AI occupante (attaccabile/reconnabile)
+         aiAlly        // alleato (Difendi alleato — futura)
+       }
+     Ritorna [{ id, available, gate, future }] in ordine di default suggerito. */
+  function actionsFor(target, fleet) {
+    const out = [];
+    if (!target) return out;
+    const armed = fleetHasGunsLocal(fleet);
+    const colonial = fleetHasColonial(fleet);
+    const extractor = fleetHasExtractor(fleet);
+
+    if (target.ownColony) {
+      out.push({ id: 'dock', available: true, gate: null, future: false });
+    }
+    if (target.colonizable) {
+      out.push({ id: 'colonize', available: colonial, gate: 'coloniale', future: false });
+    }
+    if (target.giacimento || target.anomalyKind) {
+      const reliquie = target.anomalyKind === 'reliquie';
+      out.push({ id: 'extract', available: reliquie ? true : extractor, gate: reliquie ? null : 'estrattore', future: false });
+    }
+    if (target.aiPresent || target.kind === 'nest') {
+      out.push({ id: 'attack', available: armed, gate: 'fuoco', future: false });
+    }
+    if (target.aiPresent || target.aiAlly || target.kind === 'nest') {
+      out.push({ id: 'recon', available: true, gate: null, future: false });
+    }
+    if (target.aiAlly) {
+      out.push({ id: 'defend-ally', available: armed, gate: 'fuoco', future: true });
+    }
+    return out;
+  }
+
+  /* ------------------------------------------------------------------
+     Stadio 1.4 — Coda comandi (fleet.queue). Step accodati manualmente
+     che si applicano uno alla volta quando la flotta è "settled" (idle).
+     Avanzamento agganciato in `tick` (hook idle). Editabile/interrompibile
+     solo agli snodi (la flotta è ferma quando si avanza). Additivo/lazy:
+     nessun campo nuovo nel save, guardie Array.isArray ovunque.
+     ------------------------------------------------------------------ */
+  function applyNextQueued(game, fleet, events) {
+    if (!fleet || !Array.isArray(fleet.queue) || !fleet.queue.length) return false;
+    const step = fleet.queue.shift();
+    const r = setOrder(game, fleet, step, { fromQueue: true });
+    if (!r.ok) {
+      /* Step non più valido (mondo cambiato): degrada con grazia e scarta la
+         coda residua (recovery-friendly #22) invece di fallire a freddo. */
+      fleet.queue = [];
+      if (events) events.push({
+        kind: 'fleet-queue-aborted', fleetId: fleet.id, fleetName: fleet.name,
+        reason: r.reason || null,
+        systemId: fleet.location ? fleet.location.systemId : null,
+        impulso: game.timeImpulsi || 0
+      });
+      return false;
+    }
+    if (events) events.push({
+      kind: 'fleet-queue-advance', fleetId: fleet.id, fleetName: fleet.name,
+      orderType: step.type,
+      systemId: fleet.location ? fleet.location.systemId : null,
+      impulso: game.timeImpulsi || 0
+    });
+    return true;
+  }
+
+  /* Imposta un PIANO: il primo step parte subito (setOrder, che resetta la
+     coda preesistente), il resto va in coda. steps = [orderSpec, ...]. */
+  function setPlan(game, fleet, steps) {
+    if (!fleet) return { ok: false, reason: 'Flotta inesistente' };
+    if (!Array.isArray(steps) || !steps.length) return { ok: false, reason: 'Piano vuoto' };
+    const r = setOrder(game, fleet, steps[0]);
+    if (!r.ok) return r;
+    fleet.queue = steps.slice(1);
+    return { ok: true };
+  }
+  function enqueueOrder(fleet, step) {
+    if (!fleet || !step || !step.type) return { ok: false, reason: 'Step non valido' };
+    if (!Array.isArray(fleet.queue)) fleet.queue = [];
+    fleet.queue.push(step);
+    return { ok: true };
+  }
+  function clearQueue(fleet) { if (fleet) fleet.queue = []; }
+
   ORION.fleet = {
     CLASSES: CLASSES,
     CLASS_ORDER: CLASS_ORDER,
@@ -2642,6 +2915,11 @@
     transferCrew: transferCrew,
     mergeFleets: mergeFleets,
     setOrder: setOrder,
+    /* Stadio 1.4 — coda comandi (docs/FLEET_FLOW.md). */
+    setPlan: setPlan,
+    enqueueOrder: enqueueOrder,
+    clearQueue: clearQueue,
+    applyNextQueued: applyNextQueued,
     tick: tick,
     awardCrewXp: awardCrewXp,
     fleetUpkeep: fleetUpkeep,
@@ -2662,6 +2940,11 @@
     FORMATIONS: FORMATIONS,
     setFormation: setFormation,
     fleetHasColonial: fleetHasColonial,
+    fleetHasExtractor: fleetHasExtractor,
+    /* Stadio 1 — modello comandi (docs/FLEET_FLOW.md). */
+    fleetStance: fleetStance,
+    canTargetBody: canTargetBody,
+    actionsFor: actionsFor,
     /* M15 — grandi navi. */
     fleetHasKind: fleetHasKind,
     fleetOfficerSlots: fleetOfficerSlots,
