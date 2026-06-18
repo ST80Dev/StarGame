@@ -4175,7 +4175,10 @@ function renderCantieriSection(colony, planet) {
     /* Decisione #41: cantieri (build paralleli) + attracchi (porto a terra). */
     const E = ORION.expedition || {};
     const buildSlots = E.hangarBuildSlots ? E.hangarBuildSlots(colony) : 1;
-    const docks = E.hangarDockCapacity ? E.hangarDockCapacity(colony) : 1;
+    /* Posti d'attracco TOTALI = attracchi + cantieri (le navi in costruzione
+       prenotano il posto, 2026-06-18). Combacia col gate canBuildShip. */
+    const docks = E.hangarBerthCapacity ? E.hangarBerthCapacity(colony)
+                : (E.hangarDockCapacity ? E.hangarDockCapacity(colony) : 1);
     const active = E.activeShipBuilds ? E.activeShipBuilds(colony) : queue.length;
     /* Cantieri occupati = scafi + mercantili in coda (#56). Gli attracchi
        (docks) restano solo per gli scafi: i mercantili non occupano il porto. */
@@ -4220,7 +4223,7 @@ function renderCantieriSection(colony, planet) {
       '</div>' +
       '<div class="cantieri-row__caps">' +
         '<span class="cantieri-cap' + cantieriCls + '" title="Build paralleli abilitati dal livello dell\'Hangar (scafi + mercantili)">Cantieri <strong>' + cantieriUse + ' / ' + buildSlots + '</strong></span>' +
-        '<span class="cantieri-cap' + portCls + '" title="Posti d\'attracco a terra · in spedizione: ' + flying + '">Attracchi <strong>' + bound + ' / ' + docks + '</strong></span>' +
+        '<span class="cantieri-cap' + portCls + '" title="Posti d\'attracco totali (attracchi + cantieri): le navi in costruzione prenotano il posto · in spedizione: ' + flying + '">Attracchi <strong>' + bound + ' / ' + docks + '</strong></span>' +
         ((F.portMaintenance && F.portMaintenance(ORION.game, colony) > 0)
           ? '<span class="cantieri-cap" title="Manutenzione/riparazione delle navi al porto: riserva + flotte ferme qui (occupare un attracco consuma metalli). Le flotte in viaggio pagano la riserva di viaggio.">Manutenzione <strong>−' + F.portMaintenance(ORION.game, colony).toFixed(2) + ' ' + resIcon('met') + '/' + iU() + '</strong></span>'
           : '') +

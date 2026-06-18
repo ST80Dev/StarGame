@@ -150,6 +150,15 @@
     let n = ent ? _capForLevel(hangarCapTable('docks'), ent.level || 1) : 0;
     return n + bacinoCap(colony, 'docks') + portoCap(colony, 'docks');
   }
+  /* Posti d'attracco TOTALI a casa (decisione utente 2026-06-18): attracchi
+     (docks) + cantieri (buildSlots). Le navi IN COSTRUZIONE prenotano il loro
+     posto contro questo totale (es. Hangar lvl 1 → 4 + 2 = 6). I cantieri
+     restano comunque il limite delle build CONTEMPORANEE (hangarBuildSlots).
+     Unica fonte di verità per il "porto": canBuildShip, overflow spedizioni,
+     UI e parcheggio flotte (fleet.parkAtArrival) usano tutti questo valore. */
+  function hangarBerthCapacity(colony) {
+    return hangarDockCapacity(colony) + hangarBuildSlots(colony);
+  }
   /* Peso d'attracco di una classe nave (#41 → M15): le capitali pesano più
      di 1. Fallback 1 se ORION.fleet non è caricato (test headless). */
   function shipDockWeight(kind) {
@@ -278,10 +287,11 @@
     if (active >= slots) {
       return { ok: false, reason: 'Cantieri saturi (' + active + '/' + slots + '). Espandi l\'Hangar o il Bacino di costruzione.' };
     }
-    const docks = hangarDockCapacity(colony);
+    const docks = hangarBerthCapacity(colony);
     const bound = totalShipsBound(game, colony, colonyKey).total;
     /* M15: la nave in arrivo pesa dockWeight (capitali > 1). Controlla che ci
-       stia (non solo "almeno 1 unità libera"). */
+       stia (non solo "almeno 1 unità libera"). Capacità = attracchi + cantieri
+       (le navi in costruzione prenotano già il posto, #41 + 2026-06-18). */
     const w = kind ? shipDockWeight(kind) : 1;
     if (bound + w > docks) {
       return { ok: false, reason: 'Porto saturo (' + bound + '/' + docks + ', servono ' + w + '). Espandi l\'Hangar/Bacino o libera attracchi.' };
@@ -641,7 +651,7 @@
           if (!shipLost) {
             colony.ships = colony.ships || { explorer: 0 };
             colony.ships.explorer = (colony.ships.explorer || 0) + 1;
-            const docks = hangarDockCapacity(colony);
+            const docks = hangarBerthCapacity(colony);
             const bound = totalShipsBound(game, colony, exp.originColonyKey).total;
             if (docks > 0 && bound > docks) {
               events.push({
@@ -732,6 +742,7 @@
     activeMercBuilds: activeMercBuilds,
     activeCantieriUse: activeCantieriUse,
     hangarDockCapacity: hangarDockCapacity,
+    hangarBerthCapacity: hangarBerthCapacity,
     activeShipBuilds: activeShipBuilds,
     academyTrainSlots: academyTrainSlots,
     activeCrewBuilds: activeCrewBuilds,
