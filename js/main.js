@@ -8517,7 +8517,58 @@ function openFleetDetail(fleetId, opts) {
         '<p class="fdetail__hint">' + uiIcon('warning', 'gold') + ' Serve una colonia con <strong>Hangar di costruzione</strong> per formare una flotta.</p>',
         '<button class="btn btn--mini" data-action="fleet-overlay-close" type="button">Chiudi</button>');
     }
-    if (!D.newColonyKey || elig.indexOf(D.newColonyKey) < 0) { D.newColonyKey = elig[0]; D.draft = { ships: {}, crew: [] }; }
+    /* ===== DESTINAZIONE (primo concetto, Stadio 2.3a) ===== */
+    const DISC = (ORION.galaxy && ORION.galaxy.DISCOVERY) || { DETECTED: 1, EXPLORED: 2 };
+    const disc = (g.state && g.state.discovery) || {};
+    function capSysId() {
+      let hk = null;
+      Object.keys(g.colonies).forEach(function (k) { if (g.colonies[k] && g.colonies[k].isHomeBase) hk = k; });
+      return hk ? Number(String(hk).split(':')[0]) : ((g.galaxy && g.galaxy.homeId) || 0);
+    }
+    function sysDist(a, b) {
+      const A = g.galaxy.systems[a], B = g.galaxy.systems[b];
+      if (!A || !B) return Infinity;
+      const dx = (A.x || 0) - (B.x || 0), dy = (A.y || 0) - (B.y || 0), dz = (A.z || 0) - (B.z || 0);
+      return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+    function knownCivsInSystem(sysId) {
+      const out = [];
+      (g.civs || []).forEach(function (c) {
+        if (!c || !c.alive || !Array.isArray(c.systems)) return;
+        if (c.systems.indexOf(sysId) < 0) return;
+        const rank = (ORION.ai && ORION.ai.knowledgeRank) ? ORION.ai.knowledgeRank(c) : 2;
+        if (rank >= 1) out.push(c);
+      });
+      if (!out.length && ORION.ai && ORION.ai.civForSystem) {
+        const c = ORION.ai.civForSystem(g, sysId);
+        const rank = (c && ORION.ai.knowledgeRank) ? ORION.ai.knowledgeRank(c) : 0;
+        if (c && c.alive && rank >= 1) out.push(c);
+      }
+      return out;
+    }
+    function civKnownName(c) {
+      const rank = (ORION.ai && ORION.ai.knowledgeRank) ? ORION.ai.knowledgeRank(c) : 2;
+      return rank >= 2 ? c.name : 'Ignota';
+    }
+    const capId = capSysId();
+    const knownSys = [];
+    for (let i = 0; i < g.galaxy.systems.length; i++) { if ((disc[i] || 0) >= DISC.DETECTED) knownSys.push(i); }
+    knownSys.sort(function (a, b) { return sysDist(capId, a) - sysDist(capId, b); });
+    if (!D.dest) D.dest = { sysId: null, bodyKey: null };
+    if (D.dest.sysId == null || (disc[D.dest.sysId] || 0) < DISC.DETECTED) {
+      const nonCap = knownSys.filter(function (s) { return s !== capId; });
+      D.dest.sysId = nonCap.length ? nonCap[0] : (knownSys.length ? knownSys[0] : capId);
+      D.dest.bodyKey = null;
+    }
+
+    if (!D.newColonyKey || elig.indexOf(D.newColonyKey) < 0) {
+      /* Origine di default = colonia idonea più vicina alla destinazione. */
+      D.newColonyKey = elig.slice().sort(function (a, b) {
+        return sysDist(Number(String(a).split(':')[0]), D.dest.sysId) -
+               sysDist(Number(String(b).split(':')[0]), D.dest.sysId);
+      })[0];
+      D.draft = { ships: {}, crew: [] };
+    }
     if (!D.draft) D.draft = { ships: {}, crew: [] };
     if (!Array.isArray(D.draft.crew)) D.draft.crew = [];
     const colony = g.colonies[D.newColonyKey];
@@ -8535,9 +8586,11 @@ function openFleetDetail(fleetId, opts) {
       return 'Corpo ' + bk;
     }
     const curSysId = sysIdOf(D.newColonyKey);
-    /* Sistemi distinti con almeno una colonia idonea (ordine stabile). */
+    /* Sistemi distinti con colonia idonea, ordinati per vicinanza alla
+       destinazione (le navi dalle colonie più vicine — feedback utente). */
     const sysIds = [];
     elig.forEach(function (k) { const s = sysIdOf(k); if (sysIds.indexOf(s) < 0) sysIds.push(s); });
+    sysIds.sort(function (a, b) { return sysDist(a, D.dest.sysId) - sysDist(b, D.dest.sysId); });
     const sysOptsHtml = sysIds.map(function (s) {
       const nm = (g.galaxy.systems[s] && g.galaxy.systems[s].name) || ('Sistema ' + s);
       return '<option value="' + s + '"' + (s === curSysId ? ' selected' : '') + '>' + escapeHtml(nm) + '</option>';
@@ -8632,26 +8685,59 @@ function openFleetDetail(fleetId, opts) {
       '<span class="fdetail__sumchip ' + (crewOk ? 'is-ok' : 'is-warn') + '" title="Equipaggio richiesto per gli ordini di movimento">' +
         (crewOk ? '✓' : '⚠') + ' eq. ' + crewSel + '/' + crewReq + '</span>';
 
-    /* Sezione ordine (obbligatoria): builder sempre aperto, riusa le stesse
-       helper delle flotte esistenti — la flotta-bozza nello stub fa da
-       "fleet" per `renderDestArea`/`renderOrdOpts`/`buildOrder`. */
-    const ordSec = nShips > 0
-      ? '<div class="fdetail__sec fdetail__sec--ord is-editing">' +
-          secHead('fleet', 'cyan', 'Ordine alla partenza', 'obbligatorio') +
-          renderOrderBuilderDraft() +
-        '</div>'
-      : '<div class="fdetail__sec fdetail__sec--ord">' +
-          secHead('fleet', 'cyan', 'Ordine alla partenza', 'obbligatorio') +
-          '<p class="fdetail__empty">Aggiungi almeno una nave per scegliere un ordine.</p>' +
-        '</div>';
+    /* ===== Sezione DESTINAZIONE (primo passo, Stadio 2.3a) ===== */
+    const destSysOpts = knownSys.map(function (s) {
+      const nm = (g.galaxy.systems[s] && g.galaxy.systems[s].name) || ('Sistema ' + s);
+      const cn = knownCivsInSystem(s).length;
+      return '<option value="' + s + '"' + (s === D.dest.sysId ? ' selected' : '') + '>' +
+        escapeHtml(nm) + (cn ? ' · ' + cn + ' AI' : '') + '</option>';
+    }).join('');
+    let destBodyHtml = '';
+    const destExplored = (disc[D.dest.sysId] || 0) >= DISC.EXPLORED;
+    if (destExplored && ORION.system && ORION.system.generate) {
+      let dbodies = [];
+      try { const dsys = ORION.system.generate(g.galaxy, D.dest.sysId); dbodies = (dsys && dsys.bodies) || []; } catch (e) { dbodies = []; }
+      if (dbodies.length) {
+        const bopts = '<option value="">— orbita generica —</option>' + dbodies.map(function (b) {
+          return '<option value="' + escapeHtml(b.key) + '"' + (String(D.dest.bodyKey || '') === String(b.key) ? ' selected' : '') + '>' +
+            escapeHtml(b.name || b.key) + '</option>';
+        }).join('');
+        destBodyHtml = '<select class="fdetail__select" data-bind="dest-body" aria-label="Corpo di destinazione">' + bopts + '</select>';
+      }
+    } else if (!destExplored) {
+      destBodyHtml = '<span class="fdest__hint">' + uiIcon('info', 'soft') + ' Sistema non esplorato: corpo non selezionabile.</span>';
+    }
+    /* Presenza AI nota (feedback utente): quante/quali nel sistema + sul corpo. */
+    const dCivs = knownCivsInSystem(D.dest.sysId);
+    let aiLine = dCivs.length
+      ? '<div class="fdest__ai">' + uiIcon('civ', 'pink') + ' AI nel sistema: <strong>' + dCivs.length + '</strong> · ' +
+          dCivs.map(function (c) { return '<span class="fdest__civ">' + escapeHtml(civKnownName(c)) + '</span>'; }).join(' ') + '</div>'
+      : '<div class="fdest__ai fdest__ai--none">Nessuna AI nota nel sistema</div>';
+    if (D.dest.bodyKey && ORION.ai && ORION.ai.civForPlanet) {
+      const bc = ORION.ai.civForPlanet(g, D.dest.sysId, D.dest.bodyKey);
+      if (bc) aiLine += '<div class="fdest__ai">' + uiIcon('civ', 'pink') + ' Sul corpo: <span class="fdest__civ">' + escapeHtml(civKnownName(bc)) + '</span></div>';
+    }
+    const destSec = '<div class="fdetail__sec fdetail__sec--dest is-editing">' +
+      secHead('pin', 'cyan', 'Destinazione', 'primo passo') +
+      '<div class="fdetail__origin">' +
+        '<select class="fdetail__select" data-bind="dest-system" aria-label="Sistema di destinazione">' + destSysOpts + '</select>' +
+        destBodyHtml +
+      '</div>' + aiLine +
+    '</div>';
 
-    /* Sezione viveri (slider capienza serbatoio) — disponibile alla
-       partenza perché la flotta-bozza è di fatto al porto amico
-       (colonia origine). Costo del pieno cresce con l'equipaggio. */
+    /* Missione: per ora "Sposta" (default). Picker completo via actionsFor → 2.4. */
+    const misSec = '<div class="fdetail__sec">' +
+      secHead('fleet', 'cyan', 'Missione', 'Sposta') +
+      '<p class="fdetail__hint">' + uiIcon('info', 'soft') + ' La flotta <strong>raggiunge la destinazione</strong>. ' +
+        'Le altre missioni (Attacca · Estrai · Ricognizione · Colonizza) arrivano nel prossimo aggiornamento.</p>' +
+    '</div>';
+
+    /* Sezione viveri (slider capienza serbatoio). */
     const supSec = (nShips > 0) ? secSupplyDraft(crewReq) : '';
 
     const body =
-      '<div class="fdetail__sec">' + secHead('roster', 'amber', 'Origine', multiCol ? 'sistema · colonia' : '') +
+      destSec +
+      '<div class="fdetail__sec">' + secHead('roster', 'amber', 'Origine', 'colonia più vicina') +
         '<div class="fdetail__origin">' +
           '<select class="fdetail__select" data-bind="new-system" aria-label="Sistema di origine">' + sysOptsHtml + '</select>' +
           '<select class="fdetail__select" data-bind="new-colony" aria-label="Colonia di origine"' + (multiCol ? '' : ' disabled') + '>' + colOptsHtml + '</select>' +
@@ -8659,15 +8745,15 @@ function openFleetDetail(fleetId, opts) {
       '<div class="fdetail__sec">' + secHead('fleet', 'cyan', 'Navi', 'clic per spostare') + shipRows + '</div>' +
       '<div class="fdetail__sec">' + secHead('forces', 'amber', 'Equipaggio', 'in flotta ' + crewSel + '/' + crewReq) + crewBody + '</div>' +
       supSec +
-      ordSec +
-      '<p class="fdetail__hint">' + uiIcon('info', 'soft') + ' Il nome si adatterà all’ordine. <strong>Annulla</strong> non crea nulla.</p>';
+      misSec +
+      '<p class="fdetail__hint">' + uiIcon('info', 'soft') + ' Il nome si adatterà alla missione. <strong>Annulla</strong> non crea nulla.</p>';
 
-    /* Validazione globale: serve composizione + ordine valido per creare. */
-    const draftOrder = (nShips > 0) ? buildOrder() : null;
+    /* Validazione globale: serve composizione + destinazione. */
+    const draftOrder = (nShips > 0) ? buildCreateOrder() : null;
     const canCreate = nShips > 0 && !!draftOrder;
     const disabledReason = (nShips <= 0)
       ? 'Aggiungi almeno una nave'
-      : (!draftOrder ? 'Definisci l’ordine alla partenza' : '');
+      : (!draftOrder ? 'Scegli una destinazione' : '');
 
     const footer =
       '<div class="fdetail__sum">' + sumChips + '</div>' +
@@ -8947,6 +9033,14 @@ function openFleetDetail(fleetId, opts) {
     }
     return '';
   }
+  /* Stadio 2.3a — ordine del flusso destination-first (creazione). Missione
+     di default "Sposta" (M1[+M2] verso il corpo se scelto). Il picker missione
+     completo (Attacca/Estrai/Ricognizione/Colonizza) arriva al 2.4. */
+  function buildCreateOrder() {
+    if (!D.dest || D.dest.sysId == null) return null;
+    return { type: 'move', toSysId: D.dest.sysId, bodyKey: D.dest.bodyKey || null };
+  }
+
   function buildOrder() {
     const o = D.ord;
     if (o.tripType === 'explore') {
@@ -9203,6 +9297,17 @@ function openFleetDetail(fleetId, opts) {
       b.addEventListener('click', closeDetail);
     });
     /* --- nuova flotta (#88: carrello + Conferma/Annulla) --- */
+    /* Destinazione (Stadio 2.3a): sistema + corpo. */
+    const destSysSel = host.querySelector('[data-bind="dest-system"]');
+    if (destSysSel) destSysSel.addEventListener('change', function () {
+      if (!D.dest) D.dest = { sysId: null, bodyKey: null };
+      D.dest.sysId = Number(destSysSel.value); D.dest.bodyKey = null; render();
+    });
+    const destBodySel = host.querySelector('[data-bind="dest-body"]');
+    if (destBodySel) destBodySel.addEventListener('change', function () {
+      if (!D.dest) D.dest = { sysId: null, bodyKey: null };
+      D.dest.bodyKey = destBodySel.value || null; render();
+    });
     const newSysSel = host.querySelector('[data-bind="new-system"]');
     if (newSysSel) newSysSel.addEventListener('change', function () {
       const sid = Number(newSysSel.value);
@@ -9248,8 +9353,8 @@ function openFleetDetail(fleetId, opts) {
       /* L'ordine è obbligatorio in creazione: lo costruiamo PRIMA di
          materializzare (la flotta-bozza è già nello stub, quindi
          buildOrder() ragiona sul sistema d'origine corretto). */
-      const order = buildOrder();
-      if (!order) { showToast('Definisci l’ordine alla partenza'); return; }
+      const order = buildCreateOrder();
+      if (!order) { showToast('Scegli una destinazione'); return; }
       /* Materializza solo ora: createFleet + assegnazioni + setOrder in
          un colpo. Rollback completo se qualcosa fallisce (#22). */
       const r = ORION.fleet.createFleet(g, colKey, null);

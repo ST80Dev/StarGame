@@ -5969,10 +5969,20 @@ select.main-menu__input { cursor: pointer; }
 .fdetail__crow-b .btn--mini { min-width: 24px; padding: 1px 6px; }
 .fdetail__vets { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
 
-/* Origine in due passi: sistema | colonia (Stadio 2.2 follow-up). */
-.fdetail__origin { display: flex; gap: 8px; }
+/* Origine/Destinazione in due campi affiancati (Stadio 2.2/2.3a). */
+.fdetail__origin { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .fdetail__origin .fdetail__select { flex: 1 1 0; min-width: 0; }
-@media (max-width: 760px) { .fdetail__origin { flex-direction: column; } }
+@media (max-width: 760px) { .fdetail__origin { flex-direction: column; align-items: stretch; } }
+
+/* Destinazione: presenza AI nota (system + corpo). Civ = rosa (UI_GUIDE §1). */
+.fdetail__sec--dest.is-editing { border-color: rgba(47, 230, 224, 0.4); }
+.fdest__ai {
+  margin-top: 6px; font-size: 0.78rem; color: var(--c-text-faint, #98a3c8);
+  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+}
+.fdest__ai--none { opacity: 0.85; }
+.fdest__civ { color: var(--c-bad, #f08296); text-shadow: 0 0 3px currentColor; font-weight: 600; }
+.fdest__hint { font-size: 0.76rem; color: var(--c-text-faint, #98a3c8); display: inline-flex; align-items: center; gap: 4px; }
 
 /* Composizione flotta a due pannelli — a disposizione → in flotta (Stadio 2.2).
    Click per spostare un'unità (niente drag&drop: parità touch/mouse). */
