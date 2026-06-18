@@ -8759,11 +8759,48 @@ function openFleetDetail(fleetId, opts) {
       '</div>' + aiLine +
     '</div>';
 
-    /* Missione: per ora "Sposta" (default). Picker completo via actionsFor → 2.4. */
-    const misSec = '<div class="fdetail__sec">' +
-      secHead('fleet', 'cyan', 'Missione', 'Sposta') +
-      '<p class="fdetail__hint">' + uiIcon('info', 'soft') + ' La flotta <strong>raggiunge la destinazione</strong>. ' +
-        'Le altre missioni (Attacca · Estrai · Ricognizione · Colonizza) arrivano nel prossimo aggiornamento.</p>' +
+    /* ===== Sezione MISSIONE (Stadio 2.4) — guidata da fleetTarget+actionsFor.
+       "Sposta" sempre disponibile; le azioni valide per l'oggetto (Attacca/
+       Estrai/Ricognizione) compaiono solo se la composizione le consente.
+       Colonizza è ancora gestita dal pannello pianeta → qui segnalata in arrivo. */
+    const draftFleet = buildDraftFleet();
+    const destTarget = ORION.fleetTarget ? ORION.fleetTarget.describe(g, D.dest.sysId, D.dest.bodyKey) : null;
+    const rawActs = (ORION.fleet.actionsFor && destTarget) ? ORION.fleet.actionsFor(destTarget, draftFleet) : [];
+    const MISSION_META = {
+      move:     { ic: 'send',      tone: 'cyan',   lab: 'Sposta' },
+      attack:   { ic: 'sword',     tone: 'pink',   lab: 'Attacca' },
+      extract:  { ic: 'resources', tone: 'amber',  lab: 'Estrai' },
+      recon:    { ic: 'spy',       tone: 'violet', lab: 'Ricognizione' },
+      colonize: { ic: 'home',      tone: 'amber',  lab: 'Colonizza' }
+    };
+    const GATE_LABEL = { coloniale: 'nave coloniale', estrattore: 'estrattore', fuoco: 'potenza di fuoco' };
+    const misOpts = [{ id: 'move', available: true, gate: null, future: false }];
+    rawActs.forEach(function (a) {
+      if (a.id === 'dock' || a.id === 'defend-ally') return; // dock = Sposta su colonia; defend-ally futura
+      misOpts.push(a);
+    });
+    const selectableIds = misOpts.filter(function (a) {
+      return a.available && !a.future && MISSION_META[a.id] && a.id !== 'colonize';
+    }).map(function (a) { return a.id; });
+    if (!D.mission) D.mission = 'move';
+    if (selectableIds.indexOf(D.mission) < 0) D.mission = 'move';
+    const misChips = misOpts.map(function (a) {
+      const meta = MISSION_META[a.id]; if (!meta) return '';
+      const wip = (a.id === 'colonize');
+      const disabled = !a.available || a.future || wip;
+      const sel = (D.mission === a.id) && !disabled;
+      const gateTxt = (!a.available && a.gate) ? (GATE_LABEL[a.gate] || a.gate) : '';
+      const title = wip ? 'Colonizza: per ora usa il pannello del pianeta (integrazione in arrivo)'
+        : (gateTxt ? 'Serve: ' + gateTxt : meta.lab);
+      const sfx = wip ? ' <span class="fdetail__chip-note">in arrivo</span>'
+        : (gateTxt ? ' <span class="fdetail__chip-note">' + escapeHtml(gateTxt) + '</span>' : '');
+      return '<button class="fdetail__chip' + (sel ? ' is-active' : '') + '" type="button" data-mission="' + a.id + '"' +
+        (disabled ? ' disabled' : '') + ' title="' + escapeHtml(title) + '">' +
+        uiIcon(meta.ic, meta.tone) + ' ' + meta.lab + sfx + '</button>';
+    }).join('');
+    const misSec = '<div class="fdetail__sec fdetail__sec--ord is-editing">' +
+      secHead('fleet', 'cyan', 'Missione', MISSION_META[D.mission] ? MISSION_META[D.mission].lab : 'Sposta') +
+      '<div class="fdetail__chips">' + misChips + '</div>' +
     '</div>';
 
     /* Sezione viveri (slider capienza serbatoio) — SEMPRE presente per non far
@@ -9074,7 +9111,27 @@ function openFleetDetail(fleetId, opts) {
      completo (Attacca/Estrai/Ricognizione/Colonizza) arriva al 2.4. */
   function buildCreateOrder() {
     if (!D.dest || D.dest.sysId == null) return null;
-    return { type: 'move', toSysId: D.dest.sysId, bodyKey: D.dest.bodyKey || null };
+    const sys = D.dest.sysId, bk = D.dest.bodyKey || null;
+    const m = D.mission || 'move';
+    if (m === 'attack') return { type: 'attack', toSysId: sys, bodyKey: bk };
+    if (m === 'recon') return { type: 'recon', toSysId: sys, bodyKey: bk };
+    if (m === 'extract') {
+      /* anomalyKind: giacimento del corpo (cintura/gassoso) o anomalia fluttuante. */
+      let kind = null;
+      if (bk && ORION.system && ORION.system.generate && ORION.system.findBody && ORION.anomaly && ORION.anomaly.bodyGiacimento) {
+        try {
+          const ds = ORION.system.generate(g.galaxy, sys);
+          const b = ORION.system.findBody(ds, bk);
+          const gi = b && ORION.anomaly.bodyGiacimento(b);
+          if (gi) kind = gi.kind;
+        } catch (e) { /* fallback */ }
+      }
+      if (!kind && ORION.fleetTarget) { const t = ORION.fleetTarget.describe(g, sys, bk); kind = t.anomalyKind; }
+      if (!kind) return null;
+      return { type: 'survey', toSysId: sys, anomalyKind: kind, bodyKey: bk };
+    }
+    /* default: Sposta (M1[+M2]). */
+    return { type: 'move', toSysId: sys, bodyKey: bk };
   }
 
   function buildOrder() {
@@ -9343,6 +9400,11 @@ function openFleetDetail(fleetId, opts) {
     if (destBodySel) destBodySel.addEventListener('change', function () {
       if (!D.dest) D.dest = { sysId: null, bodyKey: null };
       D.dest.bodyKey = destBodySel.value || null; render();
+    });
+    /* Picker missione (Stadio 2.4). */
+    host.querySelectorAll('[data-mission]').forEach(function (b) {
+      if (b.disabled) return;
+      b.addEventListener('click', function () { D.mission = b.dataset.mission; render(); });
     });
     const newSysSel = host.querySelector('[data-bind="new-system"]');
     if (newSysSel) newSysSel.addEventListener('change', function () {
