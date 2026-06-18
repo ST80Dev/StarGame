@@ -705,6 +705,20 @@
     return { ok: true };
   }
 
+  /* addNewShip — materializza UNA nave nuova (classe `kind`) direttamente
+     nell'array di una flotta, senza passare dal counter di una colonia.
+     Usata dal cantiere della Stazione (M16): la stazione assembla scafi
+     leggeri/medi da una riserva di metalli e li consegna a una flotta
+     ormeggiata. Ritorna l'entità nave creata, o null se classe ignota. */
+  function addNewShip(game, fleet, kind) {
+    const cls = CLASSES[kind];
+    if (!fleet || !cls) return null;
+    if (!Array.isArray(fleet.ships)) fleet.ships = [];
+    const ship = { id: nextShipId(game), kind: kind, hp: cls.hp, wear: 0 };
+    fleet.ships.push(ship);
+    return ship;
+  }
+
   /* unassignShips — riporta `count` navi della classe dalla flotta al
      counter colonia. La flotta deve essere `docked` nel sistema della
      colonia. Le entità rimosse perdono la propria identità (intercambiabili
@@ -2782,6 +2796,7 @@
     isReachable: isReachable,
     createFleet: createFleet,
     assignShips: assignShips,
+    addNewShip: addNewShip,
     unassignShips: unassignShips,
     assignCrew: assignCrew,
     assignCrewById: assignCrewById,
