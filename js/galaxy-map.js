@@ -1076,6 +1076,61 @@
       this._emitContext(true);
     }
 
+    /* ---- Camera per cinematiche (ORION.cinematics) -----------------------
+       Espone i BERSAGLI di camera senza animare, così il regista può
+       interpolarli con la propria tempistica lenta/continua, e un setter
+       diretto che disegna un singolo frame. Nessun effetto sullo stato di
+       gioco (puro vestito). */
+    cinematicTarget(kind, id) {
+      if (kind === 'galaxy') {
+        return {
+          s: this.fitScale,
+          ox: (this.cssW - this.fitScale) / 2,
+          oy: (this.cssH - this.fitScale) / 2,
+          orient: defaultOrient()
+        };
+      }
+      if (kind === 'group') {
+        const g = this._groupById(id);
+        if (!g) return null;
+        const pad = 0.03;
+        const pts = [
+          { x: g.minX - pad, y: g.minY - pad, z: g.minZ || 0 },
+          { x: g.maxX + pad, y: g.minY - pad, z: g.minZ || 0 },
+          { x: g.minX - pad, y: g.maxY + pad, z: g.maxZ || 0 },
+          { x: g.maxX + pad, y: g.maxY + pad, z: g.maxZ || 0 },
+          { x: g.cx, y: g.cy, z: g.cz || 0 }
+        ];
+        const cam = this._cameraForRotatedBounds(pts, 0.62, this.fitScale * 2.3);
+        return { s: cam.s, ox: cam.ox, oy: cam.oy, orient: this.orient };
+      }
+      if (kind === 'system') {
+        const s = this.galaxy.systems[id];
+        if (!s) return null;
+        const span = 0.16;
+        const pts = [
+          { x: s.x - span, y: s.y - span, z: s.z || 0 },
+          { x: s.x + span, y: s.y - span, z: s.z || 0 },
+          { x: s.x - span, y: s.y + span, z: s.z || 0 },
+          { x: s.x + span, y: s.y + span, z: s.z || 0 }
+        ];
+        const cam = this._cameraForRotatedBounds(pts, 0.8);
+        return { s: cam.s, ox: cam.ox, oy: cam.oy, orient: this.orient };
+      }
+      return null;
+    }
+
+    /* Imposta direttamente la camera (un frame). Interrompe ogni animazione
+       interna in corso così non "litiga" col tween del regista. */
+    applyCamera(s, ox, oy, orient) {
+      this._anim = false;
+      if (typeof s === 'number') this.scale = s;
+      if (typeof ox === 'number') this.offsetX = ox;
+      if (typeof oy === 'number') this.offsetY = oy;
+      if (orient) this.orient = orient;
+      this.requestRender();
+    }
+
     /* ---- Notifica del contesto alla UI (livello/gruppo/sistema) ---- */
     _emitContext(force) {
       if (!this.onContext) return;
