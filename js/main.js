@@ -95,6 +95,9 @@ ORION.chronicleFilter = 'important';
 const CHRONICLE_NOISE_KINDS = new Set([
   /* Costruzione/produzione routine. */
   'build-done', 'ship-built', 'crew-formed', 'mercantile-built', 'mercantile-promoted',
+  /* Smantellamento/downgrade: avviato dal giocatore, log della colonia
+     basta — non serve cronaca (feedback utente 2026-06-17). */
+  'demolish-done', 'downgrade-done',
   /* Insediamento (4 voci per ogni nuova colonia → rumore). */
   'settle-stage',
   /* Coda governatore Tier 2 (azioni automatiche, log nel pannello dedicato). */
@@ -143,6 +146,20 @@ const CHRONICLE_NOISE_KINDS = new Set([
 /* Helper: l'evento è rumore? Letto da chronicleEvent prima di pushChronicle. */
 function isChronicleNoise(ev) {
   return ev && ev.kind && CHRONICLE_NOISE_KINDS.has(ev.kind);
+}
+
+/* Eventi "silenziosi": vengono mostrati nel log della cronaca ma NON
+   attivano l'aura pulsante sulla linguetta. Pensati per azioni avviate
+   dal giocatore (avvii costruzione, smantellamenti, downgrade, formazione
+   equipaggio, assemblaggio flotte): il click stesso è il feedback —
+   un'aura aggiuntiva è solo rumore visivo (feedback utente 2026-06-17). */
+const CHRONICLE_SILENT_KINDS = new Set([
+  /* Vuoto al momento: i completamenti routine sono stati promossi a
+     CHRONICLE_NOISE_KINDS (zero entry). Lasciato il meccanismo per
+     futuri kind che vogliamo "presenti ma senza pulsazione". */
+]);
+function isChronicleSilent(ev) {
+  return ev && ev.kind && CHRONICLE_SILENT_KINDS.has(ev.kind);
 }
 
 /* Cronaca a due sezioni (sostituisce filtro Importanti/Tutto):
@@ -3398,9 +3415,9 @@ function runQuickColonize(planet, colonyKey, loadPop) {
     showToast('Assegnazione equipaggio: ' + (aCrew.reason || 'errore'));
     return;
   }
-  /* Cronaca: ha creato una nuova spedizione. */
-  pushChronicle(ORION.time.currentDS(g) + ' — Nuova <strong>' + escapeHtml(fleetName) +
-    '</strong> assemblata su ' + escapeHtml(colonyNameFromKey(colonyKey)) + '.', 'planet');
+  /* Spedizione assemblata: azione del giocatore — nessuna voce in cronaca
+     (feedback utente 2026-06-17, rumore in Colonie). La conferma è visiva
+     nel roster flotte. */
   /* doColonize fa il resto (costo + embarkPop + setOrder).
      Se doColonize fallisce internamente (es. risorse insufficienti, ordine
      rifiutato) la flotta resta assemblata ma idle in orbita della colonia —
@@ -3828,7 +3845,8 @@ function _doBuild(id, ctxKey, ctxPlanet) {
     return;
   }
   const def = ORION.structures.get(id);
-  pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione: <strong>' + def.name + '</strong> su ' + planet.name + bodyTagHtml(planet.systemId) + ' (' + def.time + ' ' + iU() + ').', 'planet');
+  /* Avvio costruzione struttura: rumore in Colonie — la coda della
+     colonia è il feedback (build-done idem fuori dal log). */
   if (ORION.tutorial && ORION.tutorial.fire) {
     ORION.tutorial.fire('struct:' + id);
     if (id === 'centro-ingegneria-planetaria') ORION.tutorial.fire('terraforming');
@@ -3916,19 +3934,14 @@ function _doDemolish(id, ctxKey, ctxPlanet) {
   if (!colony || !planet) { showToast('Colonia non trovata'); return; }
   const def = ORION.structures.get(id);
   if (!def) return;
-  const dur = Math.max(1, Math.round((def.time || 2) / 2));
-  const struct = colony.structures[id];
-  const lvl = struct ? (struct.level || 0) : 0;
   const r = ORION.planet.startDemolish(colony, planet, id, ORION.time.currentDS(g));
   if (!r.ok) {
     console.info('Smantellamento rifiutato:', r.reason);
     showToast(r.reason || 'Smantellamento rifiutato');
     return;
   }
-  const verb = lvl >= 2
-    ? ('Avviato downgrade: <strong>' + def.name + '</strong> (lvl ' + lvl + '→' + (lvl - 1) + ')')
-    : ('Avviato smantellamento: <strong>' + def.name + '</strong>');
-  pushChronicle(ORION.time.currentDS(g) + ' — ' + verb + ' su ' + planet.name + bodyTagHtml(planet.systemId) + ' (' + dur + ' Ι).', 'planet');
+  /* Avvio smantellamento/downgrade: azione del giocatore, niente entry
+     in cronaca — la coda della colonia mostra il lavoro in corso. */
   persistGame(g);
   updateGlobalResourceHud();
   updatePlanetUI();
@@ -4409,7 +4422,8 @@ function tryBuildShip() {
     onConfirm: function () {
       const r = ORION.planet.startShipBuild(colony, planet, g, ORION.openPlanetKey, kind);
       if (!r.ok) { console.info('Costruzione scafo rifiutata:', r.reason); showToast(r.reason); return; }
-      pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione di una <strong>' + cls.name + '</strong> su ' + planet.name + bodyTagHtml(planet.systemId) + '.', 'planet');
+      /* Avvio costruzione scafo: rumore in cronaca — l'Hangar mostra
+         già la build in coda. */
       persistGame(g);
       updateGlobalResourceHud();
       updatePlanetUI();
@@ -4430,7 +4444,8 @@ function tryBuildCrew() {
     onConfirm: function () {
       const r = ORION.planet.startCrewBuild(colony, planet);
       if (!r.ok) { console.info('Formazione equipaggio rifiutata:', r.reason); showToast(r.reason); return; }
-      pushChronicle(ORION.time.currentDS(g) + ' — Avviata formazione di un <strong>equipaggio esploratore</strong> presso l\'Accademia di ' + planet.name + bodyTagHtml(planet.systemId) + '.', 'planet');
+      /* Avvio formazione equipaggio: rumore in cronaca — l'Accademia
+         mostra il training in coda. */
       persistGame(g);
       updateGlobalResourceHud();
       updatePlanetUI();
@@ -6468,8 +6483,8 @@ function openStationBuildPicker(stage) {
         const targetId = Number(b.dataset.build);
         const r = ST.build(g, ORION.stationBuildColony, targetId);
         if (!r.ok) { showToast(r.reason || 'Costruzione rifiutata'); return; }
-        const sName = g.galaxy.systems[targetId] ? g.galaxy.systems[targetId].name : 'sistema';
-        pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione di una <strong>stazione</strong> in ' + escapeHtml(sName) + '.', 'fleet');
+        /* Avvio costruzione stazione: azione del giocatore — niente
+           entry in cronaca, la vista Stazioni mostra il cantiere. */
         persistGame(g); close(); renderStationsView(stage); updateGlobalResourceHud();
       });
     });
@@ -9676,9 +9691,8 @@ function openFleetDetail(fleetId, opts) {
         const pen = ORION.cohesion.applyTravelPenalty(g, sysIds);
         if (pen.applied < 0) showToast('Rotta attraverso ' + pen.affectedSys.length + ' sistema coeso — disposizione ' + pen.applied);
       }
-      pushChronicle(ORION.time.currentDS(g) + ' — Nuova flotta <strong>' + escapeHtml(nf.name) +
-        '</strong> formata su ' + escapeHtml(systemNameFromKey(g, colKey)) + ' · ' +
-        escapeHtml(orderLabel({ orders: order })) + '.', 'planet');
+      /* Nuova flotta formata dal giocatore: niente entry — la flotta
+         compare in tab Flotte e il toast/UI sono il feedback. */
       persistGame(g);
       fleet = nf;
       D.creating = false;
@@ -11159,6 +11173,14 @@ function chronicleEvent(ev) {
      gli eventi che richiedono attenzione. I dettagli operativi vivono
      nei pannelli dedicati (colonia, flotta, rotte). */
   if (isChronicleNoise(ev)) return;
+  /* Kind "silenziosi" (es. completamenti smantellamento/downgrade avviati
+     dal giocatore): l'entry compare nel log ma non fa pulsare la linguetta.
+     Flag transitorio consumato da pushChronicle e resettato a fine evento. */
+  ORION._chronicleSilentNext = isChronicleSilent(ev);
+  try { return _chronicleEventBody(ev); }
+  finally { ORION._chronicleSilentNext = false; }
+}
+function _chronicleEventBody(ev) {
   const ds = ORION.time.format(ev.impulso);
   const pname = (ev.planet && ev.planet.name) || '—';
   // Decisione #26: aggiungiamo il tag di appartenenza accanto al nome
@@ -14430,12 +14452,16 @@ function resetChronicle(galaxy, startDS) {
       : '<li class="chronicle__entry chronicle__entry--system">Nessuna voce.</li>');
 }
 
-function pushChronicle(html, modifier, category) {
+function pushChronicle(html, modifier, category, opts) {
   /* `category` opzionale: se assente la deriviamo dal modifier (regola
-     di fallback per chiamate dirette non passate da chronicleEvent). */
+     di fallback per chiamate dirette non passate da chronicleEvent).
+     `opts.silent` (o `ORION._chronicleSilentNext` settato da chronicleEvent
+     per un kind in CHRONICLE_SILENT_KINDS): l'entry entra nel log ma non
+     attiva l'aura pulsante sulla linguetta. */
   const cat = (category === 'galaxy' || category === 'colony')
     ? category
     : chronicleCategoryFromMod(modifier || '');
+  const silent = !!((opts && opts.silent) || ORION._chronicleSilentNext);
   /* Persist nel game state: il DOM lo ricaviamo, ma la fonte di verità
      per il save (e il replay dopo F5) è game.chronicle[]. */
   if (ORION.game) {
@@ -14450,7 +14476,7 @@ function pushChronicle(html, modifier, category) {
      la categoria dell'evento. In ogni altro caso → flag unread per la
      categoria, così la linguetta pulsa. */
   const looking = (ORION.lpTab === 'chronicle') && (ORION.chronicleSection === cat);
-  if (!looking) {
+  if (!looking && !silent) {
     if (!ORION.chronicleUnread) ORION.chronicleUnread = { galaxy: false, colony: false };
     const wasUnread = ORION.chronicleUnread[cat];
     ORION.chronicleUnread[cat] = true;
