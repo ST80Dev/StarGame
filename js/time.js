@@ -1428,44 +1428,57 @@
            (ALIGNMENT_IMPACT #23): liberare un sistema da una civiltà MALIGNA
            è "light"; aggredire una buona/neutrale è "dark". */
         if (playerWon && civ.systems.indexOf(sysId) >= 0) {
-          /* M11 Fase B parziale (decisione #51): OCCUPAZIONE invece di
-             rollback-a-neutrale. La civ perde i pianeti del sistema (come
-             prima), ma il sistema viene formalmente OCCUPATO dal giocatore
-             → bersaglio di reputazione/morale più pesante, contatore visibile
-             per la pista Egemone, leva di rilascio in UI (recovery-friendly:
-             il giocatore può sempre abbandonare l'occupazione). */
-          if (root.ORION.ai && root.ORION.ai.removeAllInSystem) {
-            root.ORION.ai.removeAllInSystem(civ, sysId);
-          } else {
-            civ.systems = civ.systems.filter(function (s) { return s !== sysId; });
+          /* M13 B-2 (decisione #93): rimossa la "occupazione di sistema" di
+             M11 Fase A — incoerente col modello multi-proprietà per body
+             (#52). La perdita è MIRATA al body attaccato (`attackBodyKey`,
+             se noto) o al primo pianeta della civ nel sistema. La presenza
+             militare sul sistema si dichiara col PRESIDIO (ORION.garrison),
+             non si subisce automaticamente.
+             Verbo morale (#23): liberare un body da una civ maligna è
+             "light"; aggredire una buona/neutrale è "dark". */
+          const targetBodyKey = fleet.attackBodyKey || null;
+          let removedAny = false;
+          if (root.ORION.ai && root.ORION.ai.removePlanet && targetBodyKey) {
+            const planetKey = sysId + ':' + targetBodyKey;
+            if ((civ.planets || []).indexOf(planetKey) >= 0) {
+              root.ORION.ai.removePlanet(civ, planetKey);
+              removedAny = true;
+            }
           }
-          civ.power = Math.max(0, civ.power - 8);
-          /* L'occupazione è un atto più pesante della "liberazione neutrale":
-             dark più forte se la civ è buona/neutrale, light forte se maligna. */
-          const impact = (civ.alignment === 'male') ? 'light' : 'dark';
-          if (root.ORION.victory && root.ORION.victory.applyAlignment) {
-            root.ORION.victory.applyAlignment(game, impact, 2);
+          /* Fallback: nessun body specifico → rimuovi il primo pianeta che
+             la civ possiede in questo sistema. */
+          if (!removedAny && Array.isArray(civ.planets)) {
+            for (let pp = 0; pp < civ.planets.length; pp++) {
+              const pk = civ.planets[pp];
+              if (pk && pk.indexOf(sysId + ':') === 0) {
+                if (root.ORION.ai && root.ORION.ai.removePlanet) {
+                  root.ORION.ai.removePlanet(civ, pk);
+                }
+                removedAny = true;
+                break;
+              }
+            }
           }
-          if (impact === 'light') bumpIcg(game, -2); else bumpIcg(game, 3);
-          report.alignmentImpact = impact;
-          /* Registra l'occupazione (delta lazy). */
-          if (!game.occupations || typeof game.occupations !== 'object') game.occupations = {};
-          if (!game.occupations[sysId]) {
-            game.occupations[sysId] = {
-              fromCivId: civ.id, fromCivName: civ.name,
-              fromCivColor: civ.color, fromAlignment: civ.alignment,
-              sinceI: game.timeImpulsi
-            };
-            report.occupiedSystem = sysId;
-            events.push({ kind: 'system-occupied', sysId: sysId,
-              fromCivId: civ.id, fromCivName: civ.name,
-              alignment: civ.alignment, impulso: game.timeImpulsi });
-          } else {
-            report.rolledBackSystem = sysId; // già occupato → solo "ripulito"
+          if (removedAny) {
+            civ.power = Math.max(0, civ.power - 4);
+            const impact = (civ.alignment === 'male') ? 'light' : 'dark';
+            if (root.ORION.victory && root.ORION.victory.applyAlignment) {
+              root.ORION.victory.applyAlignment(game, impact, 1);
+            }
+            if (impact === 'light') bumpIcg(game, -1); else bumpIcg(game, 2);
+            report.alignmentImpact = impact;
+            report.bodyLost = targetBodyKey || null;
           }
-          if ((civ.planets || civ.systems || []).length === 0) {
+          if ((civ.planets || []).length === 0) {
             civ.alive = false;
             events.push({ kind: 'civ-fallen', civName: civ.name, conqueror: 'le tue forze', impulso: game.timeImpulsi });
+          }
+          /* M13 B-2 (decisione #93): tentativo di cattura tech. Chance
+             maggiore se il vittorioso ha raidato un body specifico (più
+             vicino ai laboratori); altrimenti scaramuccia spaziale. */
+          if (root.ORION.research && root.ORION.research.tryCaptureTech) {
+            const captureKind = (removedAny && targetBodyKey) ? 'raid' : 'skirmish';
+            root.ORION.research.tryCaptureTech(game, civ, captureKind, events);
           }
         }
       }
@@ -2267,6 +2280,12 @@
        costruzione/upkeep/riparazione delle stazioni. */
     processStationDefense(game, events);
     processStations(game, events);
+    /* M13 B-2 (decisione #93): manutenzione presidi militari (cadenza
+       TICK_EVERY_I interna). Decade compromised → lapsed se non rinforzato. */
+    if (root.ORION.garrison && root.ORION.garrison.tick &&
+        (game.timeImpulsi % root.ORION.garrison.CFG.TICK_EVERY_I) === 0) {
+      root.ORION.garrison.tick(game, events);
+    }
     processWarState(game);
     /* M09 Fase B: rilevamento sconfitta (0 colonie → esilio/gameover). */
     checkDefeat(game, events);

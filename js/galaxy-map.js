@@ -1258,6 +1258,7 @@
           this._drawCohesion(ctx, reveal);
           this._drawPirateNests(ctx, reveal);
           this._drawStations(ctx, reveal);
+          this._drawGarrisons(ctx, reveal);
           this._drawFleets(ctx, reveal);
           this._drawAiFleets(ctx, reveal);
           if (this._fleetPicker) this._drawFleetPickerOverlay(ctx, reveal);
@@ -2107,6 +2108,35 @@
     /* M16 (decisione #81): marker delle tue stazioni spaziali. Sono tue →
        sempre visibili (niente nebbia di guerra). Glifo ⬡ ciano sopra il
        nodo; ambra se in costruzione, rosso se isolata. */
+    /* M13 B-2 (decisione #93): presidio militare — bandiera ⚑ a fianco del
+       sistema presidiato. Colore: blu giocatore (active) o giallo
+       (compromised). */
+    _drawGarrisons(ctx, reveal) {
+      const game = root.ORION && root.ORION.game;
+      if (!game || !game.garrisons) return;
+      const g = this.galaxy;
+      const keys = Object.keys(game.garrisons);
+      if (!keys.length) return;
+      ctx.save();
+      ctx.globalAlpha = reveal;
+      for (let i = 0; i < keys.length; i++) {
+        const entry = game.garrisons[keys[i]];
+        if (!entry) continue;
+        const sys = g.systems[Number(keys[i])];
+        if (!sys) continue;
+        const p = this.project(sys.x, sys.y, sys.z || 0);
+        if (p.x < -30 || p.x > this.cssW + 30 || p.y < -30 || p.y > this.cssH + 30) continue;
+        const r = this.nodeRadius(p.parallax);
+        const color = entry.status === 'compromised' ? '#e0c060' : '#5fa8ff';
+        ctx.fillStyle = color;
+        ctx.font = Math.max(11, r + 6) + 'px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('⚑', p.x - (r + 8), p.y - (r + 2));
+      }
+      ctx.restore();
+    }
+
     _drawStations(ctx, reveal) {
       const game = root.ORION && root.ORION.game;
       if (!game || !Array.isArray(game.stations) || !game.stations.length) return;
