@@ -59,6 +59,12 @@
     COLONY_SENSOR: 0.62,    // potenza rilevamento passiva di una colonia
     COLONY_RANGE_FALLOFF: 0.55, // copertura sui sistemi adiacenti (1° anello)
     COLONY_RANGE2_FALLOFF: 0.30, // copertura sul 2° anello (2 hop, più debole)
+    /* Sensori di FLOTTA (mobili): raggio < colonia e tarato sul tipo di navi
+       (richiesta utente 2026-06-19). Una flotta vede SEMPRE il proprio
+       sistema (incrocio/co-locazione); solo gli scafi da ricognizione
+       (explorer/intercettore, fleet.fleetSensor.range>=1) estendono di 1 hop
+       al sistema adiacente — MAI a 2 hop come una colonia. */
+    FLEET_RING_FALLOFF: 0.45,
     CONTACT_PERSIST_I: 32,  // un contatto resta "ultimo avvistamento" dopo l'uscita dai sensori
     DETECT_BASE: 0.22,      // offset prob. rilevamento
     INTEL_GAIN: 0.16,       // crescita intel/Impulso in copertura
@@ -443,14 +449,14 @@
       for (let k = 0; k < nodesF.length; k++) {
         const here = nodesF[k];
         if (here == null) continue;
+        /* Proprio sistema: sempre (incrocio/co-locazione). */
         bump(here, s.power);
-        const nb = neighborsOf(game, here);
-        for (let j = 0; j < nb.length; j++) {
-          bump(nb[j], s.power * CFG.COLONY_RANGE_FALLOFF);
-          if (s.range >= 1) {
-            const nb2 = neighborsOf(game, nb[j]);
-            for (let m = 0; m < nb2.length; m++) bump(nb2[m], s.power * CFG.COLONY_RANGE2_FALLOFF);
-          }
+        /* 1 hop SOLO con scafo da ricognizione; niente 2° anello (raggio di
+           flotta < colonia, tarato sul tipo di navi — richiesta utente
+           2026-06-19). */
+        if (s.range >= 1) {
+          const nb = neighborsOf(game, here);
+          for (let j = 0; j < nb.length; j++) bump(nb[j], s.power * CFG.FLEET_RING_FALLOFF);
         }
       }
     }
@@ -465,15 +471,42 @@
     return [af.systemId];
   }
 
-  /* Una tua flotta è co-locata con la flotta AI (stesso sistema nodo)? */
-  function coLocatedPlayerFleet(game, nodes) {
+  /* Tratto (edge) interstellare corrente di una flotta, o null se ferma/intra. */
+  function fleetLeg(f) {
+    if (f && f.location && f.location.status === 'in-transit' && !f.location.intra &&
+        Array.isArray(f.route) && f.routeIdx + 1 < f.route.length) {
+      return [f.route[f.routeIdx], f.route[f.routeIdx + 1]];
+    }
+    return null;
+  }
+  function sameEdge(a1, a2, b1, b2) {
+    return (a1 === b1 && a2 === b2) || (a1 === b2 && a2 === b1);
+  }
+  /* Flotte del giocatore che INCROCIANO una flotta AI:
+     - a un NODO: co-locate (stesso sistema) con un nodo-presenza dell'AI;
+     - in VOLO interstellare: sullo STESSO tratto (stessa coppia di sistemi),
+       così "incrociarli nei tratti interstellari" è possibile (richiesta
+       utente 2026-06-19), non solo a sistema fermo. */
+  function encounteringPlayerFleets(game, af) {
+    const nodes = presenceNodes(af);
+    const afLeg = (af.status === 'in-transit' && Array.isArray(af.route) && af.routeIdx + 1 < af.route.length)
+      ? [af.route[af.routeIdx], af.route[af.routeIdx + 1]] : null;
     const fleets = game.fleets || [];
+    const out = [];
     for (let i = 0; i < fleets.length; i++) {
       const f = fleets[i];
       if (!f || !f.location) continue;
-      if (nodes.indexOf(f.location.systemId) >= 0) return f;
+      if (f.location.status === 'in-transit') {
+        const fl = fleetLeg(f);
+        if (afLeg && fl && sameEdge(fl[0], fl[1], afLeg[0], afLeg[1])) out.push(f);
+      } else if (nodes.indexOf(f.location.systemId) >= 0) {
+        out.push(f);
+      }
     }
-    return null;
+    return out;
+  }
+  function coLocatedPlayerFleet(game, af) {
+    return encounteringPlayerFleets(game, af)[0] || null;
   }
 
   function detect(game, af, cov, colSys, events) {
@@ -540,9 +573,15 @@
     if (af.engaged || af.fp <= 0) return false;
     const civ = (game.civs || []).filter(function (c) { return c.id === af.civId; })[0];
     if (!civHostileToPlayer(civ)) return false;
-    const nodes = presenceNodes(af);
-    const pf = coLocatedPlayerFleet(game, nodes);
+    const pf = coLocatedPlayerFleet(game, af);
     if (!pf || !Array.isArray(pf.ships) || !pf.ships.length) return false;
+    /* Niente ingaggio automatico dalla parte del giocatore (richiesta utente
+       2026-06-19): all'incrocio scatta lo scontro SOLO se la TUA flotta è in
+       formazione AGGRESSIVA (posizione "spara a vista"). Altrimenti nessun
+       danno forzato: l'incrocio/rilevamento ti AVVISA (processCrossings +
+       eventi detect/approach) e decidi tu (Intercetta/Segui/ritirata). La
+       pressione AI organizzata resta nel sistema incursioni (con preavviso). */
+    if (pf.formation !== 'aggressive') return false;
 
     const I = game.timeImpulsi || 0;
     /* Chance scalata sotto il warm-up soft: early più mansueto, ma NON un
@@ -608,28 +647,18 @@
     return !!(civ && Array.isArray(civ.systems) && civ.systems.indexOf(sysId) >= 0);
   }
   /* Flotta player co-locata con una flotta AI (stesso nodo, non in transito). */
-  function playerFleetAt(game, af) {
-    const nodes = presenceNodes(af);
-    const fleets = game.fleets || [];
-    const out = [];
-    for (let i = 0; i < fleets.length; i++) {
-      const f = fleets[i];
-      if (!f || !f.location || f.location.status === 'in-transit') continue;
-      if (nodes.indexOf(f.location.systemId) >= 0) out.push(f);
-    }
-    return out;
-  }
-
-  /* "Quando incrocio raccolgo qualche info" — anche senza fermarsi. Alla
-     PRIMA co-locazione di una tua flotta con una flotta AI, una nota di
+  /* "Quando incrocio raccolgo qualche info" — anche senza fermarsi, e anche
+     nei tratti interstellari (richiesta utente 2026-06-19). Alla PRIMA
+     co-locazione/incrocio di una tua flotta con una flotta AI, una nota di
      cronaca con quel che sai + un piccolo bump d'intel. */
   function processCrossings(game, fleetsAi, events) {
     const I = game.timeImpulsi || 0;
     for (let i = 0; i < fleetsAi.length; i++) {
       const af = fleetsAi[i];
       if (!af || af._dead) continue;
-      const here = playerFleetAt(game, af);
+      const here = encounteringPlayerFleets(game, af);
       if (!here.length) continue;
+      const hostile = civHostileToPlayer(civById(game, af.civId));
       if (!Array.isArray(af.crossedBy)) af.crossedBy = [];
       for (let j = 0; j < here.length; j++) {
         const pf = here[j];
@@ -637,12 +666,17 @@
         af.crossedBy.push(pf.id);
         af.detected = true;
         af.intel = Math.min(1, (af.intel || 0) + CFG.CROSS_INTEL_BUMP);
+        /* Incrocio con una flotta OSTILE che NON è stata ingaggiata (la tua
+           non è aggressiva): è il "momento per decidere" — evento con
+           auto-pausa, niente danno (richiesta utente 2026-06-19). Le altre
+           sono note atmosferiche. */
+        const decisionMoment = hostile && pf.formation !== 'aggressive';
         events.push({
-          kind: 'aifleet-crossed',
+          kind: decisionMoment ? 'aifleet-hostile-encounter' : 'aifleet-crossed',
           aifleetId: af.id, fleetId: pf.id, fleetName: pf.name,
           sysId: pf.location.systemId, regionLabel: regionLabel(game, pf.location.systemId),
           missionLabel: MISSIONS[af.mission].label,
-          civName: af.intel >= CFG.INTEL_FULL ? af.civName : null,
+          civName: af.intel >= CFG.INTEL_PARTIAL ? af.civName : null,
           compKnown: af.intel >= CFG.INTEL_PARTIAL,
           impulso: I
         });

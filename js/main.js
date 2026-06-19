@@ -10775,6 +10775,7 @@ const DEFAULT_AUTOPAUSE = {
   'aifleet-detected': false,
   'aifleet-approach': true,
   'aifleet-crossed': false,
+  'aifleet-hostile-encounter': true,
   'aifleet-skirmish': true,
   'aifleet-destroyed': true,
   'follow-lost': false,
@@ -11206,6 +11207,7 @@ function showEventOverlay(events) {
     'aifleet-detected': 'Flotta non identificata rilevata',
     'aifleet-approach': 'Flotta in avvicinamento alla colonia',
     'aifleet-crossed': 'Flotta altrui incrociata',
+    'aifleet-hostile-encounter': 'Flotta ostile incrociata',
     'aifleet-skirmish': 'Scaramuccia con flotta altrui',
     'aifleet-destroyed': 'Flotta altrui intercettata e dispersa',
     'follow-lost': 'Contatto perso',
@@ -11758,6 +11760,11 @@ function _chronicleEventBody(ev) {
     const whoFrag = ev.civName ? (' di <strong>' + escapeHtml(ev.civName) + '</strong>') : '';
     const compFrag = ev.compKnown ? (' (missione di <em>' + escapeHtml(ev.missionLabel) + '</em>)') : ' (composizione ignota)';
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName || 'La tua flotta') + '</strong> ha incrociato una flotta' + whoFrag + compFrag + ' nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">puoi dare l\'ordine «Segui» per scrutarla meglio</span>.', 'civ');
+  } else if (ev.kind === 'aifleet-hostile-encounter') {
+    /* M18.x: incrocio con flotta OSTILE non ingaggiata (la tua non è
+       aggressiva). Momento di decisione (auto-pausa), nessun danno. */
+    const who = ev.civName ? ('<strong>' + escapeHtml(ev.civName) + '</strong>') : 'una flotta ostile';
+    pushChronicle(ds + ' — ⚠ <strong>' + escapeHtml(ev.fleetName || 'La tua flotta') + '</strong> ha incrociato ' + who + ' (ostile) nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">decidi: Intercetta, Segui, oppure ritírati. Nessuno scontro automatico (formazione non aggressiva).</span>', 'civ');
   } else if (ev.kind === 'aifleet-skirmish') {
     const who = ev.civName ? ('<strong>' + escapeHtml(ev.civName) + '</strong>') : 'una flotta ostile';
     const hitFrag = ev.shipsHit > 0 ? (ev.shipsHit + ' scafi colpiti') : 'nessun danno serio';
