@@ -10802,7 +10802,7 @@ const DEFAULT_AUTOPAUSE = {
   'crisis-raised': true, 'crisis-lapsed': true, 'anomaly-relic-found': false, 'anomaly-depleted': false,
   /* FSP §17.7: contatto/scansione/controllo atmosferici (OFF); rivelazione
      dell'effetto è la commit significativa (ON). */
-  'fsp-contact': false, 'fsp-scanned': false, 'fsp-revealed': true, 'fsp-claimed': false,
+  'fsp-contact': false, 'fsp-scanned': false, 'fsp-revealed': true, 'fsp-claimed': false, 'fsp-lost': true,
   /* Fase B (decisione #46): tappa intermedia raggiunta. Default OFF —
      non interrompiamo a ogni waypoint, può essere una rotta lunga. L'arrivo
      finale e la `route-complete` continuano a fermare il tempo. */
@@ -11251,6 +11251,7 @@ function showEventOverlay(events) {
     'fsp-scanned': 'Fenomeno classificato',
     'fsp-revealed': 'Fenomeno investigato',
     'fsp-claimed': 'Fenomeno sotto controllo',
+    'fsp-lost': 'Fenomeno perduto',
     'fleet-leg-hop': 'Flotta: hop intermedio',
     'fleet-waypoint-reached': 'Flotta: tappa raggiunta',
     'garrison-threat-detected': 'Garrison: minaccia rilevata',
@@ -12138,6 +12139,8 @@ function _chronicleEventBody(ev) {
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.name || 'Fenomeno') + '</strong> investigato presso ' + escapeHtml(ev.sysName || '—') + ': ' + escapeHtml(ev.text || '') , 'system');
   } else if (ev.kind === 'fsp-claimed') {
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.name || 'Fenomeno') + '</strong> ora sotto il tuo controllo (presidio).', 'system');
+  } else if (ev.kind === 'fsp-lost') {
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.name || 'Fenomeno') + '</strong> presso ' + escapeHtml(ev.sysName || '—') + ' è stato sottratto da ' + escapeHtml(ev.faction || 'una fazione rivale') + ': lasciato indifeso. Puoi tornare a rivendicarlo.', 'crit');
   } else if (ev.kind === 'empire-fallen') {
     if (ev.hard) {
       pushChronicle(ds + ' — <strong>La tua civiltà è caduta.</strong> Senza più colonie, l\'impero si dissolve negli annali galattici.', 'system');
@@ -14607,6 +14610,7 @@ function _renderPhenomenonPopup(id, screenX, screenY) {
       '<div><dt>Classe</dt><dd>' + escapeHtml(PH.CLASSES[ph.cls].label) + '</dd></div>' +
       '<div><dt>Esito</dt><dd>' + escapeHtml(st.outcome ? st.outcome.text : '—') + '</dd></div>' +
       (st.owned ? '<div><dt>Stato</dt><dd>' + (st.varcoTo != null ? 'varco attivo — scorciatoia per le tue flotte' : 'sotto il tuo controllo') + '</dd></div>' : '') +
+      (!st.owned && st.aiFaction ? '<div><dt>Stato</dt><dd>conteso da ' + escapeHtml(st.aiFaction) + '</dd></div>' : '') +
       '</dl>' +
       ((st.outcome && st.outcome.exploitable && !st.owned)
         ? '<p class="fleet-info-popup__hint">' + (st.varcoTo != null

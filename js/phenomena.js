@@ -443,8 +443,23 @@
     REVEAL_MIN: 1, REVEAL_SPAN: 3,    // sistemi rivelati (intel)
     UNIQUE_MULT: 1.6,                 // gli unici sono più "grossi" (sempre capati)
     PASSIVE_RATE_MIN: 0.3, PASSIVE_RATE_SPAN: 0.9, // trickle/Ι nodo posseduto
-    PASSIVE_CAP: 1500            // tetto totale dal nodo posseduto (anti-game-winner)
+    PASSIVE_CAP: 1500,           // tetto totale dal nodo posseduto (anti-game-winner)
+    /* Fase 5 — contendibilità: un nodo posseduto e NON presidiato può essere
+       sottratto dall'AI. Grazia generosa (puoi assentarti) + roll periodico
+       deterministico scalato da pericolo/ICG. Recovery-friendly: si ri-rivendica. */
+    CONTEST_GRACE: 250,          // Ι senza presidio prima di rischiare
+    CONTEST_PERIOD: 120,         // un solo roll ogni N Ι
+    CONTEST_P_BASE: 0.12,        // probabilità base (scalata, cap 0.6)
+    /* Fase 5 — pressione ICG da hazard classificati ma NON gestiti (né
+       investigati/neutralizzati né marcati come da evitare). Lieve; l'ICG
+       decade verso 20 in ai.js, quindi è una tensione, non una spirale. */
+    ICG_HAZARD_DRIP: 0.004, ICG_DRIP_MAX_SOURCES: 6
   };
+  /* Etichette fazione per il flavor della contendibilità (#34, §13.7). */
+  function contestFaction(ph, rng) {
+    if (ph.cls === 'relic' || ph.cls === 'temp' || ph.unique) return 'il Conclave di Vehryn';
+    return rng.pick(['una banda pirata', 'il Sindacato Mekhari', 'il Conclave di Vehryn']);
+  }
   /* Risorsa "naturale" per classe (cache/loss). bio sceglie food/water. */
   const RES_BY_CLASS = { grav: 'en', relic: 'met', emis: 'en', bio: 'food', temp: 'met' };
   const RES_LABEL = { met: 'metalli', en: 'energia', food: 'cibo', water: 'acqua' };
@@ -743,7 +758,8 @@
     const c = canExploit(game, id); if (!c.ok) return c;
     const st = ensureState(game, id);
     st.owned = true; st.passiveTotal = st.passiveTotal || 0;
-    if (st.varcoTo != null) applyVarchiLinks(game); // attiva subito la scorciatoia
+    st.undef = 0; st.aiFaction = null; // riconquista: azzera indifesa/fazione
+    if (st.varcoTo != null) applyVarchiLinks(game); // (ri)attiva la scorciatoia
     return { ok: true, category: st.outcome.category };
   }
 
@@ -767,18 +783,36 @@
     }
     return out;
   }
+  /* Sincronizza gli archi-varco nei links della galassia: aggiunge quelli
+     dei varco posseduti e RIMUOVE quelli non più posseduti (es. varco perso
+     per contesa → la scorciatoia si chiude). Traccia solo gli archi creati da
+     noi (galaxy._varcoLinks, transitorio) → non tocca mai i link nativi. */
   function applyVarchiLinks(game) {
     if (!game || !game.galaxy) return;
-    const sys = game.galaxy.systems;
-    const edges = varchiEdges(game);
-    for (let i = 0; i < edges.length; i++) {
-      const a = edges[i].a, b = edges[i].b;
-      if (a == null || b == null || !sys[a] || !sys[b] || a === b) continue;
-      if (!Array.isArray(sys[a].links)) sys[a].links = [];
-      if (!Array.isArray(sys[b].links)) sys[b].links = [];
-      if (sys[a].links.indexOf(b) < 0) sys[a].links.push(b);
-      if (sys[b].links.indexOf(a) < 0) sys[b].links.push(a);
-    }
+    const galaxy = game.galaxy, sys = galaxy.systems;
+    if (!galaxy._varcoLinks) galaxy._varcoLinks = {};
+    const tracked = galaxy._varcoLinks;
+    const desired = {};
+    varchiEdges(game).forEach(function (e) {
+      if (e.a == null || e.b == null || e.a === e.b) return;
+      desired[e.a + '-' + e.b] = { a: e.a, b: e.b };
+      desired[e.b + '-' + e.a] = { a: e.b, b: e.a };
+    });
+    Object.keys(tracked).forEach(function (key) {
+      if (desired[key]) return;
+      const e = tracked[key]; delete tracked[key];
+      if (sys[e.a] && Array.isArray(sys[e.a].links)) {
+        const idx = sys[e.a].links.indexOf(e.b);
+        if (idx >= 0) sys[e.a].links.splice(idx, 1);
+      }
+    });
+    Object.keys(desired).forEach(function (key) {
+      if (tracked[key]) return;
+      const e = desired[key];
+      if (!sys[e.a] || !sys[e.b]) return;
+      if (!Array.isArray(sys[e.a].links)) sys[e.a].links = [];
+      if (sys[e.a].links.indexOf(e.b) < 0) { sys[e.a].links.push(e.b); tracked[key] = e; }
+    });
   }
 
   /* AZIONE 4 — MARCA/EVITA (sempre disponibile da Contatto in poi). */
@@ -795,20 +829,56 @@
     if (!game || !game.galaxy) return;
     ensure(game);
     detect(game, events);
-    // passivo: nodi cache posseduti e presidiati → trickle capato
     const items = forGalaxy(game.galaxy);
+    const now = game.timeImpulsi || 0;
+    let icgDrip = 0, dripSources = 0;
     for (let i = 0; i < items.length; i++) {
       const ph = items[i];
       const st = game.phenomena[ph.id];
-      if (!st || !st.owned || !st.outcome) continue;
-      if (st.outcome.category !== 'cache' && st.outcome.category !== 'unique') continue;
-      if ((st.passiveTotal || 0) >= FX.PASSIVE_CAP) continue;
-      if (!playerFleetAtSystem(game, ph.nearSys)) continue;
-      const rate = FX.PASSIVE_RATE_MIN + (ph.intensity || 0.5) * FX.PASSIVE_RATE_SPAN;
-      const take = Math.min(rate, FX.PASSIVE_CAP - (st.passiveTotal || 0));
-      if (deposit(game, st.outcome.res || 'met', take)) {
-        st.passiveTotal = (st.passiveTotal || 0) + take;
+      if (!st) continue;
+      const disc = st.d || 0;
+
+      /* Pressione ICG: hazard classificati ma non gestiti (non investigati/
+         neutralizzati, non marcati come da evitare). Marcarli o risolverli
+         ferma la pressione → il verbo "Evita" è contenimento concreto. */
+      if (disc >= DISCOVERY.CLASSIFICATO && ph.tenor < 0 && !st.marked && !st.used && !st.owned) {
+        if (dripSources < FX.ICG_DRIP_MAX_SOURCES) { icgDrip += FX.ICG_HAZARD_DRIP; dripSources++; }
       }
+
+      if (!st.owned || !st.outcome) continue;
+      const presidio = playerFleetAtSystem(game, ph.nearSys);
+
+      /* Passivo: nodi cache/unici posseduti e PRESIDIATI → trickle capato. */
+      if ((st.outcome.category === 'cache' || st.outcome.category === 'unique') &&
+          (st.passiveTotal || 0) < FX.PASSIVE_CAP && presidio) {
+        const rate = FX.PASSIVE_RATE_MIN + (ph.intensity || 0.5) * FX.PASSIVE_RATE_SPAN;
+        const take = Math.min(rate, FX.PASSIVE_CAP - (st.passiveTotal || 0));
+        if (deposit(game, st.outcome.res || 'met', take)) st.passiveTotal = (st.passiveTotal || 0) + take;
+      }
+
+      /* Contendibilità: se presidiato, sei al sicuro; altrimenti il contatore
+         "indifeso" sale e, oltre la grazia, un roll periodico deterministico
+         può far sottrarre il nodo a una fazione AI (Vehryn/pirati/Mekhari). */
+      if (presidio) { st.undef = 0; continue; }
+      st.undef = (st.undef || 0) + 1;
+      if (st.undef < FX.CONTEST_GRACE) continue;
+      const bucket = Math.floor(now / FX.CONTEST_PERIOD);
+      if (st._contestBucket === bucket) continue;
+      st._contestBucket = bucket;
+      const rng = ORION.rng.makeRng(ph.effectSeed + ':contest:' + bucket);
+      const sys = game.galaxy.systems[ph.nearSys];
+      const danger = (sys && sys.danger) || 0;
+      const p = Math.min(0.6, FX.CONTEST_P_BASE * (0.5 + danger / 100 + (game.icg || 20) / 200));
+      if (rng.chance(p)) {
+        st.owned = false; st.undef = 0;
+        st.aiFaction = contestFaction(ph, rng);
+        // il varco perde l'attivazione (resta rivelato/ri-rivendicabile)
+        if (events) events.push({ kind: 'fsp-lost', id: ph.id, sysId: ph.nearSys,
+          sysName: sys ? sys.name : '—', name: ph.name, faction: st.aiFaction, impulso: now });
+      }
+    }
+    if (icgDrip > 0) {
+      game.icg = Math.max(0, Math.min(100, (typeof game.icg === 'number' ? game.icg : 20) + icgDrip));
     }
   }
 
