@@ -736,6 +736,10 @@ function newGame(seed, opts) {
     if (Array.isArray(saved.crises)) ORION.game.crises = saved.crises.slice();
     if (saved.crisisMeta && typeof saved.crisisMeta === 'object') ORION.game.crisisMeta = Object.assign({ icgTier: 0 }, saved.crisisMeta);
     if (saved.anomalies && typeof saved.anomalies === 'object') ORION.game.anomalies = Object.assign({}, saved.anomalies);
+    /* FSP §17.7 (Fenomeni di Spazio Profondo): stato delta additivo (scoperta/
+       proprietà). Save vecchi senza chiave → {}: gli FSP esistono comunque
+       (rigenerati dal seed) e partono tutti a "Eco" come in partita nuova. */
+    if (saved.phenomena && typeof saved.phenomena === 'object') ORION.game.phenomena = Object.assign({}, saved.phenomena);
     /* M11 Fase B parziale: sistemi occupati (additivo, no migrazione). */
     if (saved.occupations && typeof saved.occupations === 'object') {
       ORION.game.occupations = Object.assign({}, saved.occupations);
@@ -830,6 +834,13 @@ function newGame(seed, opts) {
         ORION.anomaly.ensureSites(ORION.game, c.systemId);
       });
     }
+  }
+  /* FSP §17.7 (Fenomeni di Spazio Profondo): init stato delta + pre-genera la
+     lista immutabile dal seed (cache su galaxy._phenomena). Idempotente:
+     funziona identico su partita nuova e su save pre-FSP (delta vuoto → tutti
+     a "Eco"). Niente rendering/interazione qui (Fasi 2-3). */
+  if (ORION.phenomena && ORION.phenomena.ensure) {
+    ORION.phenomena.ensure(ORION.game);
   }
 
   setHudDate(ORION.time.currentDS(ORION.game));

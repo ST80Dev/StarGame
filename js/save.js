@@ -248,6 +248,11 @@
       crises: Array.isArray(game.crises) ? game.crises : [],
       crisisMeta: (game.crisisMeta && typeof game.crisisMeta === 'object') ? game.crisisMeta : { icgTier: 0 },
       anomalies: (game.anomalies && typeof game.anomalies === 'object') ? game.anomalies : {},
+      /* FSP §17.7: stato delta dei Fenomeni di Spazio Profondo (scoperta/
+         proprietà/uso). Additivo lazy (nessun bump): la struttura immutabile
+         degli FSP si rigenera dal seed (come i gruppi), nel save vive solo il
+         delta. Save vecchi → {} (tutti a "Eco"). */
+      phenomena: (game.phenomena && typeof game.phenomena === 'object') ? game.phenomena : {},
       /* M18.x (richiesta utente 2026-06-18): flotte ambientali AI in volo
          (schema 32, additivo). Save vecchi → lista vuota: si ripopola dal
          seed giocando. */
