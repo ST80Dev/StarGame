@@ -393,7 +393,10 @@
     _now() { return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(); }
 
     _zoomAt(sx, sy, factor) {
-      const minScale = this.fitScale * 0.55;
+      /* Feedback 2026-06-19: l'uscita verso il gruppo scattava troppo tardi
+         (vista-sistema con molto margine vuoto) → soglia d'uscita alzata
+         0.55×→0.75×: la transizione parte prima, salto meno marcato. */
+      const minScale = this.fitScale * 0.75;
       const maxScale = this.fitScale * 14;
       /* decisione #80 — navigazione a zoom: contro il muro IN → scendi nel
          pianeta centrato; contro il muro OUT → risali alla galassia. */

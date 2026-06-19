@@ -1019,10 +1019,11 @@
       /* decisione #80 — atterra un po' più "dentro" il gruppo così, uscendo
          da un Sistema, ci sono alcuni passi di zoom-out a nodi pieni prima che
          inizi la dissolvenza verso la galassia (niente scalino).
-         Feedback 2026-06-19: inquadratura più stretta (fill 0.62→0.8, floor
-         2.3×→2.8×) — prima la vista gruppo era troppo ampia e costringeva a
-         rientrare in zoom-in. */
-      const cam = this._cameraForRotatedBounds(pts, 0.8, this.fitScale * 2.8);
+         Feedback 2026-06-19: vista gruppo troppo ampia (anche al primo zoom di
+         gruppo) → inquadratura più stretta (fill 0.85, floor 3.6×). Per gruppi
+         grandi i bordi possono uscire dallo schermo: scelta voluta, si privilegia
+         la vicinanza alla zona d'interesse rispetto al "tutto il gruppo". */
+      const cam = this._cameraForRotatedBounds(pts, 0.85, this.fitScale * 3.6);
       this._animateTo(cam.s, cam.ox, cam.oy);
       this._emitContext(true);
     }
@@ -1050,7 +1051,7 @@
       if (!s) return;
       this.activeGroupId = s.cluster;
       this.state.selectedId = id;
-      let scale = this.fitScale * 2.8;
+      let scale = this.fitScale * 3.6;
       const g = this._groupById(s.cluster);
       if (g) {
         const pad = 0.03;
@@ -1061,7 +1062,7 @@
           { x: g.maxX + pad, y: g.maxY + pad, z: g.maxZ || 0 },
           { x: g.cx, y: g.cy, z: g.cz || 0 }
         ];
-        scale = this._cameraForRotatedBounds(pts, 0.8, this.fitScale * 2.8).s;
+        scale = this._cameraForRotatedBounds(pts, 0.85, this.fitScale * 3.6).s;
       }
       /* offset tale che il punto proiettato del sistema cada al centro schermo */
       const r = this.orient.rotate(s.x - 0.5, s.y - 0.5, s.z || 0);
@@ -1158,7 +1159,7 @@
           { x: g.maxX + pad, y: g.maxY + pad, z: g.maxZ || 0 },
           { x: g.cx, y: g.cy, z: g.cz || 0 }
         ];
-        const cam = this._cameraForRotatedBounds(pts, 0.8, this.fitScale * 2.8);
+        const cam = this._cameraForRotatedBounds(pts, 0.85, this.fitScale * 3.6);
         return { s: cam.s, ox: cam.ox, oy: cam.oy, orient: this.orient };
       }
       if (kind === 'system') {
