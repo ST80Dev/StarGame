@@ -869,9 +869,11 @@
       ts: Date.now()
     };
     writeStore(store);
-    /* Cloud sync immediato per gli slot manuali (azione esplicita dell'utente). */
+    /* Cloud sync immediato per gli slot manuali (azione esplicita dell'utente).
+       Passiamo il nome cosi' il cloud lo persiste e i prompt successivi
+       possono ripresentarlo come default. */
     if (ORION.cloud && ORION.cloud.pushNow) {
-      ORION.cloud.pushNow('s' + idx, game);
+      ORION.cloud.pushNow('s' + idx, game, store.slots[idx].name);
     }
     return true;
   }
