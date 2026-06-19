@@ -6564,6 +6564,23 @@ select.main-menu__input { cursor: pointer; }
 }
 .dip-offer__icon { font-size: 1.1rem; color: #ff7ca8; }
 .dip-offer__text { flex: 1 1 auto; font-size: 0.82rem; }
+/* M11 Fase B piena (decisione #94) — varianti per controfferte / ultimatum /
+   preavvisi di tradimento. Coding visivo (UI_GUIDE §7): is-warn (oro) per
+   controfferta; is-crit (rosso) per ultimatum e warning di tradimento. */
+.dip-offer--counter {
+  background: rgba(240, 192, 80, 0.12);
+  border-color: rgba(240, 192, 80, 0.50);
+  border-left-color: #f0c050;
+}
+.dip-offer--counter .dip-offer__icon { color: #f0c050; }
+.dip-offer--ultimatum,
+.dip-offer--warning {
+  background: rgba(255, 90, 90, 0.14);
+  border-color: rgba(255, 90, 90, 0.55);
+  border-left-color: #ff5a5a;
+}
+.dip-offer--ultimatum .dip-offer__icon,
+.dip-offer--warning .dip-offer__icon { color: #ff5a5a; }
 
 /* M11 Fase B parziale — Sistemi occupati */
 .civ-occupations {

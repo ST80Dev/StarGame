@@ -76,7 +76,33 @@
        reputazione alta e pressione bassa. */
     AI_PEACE_REP_MIN: 55,
     /* Massimo 1 offerta nuova per tick proattivo, in modo da non spammare. */
-    PROACTIVE_MAX_PER_TICK: 1
+    PROACTIVE_MAX_PER_TICK: 1,
+    /* ============== M11 Fase B piena (decisione #94) ==============
+       Controfferte, ultimatum, tradimenti, trattati di passaggio. */
+    /* CONTROFFERTE — la AI rilancia invece di solo rifiutare, quando la
+       proposta è "in zona soglia" (gap entro questo limite). */
+    COUNTER_GAP_WINDOW: 20,         // pt di disposizione entro cui rilancia
+    /* Costi del tributo. Scala lineare col gap: a soglia esatta è il base,
+       ad +20 di gap è ~+100% (bilanciato leggero #22). */
+    COUNTER_PEACE_BASE_MET: 80, COUNTER_PEACE_BASE_EN: 40, COUNTER_PEACE_PER_GAP_MET: 5, COUNTER_PEACE_PER_GAP_EN: 3,
+    COUNTER_ALLY_BASE_MET: 150, COUNTER_ALLY_BASE_EN: 80, COUNTER_ALLY_PER_GAP_MET: 6, COUNTER_ALLY_PER_GAP_EN: 4,
+    /* ULTIMATUM — civ in pace ma molto ostile, potente, può chiedere
+       tributo o guerra. Cadenza tick proattivo. */
+    ULTIMATUM_DISP_MAX: -30,        // disposizione ≤ questo
+    ULTIMATUM_POWER_MIN: 25,        // potere AI ≥ questo (no formica)
+    ULTIMATUM_MET: 200, ULTIMATUM_EN: 100,  // tributo richiesto
+    ULTIMATUM_ACCEPT_DISP: 20,      // bonus disposizione se paghi
+    /* TRADIMENTI — civ Male in alleanza matura, disp in calo, pressione alta.
+       Preavviso, poi guerra se nessun atto di "appianamento". */
+    BETRAY_AGE_MIN: 150,            // alleanza matura ≥ N Ι (no flip immediato)
+    BETRAY_DISP_MAX: 20,            // disposizione in declino
+    BETRAY_PRESSURE_MIN: 0.5,       // pressione sul giocatore alta
+    BETRAY_CHANCE: 0.06,            // probabilità per check
+    BETRAY_GRACE_I: 40,             // tempo per appianare prima della guerra
+    /* TRATTATI DI PASSAGGIO — stato bilaterale, prereq M12 Fase B. */
+    PASSAGE_DISP_MIN: 40,           // disposizione min per proporlo
+    PASSAGE_REP_BONUS: 2,           // reputazione al firma
+    PASSAGE_DISP_DRIFT: 2           // disposizione/DRIFT_EVERY_I durante trattato
   };
 
   /* ---------- Reputazione globale (§14) ---------- */
@@ -129,16 +155,24 @@
      Solo il giocatore propone (Fase A). */
   function availableActions(game, civ) {
     const rel = effectiveRelation(game, civ);
+    const hasPassage = !!(civ && civ.passageTreaty);
     if (rel === 'war')      return ['sue-peace'];
     if (rel === 'truce')    return ['propose-peace', 'declare-war'];
-    if (rel === 'alliance') return ['break-alliance'];
-    return ['propose-alliance', 'declare-war']; // peace (default)
+    if (rel === 'alliance') {
+      /* M11 Fase B (decisione #94): trattato di passaggio gating su
+         disposizione min, una volta sola finché attivo. */
+      return hasPassage ? ['break-alliance'] : ['propose-passage', 'break-alliance'];
+    }
+    /* peace */
+    return hasPassage ? ['propose-alliance', 'declare-war']
+                      : ['propose-alliance', 'propose-passage', 'declare-war'];
   }
 
   const ACTION_LABEL = {
     'sue-peace': 'Proponi pace',
     'propose-peace': 'Proponi pace',
     'propose-alliance': 'Proponi alleanza',
+    'propose-passage': 'Proponi trattato di passaggio',
     'declare-war': 'Dichiara guerra',
     'break-alliance': 'Rompi alleanza'
   };
@@ -163,12 +197,29 @@
       /* La AI accetta la pace se non troppo ostile, o se la tua reputazione
          è alta, o se è lei stessa sotto pressione (vuole tregua). */
       const ok = disp >= CFG.PEACE_DISP_MIN || rep >= CFG.PEACE_REP_HELP || pressure >= 0.6;
-      return {
-        accept: ok, unilateral: false,
-        likelihood: ok ? (disp >= 0 ? 'probabile' : 'incerta') : 'improbabile',
-        reason: ok ? 'La controparte è disposta a deporre le armi.'
-                   : 'Troppo ostile per accettare la pace adesso.'
-      };
+      if (ok) {
+        return { accept: true, unilateral: false,
+          likelihood: disp >= 0 ? 'probabile' : 'incerta',
+          reason: 'La controparte è disposta a deporre le armi.' };
+      }
+      /* M11 Fase B (decisione #94) — Controfferta: se siamo "vicini" alla
+         soglia, rilancia con tributo invece di rifiutare secco. */
+      const gap = CFG.PEACE_DISP_MIN - disp;
+      if (gap <= CFG.COUNTER_GAP_WINDOW && align !== 'bene') {
+        /* Le civ buone non monetizzano la pace (vincolo onorevole). */
+        return { accept: false, unilateral: false,
+          likelihood: 'controfferta',
+          reason: 'Chiedono un tributo per deporre le armi.',
+          counter: {
+            actionId: 'propose-peace',
+            payload: {
+              met: CFG.COUNTER_PEACE_BASE_MET + gap * CFG.COUNTER_PEACE_PER_GAP_MET,
+              en:  CFG.COUNTER_PEACE_BASE_EN  + gap * CFG.COUNTER_PEACE_PER_GAP_EN
+            }
+          } };
+      }
+      return { accept: false, unilateral: false, likelihood: 'improbabile',
+        reason: 'Troppo ostile per accettare la pace adesso.' };
     }
 
     if (actionId === 'propose-alliance') {
@@ -176,14 +227,47 @@
       if (align === 'bene') ok = ok && rep >= CFG.ALLY_REP_MIN;      // i buoni vogliono onore
       else if (align === 'male') ok = ok && rep <= (100 - CFG.ALLY_REP_MIN); // i maligni diffidano dei santi
       // i neutrali bastano la disposizione
-      return {
-        accept: ok, unilateral: false,
-        likelihood: ok ? 'probabile' : (disp >= CFG.ALLY_DISP_MIN - 15 ? 'incerta' : 'improbabile'),
-        reason: ok ? 'I rapporti sono abbastanza saldi per un patto.'
-                   : (disp < CFG.ALLY_DISP_MIN
-                      ? 'Disposizione insufficiente per un\'alleanza.'
-                      : 'La tua reputazione non li convince.')
-      };
+      if (ok) {
+        return { accept: true, unilateral: false, likelihood: 'probabile',
+          reason: 'I rapporti sono abbastanza saldi per un patto.' };
+      }
+      /* Controfferta alleanza: solo se manca disposizione (non se è il
+         vincolo reputazione/onore, che è di principio non monetizzabile). */
+      const dispGap = CFG.ALLY_DISP_MIN - disp;
+      const repBlock = (align === 'bene' && rep < CFG.ALLY_REP_MIN) ||
+                      (align === 'male' && rep > (100 - CFG.ALLY_REP_MIN));
+      if (dispGap > 0 && dispGap <= CFG.COUNTER_GAP_WINDOW && !repBlock) {
+        return { accept: false, unilateral: false,
+          likelihood: 'controfferta',
+          reason: 'Vogliono un dono di buona fede per stringere il patto.',
+          counter: {
+            actionId: 'propose-alliance',
+            payload: {
+              met: CFG.COUNTER_ALLY_BASE_MET + dispGap * CFG.COUNTER_ALLY_PER_GAP_MET,
+              en:  CFG.COUNTER_ALLY_BASE_EN  + dispGap * CFG.COUNTER_ALLY_PER_GAP_EN
+            }
+          } };
+      }
+      return { accept: false, unilateral: false,
+        likelihood: dispGap <= 15 ? 'incerta' : 'improbabile',
+        reason: dispGap > 0 ? 'Disposizione insufficiente per un\'alleanza.'
+                            : 'La tua reputazione non li convince.' };
+    }
+
+    if (actionId === 'propose-passage') {
+      /* M11 Fase B (decisione #94) — Trattato di passaggio: gate su pace/
+         alleanza E disposizione min. Le buone accettano più volentieri (gate
+         allentato), le maligne richiedono qualcosa in più. */
+      if (civ && civ.passageTreaty) {
+        return { accept: false, unilateral: false, likelihood: 'improbabile',
+          reason: 'Trattato di passaggio già attivo.' };
+      }
+      const minDisp = CFG.PASSAGE_DISP_MIN + (align === 'male' ? 10 : align === 'bene' ? -5 : 0);
+      const ok = disp >= minDisp;
+      return { accept: ok, unilateral: false,
+        likelihood: ok ? 'probabile' : (disp >= minDisp - 15 ? 'incerta' : 'improbabile'),
+        reason: ok ? 'Acconsentono al libero transito delle tue flotte.'
+                   : 'I rapporti non bastano per un trattato di passaggio.' };
     }
     return { accept: false, unilateral: false, likelihood: 'improbabile', reason: 'Azione non disponibile.' };
   }
@@ -213,6 +297,24 @@
     if (!verdict.unilateral) civ.lastProposalAt = now;
 
     if (!verdict.accept) {
+      /* M11 Fase B (decisione #94) — se evaluate ha proposto una controfferta,
+         la AI rilancia invece di rifiutare secco. Sostituisce l'eventuale
+         pendingOffer (non si accumulano offerte). */
+      if (verdict.counter) {
+        civ.pendingOffer = {
+          actionId: verdict.counter.actionId,
+          kind: 'counter',
+          payload: verdict.counter.payload,
+          expiresAt: now + CFG.OFFER_TTL,
+          since: now,
+          originator: 'ai'
+        };
+        events.push({ kind: 'diplo-counter', civId: civ.id, civName: civ.name,
+          civColor: civ.color, action: verdict.counter.actionId,
+          payload: verdict.counter.payload, expiresAt: civ.pendingOffer.expiresAt,
+          impulso: now });
+        return { ok: true, accepted: false, countered: true, reason: verdict.reason };
+      }
       events.push({ kind: 'diplo-rejected', civId: civ.id, civName: civ.name,
         civColor: civ.color, action: actionId, impulso: now });
       return { ok: true, accepted: false, reason: verdict.reason };
@@ -229,6 +331,9 @@
         applyMoralVerb(game, innocent ? 'dark' : 'light');
         events.push({ kind: 'diplo-war', civId: civ.id, civName: civ.name,
           civColor: civ.color, impulso: now });
+        /* La guerra cancella ogni trattato di passaggio + warning di tradimento. */
+        breakPassageTreaty(game, civ, events, 'war');
+        civ.allianceWarning = null;
         break;
       }
       case 'sue-peace':
@@ -261,6 +366,16 @@
         adjustReputation(game, CFG.REP_ON_BREAK_ALLIANCE);
         events.push({ kind: 'diplo-alliance-broken', civId: civ.id, civName: civ.name,
           civColor: civ.color, impulso: now });
+        /* Recovery: un'alleanza rotta cancella il trattato di passaggio. */
+        breakPassageTreaty(game, civ, events, 'alliance-broken');
+        break;
+      }
+      case 'propose-passage': {
+        civ.passageTreaty = { since: now };
+        civ.disposition = Math.max(civ.disposition || 0, CFG.PASSAGE_DISP_MIN);
+        adjustReputation(game, CFG.PASSAGE_REP_BONUS);
+        events.push({ kind: 'diplo-passage', civId: civ.id, civName: civ.name,
+          civColor: civ.color, impulso: now });
         break;
       }
       default:
@@ -272,6 +387,17 @@
     return { ok: true, accepted: true, reason: verdict.reason };
   }
 
+  /* M11 Fase B (decisione #94) — rottura automatica del trattato di passaggio
+     quando l'attacco semantico (guerra/tregua/alleanza rotta) lo svuota. Emette
+     evento di cronaca per trasparenza. */
+  function breakPassageTreaty(game, civ, events, reason) {
+    if (!civ || !civ.passageTreaty) return;
+    civ.passageTreaty = null;
+    if (events) events.push({ kind: 'diplo-passage-broken', civId: civ.id,
+      civName: civ.name, civColor: civ.color, reason: reason || 'unknown',
+      impulso: (game && game.timeImpulsi) || 0 });
+  }
+
   /* Revoca incursioni inbound e assedi attivi di una civiltà (pace/alleanza).
      Recovery-friendly (#22): la diplomazia È una leva di uscita dalla guerra. */
   function callOffAggression(game, civ) {
@@ -281,6 +407,31 @@
     if (Array.isArray(game.battles)) {
       game.battles = game.battles.filter(function (b) { return b.attackerCiv !== civ.id; });
     }
+  }
+
+  /* M11 Fase B (decisione #94) — pagamento tributo distribuito sulle colonie
+     in proporzione agli stock. Recovery-friendly (#22): se una risorsa va a
+     zero su una colonia non rompe nulla (i flussi M05/§7.4 la riassestano). */
+  function payTribute(game, met, en) {
+    if (!game || !game.colonies) return;
+    const keys = Object.keys(game.colonies);
+    if (!keys.length) return;
+    const colonies = keys.map(function (k) { return game.colonies[k]; });
+    function distrib(amount, prop) {
+      if (amount <= 0) return;
+      let tot = 0;
+      colonies.forEach(function (c) { tot += Math.max(0, c[prop] || 0); });
+      if (tot <= 0) return;
+      let paid = 0;
+      colonies.forEach(function (c, i) {
+        const share = (i === colonies.length - 1)
+          ? Math.max(0, amount - paid)
+          : Math.round(amount * Math.max(0, c[prop] || 0) / tot);
+        c[prop] = Math.max(0, (c[prop] || 0) - share);
+        paid += share;
+      });
+    }
+    distrib(met, 'met'); distrib(en, 'en');
   }
 
   /* Verbo morale → piste reputation light/dark + ICG (riuso M09). */
@@ -306,17 +457,31 @@
       }
     });
 
-    /* Offerte AI scadute → rifiuto silenzioso, lieve costo disposizione
-       (recovery-friendly: il giocatore può sempre proporre da sé). */
+    /* Offerte AI scadute → rifiuto silenzioso, lieve costo disposizione.
+       ECCEZIONE (M11 Fase B): un ULTIMATUM scaduto è una dichiarazione di
+       guerra effettiva — non un nudge.  */
     (game.civs || []).forEach(function (c) {
       if (!c || !c.alive || !c.pendingOffer) return;
-      if ((c.pendingOffer.expiresAt || 0) <= now) {
-        const off = c.pendingOffer;
-        c.pendingOffer = null;
-        c.disposition = (c.disposition || 0) + CFG.OFFER_EXPIRE_DISP;
-        if (events) events.push({ kind: 'diplo-offer-expired', civId: c.id,
-          civName: c.name, civColor: c.color, action: off.actionId, impulso: now });
+      if ((c.pendingOffer.expiresAt || 0) > now) return;
+      const off = c.pendingOffer;
+      c.pendingOffer = null;
+      if (off.kind === 'ultimatum') {
+        c.relation = 'war';
+        c.truceUntil = 0;
+        c.allianceSince = null;
+        c.disposition = Math.min(c.disposition || 0, -20);
+        breakPassageTreaty(game, c, events, 'ultimatum-expired');
+        if (events) {
+          events.push({ kind: 'diplo-ultimatum-expired', civId: c.id, civName: c.name,
+            civColor: c.color, impulso: now });
+          events.push({ kind: 'diplo-war', civId: c.id, civName: c.name,
+            civColor: c.color, byAi: true, impulso: now });
+        }
+        return;
       }
+      c.disposition = (c.disposition || 0) + CFG.OFFER_EXPIRE_DISP;
+      if (events) events.push({ kind: 'diplo-offer-expired', civId: c.id,
+        civName: c.name, civColor: c.color, action: off.actionId, impulso: now });
     });
 
     /* Dispacci AI proattivi (Fase B parziale): la AI propone pace/alleanza
@@ -334,6 +499,84 @@
       const target = Math.max(CFG.REP_MIN, Math.min(CFG.REP_MAX, 50 + (light - dark) * 40));
       game.reputation += (target - game.reputation) * CFG.REP_DRIFT;
       game.reputation = Math.max(CFG.REP_MIN, Math.min(CFG.REP_MAX, game.reputation));
+
+      /* M11 Fase B (decisione #94) — drift positivo durante trattato di
+         passaggio: il libero transito aumenta lentamente la fiducia
+         reciproca. Bilaterale per simmetria narrativa. */
+      (game.civs || []).forEach(function (c) {
+        if (!c || !c.alive || !c.passageTreaty) return;
+        c.disposition = Math.min(100, (c.disposition || 0) + CFG.PASSAGE_DISP_DRIFT);
+      });
+    }
+
+    /* M11 Fase B (decisione #94) — TRADIMENTI: civ Male in alleanza matura
+       possono tradire se disposizione cala e giocatore è sotto pressione.
+       Preavviso, poi guerra se non si appiana. Le civ Buone non tradiscono
+       mai (vincolo GDD §13.9). */
+    tickBetrayals(game, events, now);
+  }
+
+  function tickBetrayals(game, events, now) {
+    if (!Array.isArray(game.civs)) return;
+    const pressure = (game.warState && game.warState.pressure) || 0;
+    /* Ordine stabile per civ.id (deterministico). */
+    const civs = game.civs.slice().sort(function (a, b) {
+      return String(a.id || '').localeCompare(String(b.id || ''));
+    });
+    for (let i = 0; i < civs.length; i++) {
+      const c = civs[i];
+      if (!c || !c.alive) continue;
+      const rel = effectiveRelation(game, c);
+
+      /* Esecuzione tradimento: se è in warning, controlla scadenza grazia. */
+      if (c.allianceWarning) {
+        if (rel !== 'alliance') {
+          /* Se l'alleanza è già rotta per altri motivi, cancella il warning. */
+          c.allianceWarning = null;
+          continue;
+        }
+        const w = c.allianceWarning;
+        if (now - (w.since || now) >= CFG.BETRAY_GRACE_I) {
+          /* Tempo scaduto: tradimento esecutivo → guerra. */
+          c.relation = 'war';
+          c.allianceSince = null;
+          c.allianceWarning = null;
+          c.disposition = Math.min(c.disposition || 0, -30);
+          adjustReputation(game, CFG.REP_ON_BREAK_ALLIANCE);
+          breakPassageTreaty(game, c, events, 'betrayal');
+          if (events) {
+            events.push({ kind: 'diplo-betrayed', civId: c.id, civName: c.name,
+              civColor: c.color, impulso: now });
+            events.push({ kind: 'diplo-war', civId: c.id, civName: c.name,
+              civColor: c.color, byAi: true, impulso: now });
+          }
+        }
+        continue;
+      }
+
+      /* Apertura warning: solo civ Male, alleanza matura, declino disposizione,
+         pressione alta. Check cadenzato come tickProactive (no spam). */
+      if (rel !== 'alliance') continue;
+      if (c.alignment !== 'male') continue;
+      /* allianceSince può essere 0 legittimamente (alleanza siglata a Ι 0):
+         il fallback `|| now` lo rompeva → uso != null. */
+      const allianceAt = (c.allianceSince != null) ? c.allianceSince : now;
+      const age = now - allianceAt;
+      if (age < CFG.BETRAY_AGE_MIN) continue;
+      const disp = c.disposition || 0;
+      if (disp >= CFG.BETRAY_DISP_MAX) continue;
+      if (pressure < CFG.BETRAY_PRESSURE_MIN) continue;
+      /* Check solo a cadenza PROACTIVE_EVERY_I per evitare hot path. */
+      if (now % CFG.PROACTIVE_EVERY_I !== 0) continue;
+      const rng = ORION.rng && ORION.rng.makeRng
+        ? ORION.rng.makeRng((game.seed || (game.galaxy && game.galaxy.seed) || 'NA') +
+          ':betray:' + c.id + ':' + now)
+        : null;
+      const fires = rng ? rng.chance(CFG.BETRAY_CHANCE) : false;
+      if (!fires) continue;
+      c.allianceWarning = { since: now, kind: 'betrayal' };
+      if (events) events.push({ kind: 'diplo-betrayal-warning', civId: c.id,
+        civName: c.name, civColor: c.color, graceI: CFG.BETRAY_GRACE_I, impulso: now });
     }
   }
 
@@ -384,6 +627,28 @@
           if (c.alignment === 'male' && rep > (100 - CFG.ALLY_REP_MIN)) ok = false;
           if (ok) offer = 'propose-alliance';
         }
+        /* M11 Fase B (decisione #94) — ULTIMATUM: civ in pace ma ostile
+           (disp ≤ ULTIMATUM_DISP_MAX) e potente (power ≥ ULTIMATUM_POWER_MIN)
+           può inviare un ultimatum di tributo. Le civ Buone non lo fanno
+           (non è loro stile: dichiarano guerra apertamente o trattano). */
+        if (!offer && disp <= CFG.ULTIMATUM_DISP_MAX &&
+            (c.power || 0) >= CFG.ULTIMATUM_POWER_MIN &&
+            c.alignment !== 'bene') {
+          c.pendingOffer = {
+            actionId: 'ultimatum',
+            kind: 'ultimatum',
+            payload: { met: CFG.ULTIMATUM_MET, en: CFG.ULTIMATUM_EN },
+            expiresAt: now + CFG.OFFER_TTL,
+            since: now,
+            originator: 'ai'
+          };
+          c.lastProposalAt = now;
+          events.push({ kind: 'diplo-ultimatum', civId: c.id, civName: c.name,
+            civColor: c.color, payload: c.pendingOffer.payload,
+            expiresAt: c.pendingOffer.expiresAt, impulso: now });
+          emitted++;
+          continue;
+        }
       }
       /* alliance / war di default → nessuna offerta extra (rottura/dichiarazione
          AI-driven è materia di Fase B piena: tradimenti, ultimatum). */
@@ -407,13 +672,56 @@
     if (!civ || !civ.pendingOffer) return { ok: false, reason: 'Nessuna offerta in corso.' };
     const off = civ.pendingOffer;
     const now = (game && game.timeImpulsi) || 0;
-    civ.pendingOffer = null;
+    /* M11 Fase B (decisione #94) — ULTIMATUM rifiutato/scaduto = guerra
+       immediata (non solo nudge di disposizione). Lo gestiamo PRIMA del
+       reset di pendingOffer per non perdere stato. */
+    if (!accept && off.kind === 'ultimatum') {
+      civ.pendingOffer = null;
+      events.push({ kind: 'diplo-ultimatum-refused', civId: civ.id, civName: civ.name,
+        civColor: civ.color, impulso: now });
+      /* La civ AI dichiara guerra come atto unilaterale. */
+      civ.relation = 'war';
+      civ.truceUntil = 0;
+      civ.allianceSince = null;
+      civ.disposition = Math.min(civ.disposition || 0, -20);
+      breakPassageTreaty(game, civ, events, 'ultimatum-refused');
+      events.push({ kind: 'diplo-war', civId: civ.id, civName: civ.name,
+        civColor: civ.color, byAi: true, impulso: now });
+      return { ok: true, accepted: false, becameWar: true };
+    }
     if (!accept) {
+      civ.pendingOffer = null;
       civ.disposition = Math.max(-100, (civ.disposition || 0) + CFG.OFFER_REJECT_DISP);
       events.push({ kind: 'diplo-offer-rejected', civId: civ.id, civName: civ.name,
         civColor: civ.color, action: off.actionId, impulso: now });
       return { ok: true, accepted: false };
     }
+    /* Controfferta/ultimatum: il giocatore PAGA il tributo. Verifica che
+       l'impero abbia abbastanza, altrimenti rifiuta con motivo (recovery: non
+       lascia stato corrotto, l'offerta resta in attesa). */
+    if (off.kind === 'counter' || off.kind === 'ultimatum') {
+      const payload = off.payload || {};
+      if (!game.colonies) {
+        return { ok: false, reason: 'Impossibile verificare le risorse.' };
+      }
+      const colonies = Object.keys(game.colonies).map(function (k) { return game.colonies[k]; });
+      let totMet = 0, totEn = 0;
+      colonies.forEach(function (c) { totMet += c.met || 0; totEn += c.en || 0; });
+      if (totMet < (payload.met || 0) || totEn < (payload.en || 0)) {
+        return { ok: false, reason: 'Risorse insufficienti per pagare il tributo.' };
+      }
+      /* Scala il pagamento sulle colonie (proporzionale agli stock attuali). */
+      payTribute(game, payload.met || 0, payload.en || 0);
+      if (off.kind === 'ultimatum') {
+        civ.pendingOffer = null;
+        civ.disposition = Math.min(100, (civ.disposition || 0) + CFG.ULTIMATUM_ACCEPT_DISP);
+        events.push({ kind: 'diplo-ultimatum-paid', civId: civ.id, civName: civ.name,
+          civColor: civ.color, payload: payload, impulso: now });
+        return { ok: true, accepted: true };
+      }
+      /* Counter di pace/alleanza: scendi al ramo applicativo sotto. */
+    }
+    civ.pendingOffer = null;
     /* Applica direttamente la transizione corrispondente. */
     if (off.actionId === 'propose-peace') {
       civ.relation = 'peace';
@@ -443,7 +751,35 @@
   function offerLabel(actionId) {
     if (actionId === 'propose-peace') return 'Pace';
     if (actionId === 'propose-alliance') return 'Alleanza';
+    if (actionId === 'propose-passage') return 'Passaggio';
+    if (actionId === 'ultimatum') return 'Ultimatum';
     return actionId || '—';
+  }
+
+  /* M11 Fase B (decisione #94) — APPIANAMENTO del warning di tradimento. Il
+     giocatore può "donare" un tributo per spegnere il warning (recovery-
+     friendly: la diplomazia E SEMPRE una via d'uscita #22). Costo proporzionato
+     al rischio. Disposizione recupera. */
+  const APPEASE_MET = 150, APPEASE_EN = 80, APPEASE_DISP = 25;
+  function canAppease(game, civ) {
+    if (!civ || !civ.allianceWarning) return { ok: false, reason: 'Nessun preavviso in corso.' };
+    const colonies = Object.keys(game.colonies || {}).map(function (k) { return game.colonies[k]; });
+    let totMet = 0, totEn = 0;
+    colonies.forEach(function (c) { totMet += c.met || 0; totEn += c.en || 0; });
+    if (totMet < APPEASE_MET || totEn < APPEASE_EN) {
+      return { ok: false, reason: 'Risorse insufficienti per il dono di buona fede.' };
+    }
+    return { ok: true, cost: { met: APPEASE_MET, en: APPEASE_EN } };
+  }
+  function appease(game, civ, events) {
+    const chk = canAppease(game, civ);
+    if (!chk.ok) return chk;
+    payTribute(game, APPEASE_MET, APPEASE_EN);
+    civ.allianceWarning = null;
+    civ.disposition = Math.min(100, (civ.disposition || 0) + APPEASE_DISP);
+    if (events) events.push({ kind: 'diplo-betrayal-defused', civId: civ.id,
+      civName: civ.name, civColor: civ.color, impulso: (game.timeImpulsi || 0) });
+    return { ok: true };
   }
 
   /* Conteggi per HUD/UI. */
@@ -475,9 +811,16 @@
     apply: apply,
     tick: tick,
     tickProactive: tickProactive,   // esposto per test/diagnostic
+    tickBetrayals: tickBetrayals,   // esposto per test/diagnostic
     respondToOffer: respondToOffer,
     offerLabel: offerLabel,
     alliesOf: alliesOf,
-    atWarWith: atWarWith
+    atWarWith: atWarWith,
+    /* M11 Fase B (decisione #94) */
+    canAppease: canAppease,
+    appease: appease,
+    breakPassageTreaty: breakPassageTreaty,
+    payTribute: payTribute,
+    hasPassageTreaty: function (civ) { return !!(civ && civ.passageTreaty); }
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
