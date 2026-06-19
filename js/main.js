@@ -9310,8 +9310,6 @@ function openFleetDetail(fleetId, opts) {
     return '<div class="fdetail__pos">' +
       '<div class="fdetail__pos-main">' + mainInner +
         ' <span class="fleet-status fleet-status--' + statusCls + '">' + statusLabel(fleet) + '</span>' + renBtn + '</div>' +
-      '<div class="fdetail__pos-sub">' + uiIcon('roster', 'amber') + ' origine: ' +
-        escapeHtml(systemNameFromKey(g, fleet.ownerColonyKey)) + '</div>' +
     '</div>';
   }
 
