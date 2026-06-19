@@ -1596,7 +1596,12 @@ function openSystem(id) {
     onExit: () => {
       const cluster = g.galaxy.systems[id].cluster;
       closeSystem();
-      if (ORION.map) ORION.map.focusGroup(cluster);
+      /* Uscendo dal sistema, centra la mappa sul sistema DA CUI si esce (non
+         sul baricentro del gruppo) mantenendo lo zoom di gruppo — continuità
+         spaziale (richiesta utente 2026-06-19). Fallback al gruppo se l'API
+         non c'è. */
+      if (ORION.map && ORION.map.focusSystemCentered) ORION.map.focusSystemCentered(id);
+      else if (ORION.map) ORION.map.focusGroup(cluster);
     }
   });
 
