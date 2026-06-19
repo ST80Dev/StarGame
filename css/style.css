@@ -7071,13 +7071,29 @@ select.main-menu__input { cursor: pointer; }
   border-radius: var(--radius-sm, 5px);
 }
 .lp-fleet-group { margin-bottom: 8px; }
+/* Header del gruppo stellare: bottone cliccabile per collassare/espandere
+   (decisione utente 2026-06-16). Stesso look della testata precedente, con
+   caret a sinistra. */
 .lp-fleet-group__h {
   display: flex; align-items: center; gap: 5px;
+  width: 100%;
   margin: 0 0 4px;
-  padding-bottom: 3px;
+  padding: 2px 0 3px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--c-border-soft, rgba(255, 255, 255, 0.08));
+  font: inherit;
   font-size: 0.76rem;
   color: var(--c-text-faint, #98a3c8);
-  border-bottom: 1px solid var(--c-border-soft, rgba(255, 255, 255, 0.08));
+  text-align: left;
+  cursor: pointer;
+}
+.lp-fleet-group__h:hover { color: var(--c-accent); }
+.lp-fleet-group__caret {
+  display: inline-block;
+  width: 10px;
+  font-size: 0.72rem;
+  color: var(--c-text-soft);
 }
 .lp-fleet-group__h strong { color: var(--c-violet, #b89cff); font-weight: 600; }
 .lp-fleet-group__n {
@@ -7087,6 +7103,8 @@ select.main-menu__input { cursor: pointer; }
   border-radius: 999px;
   background: rgb(var(--c-surface-rgb) / 0.6);
 }
+.lp-fleet-group.is-collapsed .lp-fleet-group__body { display: none; }
+.lp-fleet-group.is-collapsed .lp-fleet-group__h { margin-bottom: 0; }
 .lp-launcher__btn {
   display: flex; align-items: center; gap: 9px;
   width: 100%;
