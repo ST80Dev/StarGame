@@ -388,6 +388,34 @@
         'È anche il <em>prerequisito</em> per gli accordi commerciali con la civiltà (in arrivo con M12 Fase B).</p>'
     },
     {
+      id: 'diplo-vassal',
+      tag: 'Civiltà · Diplomazia',
+      title: 'Vassallaggio delle micro-civiltà',
+      body:
+        '<p>Le <strong>micro-civiltà</strong> deboli (1-3 pianeti) possono essere convinte a <strong>sottomettersi</strong> ' +
+        'a te in cambio di protezione. Le trovi tra le azioni: <em>«Proponi vassallaggio»</em>.</p>' +
+        '<p>Una micro-civ accetta più volentieri se la <strong>disposizione</strong> è almeno tiepida (≥−10) e non ' +
+        'sei in <em>troppi fronti aperti</em> (non sembri un protettore credibile). Le civ <strong>buone non si piegano</strong> ' +
+        'per principio (vincolo d\'onore, come la pace coi tributi).</p>' +
+        '<p><strong>Effetti:</strong> il vassallo paga un <strong>tributo periodico</strong> (~80 Ι) in met+en sulla tua capitale, ' +
+        'è di fatto un alleato (niente incursioni), e <strong>occupa lo slot diplomatico</strong> (non puoi proporgli alleanze/passaggio).</p>' +
+        '<p><strong>Affrancarlo</strong> è un atto morale <em>light</em> (rep + disposizione). <strong>Trattarlo male</strong> ' +
+        '(disposizione molto bassa) può portare a una <strong>ribellione</strong>: maligna → guerra; neutrale/buona → ' +
+        'affrancamento freddo. Recovery-friendly: niente fail-state.</p>'
+    },
+    {
+      id: 'diplo-distress',
+      tag: 'Civiltà · Diplomazia',
+      title: 'Soccorso ad un alleato',
+      body:
+        '<p>Un <strong>alleato</strong> in difficoltà (potere in calo significativo) può inviarti un <strong>dispaccio di soccorso</strong>: ' +
+        'chiede risorse per riprendersi.</p>' +
+        '<p><strong>Aiuti</strong> (paghi met+en) → reputazione + disposizione + un nudge concreto al suo potere · ' +
+        '<strong>Respingi</strong> → fastidio diplomatico (disp −) · <strong>Ignori</strong> (scade) → costo lieve di ' +
+        'reputazione e disposizione (la passività è vista come freddezza).</p>' +
+        '<p>L\'aiuto non è scontato: il banner ti indica chiaramente quanto costa prima di decidere.</p>'
+    },
+    {
       id: 'ai-vocations',
       tag: 'Civiltà · Vocazioni',
       title: 'Le 8 vocazioni delle civiltà',

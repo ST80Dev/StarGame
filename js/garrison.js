@@ -230,6 +230,8 @@
     /* M11 Fase B (decisione #94): se c'è un trattato di passaggio attivo, la
        flotta transita senza dispaccio (passaggio già concesso). */
     if (civ.passageTreaty) return false;
+    /* M11 (decisione #95): i vassalli sono già amici forzati — niente dispaccio. */
+    if (civ.vassal) return false;
     return true;
   }
 
