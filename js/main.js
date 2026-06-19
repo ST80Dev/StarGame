@@ -8626,7 +8626,7 @@ function openFleetManageInFlight() {
         if (!window.confirm('Fondere «' + from.name + '» in «' + to.name + '»? La prima verrà sciolta e le sue navi/equipaggi/figure passeranno alla seconda.')) return;
         const r = ORION.fleet.mergeFleets(g, from, to);
         if (!r.ok) { showToast(r.reason); return; }
-        pushChronicle(ORION.time.currentDS(g) + ' — Flotte unite in <strong>' + escapeHtml(to.name) + '</strong>.', 'planet');
+        /* Fusione flotte: azione del giocatore — niente entry in cronaca. */
         persistGame(g); render();
       });
     });
@@ -10072,8 +10072,8 @@ function openFleetDetail(fleetId, opts) {
         const ck = b.dataset.embark;
         const r = ORION.fleet.embarkPop(g, fleet, ck, 1);
         if (!r.ok) { showToast(r.reason); return; }
-        pushChronicle(ORION.time.currentDS(g) + ' — <strong>' + escapeHtml(fleet.name) + '</strong>: 1 livello di pionieri imbarcato da <strong>' +
-          escapeHtml(systemNameFromKey(g, ck)) + '</strong> · Diaspora ×2/60 ' + iU() + '.', 'planet');
+        /* Imbarco coloni: azione del giocatore — il banner Diaspora
+           nella colonia è il feedback. */
         persistGame(g); refreshColonyViews(ck); render();
       });
     });
@@ -10082,8 +10082,7 @@ function openFleetDetail(fleetId, opts) {
         const ck = b.dataset.disembark;
         const r = ORION.fleet.disembarkPop(g, fleet, ck, 1);
         if (!r.ok) { showToast(r.reason); return; }
-        pushChronicle(ORION.time.currentDS(g) + ' — <strong>' + escapeHtml(fleet.name) + '</strong>: 1 livello di pionieri sbarcato a <strong>' +
-          escapeHtml(systemNameFromKey(g, ck)) + '</strong>.', 'planet');
+        /* Sbarco coloni: azione del giocatore. */
         persistGame(g); refreshColonyViews(ck); render();
       });
     });
@@ -10093,8 +10092,7 @@ function openFleetDetail(fleetId, opts) {
     if (refuelBtn) refuelBtn.addEventListener('click', function () {
       const r = ORION.fleet.payRefuelAt(g, fleet);
       if (!r.ok) { showToast(r.reason); return; }
-      pushChronicle(ORION.time.currentDS(g) + ' — <strong>' + escapeHtml(fleet.name) + '</strong> rifornita presso <strong>' +
-        escapeHtml((r.civ && r.civ.name) || 'porto in pace') + '</strong> (−' + r.cost + ' cr).', 'planet');
+      /* Rifornimento manuale: azione del giocatore. */
       persistGame(g); render();
     });
 
@@ -10106,7 +10104,7 @@ function openFleetDetail(fleetId, opts) {
     if (dissolve) dissolve.addEventListener('click', function () {
       const r = ORION.fleet.dissolveFleet(g, fleet);
       if (!r.ok) { showToast(r.reason); return; }
-      pushChronicle(ORION.time.currentDS(g) + ' — Flotta <strong>' + escapeHtml(fleet.name) + '</strong> sciolta.', 'planet');
+      /* Dissoluzione flotta: azione del giocatore. */
       persistGame(g); closeDetail();
     });
   }
@@ -10128,8 +10126,8 @@ function openFleetDetail(fleetId, opts) {
       const pen = ORION.cohesion.applyTravelPenalty(g, sysIds);
       if (pen.applied < 0) showToast('Rotta attraverso ' + pen.affectedSys.length + ' sistema coeso — disposizione ' + pen.applied);
     }
-    pushChronicle(ORION.time.currentDS(g) + ' — <strong>' + escapeHtml(fleet.name) + '</strong>: ' +
-      escapeHtml(orderLabel({ orders: order })) + '.', 'explore');
+    /* Ordine confermato sul dettaglio flotta: azione del giocatore —
+       l'etichetta dell'ordine è già visibile sulla flotta nella sidebar. */
     persistGame(g);
     D.ordOpen = false;
     D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: false, exploreEach: false } };
@@ -14457,9 +14455,8 @@ function applyFleetOrderFromMap(req) {
     showToast(r.reason || 'Ordine rifiutato');
     return;
   }
-  pushChronicle(ORION.time.currentDS(g) + ' — Ordine via mappa: <strong>' +
-    escapeHtml(fleet.name) + '</strong> · ' + orderLabelText + ' verso <strong>' +
-    escapeHtml(sys.name) + '</strong>.', 'system');
+  /* Ordine via mappa: azione del giocatore — il toast qui sotto e
+     l'ordine visibile sulla flotta sono il feedback. */
   persistGame(g);
   exitFleetPicker(true);
   showToast(fleet.name + ' · ' + orderLabelText);
