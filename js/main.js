@@ -1961,6 +1961,11 @@ function closePlanet() {
     if (planetHolder) planetHolder.hidden = true;
     if (sysHolder) { sysHolder.style.visibility = ''; zoomFadeIn(sysHolder); }
     if (deckHolder) deckHolder.hidden = true;
+    /* Fix 2026-06-20: il riepilogo "straniero" (.deck-foreign) è figlio diretto
+       di .galaxy-root → va rimosso esplicitamente alla chiusura del pianeta,
+       altrimenti resta sopra la vista Sistema/Gruppo facendo zoom-out. */
+    const fdeck = root.querySelector('.deck-foreign');
+    if (fdeck) fdeck.remove();
   }
   setNavActive('system');
   setGalaxyHint('system');
@@ -14790,34 +14795,22 @@ function refreshForeignDeck() {
       '<span class="deck-foreign__v">' + escapeHtml(LV[io.level] || io.level) + ' · ' + escapeHtml(prog) + '</span></div>';
   }
 
+  /* Riepilogo SINTETICO (richiesta utente 2026-06-20): sul pianeta AI mostriamo
+     solo un riassunto leggero — proprietario + tipo + allineamento + rimando.
+     Il DOSSIER dettagliato (stima impero, intel, progresso) vive nella sezione
+     Diplomazia / dettaglio civiltà, raggiungibile dai pulsanti dell'action bar
+     ("Apri dossier civiltà" / "Diplomazia"). Niente più scheda pesante che
+     resta sopra la mappa. */
   const html =
-    '<div class="deck-foreign colony-deck--foreign" style="--civ-color:' + escapeHtml(civ.color) + '">' +
+    '<div class="deck-foreign deck-foreign--mini colony-deck--foreign" style="--civ-color:' + escapeHtml(civ.color) + '">' +
       '<div class="deck-foreign__head">' +
         '<span class="deck-foreign__swatch" aria-hidden="true"></span>' +
         '<span class="deck-foreign__name">' + escapeHtml(civ.name) + '</span>' +
         '<span class="deck-foreign__chip">' + (ALIGN_LABEL[civ.alignment] || civ.alignment) + '</span>' +
-        '<span class="deck-foreign__chip">' + escapeHtml(civ.traitLabel || '—') + '</span>' +
       '</div>' +
-      /* PR-D: emoji sostituiti da SVG inline (UI_GUIDE §3 strategia B).
-         Cross-OS rendering consistente, glow morbido coerente. */
-      '<section class="deck-foreign__section">' +
-        '<h4><span class="ui-icon ui-icon--blue deck-foreign__h4-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('info')) || '') + '</span> Info pubbliche</h4>' +
-        '<div class="deck-foreign__row"><span class="deck-foreign__k">Tipo corpo</span><span class="deck-foreign__v">' + escapeHtml(def ? def.label : planet.type) + '</span></div>' +
-        '<div class="deck-foreign__row"><span class="deck-foreign__k">Regione</span><span class="deck-foreign__v">' + escapeHtml(tier.name || '—') + ' · ' + escapeHtml(tier.tierLabel || '—') + '</span></div>' +
-        '<div class="deck-foreign__row"><span class="deck-foreign__k">Proprietario</span><span class="deck-foreign__v">' + escapeHtml(civ.name) + '</span></div>' +
-      '</section>' +
-      '<section class="deck-foreign__section">' +
-        '<h4><span class="ui-icon ui-icon--gold deck-foreign__h4-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('resources')) || '') + '</span> Stima impero</h4>' +
-        '<div class="deck-foreign__row"><span class="deck-foreign__k">Potenza percepita</span><span class="deck-foreign__v">' + escapeHtml(ptier) + '</span></div>' +
-        '<div class="deck-foreign__row"><span class="deck-foreign__k">Sistemi noti</span><span class="deck-foreign__v">' + known + '</span></div>' +
-        '<div class="deck-foreign__row"><span class="deck-foreign__k">Sede</span><span class="deck-foreign__v">' + escapeHtml(seat.name || '—') + '</span></div>' +
-        '<div class="deck-foreign__row"><span class="deck-foreign__k">Struttura stimata</span><span class="deck-foreign__v">tra ' + lo + ' e ' + hi + ' insediamenti</span></div>' +
-      '</section>' +
-      '<section class="deck-foreign__section">' +
-        '<h4><span class="ui-icon ui-icon--violet deck-foreign__h4-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('spy')) || '') + '</span> Intel dettagliato</h4>' +
-        reconHtml +
-        '<div class="deck-foreign__placeholder">Spionaggio (M19) — richiede una missione di intel attiva su questo mondo.</div>' +
-      '</section>' +
+      '<p class="deck-foreign__summary">Corpo di <strong>' + escapeHtml(civ.name) + '</strong> · ' +
+        escapeHtml(def ? def.label : planet.type) + '. ' +
+        'Dossier completo, intel e diplomazia nella sezione <strong>Diplomazia</strong>.</p>' +
     '</div>';
   root.insertAdjacentHTML('beforeend', html);
 }
