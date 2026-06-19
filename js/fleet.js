@@ -1110,9 +1110,22 @@
       if (to === currentSys) {
         /* M2 puro (stesso sistema). */
         if (bodyKey == null) {
-          /* Già in orbita generica: niente da percorrere. */
+          /* Già in orbita generica: niente da percorrere.
+             Fix bug "rotta su qui mentre in-transit": se la flotta aveva
+             un leg attivo verso un altro sistema (status 'in-transit',
+             location.systemId ancora = sistema di partenza), il solo
+             azzeramento di ordine/route lasciava lo status 'in-transit'
+             su una rotta di lunghezza 1 → al tick successivo advanceFleet
+             faceva routeIdx=1 e location.systemId=undefined (stato zombie),
+             e i poll che richiedono un'orbita valida (es. dispaccio 'reach')
+             non scattavano mai. Forziamo l'orbita al sistema corrente:
+             "rotta su qui" = "fermati subito qui". */
           fleet.orders = { type: 'idle' };
           fleet.route = [currentSys]; fleet.routeIdx = 0; fleet.etaImpulsi = 0;
+          fleet.location.status = 'orbiting';
+          fleet.location.bodyKey = null;
+          fleet.location.berth = null;
+          if (fleet.location.intra) fleet.location.intra = null;
           return { ok: true };
         }
         fleet.orders = { type: 'move', toSysId: to, bodyKey: bodyKey };
