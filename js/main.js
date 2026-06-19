@@ -6652,6 +6652,55 @@ function renderFleetView(stage) {
     const s = g.galaxy.systems[id];
     return s ? s.name : '—';
   }
+  /* Nome del corpo target di un ordine (anomalia/colonia/avamposto), se il
+     corpo è dentro `sysId`. Usa il generatore di sistema (deterministico). */
+  function bodyNameOf(sysId, bodyKey) {
+    if (!bodyKey || sysId == null || sysId < 0) return null;
+    if (!ORION.system || !ORION.system.generate || !ORION.system.findBody) return null;
+    try {
+      const ds = ORION.system.generate(g.galaxy, sysId);
+      const b = ds && ORION.system.findBody(ds, bodyKey);
+      return b ? b.name : null;
+    } catch (e) { return null; }
+  }
+  /* Riepilogo "dove sta" una flotta — corretto durante viaggi inter- e
+     intra-sistema (richiesta utente 2026-06-18: NON mostrare il sistema di
+     partenza come posizione quando la flotta è già in volo). */
+  function fleetLocLabel(f) {
+    if (!f || !f.location) return uiIcon('system', 'amber') + ' —';
+    const loc = f.location;
+    /* INTRA — manovra dentro un sistema verso un corpo (estrattori,
+       ricognizione anomalia interna, ecc.). */
+    if (loc.status === 'in-transit' && loc.intra) {
+      const sysId = loc.intra.systemId;
+      const bodyLbl = bodyNameOf(sysId, loc.intra.toBodyKey);
+      const eta = (f.etaImpulsi | 0);
+      return uiIcon('system', 'amber') + ' <strong>' + escapeHtml(sysName(sysId)) + '</strong>' + systemTagHtml(sysId) +
+        (bodyLbl
+          ? ' <span class="fleet-item__body">· → ' + escapeHtml(bodyLbl) + (eta > 0 ? ' (' + eta + ' ' + iU() + ')' : '') + '</span>'
+          : ' <span class="fleet-item__body">· manovra interna' + (eta > 0 ? ' (' + eta + ' ' + iU() + ')' : '') + '</span>');
+    }
+    /* INTER — viaggio iperspaziale tra sistemi. Mostra DESTINAZIONE finale
+       (non il sistema-stub di partenza) + sotto-info col nodo di provenienza
+       e l'ETA al prossimo hop. */
+    if (loc.status === 'in-transit') {
+      const destSys = (f.orders && f.orders.toSysId != null) ? f.orders.toSysId
+        : (Array.isArray(f.route) && f.route.length ? f.route[f.route.length - 1] : loc.systemId);
+      const fromSys = (Array.isArray(f.route) && f.routeIdx < f.route.length) ? f.route[f.routeIdx] : loc.systemId;
+      const nextHop = (Array.isArray(f.route) && f.routeIdx + 1 < f.route.length) ? f.route[f.routeIdx + 1] : null;
+      const eta = (f.etaImpulsi | 0);
+      const subInner = (nextHop != null && nextHop !== destSys)
+        ? ('verso ' + escapeHtml(sysName(nextHop)) + ' · ' + eta + ' ' + iU() + ' da ' + escapeHtml(sysName(fromSys)))
+        : (eta + ' ' + iU() + ' da ' + escapeHtml(sysName(fromSys)));
+      return uiIcon('fleet', 'cyan') + ' <strong>in viaggio → ' + escapeHtml(sysName(destSys)) + '</strong>' + systemTagHtml(destSys) +
+        ' <span class="fleet-item__body">· ' + subInner + '</span>';
+    }
+    /* STATICO — orbiting/docked: sistema corrente (+ corpo se rilevabile). */
+    const sysTag = (loc.systemId >= 0) ? systemTagHtml(loc.systemId) : '';
+    const bn = fleetBodyName(g, f);
+    return uiIcon('system', 'amber') + ' <strong>' + escapeHtml(sysName(loc.systemId)) + '</strong>' + sysTag +
+      (bn ? ' <span class="fleet-item__body">· ' + escapeHtml(bn) + '</span>' : '');
+  }
   function fleetStatusLabel(f) {
     if (!f || !f.location) return '—';
     if (f.location.status === 'in-transit') return 'in viaggio (arrivo in ' + (f.etaImpulsi | 0) + ' ' + iU() + ')';
@@ -6660,11 +6709,18 @@ function renderFleetView(stage) {
   function orderLabel(f) {
     const o = f && f.orders;
     if (!o) return 'idle';
+    const bodyFrag = function (sysId, bk) {
+      const bn = bodyNameOf(sysId, bk);
+      return bn ? ' · ' + bn : '';
+    };
     if (o.type === 'idle') return (f.location && f.location.status === 'orbiting') ? '⏸ in sosta' : 'in attesa';
-    if (o.type === 'move') return 'rotta verso ' + sysName(o.toSysId);
-    if (o.type === 'attack') return '⚔ attacco a ' + sysName(o.toSysId);
+    if (o.type === 'move') return 'spostamento a ' + sysName(o.toSysId) + bodyFrag(o.toSysId, o.bodyKey);
+    if (o.type === 'attack') return '⚔ attacco a ' + sysName(o.toSysId) + bodyFrag(o.toSysId, o.bodyKey);
     if (o.type === 'explore') return 'esplorazione di ' + sysName(o.toSysId);
-    if (o.type === 'survey') return '✦ anomalia di ' + sysName(o.toSysId);
+    if (o.type === 'survey') return '✦ raccolta anomalia · ' + sysName(o.toSysId) + bodyFrag(o.toSysId, o.bodyKey);
+    if (o.type === 'recon') return 'ricognizione di ' + sysName(o.toSysId) + bodyFrag(o.toSysId, o.bodyKey);
+    if (o.type === 'colonize') return 'colonizzazione di ' + sysName(o.toSysId) + bodyFrag(o.toSysId, o.bodyKey);
+    if (o.type === 'garrison') return 'presidio di ' + sysName(o.toSysId) + bodyFrag(o.toSysId, o.bodyKey);
     if (o.type === 'return') return 'rientro alla base';
     if (o.type === 'patrol') return 'pattuglia ' + sysName(o.sysA) + ' ↔ ' + sysName(o.sysB);
     if (o.type === 'move-route') {
@@ -6718,7 +6774,6 @@ function renderFleetView(stage) {
         const cls = (ORION.fleet && ORION.fleet.getClass(k)) || { glyph: '?', name: k };
         return '<span class="fleet-item__ship" title="' + escapeHtml(cls.name) + '">' + fleetShipIcon(k) + ' ' + counter[k] + '</span>';
       }).join('') || '<span class="cantieri-row__base">flotta vuota</span>';
-      const sysTag = (f.location && f.location.systemId >= 0) ? systemTagHtml(f.location.systemId) : '';
       const status = fleetStatusLabel(f);
       const statusCls = (f.location && f.location.status) || 'idle';
       const vetHtml = fleetVeterancyHtml(f);
@@ -6745,8 +6800,7 @@ function renderFleetView(stage) {
           '<span class="fleet-status fleet-status--' + statusCls + '">' + status + '</span>' +
         '</div>' +
         '<div class="fleet-item__row">' +
-          '<span class="fleet-item__loc">' + uiIcon('system', 'amber') + ' <strong>' + escapeHtml(sysName(f.location.systemId)) + '</strong>' + sysTag +
-            (function () { const bn = fleetBodyName(g, f); return bn ? ' <span class="fleet-item__body">· ' + escapeHtml(bn) + '</span>' : ''; })() + '</span>' +
+          '<span class="fleet-item__loc">' + fleetLocLabel(f) + '</span>' +
           '<span class="fleet-item__order">' + escapeHtml(orderLabel(f)) + '</span>' +
         '</div>' +
         '<div class="fleet-item__meta">' + counterHtml +
@@ -12273,15 +12327,59 @@ function renderLeftPanel() {
   }).join('');
 
   function fleetItemHtml(f) {
-    const sysId = (f.location && f.location.systemId >= 0) ? f.location.systemId : -1;
-    const sysName = sysId >= 0 ? g.galaxy.systems[sysId].name : '—';
-    const status = (f.location && f.location.status) || 'idle';
+    const loc = f.location || {};
+    const sysId = (loc.systemId != null && loc.systemId >= 0) ? loc.systemId : -1;
+    const sysOf = function (id) { const s = id >= 0 ? g.galaxy.systems[id] : null; return s ? s.name : '—'; };
+    const status = loc.status || 'idle';
     const berth = (status === 'docked' || status === 'orbiting') ? ORION.fleet.berthOf(g, f) : null;
     const statusLbl = status === 'docked' ? (berth === 'station' ? 'stazione' : 'hangar')
                     : status === 'in-transit' ? 'viaggio'
                     : (berth === 'orbit' ? 'parcheggio' : 'orbita');
     const cls = status === 'docked' ? 'ok' : status === 'in-transit' ? 'info' : 'warn';
     const fleetIcon = (ORION.icon && ORION.icon('fleet')) || '';
+    /* Sub-text "dove sta" — corretto durante viaggi (richiesta utente
+       2026-06-18): NON mostrare il sistema-stub di partenza come posizione
+       quando la flotta è già in volo. Inter: "in viaggio → Dest (N Ι)".
+       Intra: "Sys · → Body (N Ι)". Statico: "in Sys". */
+    let subTxt;
+    if (status === 'in-transit' && loc.intra) {
+      const sId = loc.intra.systemId;
+      let bodyName = null;
+      if (loc.intra.toBodyKey && ORION.system && ORION.system.generate && ORION.system.findBody) {
+        try { const ds = ORION.system.generate(g.galaxy, sId); const b = ds && ORION.system.findBody(ds, loc.intra.toBodyKey); bodyName = b ? b.name : null; } catch (e) { /* */ }
+      }
+      const eta = (f.etaImpulsi | 0);
+      subTxt = sysOf(sId) + (bodyName ? ' · → ' + bodyName : ' · manovra interna') + (eta > 0 ? ' (' + eta + ' ' + iU() + ')' : '');
+    } else if (status === 'in-transit') {
+      const destSys = (f.orders && f.orders.toSysId != null) ? f.orders.toSysId
+        : (Array.isArray(f.route) && f.route.length ? f.route[f.route.length - 1] : sysId);
+      const eta = (f.etaImpulsi | 0);
+      subTxt = 'in viaggio → ' + sysOf(destSys) + (eta > 0 ? ' (' + eta + ' ' + iU() + ')' : '');
+    } else {
+      subTxt = 'in ' + sysOf(sysId);
+    }
+    /* Comando in corso, sotto al sub-luogo, in mini-pill — coerente con
+       l'ordine mostrato nella vista flotte (richiesta utente). */
+    const o = f.orders;
+    let orderTxt = '';
+    if (o && o.type && o.type !== 'idle') {
+      const tn = o.toSysId != null ? sysOf(o.toSysId) : '';
+      if (o.type === 'move')          orderTxt = 'spostamento a ' + tn;
+      else if (o.type === 'attack')   orderTxt = '⚔ attacco a ' + tn;
+      else if (o.type === 'explore')  orderTxt = 'esplorazione di ' + tn;
+      else if (o.type === 'survey')   orderTxt = '✦ raccolta anomalia · ' + tn;
+      else if (o.type === 'recon')    orderTxt = 'ricognizione di ' + tn;
+      else if (o.type === 'colonize') orderTxt = 'colonizzazione di ' + tn;
+      else if (o.type === 'garrison') orderTxt = 'presidio di ' + tn;
+      else if (o.type === 'return')   orderTxt = 'rientro alla base';
+      else if (o.type === 'patrol')   orderTxt = 'pattuglia';
+      else if (o.type === 'move-route') {
+        const tot = (o.waypoints || []).length, cur = (o.wpIdx || 0) + 1;
+        orderTxt = 'rotta a tappe (' + cur + '/' + tot + ')';
+      } else if (o.type === 'patrol-loop') orderTxt = 'pattuglia ciclica';
+      else orderTxt = o.type;
+    }
+    const orderHtml = orderTxt ? '<span class="lp-item__order">' + escapeHtml(orderTxt) + '</span>' : '';
     /* Decisione utente 2026-06-16: pillola usura/viveri su una SECONDA riga,
        sotto nome+badge. Inline mangiava la prima riga e troncava il nome. */
     const wearH = fleetWearHtml(f);
@@ -12289,9 +12387,10 @@ function renderLeftPanel() {
     return '<button class="lp-item lp-item--fleet" data-action="roster-fleet" data-id="' + escapeHtml(f.id) + '" data-sys="' + sysId + '" type="button">' +
       '<span class="lp-item__head">' +
         '<span class="lp-item__glyph ui-icon" aria-hidden="true">' + fleetIcon + '</span>' +
-        '<span class="lp-item__name"><strong>' + escapeHtml(f.name) + '</strong> <span class="lp-item__sub">in ' + escapeHtml(sysName) + '</span></span>' +
+        '<span class="lp-item__name"><strong>' + escapeHtml(f.name) + '</strong> <span class="lp-item__sub">' + escapeHtml(subTxt) + '</span></span>' +
         '<span class="lp-item__badges"><span class="lp-item__badge lp-item__badge--' + cls + '">' + statusLbl + '</span></span>' +
       '</span>' +
+      (orderHtml ? ('<span class="lp-item__row">' + orderHtml + '</span>') : '') +
       ((viveriH || wearH) ? ('<span class="lp-item__row">' + viveriH + wearH + '</span>') : '') +
     '</button>';
   }
