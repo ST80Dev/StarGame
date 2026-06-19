@@ -6925,6 +6925,11 @@ select.main-menu__input { cursor: pointer; }
    2026-06-19): due torte conic-gradient su una riga, compatte. Si
    riempiono/svuotano col valore (--pct). Pure CSS, niente JS. */
 .lp-item__row--gauges { gap: 14px; }
+/* Badge stato della flotta spostato in basso a destra (richiesta utente
+   2026-06-19): vive in coda alla riga gauges (o in una riga propria se
+   senza gauges) e si allinea a destra con margin-left:auto. */
+.lp-item__badges--bottom { margin-left: auto; }
+.lp-item__row--status { justify-content: flex-end; }
 .fleet-gauges {
   display: inline-flex;
   align-items: center;

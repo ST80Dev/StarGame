@@ -12566,14 +12566,23 @@ function renderLeftPanel() {
     const orderHtml = orderTxt ? '<span class="lp-item__order">' + escapeHtml(orderTxt) + '</span>' : '';
     /* Viveri + usura come due mini-torte su UNA riga (compatto). */
     const gauges = fleetGaugesHtml(f);
+    /* Badge stato (viaggio/orbita/hangar/...) spostato in basso a destra
+       (richiesta utente 2026-06-19): nella prima riga conta il NOME e la
+       tratta del viaggio (Deneb → Pollux), il badge stato non deve mangiare
+       quello spazio. Va in coda alla riga gauges (right-aligned), o in una
+       riga propria se la flotta non ha gauges. */
+    const statusBadge = '<span class="lp-item__badges lp-item__badges--bottom">' +
+      '<span class="lp-item__badge lp-item__badge--' + cls + '">' + statusLbl + '</span>' +
+    '</span>';
     return '<button class="lp-item lp-item--fleet" data-action="roster-fleet" data-id="' + escapeHtml(f.id) + '" data-sys="' + sysId + '" type="button">' +
       '<span class="lp-item__head">' +
         '<span class="lp-item__glyph ui-icon" aria-hidden="true">' + fleetIcon + '</span>' +
         '<span class="lp-item__name"><strong>' + escapeHtml(f.name) + '</strong> <span class="lp-item__sub">' + escapeHtml(subTxt) + '</span></span>' +
-        '<span class="lp-item__badges"><span class="lp-item__badge lp-item__badge--' + cls + '">' + statusLbl + '</span></span>' +
       '</span>' +
       (orderHtml ? ('<span class="lp-item__row">' + orderHtml + '</span>') : '') +
-      (gauges ? ('<span class="lp-item__row lp-item__row--gauges">' + gauges + '</span>') : '') +
+      (gauges
+        ? ('<span class="lp-item__row lp-item__row--gauges">' + gauges + statusBadge + '</span>')
+        : ('<span class="lp-item__row lp-item__row--status">' + statusBadge + '</span>')) +
     '</button>';
   }
   /* Stazioni orbitali (M16): elencate nel Roster come pari delle colonie
