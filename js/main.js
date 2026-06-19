@@ -841,6 +841,11 @@ function newGame(seed, opts) {
      a "Eco"). Niente rendering/interazione qui (Fasi 2-3). */
   if (ORION.phenomena && ORION.phenomena.ensure) {
     ORION.phenomena.ensure(ORION.game);
+    /* Baseline SILENZIOSA al boot/load: marca a CONTATTO gli FSP già in zone
+       esplorate, così compaiono subito sulla mappa senza voci di Cronaca
+       retroattive. Le NUOVE rilevazioni durante il gioco restano eventful
+       (phenomena.tick le segnala). */
+    if (ORION.phenomena.detect) ORION.phenomena.detect(ORION.game, null);
   }
 
   setHudDate(ORION.time.currentDS(ORION.game));
@@ -1213,7 +1218,8 @@ function renderGalaxyView(stage) {
     onFleetPicked: (fleetId, sx, sy) => openFleetInfoPopup(fleetId, sx, sy),
     onFleetOrderRequest: (req) => applyFleetOrderFromMap(req),
     onFleetPickerCancel: () => exitFleetPicker(true),
-    onAiFleetPicked: (aiFleetId, sx, sy) => openAiFleetPopup(aiFleetId, sx, sy)   // M18.x
+    onAiFleetPicked: (aiFleetId, sx, sy) => openAiFleetPopup(aiFleetId, sx, sy),   // M18.x
+    onActivatePhenomenon: (id, sx, sy) => openPhenomenonPopup(id, sx, sy)   // FSP §17.7
   });
 
   setNavActive('galaxy');
@@ -10794,6 +10800,9 @@ const DEFAULT_AUTOPAUSE = {
      (showAnomalyRecapModal in runAdvance), quindi OFF qui per non duplicare
      l'overlay generico. Giacimento esausto = atmosferico (OFF). */
   'crisis-raised': true, 'crisis-lapsed': true, 'anomaly-relic-found': false, 'anomaly-depleted': false,
+  /* FSP §17.7: contatto/scansione/controllo atmosferici (OFF); rivelazione
+     dell'effetto è la commit significativa (ON). */
+  'fsp-contact': false, 'fsp-scanned': false, 'fsp-revealed': true, 'fsp-claimed': false,
   /* Fase B (decisione #46): tappa intermedia raggiunta. Default OFF —
      non interrompiamo a ogni waypoint, può essere una rotta lunga. L'arrivo
      finale e la `route-complete` continuano a fermare il tempo. */
@@ -11238,6 +11247,10 @@ function showEventOverlay(events) {
     'crisis-lapsed': 'Crisi ignorata',
     'anomaly-relic-found': 'Reliquia antica esplorata',
     'anomaly-depleted': 'Giacimento quasi esausto',
+    'fsp-contact': 'Fenomeno di Spazio Profondo rilevato',
+    'fsp-scanned': 'Fenomeno classificato',
+    'fsp-revealed': 'Fenomeno investigato',
+    'fsp-claimed': 'Fenomeno sotto controllo',
     'fleet-leg-hop': 'Flotta: hop intermedio',
     'fleet-waypoint-reached': 'Flotta: tappa raggiunta',
     'garrison-threat-detected': 'Garrison: minaccia rilevata',
@@ -12117,6 +12130,14 @@ function _chronicleEventBody(ev) {
   } else if (ev.kind === 'anomaly-depleted') {
     const sys = ORION.game.galaxy.systems[ev.sysId];
     pushChronicle(ds + ' — Il giacimento su <strong>' + (sys ? sys.name : '—') + '</strong> è quasi esausto: si rigenererà col tempo.', 'system');
+  } else if (ev.kind === 'fsp-contact') {
+    pushChronicle(ds + ' — Segnale anomalo nello spazio profondo presso <strong>' + escapeHtml(ev.sysName || '—') + '</strong>: un Fenomeno di Spazio Profondo attende analisi.', 'system');
+  } else if (ev.kind === 'fsp-scanned') {
+    pushChronicle(ds + ' — Fenomeno di Spazio Profondo classificato presso <strong>' + escapeHtml(ev.sysName || '—') + '</strong>: ' + escapeHtml(ev.className || '—') + '.', 'system');
+  } else if (ev.kind === 'fsp-revealed') {
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.name || 'Fenomeno') + '</strong> investigato presso ' + escapeHtml(ev.sysName || '—') + ': ' + escapeHtml(ev.text || '') , 'system');
+  } else if (ev.kind === 'fsp-claimed') {
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.name || 'Fenomeno') + '</strong> ora sotto il tuo controllo (presidio).', 'system');
   } else if (ev.kind === 'empire-fallen') {
     if (ev.hard) {
       pushChronicle(ds + ' — <strong>La tua civiltà è caduta.</strong> Senza più colonie, l\'impero si dissolve negli annali galattici.', 'system');
@@ -14517,6 +14538,163 @@ function closeFleetInfoPopup() {
   if (ORION.map && ORION.map.setHighlightedFleet) {
     ORION.map.setHighlightedFleet(null);
   }
+}
+
+/* ===================================================================
+   FSP §17.7 — Popup d'interazione coi Fenomeni di Spazio Profondo.
+   Click su un marker FSP (mappa) → popup ancorato (riusa .fleet-info-popup).
+   Mostra info coerenti col livello di scoperta e i 4 verbi (Scansiona ·
+   Investiga · Controlla · Evita). Gli EFFETTI restano nascosti finché non
+   investighi (opacità by design §17.7.2). Le azioni vivono in
+   ORION.phenomena; qui solo UI + Cronaca + persistenza + re-render.
+   =================================================================== */
+const FSP_COLORS = { grav: '#b89cff', relic: '#f0a868', emis: '#f0d670', bio: '#6fe0b8', temp: '#f08296' };
+const FSP_ICON = { grav: 'fspGrav', relic: 'fspRelic', emis: 'fspEmis', bio: 'fspBio', temp: 'fspTemp' };
+
+function _maybeClosePhenPopup(e) {
+  const node = document.getElementById('phenomenon-popup');
+  if (!node) { document.removeEventListener('click', _maybeClosePhenPopup, true); return; }
+  if (node.contains(e.target)) return;
+  closePhenomenonPopup();
+}
+function _phenEscHandler(e) { if (e.key === 'Escape') closePhenomenonPopup(); }
+function closePhenomenonPopup() {
+  const node = document.getElementById('phenomenon-popup');
+  if (node && node.parentNode) node.parentNode.removeChild(node);
+  document.removeEventListener('click', _maybeClosePhenPopup, true);
+  document.removeEventListener('keydown', _phenEscHandler);
+}
+
+function openPhenomenonPopup(id, screenX, screenY) {
+  const g = ORION.game, PH = ORION.phenomena;
+  if (!g || !PH || !PH.byId(g.galaxy, id)) return;
+  if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('fenomeni');
+  _renderPhenomenonPopup(id, screenX, screenY);
+}
+
+function _phenBtn(action, icon, tone, label, enabled, reason) {
+  return '<button class="btn btn--mini btn--with-icon" data-action="' + action + '" type="button"' +
+    (enabled ? '' : ' disabled title="' + escapeHtml(reason || 'non disponibile') + '"') + '>' +
+    uiIcon(icon, tone) + ' ' + escapeHtml(label) + '</button>';
+}
+
+function _renderPhenomenonPopup(id, screenX, screenY) {
+  const g = ORION.game, PH = ORION.phenomena;
+  const ph = PH.byId(g.galaxy, id); if (!ph) return;
+  const st = PH.stateOf(g, id);
+  const D = PH.DISCOVERY;
+  const disc = st.d || 0;
+  const known = disc >= D.CLASSIFICATO;
+  const revealed = disc >= D.RIVELATO;
+  const nearSys = g.galaxy.systems[ph.nearSys];
+  const nearName = nearSys ? nearSys.name : '—';
+  const color = known ? (FSP_COLORS[ph.cls] || '#cfe0ff') : 'rgba(205,214,238,0.95)';
+  const iconName = known ? (FSP_ICON[ph.cls] || 'fsp') : 'fsp';
+  const title = !known ? 'Segnale anomalo' : ((ph.unique ? '★ ' : '') + escapeHtml(ph.name));
+
+  let body;
+  if (!known) {
+    body = '<p>Rilevato presso <strong>' + escapeHtml(nearName) + '</strong>. Classe e natura ignote.</p>' +
+      '<p class="fleet-info-popup__hint">Porta una <strong>flotta</strong> (o possiedi una <strong>colonia</strong>) nel sistema d\'aggancio, poi <strong>Scansiona</strong> per classificarlo.</p>';
+  } else if (!revealed) {
+    body = '<dl class="fleet-info-popup__meta">' +
+      '<div><dt>Classe</dt><dd>' + escapeHtml(PH.CLASSES[ph.cls].label) + '</dd></div>' +
+      '<div><dt>Lettura</dt><dd>' + escapeHtml(PH.descriptorFor(ph)) + ' · ' + escapeHtml(PH.tenorHint(ph)) + '</dd></div>' +
+      '<div><dt>Aggancio</dt><dd>' + escapeHtml(nearName) + '</dd></div>' +
+      '</dl><p class="fleet-info-popup__hint">Manda una tua <strong>flotta</strong> nel sistema d\'aggancio e <strong>Investiga</strong> per scoprirne l\'effetto.</p>';
+  } else {
+    body = '<dl class="fleet-info-popup__meta">' +
+      '<div><dt>Classe</dt><dd>' + escapeHtml(PH.CLASSES[ph.cls].label) + '</dd></div>' +
+      '<div><dt>Esito</dt><dd>' + escapeHtml(st.outcome ? st.outcome.text : '—') + '</dd></div>' +
+      (st.owned ? '<div><dt>Stato</dt><dd>sotto il tuo controllo</dd></div>' : '') +
+      '</dl>' +
+      ((st.outcome && st.outcome.exploitable && !st.owned)
+        ? '<p class="fleet-info-popup__hint">Puoi prenderne il <strong>controllo</strong> presidiandolo con una flotta nel sistema d\'aggancio.</p>' : '');
+  }
+
+  let actions = '';
+  if (disc === D.CONTATTO) { const c = PH.canScan(g, id); actions += _phenBtn('phen-scan', 'spy', 'cyan', 'Scansiona', c.ok, c.reason); }
+  if (disc === D.CLASSIFICATO) { const c = PH.canInvestigate(g, id); actions += _phenBtn('phen-investigate', 'send', 'cyan', 'Investiga', c.ok, c.reason); }
+  if (revealed && st.outcome && st.outcome.exploitable && !st.owned) { const c = PH.canExploit(g, id); actions += _phenBtn('phen-exploit', 'pin', 'cyan', 'Controlla', c.ok, c.reason); }
+  actions += _phenBtn('phen-mark', 'warning', 'pink', st.marked ? 'Non evitare' : 'Evita', true, '');
+
+  const html =
+    '<header class="fleet-info-popup__head">' +
+      '<h3 class="fleet-info-popup__name"><span class="ui-icon" style="color:' + color + '" aria-hidden="true">' + (ORION.icon(iconName) || '') + '</span> ' + title + '</h3>' +
+      '<button class="btn btn--mini btn--icon-only" data-action="phen-close" type="button" aria-label="Chiudi">' +
+        '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
+      '</button>' +
+    '</header>' + body +
+    '<div class="fleet-info-popup__actions">' + actions + '</div>';
+
+  let node = document.getElementById('phenomenon-popup');
+  const fresh = !node;
+  if (fresh) {
+    node = document.createElement('div');
+    node.className = 'fleet-info-popup';
+    node.id = 'phenomenon-popup';
+    node.setAttribute('role', 'dialog');
+    node.setAttribute('aria-label', 'Fenomeno di Spazio Profondo');
+  }
+  node.innerHTML = html;
+  if (fresh) {
+    document.body.appendChild(node);
+    const margin = 12, rectW = 260, rectH = 200;
+    let x = (screenX || window.innerWidth / 2) + 16;
+    let y = (screenY || window.innerHeight / 2) - 16;
+    if (x + rectW > window.innerWidth - margin) x = (screenX || 0) - rectW - 16;
+    if (x < margin) x = margin;
+    if (y + rectH > window.innerHeight - margin) y = window.innerHeight - rectH - margin;
+    if (y < margin) y = margin;
+    node.style.left = x + 'px';
+    node.style.top = y + 'px';
+    setTimeout(function () {
+      document.addEventListener('click', _maybeClosePhenPopup, true);
+      document.addEventListener('keydown', _phenEscHandler);
+    }, 0);
+  }
+
+  /* Handlers (ri-bindati ad ogni refresh) */
+  node.querySelector('[data-action="phen-close"]').addEventListener('click', closePhenomenonPopup);
+  function afterAction() {
+    persistGame(g);
+    if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+    _renderPhenomenonPopup(id);  // refresh in-place (stato avanzato)
+    render();
+  }
+  const sb = node.querySelector('[data-action="phen-scan"]');
+  if (sb && !sb.disabled) sb.addEventListener('click', function () {
+    const r = PH.scan(g, id);
+    if (!r.ok) { showToast(r.reason || 'Scansione non disponibile'); return; }
+    chronicleEvent({ kind: 'fsp-scanned', id: id, sysId: ph.nearSys, sysName: nearName,
+      className: PH.CLASSES[ph.cls].label, impulso: g.timeImpulsi || 0 });
+    showToast('Fenomeno classificato: ' + PH.CLASSES[ph.cls].label);
+    afterAction();
+  });
+  const ib = node.querySelector('[data-action="phen-investigate"]');
+  if (ib && !ib.disabled) ib.addEventListener('click', function () {
+    const r = PH.investigate(g, id);
+    if (!r.ok) { showToast(r.reason || 'Investigazione non disponibile'); return; }
+    chronicleEvent({ kind: 'fsp-revealed', id: id, sysId: ph.nearSys, sysName: nearName,
+      name: ph.name, text: r.outcome.text, category: r.outcome.category, impulso: g.timeImpulsi || 0 });
+    showToast(r.outcome.text);
+    afterAction();
+  });
+  const eb = node.querySelector('[data-action="phen-exploit"]');
+  if (eb && !eb.disabled) eb.addEventListener('click', function () {
+    const r = PH.exploit(g, id);
+    if (!r.ok) { showToast(r.reason || 'Controllo non disponibile'); return; }
+    chronicleEvent({ kind: 'fsp-claimed', id: id, sysId: ph.nearSys, sysName: nearName,
+      name: ph.name, impulso: g.timeImpulsi || 0 });
+    showToast(ph.name + ' · sotto il tuo controllo');
+    afterAction();
+  });
+  const mb = node.querySelector('[data-action="phen-mark"]');
+  if (mb) mb.addEventListener('click', function () {
+    const r = PH.toggleMark(g, id);
+    showToast(r.marked ? 'Fenomeno marcato come zona da evitare' : 'Marcatura rimossa');
+    afterAction();
+  });
 }
 
 /* describeFleetOrder — testo italiano dell'ordine corrente + summary

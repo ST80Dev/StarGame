@@ -86,6 +86,22 @@
         'e degli adiacenti sono visibili da subito. L\'esplorazione vera arriverà con le flotte.</p>'
     },
     {
+      id: 'fenomeni',
+      tag: 'Spazio profondo',
+      title: 'Fenomeni di Spazio Profondo',
+      body:
+        '<p>Sparsi nello <strong>spazio interstellare</strong> — anche lontano dalle rotte — esistono i ' +
+        '<strong>Fenomeni di Spazio Profondo</strong>: posti speciali da <strong>scoprire, sfruttare o evitare</strong>. ' +
+        'Ne esistono cinque classi (gravitazionali, reliquie/artificiali, emissione, biologiche, temporali), ognuna con ' +
+        'un <strong>glifo e una tinta</strong> propri. Ogni galassia ne ha una varietà e una frequenza diverse.</p>' +
+        '<p>Sai sempre <strong>come</strong> interagire, non <strong>cosa</strong> otterrai finché non ti esponi:</p>' +
+        '<p>• Un <strong>segnale anomalo</strong> (diamante con <strong>?</strong>) appare quando esplori lì vicino. ' +
+        '<strong>Scansiona</strong> (flotta o colonia nel sistema d\'aggancio) per conoscerne la classe. ' +
+        '<strong>Investiga</strong> con una flotta per scoprirne l\'effetto — può aiutarti poco o molto, o essere un rischio. ' +
+        'Alcuni puoi <strong>Controllarli</strong> (presidio) per un beneficio continuo; altri conviene <strong>Evitarli</strong>.</p>' +
+        '<p class="tut-hint">Non sono mai vincitori di partita: aiutano in base alla tua strategia, e chi li possiede può perderli.</p>'
+    },
+    {
       id: 'ai-fleet-follow',
       tag: 'Contatti',
       title: 'Flotte altrui e inseguimento',

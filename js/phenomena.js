@@ -415,11 +415,318 @@
         x: ph.x, y: ph.y, z: ph.z, groupId: ph.groupId,
         groupName: g ? g.name : null,
         unique: ph.unique, name: ph.name, tenor: ph.tenor,
-        intensity: ph.intensity,
+        intensity: ph.intensity, nearSys: ph.nearSys,
         disc: st.d || DISCOVERY.ECO,
-        owned: !!st.owned, used: !!st.used, marked: !!st.marked
+        owned: !!st.owned, used: !!st.used, marked: !!st.marked,
+        outcome: st.outcome || null
       };
     });
+  }
+
+  /* ==================================================================
+     FASE 3 — SCOPERTA, INTERAZIONE, EFFETTI
+     I 4 verbi (§17.7.2): Scansiona · Investiga · Sfrutta/Controlla · Marca.
+     Il giocatore conosce i verbi; l'EFFETTO si rivela solo investigando.
+     Tutto deterministico (effectSeed per istanza). Recovery-friendly:
+     gli hazard sono limitati (le navi sopravvivono), nessun fail-state.
+     ================================================================== */
+
+  const DISC_EXPLORED = 2; // ORION.galaxy DISCOVERY.EXPLORED
+
+  /* Tuning effetti (in codice, non player-facing: opacità by design). I
+     valori sono CAP modesti — gli FSP NON sono game-winner (§17.7.1). */
+  const FX = {
+    DETECT_RADIUS: 0.10,         // un sistema esplorato entro questo raggio rileva l'FSP
+    CACHE_MIN: 60, CACHE_SPAN: 240,   // cache risorse one-shot (×intensità)
+    LOSS_MIN: 20, LOSS_SPAN: 90,      // perdita risorse (hazard)
+    WEAR_MIN: 8, WEAR_SPAN: 22,       // usura navi (hazard), cap 100
+    REVEAL_MIN: 1, REVEAL_SPAN: 3,    // sistemi rivelati (intel)
+    UNIQUE_MULT: 1.6,                 // gli unici sono più "grossi" (sempre capati)
+    PASSIVE_RATE_MIN: 0.3, PASSIVE_RATE_SPAN: 0.9, // trickle/Ι nodo posseduto
+    PASSIVE_CAP: 1500            // tetto totale dal nodo posseduto (anti-game-winner)
+  };
+  /* Risorsa "naturale" per classe (cache/loss). bio sceglie food/water. */
+  const RES_BY_CLASS = { grav: 'en', relic: 'met', emis: 'en', bio: 'food', temp: 'met' };
+  const RES_LABEL = { met: 'metalli', en: 'energia', food: 'cibo', water: 'acqua' };
+
+  function byId(galaxy, id) {
+    const items = forGalaxy(galaxy);
+    for (let i = 0; i < items.length; i++) if (items[i].id === id) return items[i];
+    return null;
+  }
+  function ensureState(game, id) {
+    if (!game.phenomena || typeof game.phenomena !== 'object') game.phenomena = {};
+    if (!game.phenomena[id]) game.phenomena[id] = { d: DISCOVERY.ECO };
+    return game.phenomena[id];
+  }
+
+  /* Una flotta DEL GIOCATORE presente (in orbita/attracco) nel sistema. */
+  function playerFleetAtSystem(game, sysId) {
+    const fl = game.fleets || [];
+    for (let i = 0; i < fl.length; i++) {
+      const f = fl[i];
+      if (!f || !f.location || f.location.systemId !== sysId) continue;
+      if (f.location.status === 'orbiting' || f.location.status === 'docked') return f;
+    }
+    return null;
+  }
+  function colonyInSystem(game, sysId) {
+    const cols = game.colonies || {};
+    const keys = Object.keys(cols);
+    for (let i = 0; i < keys.length; i++) {
+      const c = cols[keys[i]];
+      if (c && c.systemId === sysId && c.colonized) return keys[i];
+    }
+    return null;
+  }
+  function depositColonyKey(game) {
+    if (ORION.dispatch && ORION.dispatch.payColonyKey) {
+      const k = ORION.dispatch.payColonyKey(game);
+      if (k && game.colonies[k]) return k;
+    }
+    const keys = Object.keys(game.colonies || {});
+    for (let i = 0; i < keys.length; i++) if (game.colonies[keys[i]].colonized) return keys[i];
+    return null;
+  }
+  function deposit(game, res, amt) {
+    const k = depositColonyKey(game);
+    const col = k && game.colonies[k];
+    if (col && col.stock) { col.stock[res] = Math.max(0, (col.stock[res] || 0) + amt); return true; }
+    return false;
+  }
+
+  /* ------------------------------------------------------------------
+     SCOPERTA (livello CONTATTO): un FSP "pinga" sulla mappa quando un
+     sistema esplorato è vicino (il suo nearSys, o uno entro DETECT_RADIUS).
+     Con `events` → emette voce di Cronaca per le NUOVE rilevazioni; senza
+     (boot/load) → baseline silenziosa (niente spam retroattivo).
+     ------------------------------------------------------------------ */
+  function isDetected(game, ph) {
+    const disc = game.state && game.state.discovery;
+    if (!disc) return false;
+    if ((disc[ph.nearSys] || 0) >= DISC_EXPLORED) return true;
+    const sys = game.galaxy.systems;
+    const r2 = FX.DETECT_RADIUS * FX.DETECT_RADIUS;
+    for (let i = 0; i < sys.length; i++) {
+      if ((disc[i] || 0) < DISC_EXPLORED) continue;
+      const dx = sys[i].x - ph.x, dy = sys[i].y - ph.y;
+      if (dx * dx + dy * dy <= r2) return true;
+    }
+    return false;
+  }
+  function detect(game, events) {
+    if (!game || !game.galaxy) return;
+    const items = forGalaxy(game.galaxy);
+    for (let i = 0; i < items.length; i++) {
+      const ph = items[i];
+      const st = game.phenomena[ph.id];
+      if (st && (st.d || 0) >= DISCOVERY.CONTATTO) continue;
+      if (!isDetected(game, ph)) continue;
+      const s = ensureState(game, ph.id);
+      s.d = DISCOVERY.CONTATTO;
+      if (events) {
+        const sys = game.galaxy.systems[ph.nearSys];
+        events.push({
+          kind: 'fsp-contact', id: ph.id,
+          sysId: ph.nearSys, sysName: sys ? sys.name : '—',
+          x: ph.x, y: ph.y, impulso: game.timeImpulsi || 0
+        });
+      }
+    }
+  }
+
+  /* Descrittore ambiguo mostrato alla CLASSIFICAZIONE (non rivela l'effetto). */
+  const DESCRIPTORS = ['firma dormiente', 'eco antica', 'lettura instabile',
+    'risonanza irregolare', 'traccia fredda', 'segnatura profonda'];
+  function descriptorFor(ph) {
+    const rng = ORION.rng.makeRng(ph.effectSeed + ':desc');
+    return rng.pick(DESCRIPTORS);
+  }
+  function tenorHint(ph) {
+    return ph.tenor > 0.12 ? 'promettente' : (ph.tenor < -0.12 ? 'minaccioso' : 'incerto');
+  }
+
+  /* ------------------------------------------------------------------
+     AZIONE 1 — SCANSIONA (Contatto → Classificato). Richiede una flotta o
+     una colonia nel sistema d'aggancio (nearSys). Nessun effetto.
+     ------------------------------------------------------------------ */
+  function canScan(game, id) {
+    const ph = byId(game.galaxy, id); if (!ph) return { ok: false, reason: 'assente' };
+    const st = ensureState(game, id);
+    if ((st.d || 0) !== DISCOVERY.CONTATTO) return { ok: false, reason: 'non-contatto' };
+    if (playerFleetAtSystem(game, ph.nearSys) || colonyInSystem(game, ph.nearSys)) return { ok: true };
+    return { ok: false, reason: 'serve flotta o colonia nel sistema d\'aggancio' };
+  }
+  function scan(game, id) {
+    const c = canScan(game, id); if (!c.ok) return c;
+    const ph = byId(game.galaxy, id);
+    const st = ensureState(game, id);
+    st.d = DISCOVERY.CLASSIFICATO;
+    return { ok: true, classLabel: CLASSES[ph.cls].label, variant: ph.variant,
+      descriptor: descriptorFor(ph), tenorHint: tenorHint(ph) };
+  }
+
+  /* ------------------------------------------------------------------
+     RISOLUTORE EFFETTI (one-shot, deterministico da effectSeed). Categorie:
+     cache (boon risorse, sfruttabile) · intel (rivela sistemi) · hazard
+     (usura/perdita, recovery-friendly) · shortcut (varco, gancio Fase 4) ·
+     dormant (inconcludente). Magnitudini ∝ intensità, sempre capate.
+     ------------------------------------------------------------------ */
+  const CAT_WEIGHTS = {
+    grav:  { hazard: 0.45, intel: 0.25, shortcut: 0.20, cache: 0.10 },
+    relic: { cache: 0.55, intel: 0.30, hazard: 0.15 },
+    emis:  { intel: 0.55, cache: 0.25, hazard: 0.20 },
+    bio:   { cache: 0.50, hazard: 0.35, intel: 0.15 },
+    temp:  { cache: 0.2, intel: 0.2, hazard: 0.2, shortcut: 0.2, dormant: 0.2 }
+  };
+  function revealNearbySystems(game, ph, k) {
+    const sys = game.galaxy.systems;
+    const order = [];
+    for (let i = 0; i < sys.length; i++) {
+      const dx = sys[i].x - ph.x, dy = sys[i].y - ph.y;
+      order.push({ id: i, d2: dx * dx + dy * dy });
+    }
+    order.sort(function (a, b) { return a.d2 - b.d2; });
+    let done = 0;
+    for (let i = 0; i < order.length && done < k; i++) {
+      if (ORION.galaxy && ORION.galaxy.revealSystem) {
+        if (ORION.galaxy.revealSystem(game.galaxy, order[i].id, game.state)) done++;
+        else {
+          // già esplorato: promuovilo comunque "consumando" lo slot solo se ignoto
+          const disc = game.state && game.state.discovery;
+          if (disc && (disc[order[i].id] || 0) < DISC_EXPLORED) { disc[order[i].id] = DISC_EXPLORED; done++; }
+        }
+      }
+    }
+    return done;
+  }
+  function resolveEffect(game, ph) {
+    const rng = ORION.rng.makeRng(ph.effectSeed + ':fx');
+    const cat = weightedKey(CAT_WEIGHTS[ph.cls] || CAT_WEIGHTS.temp, rng);
+    const mult = ph.unique ? FX.UNIQUE_MULT : 1;
+    const inten = ph.intensity || 0.5;
+
+    if (cat === 'cache') {
+      let res = RES_BY_CLASS[ph.cls] || 'met';
+      if (ph.cls === 'bio') res = rng.chance(0.5) ? 'food' : 'water';
+      const amt = Math.round((FX.CACHE_MIN + inten * FX.CACHE_SPAN) * mult);
+      deposit(game, res, amt);
+      return { category: 'cache', res: res, amount: amt, exploitable: true,
+        text: 'Cache di risorse recuperata: +' + amt + ' ' + RES_LABEL[res] + '.' };
+    }
+    if (cat === 'intel') {
+      const k = FX.REVEAL_MIN + Math.round(inten * FX.REVEAL_SPAN);
+      const done = revealNearbySystems(game, ph, k);
+      return { category: 'intel', reveals: done, exploitable: false,
+        text: done > 0 ? ('Dati di navigazione: rivelati ' + done + ' sistemi vicini.')
+                       : 'Dati di navigazione: nessun sistema nuovo nei dintorni.' };
+    }
+    if (cat === 'hazard') {
+      const wear = Math.min(60, Math.round(FX.WEAR_MIN + inten * FX.WEAR_SPAN));
+      const fleet = playerFleetAtSystem(game, ph.nearSys);
+      if (fleet && Array.isArray(fleet.ships)) {
+        for (let i = 0; i < fleet.ships.length; i++) {
+          fleet.ships[i].wear = Math.min(100, (fleet.ships[i].wear || 0) + wear);
+        }
+      }
+      let lossTxt = '';
+      if (rng.chance(0.5)) {
+        const res = RES_BY_CLASS[ph.cls] || 'met';
+        const loss = Math.round(FX.LOSS_MIN + inten * FX.LOSS_SPAN);
+        deposit(game, res, -loss);
+        lossTxt = ' Perduti ' + loss + ' ' + RES_LABEL[res] + '.';
+      }
+      return { category: 'hazard', wear: wear, exploitable: false,
+        text: 'Pericolo! Le navi subiscono usura (+' + wear + '%).' + lossTxt };
+    }
+    if (cat === 'shortcut') {
+      // varco: individua un'estremità lontana (gancio Fase 4 per il viaggio)
+      const sys = game.galaxy.systems;
+      let far = ph.nearSys, farD = -1;
+      for (let i = 0; i < sys.length; i++) {
+        const dx = sys[i].x - ph.x, dy = sys[i].y - ph.y, d = dx * dx + dy * dy;
+        if (d > farD) { farD = d; far = i; }
+      }
+      const nm = sys[far] ? sys[far].name : '—';
+      return { category: 'shortcut', varcoTo: far, exploitable: true,
+        text: 'Varco instabile: punta verso ' + nm + ' (rotta utilizzabile in sviluppo).' };
+    }
+    return { category: 'dormant', exploitable: false,
+      text: 'Lettura inconcludente: il fenomeno resta silente, per ora.' };
+  }
+
+  /* ------------------------------------------------------------------
+     AZIONE 2 — INVESTIGA (Classificato → Rivelato). Richiede flotta nel
+     sistema d'aggancio. Risolve e applica l'effetto (one-shot).
+     ------------------------------------------------------------------ */
+  function canInvestigate(game, id) {
+    const ph = byId(game.galaxy, id); if (!ph) return { ok: false, reason: 'assente' };
+    const st = ensureState(game, id);
+    if ((st.d || 0) !== DISCOVERY.CLASSIFICATO) return { ok: false, reason: 'non-classificato' };
+    if (!playerFleetAtSystem(game, ph.nearSys)) return { ok: false, reason: 'serve una tua flotta nel sistema d\'aggancio' };
+    return { ok: true };
+  }
+  function investigate(game, id) {
+    const c = canInvestigate(game, id); if (!c.ok) return c;
+    const ph = byId(game.galaxy, id);
+    const st = ensureState(game, id);
+    const outcome = resolveEffect(game, ph);
+    st.d = DISCOVERY.RIVELATO;
+    st.outcome = outcome;
+    st.used = !outcome.exploitable; // gli effetti non sfruttabili si esauriscono
+    if (outcome.varcoTo != null) st.varcoTo = outcome.varcoTo;
+    return { ok: true, outcome: outcome };
+  }
+
+  /* ------------------------------------------------------------------
+     AZIONE 3 — SFRUTTA/CONTROLLA (Rivelato + sfruttabile). Rivendica il
+     nodo: effetto passivo (trickle) mentre lo presidi (vedi tick).
+     Contendibile dall'AI in Fase 5.
+     ------------------------------------------------------------------ */
+  function canExploit(game, id) {
+    const ph = byId(game.galaxy, id); if (!ph) return { ok: false, reason: 'assente' };
+    const st = ensureState(game, id);
+    if ((st.d || 0) !== DISCOVERY.RIVELATO || !st.outcome || !st.outcome.exploitable)
+      return { ok: false, reason: 'non-sfruttabile' };
+    if (st.owned) return { ok: false, reason: 'già sotto controllo' };
+    if (!playerFleetAtSystem(game, ph.nearSys)) return { ok: false, reason: 'serve una tua flotta nel sistema d\'aggancio' };
+    return { ok: true };
+  }
+  function exploit(game, id) {
+    const c = canExploit(game, id); if (!c.ok) return c;
+    const st = ensureState(game, id);
+    st.owned = true; st.passiveTotal = st.passiveTotal || 0;
+    return { ok: true, category: st.outcome.category };
+  }
+
+  /* AZIONE 4 — MARCA/EVITA (sempre disponibile da Contatto in poi). */
+  function toggleMark(game, id) {
+    const st = ensureState(game, id);
+    st.marked = !st.marked;
+    return { ok: true, marked: st.marked };
+  }
+
+  /* ------------------------------------------------------------------
+     TICK — scoperta di prossimità + passivo dei nodi posseduti.
+     ------------------------------------------------------------------ */
+  function tick(game, events) {
+    if (!game || !game.galaxy) return;
+    ensure(game);
+    detect(game, events);
+    // passivo: nodi cache posseduti e presidiati → trickle capato
+    const items = forGalaxy(game.galaxy);
+    for (let i = 0; i < items.length; i++) {
+      const ph = items[i];
+      const st = game.phenomena[ph.id];
+      if (!st || !st.owned || !st.outcome || st.outcome.category !== 'cache') continue;
+      if ((st.passiveTotal || 0) >= FX.PASSIVE_CAP) continue;
+      if (!playerFleetAtSystem(game, ph.nearSys)) continue;
+      const rate = FX.PASSIVE_RATE_MIN + (ph.intensity || 0.5) * FX.PASSIVE_RATE_SPAN;
+      const take = Math.min(rate, FX.PASSIVE_CAP - (st.passiveTotal || 0));
+      if (deposit(game, st.outcome.res || 'met', take)) {
+        st.passiveTotal = (st.passiveTotal || 0) + take;
+      }
+    }
   }
 
   ORION.phenomena = {
@@ -428,11 +735,23 @@
     CLASS_ORDER: CLASS_ORDER,
     PROFILES: PROFILES,
     CFG: CFG,
+    FX: FX,
     profileFor: profileFor,
     generate: generate,
     forGalaxy: forGalaxy,
     ensure: ensure,
     stateOf: stateOf,
-    list: list
+    list: list,
+    byId: byId,
+    detect: detect,
+    tick: tick,
+    descriptorFor: descriptorFor,
+    tenorHint: tenorHint,
+    canScan: canScan, scan: scan,
+    canInvestigate: canInvestigate, investigate: investigate,
+    canExploit: canExploit, exploit: exploit,
+    toggleMark: toggleMark,
+    playerFleetAtSystem: playerFleetAtSystem,
+    colonyInSystem: colonyInSystem
   };
 })(typeof window !== 'undefined' ? window : this);
