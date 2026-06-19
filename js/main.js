@@ -1016,6 +1016,15 @@ function navigateView(view) {
 }
 
 function renderView(stage, view) {
+  /* Breadcrumb striscia: etichetta di sezione per le viste della sidebar
+     (decisione utente 2026-06-20). Le viste mappa (galassia/gruppo/sistema/
+     pianeta) la sovrascrivono con la breadcrumb di navigazione; renderCivView
+     la sovrascrive per il dettaglio civ. */
+  const SIDEBAR_CRUMB = {
+    civ: 'Diplomazia', market: 'Mercato', stations: 'Stazioni', research: 'Ricerca',
+    crews: 'Equipaggi', dispatch: 'Dispacci', destiny: 'Destino', fleet: 'Flotte'
+  };
+  if (SIDEBAR_CRUMB[view]) setViewCrumbs('<span class="crumb is-current">' + SIDEBAR_CRUMB[view] + '</span>');
   if (!stage) return;
 
   // Galassia / Sistema / Pianeta condividono lo stage: ogni livello è un
@@ -1204,7 +1213,8 @@ function renderGalaxyView(stage) {
       /* M07.3 (decisione #62): Dashboard Impero — overlay al centro a livello galassia. */
       '<div class="empire-deck" data-empire-deck hidden aria-label="Dashboard Impero"></div>' +
       '<button class="empire-deck-toggle" data-empire-toggle type="button" hidden aria-label="Mostra/nascondi Dashboard Impero"></button>' +
-      '<nav class="galaxy-breadcrumb" data-breadcrumb aria-label="Percorso di navigazione"></nav>' +
+      /* Breadcrumb spostata nella striscia persistente .viewport__crumbs
+         (decisione utente 2026-06-20): la mappa la popola via [data-breadcrumb]. */
       '<div class="galaxy-hint">Trascina · zoom rotella/pinch · <kbd>Shift</kbd>+trascina = ruota libera · <kbd>Alt</kbd>+trascina = roll · pinch a 2 dita ruota su touch</div>' +
     '</div>';
 
@@ -1295,6 +1305,18 @@ function renderBreadcrumb(ctx) {
       else if (btn.dataset.crumb === 'group') ORION.map.focusGroup(Number(btn.dataset.id));
     });
   });
+}
+
+/* Riempie la striscia breadcrumb unica (.viewport__crumbs / [data-breadcrumb]).
+   Usata dalle viste della sidebar; la mappa usa renderBreadcrumb/renderSystem-
+   Breadcrumb che puntano allo stesso elemento. `parts` = array di crumb già in
+   HTML (button.crumb / span.crumb.is-current), uniti con il separatore ›. */
+function setViewCrumbs(parts) {
+  const el = document.querySelector('[data-breadcrumb]');
+  if (!el) return null;
+  const arr = Array.isArray(parts) ? parts : [parts];
+  el.innerHTML = arr.filter(Boolean).join('<span class="crumb__sep">›</span>');
+  return el;
 }
 
 function findGroup(id) {
@@ -7640,6 +7662,8 @@ function renderCivView(stage) {
     if (dc && (dcRank >= 1 || dc.faction)) { renderCivDetail(stage, dc); return; }
     ORION._civDetailId = null; // non più valido (caduta/sconosciuta)
   }
+  /* Breadcrumb striscia: lista = solo "Diplomazia" (corrente). */
+  setViewCrumbs('<span class="crumb is-current">Diplomazia</span>');
 
   const ALIGN_LABEL = { bene: 'Bene', male: 'Male', neutrale: 'Neutrale' };
   const KNOWLEDGE = ORION.ai.KNOWLEDGE || { unknown:0, spotted:1, contacted:2, known:3, familiar:4 };
@@ -7810,14 +7834,11 @@ function renderCivView(stage) {
         : '';
       /* Card di RIEPILOGO sintetica (richiesta utente 2026-06-20): il dossier
          completo (colonie, flotte identificate, intel, diplomazia) vive nella
-         schermata di dettaglio raggiungibile dal nome. */
-      const moreHint = '<button type="button" class="civ-card__more" data-civ-detail="' + escapeHtml(c.id) + '">↳ Dossier completo: colonie, flotte identificate, diplomazia →</button>';
-
+         schermata di dettaglio raggiungibile cliccando il NOME della civ. */
       body = '<div class="civ-card__chips">' + alignChip + relChip + fedChip + intelChip + '</div>' +
         offerHtml +
         estBlock +
         dispBlock +
-        moreHint +
         dipActions +
         ((intelRank >= 2) ? civTradeHtml(g, c) + civWasteHtml(g, c) : '');
     }
@@ -8233,10 +8254,19 @@ function renderCivDetail(stage, c) {
     }).join('') + '</div>';
   }
 
+  /* Breadcrumb nella striscia unica in alto (decisione utente 2026-06-20):
+     "Civiltà › <nome>", stile coerente con la mappa (.crumb). */
+  const crumbEl = setViewCrumbs([
+    '<button type="button" class="crumb" data-civ-back>Civiltà</button>',
+    '<span class="crumb is-current">' + escapeHtml(c.name) + '</span>'
+  ]);
+  if (crumbEl) {
+    const bk = crumbEl.querySelector('[data-civ-back]');
+    if (bk) bk.onclick = function () { ORION._civDetailId = null; renderCivView(stage); };
+  }
+
   stage.innerHTML =
     '<div class="civ-view civ-detail">' +
-      '<nav class="crumbs"><button type="button" class="crumbs__link" data-civ-back>← Civiltà</button>' +
-        '<span class="crumbs__sep">›</span><span class="crumbs__cur">' + escapeHtml(c.name) + '</span></nav>' +
       '<header class="civ-detail__head" style="--civ-color:' + escapeHtml(c.color || '#888') + '">' +
         '<span class="civ-detail__swatch" aria-hidden="true"></span>' +
         '<h2 class="civ-detail__name">' + escapeHtml(c.name) + '</h2>' +
@@ -8263,8 +8293,7 @@ function renderCivDetail(stage, c) {
       (dipHtml ? '<section class="civ-detail__sec"><h3>Diplomazia</h3>' + dipHtml + '</section>' : '') +
     '</div>';
 
-  const back = stage.querySelector('[data-civ-back]');
-  if (back) back.addEventListener('click', function () { ORION._civDetailId = null; renderCivView(stage); });
+  /* (Il "torna" della breadcrumb è agganciato sulla striscia, sopra.) */
   /* Click su una colonia nota → mappa centrata su quel sistema. */
   stage.querySelectorAll('.civ-detail__col[data-sys]').forEach(function (li) {
     li.addEventListener('click', function () {

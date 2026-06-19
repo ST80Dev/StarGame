@@ -438,7 +438,28 @@ button { font-family: inherit; }
   overflow: hidden;
   min-height: 0;
 }
-.viewport__stage { position: absolute; inset: 0; display: grid; place-items: center; }
+/* Striscia breadcrumb unica in cima alla sezione centrale (decisione utente
+   2026-06-20): larga quanto il viewport, bassa, sempre presente. Usata sia
+   dalla mappa sia dalle viste della sidebar. */
+.viewport__crumbs {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  z-index: 6;
+  background: rgb(var(--c-surface-rgb) / 0.6);
+  border-bottom: 1px solid var(--c-border-soft);
+  backdrop-filter: blur(4px);
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.viewport__crumbs::-webkit-scrollbar { height: 0; }
+/* Lo stage parte SOTTO la striscia. */
+.viewport__stage { position: absolute; inset: 28px 0 0 0; display: grid; place-items: center; }
 .viewport__placeholder { text-align: center; color: var(--c-text-faint); user-select: none; }
 .viewport__glyph {
   display: block;
@@ -6373,23 +6394,6 @@ select.main-menu__input { cursor: pointer; }
    ===================================================================== */
 .civ-view { padding: 8px 12px; place-self: stretch; max-height: 100%; overflow-y: auto; }
 
-/* Breadcrumb di navigazione per le sotto-pagine (richiesta utente 2026-06-20).
-   Riusabile: Diplomazia → dettaglio civ, e future sotto-pagine. */
-.crumbs {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 0.82rem; margin-bottom: 10px;
-}
-.crumbs__link {
-  background: rgb(var(--c-surface-rgb) / 0.55);
-  border: 1px solid var(--c-border-soft);
-  border-radius: 4px; padding: 3px 9px;
-  color: var(--c-accent); cursor: pointer;
-  font-weight: 600;
-}
-.crumbs__link:hover { border-color: var(--c-accent); }
-.crumbs__sep { color: var(--c-text-faint); }
-.crumbs__cur { color: var(--c-text); font-weight: 600; }
-
 /* Schermata di dettaglio civiltà. */
 .civ-detail__head {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
@@ -6442,12 +6446,6 @@ select.main-menu__input { cursor: pointer; }
   text-underline-offset: 2px;
 }
 .civ-card__name--link:hover { text-decoration-color: var(--c-accent); }
-.civ-card__more {
-  display: inline-block; margin-top: 6px;
-  background: none; border: none; padding: 0; cursor: pointer;
-  font-size: 0.78rem; color: var(--c-accent); text-align: left;
-}
-.civ-card__more:hover { text-decoration: underline; }
 .civ-indices { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .civ-index {
   font-size: 0.82rem; color: var(--c-text-faint);
