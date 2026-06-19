@@ -746,16 +746,17 @@
     {
       id: 'economy-hub', tag: 'Economia · ⇄', title: 'Scheda Economia',
       body:
-        '<p>La <strong>scheda Economia</strong> (Plancia d\'Impero → <em>Economia</em>) riunisce in un solo posto ' +
-        'tutti i <strong>guadagni di risorse e crediti fuori dalla produzione delle colonie</strong>.</p>' +
-        '<p><strong>Sintesi:</strong> in cima, il colpo d\'occhio sui flussi extra-colonia (sfruttamenti in corso, ' +
-        'scambi con le AI, rotte interne).</p>' +
+        '<p>La linguetta <strong>Economia</strong> (Plancia d\'Impero, barra schede) raccoglie tutti i ' +
+        '<strong>guadagni di risorse e crediti fuori dalla produzione delle colonie</strong>, in <strong>4 sotto-sezioni</strong>, ' +
+        'ognuna con la sua schermata piena:</p>' +
         '<p><strong>Anomalie &amp; sfruttamenti §17.3:</strong> tutti i siti noti della galassia (detriti, cinture, ' +
-        'nebulose, reliquie), <em>raggruppati per sistema</em> e filtrabili per tipo di risorsa. Da qui invii una ' +
+        'nebulose, giganti gassosi, reliquie), <em>raggruppati per sistema</em> e filtrabili per risorsa. Da qui invii una ' +
         'flotta che <strong>resta sul posto</strong> a drenare (parte dalla colonia idonea più vicina).</p>' +
-        '<p><strong>Scambi con le AI:</strong> i contratti di export rifiuti attivi (i nuovi si aprono dalla Diplomazia).</p>' +
-        '<p><strong>Rotte interne &amp; mercato:</strong> il Mercato M12 (rotte, tesoreria, valute, Mekhari) è qui dentro.</p>' +
-        '<p>Nella scheda <em>colonia</em>, la tab Esplorazione mostra solo il riepilogo dei siti <strong>del suo sistema</strong>.</p>'
+        '<p><strong>Mercato &amp; rotte:</strong> capacità Mercato §10 e rotte commerciali d\'impero (M12).</p>' +
+        '<p><strong>Tesoreria &amp; valute:</strong> portfolio valute regionali, cambio, mercato grigio Mekhari.</p>' +
+        '<p><strong>Scambi con le AI:</strong> contratti di export rifiuti attivi (i nuovi si aprono dalla Diplomazia).</p>' +
+        '<p>Ogni voce del menu mostra un mini-riepilogo. Nella scheda <em>colonia</em>, la tab Esplorazione riassume solo i siti ' +
+        '<strong>del suo sistema</strong>.</p>'
     },
     {
       id: 'treasury', tag: 'Commercio · ⇄', title: 'Tesoreria e valute regionali',

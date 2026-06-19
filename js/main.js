@@ -1022,8 +1022,10 @@ function renderView(stage, view) {
      pianeta) la sovrascrivono con la breadcrumb di navigazione; renderCivView
      la sovrascrive per il dettaglio civ. */
   const SIDEBAR_CRUMB = {
-    civ: 'Diplomazia', market: 'Mercato', economy: 'Economia', stations: 'Stazioni', research: 'Ricerca',
-    crews: 'Equipaggi', dispatch: 'Dispacci', destiny: 'Destino', fleet: 'Flotte'
+    civ: 'Diplomazia', stations: 'Stazioni', research: 'Ricerca',
+    crews: 'Equipaggi', dispatch: 'Dispacci', destiny: 'Destino', fleet: 'Flotte',
+    'econ-anomalies': 'Economia · Anomalie', 'econ-market': 'Economia · Mercato',
+    'econ-treasury': 'Economia · Tesoreria', 'econ-ai': 'Economia · Scambi AI'
   };
   if (SIDEBAR_CRUMB[view]) setViewCrumbs('<span class="crumb is-current">' + SIDEBAR_CRUMB[view] + '</span>');
   if (!stage) return;
@@ -1099,27 +1101,19 @@ function renderView(stage, view) {
     return;
   }
 
-  // M12 Fase A1 (decisione #53): vista "Mercato" — riepilogo d'impero del
-  // commercio interno (capacità, rotte, mercantili). La gestione operativa
-  // (crea/cancella, costruisci mercantili) vive nella tab Rotte per-colonia.
-  if (view === 'market') {
+  // Scheda "Economia" (decisione utente 2026-06-20): 4 sotto-viste a
+  // schermata piena (anomalie/sfruttamenti, mercato&rotte, tesoreria&valute,
+  // scambi AI), selezionabili dalla linguetta Economia. Read + azioni
+  // leggere, no Canvas. Il Mercato M12 è inglobato qui dentro.
+  if (view === 'econ-market' || view === 'econ-treasury' || view === 'econ-anomalies' || view === 'econ-ai') {
     if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; } if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
     if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
     if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
     if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
-    renderMarketView(stage);
-    return;
-  }
-
-  // Scheda "Economia" (decisione utente 2026-06-19): hub d'impero dei
-  // guadagni extra-colonia (anomalie/sfruttamenti + scambi AI + Mercato M12
-  // inglobato). Read + azioni leggere, no Canvas.
-  if (view === 'economy') {
-    if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; } if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
-    if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
-    if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
-    if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
-    renderEconomyView(stage);
+    if (view === 'econ-market') renderEconMarketView(stage);
+    else if (view === 'econ-treasury') renderEconTreasuryView(stage);
+    else if (view === 'econ-anomalies') renderEconAnomaliesView(stage);
+    else renderEconAiView(stage);
     return;
   }
 
@@ -4714,7 +4708,10 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
   const openFleetsBtn = host.querySelector('[data-action="exp-open-fleets"]');
   if (openFleetsBtn) openFleetsBtn.addEventListener('click', function () { navigateView('fleet'); });
   const openEconBtn = host.querySelector('[data-action="exp-open-economy"]');
-  if (openEconBtn) openEconBtn.addEventListener('click', function () { navigateView('economy'); });
+  if (openEconBtn) openEconBtn.addEventListener('click', function () {
+    ORION.lpTab = 'economy'; saveUiPrefs();
+    navigateView('econ-anomalies');
+  });
   /* Decisione utente 2026-06-17: bottone "Richiama a base"/"Riporta in
      servizio" per gli esploratori monouso fermi (remoti in sosta o
      ormeggiati a casa ma non rifusi nei counter). Setta ordine `return`:
@@ -5390,27 +5387,6 @@ function renderPlanetRotteTab(host, planet, colony) {
   if (nb && !nb.disabled) nb.addEventListener('click', function () { openRoutePicker(colony); });
 }
 
-/* Sublabel del launcher "Mercato" (sx): rotte attive + n. valute possedute.
-   Niente "crediti neutri" in UI: il giocatore non ha mai esperito un credito,
-   è solo un'unità di calcolo. Mostriamo invece quante valute distinte ha. */
-/* Sotto-etichetta del launcher "Economia": rotte + anomalie in raccolta +
-   scambi con AI in un colpo d'occhio. */
-function economyLauncherSub() {
-  const g = ORION.game;
-  if (!g) return 'commerci & sfruttamenti';
-  const routes = (ORION.trade && ORION.trade.routesUsed(g)) || 0;
-  let harv = 0;
-  if (ORION.anomaly && ORION.anomaly.knownSites) {
-    ORION.anomaly.knownSites(g).forEach(function (s) { if (s.harvesting) harv++; });
-  }
-  const deals = (g.wasteDeals || []).length;
-  const parts = [];
-  if (routes) parts.push(routes + ' rotte');
-  if (harv) parts.push(harv + ' sfrutt.');
-  if (deals) parts.push(deals + ' scambi');
-  return parts.length ? parts.join(' · ') : 'commerci & sfruttamenti';
-}
-
 const TRADE_BANK_RES = ['met', 'en', 'food', 'water'];
 const TRADE_BANK_QTY = 10;
 function doBankTrade(colony, dir, resource) {
@@ -5849,16 +5825,24 @@ function renderResearchView(stage) {
   });
 }
 
-/* Corpo della vista Mercato (rotte + tesoreria + Mekhari), estratto come
-   builder puro così da poterlo embeddare anche nella scheda Economia
-   (decisione utente 2026-06-19: Mercato inglobato in Economia). */
-function marketBodyHtml(g) {
+/* =====================================================================
+   Scheda "Economia" — linguetta di primo livello (Plancia sx) con 4
+   sotto-sezioni, ciascuna con schermata piena dedicata al centro
+   (decisione utente 2026-06-20):
+     · Anomalie & sfruttamenti (econ-anomalies)
+     · Mercato & rotte         (econ-market)
+     · Tesoreria & valute      (econ-treasury)
+     · Scambi con le AI        (econ-ai)
+   Il Mercato M12 (rotte/tesoreria/valute/Mekhari) è inglobato qui dentro.
+   Default: solo il menu nella sidebar, nessuna schermata auto-aperta.
+   ===================================================================== */
+
+/* Corpo "Mercato & rotte": riepilogo capacità + rotte d'impero. */
+function marketRoutesBodyHtml(g) {
   const T = ORION.trade;
   if (!g || !T) return '';
-
   const cap = T.marketCapacity(g);
   const routes = T.activeRoutes(g);
-  /* Conta mercantili su tutte le colonie. */
   let totalMercs = 0, idleMercs = 0;
   myColonyKeys().forEach(function (k) {
     const c = g.colonies[k];
@@ -5866,7 +5850,6 @@ function marketBodyHtml(g) {
     totalMercs += ms.length;
     ms.forEach(function (m) { if (m.status !== 'on-route') idleMercs++; });
   });
-
   let routesHtml;
   if (routes.length) {
     routesHtml = '<ul class="route-list">' + routes.map(function (r) {
@@ -5886,8 +5869,21 @@ function marketBodyHtml(g) {
   } else {
     routesHtml = '<p class="panel__note">Nessuna rotta attiva. Apri rotte dalla tab <em>Rotte</em> di una colonia con un Mercato e un mercantile.</p>';
   }
+  return '' +
+    '<div class="market-summary">' +
+      '<div class="market-summary__cell"><span class="market-summary__val">' + routes.length + ' / ' + cap.routes + '</span><span class="market-summary__lbl">Rotte attive</span></div>' +
+      '<div class="market-summary__cell"><span class="market-summary__val">' + cap.throughput + '</span><span class="market-summary__lbl">Throughput ' + iU() + '</span></div>' +
+      '<div class="market-summary__cell"><span class="market-summary__val">' + idleMercs + ' / ' + totalMercs + '</span><span class="market-summary__lbl">Mercantili a riposo</span></div>' +
+    '</div>' +
+    '<p class="sysinfo__sub">Rotte d\'impero</p>' +
+    routesHtml +
+    '<p class="panel__note">La capacità di rotte e throughput è data dai <em>Mercati</em> §10 di tutte le tue colonie. ' +
+      'Le rotte si creano dalla tab <em>Rotte</em> di una colonia.</p>';
+}
 
-  /* ----- Tesoreria (M12 Fase A2, §15.4) ----- */
+/* Corpo "Tesoreria & valute": portfolio valute regionali + cambio + mercato
+   grigio Mekhari. */
+function treasuryBodyHtml(g) {
   const Tr = ORION.treasury;
   let treasuryHtml = '';
   if (Tr) {
@@ -5906,32 +5902,22 @@ function marketBodyHtml(g) {
       portfolio = '<p class="panel__note">Portfolio vuoto. Vendi risorse al <em>Banco regionale</em> (tab Rotte di una colonia) per ottenere valuta locale.</p>';
     }
     treasuryHtml =
-      '<p class="sysinfo__sub">Tesoreria <span class="cantieri-section__hint">(' + (held.length || 'nessuna') + (held.length === 1 ? ' valuta' : ' valute') + ')</span></p>' +
+      '<p class="sysinfo__sub">Portfolio <span class="cantieri-section__hint">(' + (held.length || 'nessuna') + (held.length === 1 ? ' valuta' : ' valute') + ')</span></p>' +
       portfolio +
       '<button class="btn btn--mini btn--enter" data-action="treasury-exchange" type="button"' +
         (held.length ? '' : ' disabled') + '>⇄ Cambia valuta</button>';
+  } else {
+    treasuryHtml = '<p class="panel__note">Modulo tesoreria non disponibile.</p>';
   }
-
-  /* ----- Mercato grigio Mekhari (M12 Fase B, §15.5) ----- */
   const mekhariHtml = buildMekhariPanel(g);
-
-  return '' +
-    '<div class="market-summary">' +
-      '<div class="market-summary__cell"><span class="market-summary__val">' + routes.length + ' / ' + cap.routes + '</span><span class="market-summary__lbl">Rotte attive</span></div>' +
-      '<div class="market-summary__cell"><span class="market-summary__val">' + cap.throughput + '</span><span class="market-summary__lbl">Throughput ' + iU() + '</span></div>' +
-      '<div class="market-summary__cell"><span class="market-summary__val">' + idleMercs + ' / ' + totalMercs + '</span><span class="market-summary__lbl">Mercantili a riposo</span></div>' +
-    '</div>' +
-    '<p class="sysinfo__sub">Rotte d\'impero</p>' +
-    routesHtml +
-    treasuryHtml +
-    mekhariHtml +
-    '<p class="panel__note">La capacità di rotte e throughput è data dai <em>Mercati</em> §10 di tutte le tue colonie. ' +
-      'Le <em>valute regionali</em> (una per regione) si guadagnano vendendo risorse al banco regionale e si cambiano qui con spread modulato da reputazione + presenza Mekhari.</p>';
+  return treasuryHtml + mekhariHtml +
+    '<p class="panel__note">Le <em>valute regionali</em> (una per regione) si guadagnano vendendo risorse al banco regionale e ' +
+      'si cambiano qui con spread modulato da reputazione + presenza Mekhari.</p>';
 }
 
-/* Aggancia gli eventi del corpo Mercato (rotte/tesoreria/Mekhari) entro
-   `stage`; `refresh` è la funzione che ridisegna la vista che lo contiene
-   (Mercato standalone o Economia). */
+/* Aggancia gli eventi del corpo Mercato/Tesoreria (rotte/cambio/Mekhari)
+   entro `stage`; selettori assenti = no-op (la stessa funzione serve sia la
+   vista Mercato sia la vista Tesoreria). `refresh` ridisegna la vista. */
 function bindMarketBodyEvents(stage, refresh) {
   const g = ORION.game;
   stage.querySelectorAll('[data-action="market-route-cancel"]').forEach(function (b) {
@@ -5952,38 +5938,19 @@ function bindMarketBodyEvents(stage, refresh) {
   });
 }
 
-/* Ridisegna la vista commercio attiva al centro (Economia), usata dalle
-   azioni che maturano dalla tab Rotte di colonia o dagli overlay. */
+/* Ridisegna la sotto-vista Economia attiva al centro, usata dalle azioni che
+   maturano dalla tab Rotte di colonia o dagli overlay (cambio/contrabbando). */
 function refreshActiveTradeView(stage) {
   if (!stage) return;
-  if (ORION._currentView === 'economy') renderEconomyView(stage);
-  else if (ORION._currentView === 'market') renderMarketView(stage);
+  switch (ORION._currentView) {
+    case 'econ-market':    renderEconMarketView(stage); break;
+    case 'econ-treasury':  renderEconTreasuryView(stage); break;
+    case 'econ-anomalies': renderEconAnomaliesView(stage); break;
+    case 'econ-ai':        renderEconAiView(stage); break;
+    default: break;
+  }
 }
 
-function renderMarketView(stage) {
-  if (!stage) return;
-  const g = ORION.game;
-  const T = ORION.trade;
-  if (!g || !T) return;
-  if (ORION.tutorial) ORION.tutorial.fire('trade-routes');
-  stage.innerHTML =
-    '<div class="fleet-view market-view">' +
-      '<header class="fleet-view__head">' +
-        '<h2 class="fleet-view__title">Mercato interno <span class="fleet-view__sub">M12 · Commercio</span></h2>' +
-      '</header>' +
-      marketBodyHtml(g) +
-    '</div>';
-  bindMarketBodyEvents(stage, function () { renderMarketView(stage); });
-}
-
-/* =====================================================================
-   Scheda "Economia" — hub d'impero dei guadagni extra-colonia
-   (decisione utente 2026-06-19). Riepiloga in un solo posto: sintesi dei
-   flussi, anomalie/sfruttamenti §17.3 (galassia, raggruppati per sistema,
-   filtrabili per risorsa), scambi rifiuti con le AI, e le rotte commerciali
-   interne (Mercato M12 inglobato). Read + azioni leggere; l'invio flotte
-   resta nel picker esistente / "crea flotte".
-   ===================================================================== */
 ORION._econResFilter = ORION._econResFilter || 'all';   /* 'all'|'met'|'en'|'reliquie' — volatile (UI_GUIDE §9) */
 
 /* Siti anomalia §17.3 noti in tutta la galassia esplorata (un sito per
@@ -6034,38 +6001,6 @@ function nearestSurveyColony(sysId) {
     }
   }
   return fallback;
-}
-
-/* Sintesi flussi extra-colonia (striscia di metriche). */
-function economySummaryHtml(g) {
-  const T = ORION.trade;
-  let metRate = 0, enRate = 0, harv = 0;
-  knownExploitableSites().forEach(function (s) {
-    if (!s.harvesting || s.kind === 'reliquie') return;
-    harv++;
-    const rate = (s.harvestRate != null ? s.harvestRate : 0.6);
-    if (s.res === 'met') metRate += rate; else if (s.res === 'en') enRate += rate;
-  });
-  const anomVal = harv
-    ? (round1(metRate) + ' ' + resIcon('met') + ' · ' + round1(enRate) + ' ' + resIcon('en'))
-    : '—';
-  /* Scambi rifiuti con AI: saldo crediti/Ι (sell +, dispose −). */
-  const deals = (g.wasteDeals || []);
-  let dealNet = 0, dealsActive = 0;
-  deals.forEach(function (d) {
-    if (d.status !== 'active') return;
-    dealsActive++;
-    const v = (d.flow || 4) * 0.12;
-    dealNet += (d.mode === 'sell') ? v : -v;
-  });
-  const aiVal = deals.length ? ((dealNet >= 0 ? '+' : '−') + Math.abs(round1(dealNet)) + ' cr') : '—';
-  const routes = (T && T.routesUsed(g)) || 0;
-  const cap = (T && T.marketCapacity(g)) || { routes: 0, throughput: 0 };
-  return '<div class="market-summary">' +
-    '<div class="market-summary__cell"><span class="market-summary__val">' + harv + '</span><span class="market-summary__lbl">Sfruttamenti · ' + anomVal + '/' + iU() + '</span></div>' +
-    '<div class="market-summary__cell"><span class="market-summary__val">' + dealsActive + '</span><span class="market-summary__lbl">Scambi AI · ' + aiVal + '/' + iU() + '</span></div>' +
-    '<div class="market-summary__cell"><span class="market-summary__val">' + routes + ' / ' + cap.routes + '</span><span class="market-summary__lbl">Rotte interne</span></div>' +
-  '</div>';
 }
 
 function round1(n) { return Math.round((n || 0) * 10) / 10; }
@@ -6163,7 +6098,7 @@ function economyAnomaliesHtml(g) {
       return head + items;
     }).join('');
   }
-  return '<p class="sysinfo__sub">Anomalie &amp; sfruttamenti</p>' + chips + body;
+  return chips + body;
 }
 
 /* Sezione Scambi con le AI (export rifiuti). Read + chiusura contratto; i
@@ -6188,33 +6123,81 @@ function economyAiHtml(g) {
       '</li>';
     }).join('') + '</ul>';
   }
-  return '<p class="sysinfo__sub">Scambi con le AI <span class="cantieri-section__hint">(rifiuti ♻)</span></p>' + body +
+  return body +
     '<button class="btn btn--mini" data-action="econ-open-diplo" type="button">Apri Diplomazia →</button>';
 }
 
-function renderEconomyView(stage) {
+/* ----- Mini-riepiloghi per le voci del menu Economia (sidebar) ----- */
+function econAnomaliesSub() {
+  const sites = knownExploitableSites();
+  if (!sites.length) return 'nessun sito noto';
+  const inHarv = sites.filter(function (s) { return s.harvesting; }).length;
+  return sites.length + (sites.length === 1 ? ' sito' : ' siti') + (inHarv ? ' · ' + inHarv + ' in corso' : '');
+}
+function econMarketSub() {
+  const g = ORION.game, T = ORION.trade;
+  if (!g || !T) return 'commercio interno';
+  const cap = T.marketCapacity(g);
+  const used = T.routesUsed(g);
+  if (!cap.routes && !used) return 'nessun Mercato';
+  return used + '/' + cap.routes + ' rotte · ' + cap.throughput + '/' + iU();
+}
+function econTreasurySub() {
+  const g = ORION.game, Tr = ORION.treasury;
+  if (!g || !Tr) return 'valute regionali';
+  const held = Tr.heldCurrencies(g) || [];
+  return held.length ? (held.length + (held.length === 1 ? ' valuta' : ' valute')) : 'portfolio vuoto';
+}
+function econAiSub() {
+  const g = ORION.game;
+  const deals = (g && g.wasteDeals) || [];
+  if (!deals.length) return 'nessuno scambio';
+  let net = 0;
+  deals.forEach(function (d) { if (d.status === 'active') net += (d.mode === 'sell' ? 1 : -1) * (d.flow || 4) * 0.12; });
+  return deals.length + (deals.length === 1 ? ' contratto · ' : ' contratti · ') + (net >= 0 ? '+' : '−') + Math.abs(round1(net)) + ' cr/' + iU();
+}
+
+/* Menu della linguetta Economia (corpo sidebar): 4 voci → schermate piene. */
+function economySubmenuHtml() {
+  const cur = ORION._currentView;
+  function btn(view, icon, label, sub) {
+    return '<button class="lp-launcher__btn' + (cur === view ? ' is-active' : '') + '" data-view="' + view + '" type="button">' +
+      '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon(icon)) || '') + '</span>' +
+      '<span>' + label + '</span>' +
+      '<span class="lp-launcher__sub">' + sub + '</span>' +
+    '</button>';
+  }
+  return '<div class="lp-launcher">' +
+    btn('econ-anomalies', 'star',       'Anomalie & sfruttamenti', econAnomaliesSub()) +
+    btn('econ-market',    'market',     'Mercato & rotte',         econMarketSub()) +
+    btn('econ-treasury',  'resources',  'Tesoreria & valute',      econTreasurySub()) +
+    btn('econ-ai',        'diplomacy',  'Scambi con le AI',        econAiSub()) +
+  '</div>';
+}
+
+/* Header comune delle sotto-viste Economia. */
+function econViewHead(title, sub) {
+  return '<header class="fleet-view__head">' +
+    '<h2 class="fleet-view__title">' + title + ' <span class="fleet-view__sub">' + sub + '</span></h2>' +
+  '</header>';
+}
+
+/* ----- Sotto-vista: Anomalie & sfruttamenti ----- */
+function renderEconAnomaliesView(stage) {
   if (!stage) return;
   const g = ORION.game;
   if (!g) return;
   if (ORION.tutorial) ORION.tutorial.fire('economy-hub');
   stage.innerHTML =
     '<div class="fleet-view market-view economy-view">' +
-      '<header class="fleet-view__head">' +
-        '<h2 class="fleet-view__title">Economia <span class="fleet-view__sub">Commerci &amp; sfruttamenti</span></h2>' +
-      '</header>' +
-      economySummaryHtml(g) +
+      econViewHead('Anomalie &amp; sfruttamenti', 'Economia · §17.3') +
       economyAnomaliesHtml(g) +
-      economyAiHtml(g) +
-      '<p class="sysinfo__sub">Rotte interne &amp; mercato</p>' +
-      marketBodyHtml(g) +
-      '<p class="panel__note">Tutti i guadagni di risorse e crediti <em>fuori</em> dalla produzione delle colonie: ' +
-        'anomalie §17.3 da drenare, scambi con le civiltà, rotte commerciali interne. L\'invio flotte usa lo stesso ' +
-        'picker della scheda colonia (o pianifica da <em>crea flotte</em>).</p>' +
+      '<p class="panel__note">Tutti i siti §17.3 noti della galassia, raggruppati per sistema. Inviare una flotta che ' +
+        '<strong>resta sul posto</strong> a drenare: parte dalla colonia idonea più vicina. Detriti/cinture→metalli, ' +
+        'nebulose/giganti gassosi→energia, reliquie→ricompensa una-tantum.</p>' +
     '</div>';
-
-  /* ----- Eventi sezione Economia ----- */
   stage.querySelectorAll('[data-action="econ-res-filter"]').forEach(function (b) {
-    b.addEventListener('click', function () { ORION._econResFilter = b.dataset.res; renderEconomyView(stage); });
+    b.addEventListener('click', function () { ORION._econResFilter = b.dataset.res; renderEconAnomaliesView(stage); });
   });
   stage.querySelectorAll('[data-action="econ-anom-send"]').forEach(function (b) {
     b.addEventListener('click', function () {
@@ -6224,20 +6207,59 @@ function renderEconomyView(stage) {
       openAnomalySurveyPicker(colony, Number(b.dataset.sys), b.dataset.kind, b.dataset.body || null);
     });
   });
+}
+
+/* ----- Sotto-vista: Mercato & rotte ----- */
+function renderEconMarketView(stage) {
+  if (!stage) return;
+  const g = ORION.game;
+  if (!g || !ORION.trade) return;
+  if (ORION.tutorial) ORION.tutorial.fire('trade-routes');
+  stage.innerHTML =
+    '<div class="fleet-view market-view economy-view">' +
+      econViewHead('Mercato &amp; rotte', 'Economia · M12') +
+      marketRoutesBodyHtml(g) +
+    '</div>';
+  bindMarketBodyEvents(stage, function () { renderEconMarketView(stage); });
+}
+
+/* ----- Sotto-vista: Tesoreria & valute ----- */
+function renderEconTreasuryView(stage) {
+  if (!stage) return;
+  const g = ORION.game;
+  if (!g) return;
+  if (ORION.tutorial) ORION.tutorial.fire('treasury');
+  stage.innerHTML =
+    '<div class="fleet-view market-view economy-view">' +
+      econViewHead('Tesoreria &amp; valute', 'Economia · M12') +
+      treasuryBodyHtml(g) +
+    '</div>';
+  bindMarketBodyEvents(stage, function () { renderEconTreasuryView(stage); });
+}
+
+/* ----- Sotto-vista: Scambi con le AI ----- */
+function renderEconAiView(stage) {
+  if (!stage) return;
+  const g = ORION.game;
+  if (!g) return;
+  stage.innerHTML =
+    '<div class="fleet-view market-view economy-view">' +
+      econViewHead('Scambi con le AI', 'Economia · rifiuti ♻') +
+      economyAiHtml(g) +
+      '<p class="panel__note">Contratti di export rifiuti verso le civiltà (sell = te li comprano, dispose = paghi per ' +
+        'lo smaltimento). I nuovi contratti si aprono dalla scheda <em>Diplomazia</em> (servono pace o alleanza).</p>' +
+    '</div>';
   stage.querySelectorAll('[data-action="econ-waste-cancel"]').forEach(function (b) {
     b.addEventListener('click', function () {
       const r = ORION.trade.cancelWasteDeal(g, b.dataset.deal);
       if (!r.ok) { showToast(r.reason || 'Chiusura rifiutata'); return; }
       showToast('Contratto chiuso');
       persistGame(g);
-      renderEconomyView(stage);
+      renderEconAiView(stage);
     });
   });
   const diploBtn = stage.querySelector('[data-action="econ-open-diplo"]');
   if (diploBtn) diploBtn.addEventListener('click', function () { navigateView('civ'); });
-
-  /* Corpo Mercato (rotte/tesoreria/Mekhari): stessi eventi, refresh = economia. */
-  bindMarketBodyEvents(stage, function () { renderEconomyView(stage); });
 }
 
 /* =====================================================================
@@ -12058,11 +12080,11 @@ function runAdvance(impulsi) {
     const cst = document.querySelector('[data-view-stage]');
     if (cst) { const sc = cst.scrollTop; try { renderCivView(cst); } catch (_) { /* niente */ } cst.scrollTop = sc; }
   }
-  /* Stessa reattività per la scheda Economia: anomalie in raccolta, flussi
-     e saldi cambiano Impulso per Impulso (richiesta utente 2026-06-19). */
-  if (ORION._currentView === 'economy') {
+  /* Stessa reattività per le sotto-viste Economia: anomalie in raccolta,
+     flussi e saldi cambiano Impulso per Impulso (richiesta utente 2026-06-19). */
+  if (typeof ORION._currentView === 'string' && ORION._currentView.indexOf('econ-') === 0) {
     const est = document.querySelector('[data-view-stage]');
-    if (est) { const sc = est.scrollTop; try { renderEconomyView(est); } catch (_) { /* niente */ } est.scrollTop = sc; }
+    if (est) { const sc = est.scrollTop; try { refreshActiveTradeView(est); } catch (_) { /* niente */ } est.scrollTop = sc; }
   }
   updateTimeControlsHint();
   persistGame(g);
@@ -13523,11 +13545,6 @@ function renderLeftPanel() {
       '<span>Ricerca</span>' +
       '<span class="lp-launcher__sub">M13</span>' +
     '</button>' +
-    '<button class="lp-launcher__btn' + (currentView === 'economy' ? ' is-active' : '') + '" data-view="economy" type="button">' +
-      '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('market') + '</span>' +
-      '<span>Economia</span>' +
-      '<span class="lp-launcher__sub">' + economyLauncherSub() + '</span>' +
-    '</button>' +
     '<button class="lp-launcher__btn' + (currentView === 'stations' ? ' is-active' : '') + '" data-view="stations" type="button">' +
       '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('station') + '</span>' +
       '<span>Stazioni</span>' +
@@ -13667,7 +13684,8 @@ function renderLeftPanel() {
     { id: 'roster',    iconName: 'roster',    tone: 'cyan',   label: 'Roster',        alert: rosterAlert },
     { id: 'fleet',     iconName: 'fleet',     tone: 'cyan',   label: 'Flotte',        alert: warThreats ? 'bad' : null },
     { id: 'crews',     iconName: 'forces',    tone: 'amber',  label: 'Equipaggi',     alert: crewAlert },
-    { id: 'launcher',  iconName: 'settings',  tone: 'gold',   label: 'Sale e moduli', alert: (typeof dispatchPending === 'function' && dispatchPending()) ? 'info' : null }
+    { id: 'launcher',  iconName: 'settings',  tone: 'gold',   label: 'Sale e moduli', alert: (typeof dispatchPending === 'function' && dispatchPending()) ? 'info' : null },
+    { id: 'economy',   iconName: 'market',    tone: 'green',  label: 'Economia',      alert: null }
   ];
   if (councilBody) {
     lpTabs.push({ id: 'council', iconName: 'star', tone: 'amber', label: 'Consiglio', alert: councilProposals ? 'warn' : null });
@@ -13706,6 +13724,8 @@ function renderLeftPanel() {
     bodyHtml = '<div class="lp-tab-body lp-tab-body--crew">' + crewBody + '</div>';
   } else if (activeLp === 'launcher') {
     bodyHtml = '<div class="lp-tab-body"><div class="lp-launcher">' + launcherHtml + '</div></div>';
+  } else if (activeLp === 'economy') {
+    bodyHtml = '<div class="lp-tab-body">' + economySubmenuHtml() + '</div>';
   } else if (activeLp === 'council') {
     bodyHtml = '<div class="lp-tab-body">' + councilBody + '</div>';
   } else if (activeLp === 'chronicle') {
@@ -13799,12 +13819,7 @@ function renderLeftPanel() {
   });
   host.querySelectorAll('[data-view]').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      const v = btn.dataset.view;
-      if (v === 'research' || v === 'market') {
-        navigateView(v);
-        return;
-      }
-      navigateView(v);
+      navigateView(btn.dataset.view);
     });
   });
   host.querySelectorAll('[data-action="roster-colony"]').forEach(function (btn) {
