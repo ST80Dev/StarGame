@@ -12882,8 +12882,13 @@ function renderLeftPanel() {
       if (sid >= 0 && ORION.game && ORION.game.state) ORION.game.state.selectedId = sid;
       const inInterstellar = !!(loc && loc.status === 'in-transit' && !loc.intra);
       if (inInterstellar) {
+        /* Viaggio interstellare: la flotta è un punto lungo la rotta tra due
+           stelle. Centra la mappa sulla sua POSIZIONE EFFETTIVA (interpolata)
+           con più zoom, non sul sistema di partenza (richiesta utente
+           2026-06-19). */
         navigateView('group');
-        if (sid >= 0 && ORION.map && ORION.map.focusSystemCentered) ORION.map.focusSystemCentered(sid);
+        if (ORION.map && ORION.map.focusFleet) ORION.map.focusFleet(fid);
+        else if (sid >= 0 && ORION.map && ORION.map.focusSystemCentered) ORION.map.focusSystemCentered(sid);
       } else {
         navigateView('system');
       }
