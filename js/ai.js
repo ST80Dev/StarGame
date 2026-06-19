@@ -154,9 +154,10 @@
   const CFG = {
     /* Cadenza del simulatore (8 Ι, come Fase A originale). */
     AI_EVERY_I: 8,
-    /* Warm-up MOLTO esteso (500 Ι): 0 movimenti AI. Insediamento +
-       prime strutture tranquilli. */
-    AI_WARMUP_I: 500,
+    /* Warm-up (richiesta utente 2026-06-19: anticipato 500→250 per dare
+       tensione un po' prima — pirati/incursioni/espansione). La rampa
+       (AI_RAMP ×0.3→1.0) mantiene l'intensità iniziale ridotta. */
+    AI_WARMUP_I: 250,
     /* Ramp dopo il warm-up: i primi 2000 Ι hanno chance ×0.3 (decollo
        dolce). Dopo: 1.0 piena. */
     AI_RAMP_DURATION: 2000,
