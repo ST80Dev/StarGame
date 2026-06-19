@@ -5991,6 +5991,12 @@ select.main-menu__input { cursor: pointer; }
 .fdest__civ { color: var(--c-bad, #f08296); text-shadow: 0 0 3px currentColor; font-weight: 600; }
 .fdest__hint { font-size: 0.76rem; color: var(--c-text-faint, #98a3c8); display: inline-flex; align-items: center; gap: 4px; }
 
+/* Selettore "Quale flotta?" (Manda flotta qui → flotta esistente/nuova). */
+.fchooser__row { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; text-align: left; margin-bottom: 5px; }
+.fchooser__nm { display: inline-flex; align-items: center; gap: 6px; font-size: 0.86rem; }
+.fchooser__meta { font-size: 0.74rem; color: var(--c-text-faint, #98a3c8); }
+.fchooser__new { border-style: dashed; }
+
 /* Sezione viveri bloccata finché non c'è una nave (no salto di layout, 2.3b). */
 .fdetail__sec--supply.is-locked { opacity: 0.5; }
 .fdetail__sec--supply.is-locked input[type="range"] { cursor: not-allowed; }
