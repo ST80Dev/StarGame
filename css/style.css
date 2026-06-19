@@ -6931,6 +6931,11 @@ select.main-menu__input { cursor: pointer; }
    2026-06-19): due torte conic-gradient su una riga, compatte. Si
    riempiono/svuotano col valore (--pct). Pure CSS, niente JS. */
 .lp-item__row--gauges { gap: 14px; }
+/* Badge stato della flotta spostato in basso a destra (richiesta utente
+   2026-06-19): vive in coda alla riga gauges (o in una riga propria se
+   senza gauges) e si allinea a destra con margin-left:auto. */
+.lp-item__badges--bottom { margin-left: auto; }
+.lp-item__row--status { justify-content: flex-end; }
 .fleet-gauges {
   display: inline-flex;
   align-items: center;
@@ -7077,13 +7082,29 @@ select.main-menu__input { cursor: pointer; }
   border-radius: var(--radius-sm, 5px);
 }
 .lp-fleet-group { margin-bottom: 8px; }
+/* Header del gruppo stellare: bottone cliccabile per collassare/espandere
+   (decisione utente 2026-06-16). Stesso look della testata precedente, con
+   caret a sinistra. */
 .lp-fleet-group__h {
   display: flex; align-items: center; gap: 5px;
+  width: 100%;
   margin: 0 0 4px;
-  padding-bottom: 3px;
+  padding: 2px 0 3px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--c-border-soft, rgba(255, 255, 255, 0.08));
+  font: inherit;
   font-size: 0.76rem;
   color: var(--c-text-faint, #98a3c8);
-  border-bottom: 1px solid var(--c-border-soft, rgba(255, 255, 255, 0.08));
+  text-align: left;
+  cursor: pointer;
+}
+.lp-fleet-group__h:hover { color: var(--c-accent); }
+.lp-fleet-group__caret {
+  display: inline-block;
+  width: 10px;
+  font-size: 0.72rem;
+  color: var(--c-text-soft);
 }
 .lp-fleet-group__h strong { color: var(--c-violet, #b89cff); font-weight: 600; }
 .lp-fleet-group__n {
@@ -7093,6 +7114,8 @@ select.main-menu__input { cursor: pointer; }
   border-radius: 999px;
   background: rgb(var(--c-surface-rgb) / 0.6);
 }
+.lp-fleet-group.is-collapsed .lp-fleet-group__body { display: none; }
+.lp-fleet-group.is-collapsed .lp-fleet-group__h { margin-bottom: 0; }
 .lp-launcher__btn {
   display: flex; align-items: center; gap: 9px;
   width: 100%;

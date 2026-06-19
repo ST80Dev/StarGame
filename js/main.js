@@ -71,6 +71,11 @@ ORION.chronicleCollapsed = true;
    retro-compat delle prefs vecchie e di lpAccordionOpen/normalize. */
 ORION.lpSectionCollapsed = { roster: false, nav: true, launcher: true, council: true };
 
+/* Stato collassamento dei gruppi stellari nella linguetta "Flotte" (richiesta
+   utente 2026-06-16): mappa clusterId → bool (true = collassato). Default:
+   tutti espansi. Persistito in uiprefs. */
+ORION.fleetGroupCollapsed = {};
+
 /* Linguetta attiva della Plancia d'Impero (stesso meccanismo della dx).
    'roster' | 'nav' | 'launcher' | 'council' | 'chronicle'. Persistita in
    uiprefs (è una scelta d'interfaccia, non stato di gioco). */
@@ -265,6 +270,9 @@ function loadUiPrefs() {
     }
     if (d.empireDeckOpen != null) ORION.empireDeckOpen = !!d.empireDeckOpen;
     if (typeof d.lpTab === 'string') ORION.lpTab = d.lpTab;
+    if (d.fleetGroupCollapsed && typeof d.fleetGroupCollapsed === 'object') {
+      ORION.fleetGroupCollapsed = d.fleetGroupCollapsed;
+    }
     /* Filtro cronaca: 'important' (default) silenzia il rumore di routine
        — solo eventi strategici/notevoli. 'all' mostra tutto come storico.
        Compat back: la cronaca ora è a due sezioni (Galassia/Colonie),
@@ -304,7 +312,8 @@ function saveUiPrefs() {
       chronicleSection: ORION.chronicleSection,
       chronicleUnread: ORION.chronicleUnread,
       crewSidebarSort: ORION.crewSidebarSort,
-      crewCentralPrefs: ORION.crewCentralPrefs
+      crewCentralPrefs: ORION.crewCentralPrefs,
+      fleetGroupCollapsed: ORION.fleetGroupCollapsed
     }));
   } catch (_) { /* niente */ }
 }
@@ -12576,14 +12585,23 @@ function renderLeftPanel() {
     const orderHtml = orderTxt ? '<span class="lp-item__order">' + escapeHtml(orderTxt) + '</span>' : '';
     /* Viveri + usura come due mini-torte su UNA riga (compatto). */
     const gauges = fleetGaugesHtml(f);
+    /* Badge stato (viaggio/orbita/hangar/...) spostato in basso a destra
+       (richiesta utente 2026-06-19): nella prima riga conta il NOME e la
+       tratta del viaggio (Deneb → Pollux), il badge stato non deve mangiare
+       quello spazio. Va in coda alla riga gauges (right-aligned), o in una
+       riga propria se la flotta non ha gauges. */
+    const statusBadge = '<span class="lp-item__badges lp-item__badges--bottom">' +
+      '<span class="lp-item__badge lp-item__badge--' + cls + '">' + statusLbl + '</span>' +
+    '</span>';
     return '<button class="lp-item lp-item--fleet" data-action="roster-fleet" data-id="' + escapeHtml(f.id) + '" data-sys="' + sysId + '" type="button">' +
       '<span class="lp-item__head">' +
         '<span class="lp-item__glyph ui-icon" aria-hidden="true">' + fleetIcon + '</span>' +
         '<span class="lp-item__name"><strong>' + escapeHtml(f.name) + '</strong> <span class="lp-item__sub">' + escapeHtml(subTxt) + '</span></span>' +
-        '<span class="lp-item__badges"><span class="lp-item__badge lp-item__badge--' + cls + '">' + statusLbl + '</span></span>' +
       '</span>' +
       (orderHtml ? ('<span class="lp-item__row">' + orderHtml + '</span>') : '') +
-      (gauges ? ('<span class="lp-item__row lp-item__row--gauges">' + gauges + '</span>') : '') +
+      (gauges
+        ? ('<span class="lp-item__row lp-item__row--gauges">' + gauges + statusBadge + '</span>')
+        : ('<span class="lp-item__row lp-item__row--status">' + statusBadge + '</span>')) +
     '</button>';
   }
   /* Stazioni orbitali (M16): elencate nel Roster come pari delle colonie
@@ -12628,14 +12646,25 @@ function renderLeftPanel() {
       (byG[cl] = byG[cl] || []).push(f);
     });
     const ids = Object.keys(byG).sort(function (a, b) { return byG[b].length - byG[a].length || Number(a) - Number(b); });
+    /* Header collassabile per gruppo stellare (richiesta utente 2026-06-16):
+       l'header è un <button> con caret ▾/▸; lo stato per-cluster vive in
+       ORION.fleetGroupCollapsed (persistito in uiprefs). */
     return ids.map(function (cl) {
       const grp = g.galaxy.groups[cl] || {};
       const acr = grp.acronym ? ' <span class="name-tag">[' + escapeHtml(grp.acronym) + ']</span>' : '';
-      return '<div class="lp-fleet-group">' +
-        '<div class="lp-fleet-group__h">' + uiIcon('group', 'violet') +
+      const collapsed = !!ORION.fleetGroupCollapsed[cl];
+      const caret = collapsed ? '▸' : '▾';
+      const collapsedCls = collapsed ? ' is-collapsed' : '';
+      const titleAttr = collapsed ? 'Espandi' : 'Collassa';
+      return '<div class="lp-fleet-group' + collapsedCls + '">' +
+        '<button class="lp-fleet-group__h" data-action="fleet-group-toggle" data-cluster="' + escapeHtml(String(cl)) + '" type="button" ' +
+          'aria-expanded="' + (!collapsed) + '" title="' + titleAttr + '">' +
+          '<span class="lp-fleet-group__caret">' + caret + '</span>' +
+          uiIcon('group', 'violet') +
           ' <strong>' + escapeHtml(grp.name || ('Gruppo ' + cl)) + '</strong>' + acr +
-          '<span class="lp-fleet-group__n">' + byG[cl].length + '</span></div>' +
-        byG[cl].map(fleetItemHtml).join('') +
+          '<span class="lp-fleet-group__n">' + byG[cl].length + '</span>' +
+        '</button>' +
+        '<div class="lp-fleet-group__body">' + byG[cl].map(fleetItemHtml).join('') + '</div>' +
       '</div>';
     }).join('');
   }
@@ -13029,6 +13058,16 @@ function renderLeftPanel() {
     btn.addEventListener('dblclick', function () {
       if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
       openFleetDetail(btn.dataset.id);
+    });
+  });
+  /* Toggle collassamento dei gruppi stellari nella linguetta Flotte
+     (richiesta utente 2026-06-16): persisti in uiprefs e re-render. */
+  host.querySelectorAll('[data-action="fleet-group-toggle"]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const cl = btn.dataset.cluster;
+      ORION.fleetGroupCollapsed[cl] = !ORION.fleetGroupCollapsed[cl];
+      saveUiPrefs();
+      renderLeftPanel();
     });
   });
   /* Stazioni orbitali nel Roster (decisione utente 2026-06-16): click →
