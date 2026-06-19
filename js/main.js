@@ -1066,6 +1066,9 @@ function renderView(stage, view) {
     if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
     if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
     if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
+    /* Entrando in Diplomazia dalla nav si parte dalla LISTA (non da un
+       dettaglio rimasto aperto). L'auto-refresh in runAdvance non passa di qui. */
+    ORION._civDetailId = null;
     renderCivView(stage);
     return;
   }
@@ -7606,6 +7609,16 @@ function renderCivView(stage) {
   /* Tutorial: concetti sulle civiltà alla prima apertura della vista. */
   if (ORION.tutorial) ORION.tutorial.fire('civilizations');
 
+  /* Modalità DETTAGLIO a tutta schermata (richiesta utente 2026-06-20): se è
+     selezionata una civ (click sul nome), mostra il dossier completo invece
+     della lista. */
+  if (ORION._civDetailId) {
+    const dc = (g.civs || []).filter(function (c) { return c.id === ORION._civDetailId; })[0];
+    const dcRank = dc && ORION.ai.knowledgeRank ? ORION.ai.knowledgeRank(dc) : 0;
+    if (dc && (dcRank >= 1 || dc.faction)) { renderCivDetail(stage, dc); return; }
+    ORION._civDetailId = null; // non più valido (caduta/sconosciuta)
+  }
+
   const ALIGN_LABEL = { bene: 'Bene', male: 'Male', neutrale: 'Neutrale' };
   const KNOWLEDGE = ORION.ai.KNOWLEDGE || { unknown:0, spotted:1, contacted:2, known:3, familiar:4 };
   /* M10 Fase B punto 2 (decisione #52 §13.10): scoperta progressiva a 5 gradi.
@@ -7630,9 +7643,15 @@ function renderCivView(stage) {
 
     /* Header sempre presente: nome, swatch colore, eventuale chip grado.
        4 Costanti: ruolo SEMPRE noto anche in unknown. */
+    /* Nome cliccabile → schermata di dettaglio piena (richiesta utente
+       2026-06-20). Cliccabile da avvistata in su (e per le Costanti). */
+    const nameClickable = (rank >= KNOWLEDGE.spotted) || !!factionDef;
+    const nameEl = nameClickable
+      ? '<button type="button" class="civ-card__name civ-card__name--link" data-civ-detail="' + escapeHtml(c.id) + '" title="Apri il dossier dettagliato">' + escapeHtml(c.name) + '</button>'
+      : '<span class="civ-card__name">' + escapeHtml(c.name) + '</span>';
     let head = '<div class="civ-card__head">' +
       '<span class="civ-card__swatch" aria-hidden="true"></span>' +
-      '<span class="civ-card__name">' + escapeHtml(c.name) + '</span>';
+      nameEl;
     if (kLabel) head += '<span class="civ-grade civ-grade--' + (c.knowledge || 'unknown') + '">' + escapeHtml(kLabel) + '</span>';
     /* Ruolo (solo 4 Costanti): visibile sempre. */
     if (factionDef) head += '<span class="civ-faction-role">' + escapeHtml(factionDef.role) + '</span>';
@@ -7766,13 +7785,17 @@ function renderCivView(stage) {
             '<div class="civ-disp__bar"><span class="civ-disp__mid" aria-hidden="true"></span>' +
               '<span class="civ-disp__fill civ-disp__fill--' + dispCls + '" style="width:' + pct.toFixed(0) + '%"></span></div>' +
           '</div>'
-        : '<p class="panel__note civ-card__hint">Dossier <strong>frammentario</strong>. La flotta presente ha raccolto solo l\'essenziale — ' +
-            '<strong>manda una flotta più potente</strong> (corvette, fregate, navi capitali) nel loro sistema per ottenere disposizione, sede e diplomazia.</p>';
+        : '';
+      /* Card di RIEPILOGO sintetica (richiesta utente 2026-06-20): il dossier
+         completo (colonie, flotte identificate, intel, diplomazia) vive nella
+         schermata di dettaglio raggiungibile dal nome. */
+      const moreHint = '<button type="button" class="civ-card__more" data-civ-detail="' + escapeHtml(c.id) + '">↳ Dossier completo: colonie, flotte identificate, diplomazia →</button>';
 
       body = '<div class="civ-card__chips">' + alignChip + relChip + fedChip + intelChip + '</div>' +
         offerHtml +
         estBlock +
         dispBlock +
+        moreHint +
         dipActions +
         ((intelRank >= 2) ? civTradeHtml(g, c) + civWasteHtml(g, c) : '');
     }
@@ -8007,6 +8030,13 @@ function renderCivView(stage) {
       if (ORION.map && ORION.map.focusSystemCentered) ORION.map.focusSystemCentered(sid);
     });
   });
+  /* Click su nome civ / "dossier completo" → schermata di dettaglio piena. */
+  stage.querySelectorAll('[data-civ-detail]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      ORION._civDetailId = btn.dataset.civDetail;
+      renderCivView(stage);
+    });
+  });
   stage.querySelectorAll('[data-action="occ-release"]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       const sid = Number(btn.dataset.sys);
@@ -8078,6 +8108,149 @@ function renderCivView(stage) {
       setTimeout(function () { card.classList.remove('civ-card--focus'); }, 2200);
     }
   }
+}
+
+/* Schermata di DETTAGLIO piena di una civiltà (richiesta utente 2026-06-20):
+   breadcrumb in alto + tutto quel che si sa — identità, stima impero,
+   disposizione, COLONIE note (e dove sono), FLOTTE identificate di recente,
+   diplomazia. Raggiunta cliccando il nome nella lista (ORION._civDetailId). */
+function renderCivDetail(stage, c) {
+  const g = ORION.game;
+  const AI = ORION.ai;
+  const DIP = ORION.diplomacy;
+  const KN = AI.KNOWLEDGE || { unknown: 0, spotted: 1, contacted: 2, known: 3, familiar: 4 };
+  const rank = AI.knowledgeRank ? AI.knowledgeRank(c) : 0;
+  const intelLvl = c.intelLevel || 'complete';
+  const intelRank = AI.intelLevelRank ? AI.intelLevelRank(intelLvl) : 3;
+  const ALIGN_LABEL = { bene: 'Bene', male: 'Male', neutrale: 'Neutrale' };
+  const INTEL_LABEL = { fragmentary: 'Frammentario', partial: 'Parziale', complete: 'Completo' };
+  const seat = (g.galaxy.groups || []).filter(function (gp) { return gp.id === c.homeGroupId; })[0] || {};
+  const factionDef = (c.faction && ORION.factions && ORION.factions.byId) ? ORION.factions.byId(c.faction) : null;
+  const D = (ORION.galaxy && ORION.galaxy.DISCOVERY) || { DETECTED: 1 };
+  const disc = (g.state && g.state.discovery) || {};
+
+  /* Progresso dossier (Ι al prossimo livello se una flotta sta raccogliendo). */
+  const iprog = c.intelProgress || 0;
+  const inextAt = iprog < 3 ? 3 : (iprog < 6 ? 6 : null);
+  const inextLbl = inextAt === 3 ? 'parziale' : 'completo';
+  let reconF = null;
+  (g.fleets || []).forEach(function (f) {
+    if (reconF || !f || !f.location || f.location.status === 'in-transit') return;
+    if ((c.systems || []).indexOf(f.location.systemId) >= 0) reconF = f;
+  });
+  const iio = (reconF && AI.intelOutlook) ? AI.intelOutlook(g, reconF, reconF.location.systemId) : null;
+  let progTxt;
+  if (inextAt == null) progTxt = 'dossier completo';
+  else if (iio && !iio.complete && iio.id === c.id) progTxt = '🛰 raccolta in corso · ~' + iio.etaToNext + ' Ι al livello ' + inextLbl;
+  else progTxt = iprog.toFixed(1) + '/' + inextAt + ' al livello ' + inextLbl + ' · avvicina una flotta per raccogliere';
+
+  const estPower = AI.powerTier ? AI.powerTier(c.power || 0) : '—';
+  const estKnown = AI.knownSystemsCount ? AI.knownSystemsCount(g, c) : ((c.systems || []).length);
+  const estLo = Math.max(1, estKnown), estHi = Math.max(estLo + 1, estKnown * 2);
+  const force = AI.forceEstimate ? AI.forceEstimate(g, c) : 0;
+  const vocLabel = (AI.VOCATIONS && c.vocation && AI.VOCATIONS[c.vocation]) ? AI.VOCATIONS[c.vocation].label : '—';
+  const affLabel = (AI.AFFINITIES && c.affinity && AI.AFFINITIES[c.affinity]) ? AI.AFFINITIES[c.affinity].label : '—';
+  const disp = Math.round(c.disposition || 0);
+  const dispLabel = AI.dispositionLabel ? AI.dispositionLabel(disp) : '';
+  const dispCls = disp <= -15 ? 'neg' : (disp >= 15 ? 'pos' : 'mid');
+  const pct = Math.max(0, Math.min(100, (disp + 100) / 2));
+  const descGated = intelRank >= 2;
+
+  /* COLONIE note: pianeti della civ; localizzate solo nei sistemi scoperti. */
+  const planets = (c.planets || []).map(function (pk) {
+    const parts = String(pk).split(':'); const sid = Number(parts[0]); const bk = parts[1];
+    return { sid: sid, bk: bk, known: (disc[sid] != null && disc[sid] >= D.DETECTED) };
+  });
+  const colKnown = planets.filter(function (x) { return x.known; });
+  let colHtml;
+  if (!planets.length) colHtml = '<p class="panel__note">Nessuna colonia nota.</p>';
+  else {
+    const rows = colKnown.map(function (x) {
+      const sysNm = _flSysNm(g, x.sid); const bodyNm = _flBodyNm(g, x.sid, x.bk);
+      return '<li class="civ-detail__col" data-sys="' + x.sid + '"><span class="civ-detail__col-name">' +
+        escapeHtml(sysNm) + (bodyNm ? ' · ' + escapeHtml(bodyNm) : '') + '</span>' + systemTagHtml(x.sid) + '</li>';
+    }).join('');
+    const hiddenN = planets.length - colKnown.length;
+    colHtml = (colKnown.length ? '<ul class="civ-detail__cols">' + rows + '</ul>' : '') +
+      (hiddenN > 0 ? '<p class="panel__note">+' + hiddenN + ' colonie in sistemi non ancora esplorati — esplora per localizzarle.</p>' :
+        (!colKnown.length ? '<p class="panel__note">Esplora i loro sistemi per localizzarne le colonie.</p>' : ''));
+  }
+
+  /* FLOTTE identificate di recente (dallo strato flotte ambientali AI). */
+  const aifs = (g.aiFleets || []).filter(function (af) { return af && af.civId === c.id && (af.detected || af.everDetected || af.lastSeenI != null); });
+  let fleetHtml;
+  if (!aifs.length) fleetHtml = '<p class="panel__note">Nessuna flotta identificata di recente.</p>';
+  else {
+    fleetHtml = '<ul class="civ-detail__fleets">' + aifs.map(function (af) {
+      const comp = (ORION.aifleet && ORION.aifleet.composition) ? ORION.aifleet.composition(af) : { text: '—' };
+      const mission = (ORION.aifleet && ORION.aifleet.MISSIONS && ORION.aifleet.MISSIONS[af.mission]) ? ORION.aifleet.MISSIONS[af.mission].label : af.mission;
+      const where = af.status === 'in-transit' ? 'in viaggio' : ('in ' + _flSysNm(g, af.systemId));
+      const seen = af.detected ? 'rilevata ora' : (af.lastSeenI != null ? ('vista ' + Math.max(0, (g.timeImpulsi || 0) - af.lastSeenI) + ' Ι fa') : '—');
+      return '<li class="civ-detail__fleet"><span class="civ-detail__fleet-mission">' + escapeHtml(mission) + '</span>' +
+        '<span class="civ-detail__fleet-comp">' + escapeHtml(comp.text) + '</span>' +
+        '<span class="civ-detail__fleet-where">' + escapeHtml(where) + ' · ' + escapeHtml(seen) + '</span></li>';
+    }).join('') + '</ul>';
+  }
+
+  let dipHtml = '';
+  if (DIP && intelRank >= 2 && rank >= KN.contacted) {
+    const acts = DIP.availableActions(g, c); const onCd = DIP.onCooldown(g, c);
+    dipHtml = '<div class="dip-actions">' + acts.map(function (a) {
+      const ev = DIP.evaluate(g, c, a); const danger = (a === 'declare-war' || a === 'break-alliance');
+      return '<button type="button" class="dip-btn' + (danger ? ' dip-btn--danger' : '') + '" data-dip-civ="' +
+        escapeHtml(c.id) + '" data-dip-act="' + a + '"' + (onCd && !ev.unilateral ? ' disabled' : '') + '>' +
+        escapeHtml(DIP.actionLabel(a)) + (ev.unilateral ? '' : ' <span class="dip-btn__odds">' + ev.likelihood + '</span>') + '</button>';
+    }).join('') + '</div>';
+  }
+
+  stage.innerHTML =
+    '<div class="civ-view civ-detail">' +
+      '<nav class="crumbs"><button type="button" class="crumbs__link" data-civ-back>← Civiltà</button>' +
+        '<span class="crumbs__sep">›</span><span class="crumbs__cur">' + escapeHtml(c.name) + '</span></nav>' +
+      '<header class="civ-detail__head" style="--civ-color:' + escapeHtml(c.color || '#888') + '">' +
+        '<span class="civ-detail__swatch" aria-hidden="true"></span>' +
+        '<h2 class="civ-detail__name">' + escapeHtml(c.name) + '</h2>' +
+        (factionDef ? '<span class="civ-faction-role">' + escapeHtml(factionDef.role) + '</span>' : '') +
+        '<span class="civ-intel civ-intel--' + intelLvl + '">⌖ ' + escapeHtml(INTEL_LABEL[intelLvl] || intelLvl) + '</span>' +
+      '</header>' +
+      '<p class="civ-detail__dossier">Dossier <strong>' + escapeHtml(INTEL_LABEL[intelLvl] || intelLvl) + '</strong> · ' + escapeHtml(progTxt) + '</p>' +
+      '<section class="civ-detail__sec"><h3>Identità</h3>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Allineamento</span><span>' + escapeHtml(descGated ? (ALIGN_LABEL[c.alignment] || c.alignment) : '?') + '</span>' +
+          '<span class="civ-card__k">Tratto</span><span>' + escapeHtml(descGated ? (c.traitLabel || '—') : '?') + '</span></div>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Vocazione</span><span>' + escapeHtml(intelRank >= 3 ? vocLabel : '?') + '</span>' +
+          '<span class="civ-card__k">Affinità</span><span>' + escapeHtml(intelRank >= 3 ? affLabel : '?') + '</span></div>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Sede</span><span>' + escapeHtml(seat.name || '—') + '</span></div>' +
+      '</section>' +
+      '<section class="civ-detail__sec"><h3>Stima impero</h3>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Potenza percepita</span><span class="civ-power civ-power--' + estPower + '">' + escapeHtml(estPower) + '</span>' +
+          '<span class="civ-card__k">Sistemi noti</span><span>' + estKnown + '</span></div>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Struttura stimata</span><span>tra ' + estLo + ' e ' + estHi + ' insediamenti</span>' +
+          (intelRank >= 3 ? '<span class="civ-card__k">Forza stimata</span><span>≈ ' + force + ' unità</span>' : '') + '</div>' +
+        (descGated ? '<div class="civ-disp"><div class="civ-disp__top"><span class="civ-card__k">Disposizione verso di te</span><span class="civ-disp__label civ-disp__label--' + dispCls + '">' + dispLabel + '</span></div><div class="civ-disp__bar"><span class="civ-disp__mid" aria-hidden="true"></span><span class="civ-disp__fill civ-disp__fill--' + dispCls + '" style="width:' + pct.toFixed(0) + '%"></span></div></div>' : '') +
+      '</section>' +
+      '<section class="civ-detail__sec"><h3>Colonie note <span class="civ-detail__count">' + colKnown.length + '</span></h3>' + colHtml + '</section>' +
+      '<section class="civ-detail__sec"><h3>Flotte identificate <span class="civ-detail__count">' + aifs.length + '</span></h3>' + fleetHtml + '</section>' +
+      (dipHtml ? '<section class="civ-detail__sec"><h3>Diplomazia</h3>' + dipHtml + '</section>' : '') +
+    '</div>';
+
+  const back = stage.querySelector('[data-civ-back]');
+  if (back) back.addEventListener('click', function () { ORION._civDetailId = null; renderCivView(stage); });
+  /* Click su una colonia nota → mappa centrata su quel sistema. */
+  stage.querySelectorAll('.civ-detail__col[data-sys]').forEach(function (li) {
+    li.addEventListener('click', function () {
+      const sid = Number(li.dataset.sys);
+      if (!Number.isFinite(sid) || sid < 0) return;
+      if (g.state) g.state.selectedId = sid;
+      navigateView('group');
+      if (ORION.map && ORION.map.focusSystemCentered) ORION.map.focusSystemCentered(sid);
+    });
+  });
+  if (DIP) stage.querySelectorAll('[data-dip-act]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const civ = (g.civs || []).filter(function (x) { return x.id === btn.dataset.dipCiv; })[0];
+      if (civ) runDiplomacyAction(civ, btn.dataset.dipAct);
+    });
+  });
 }
 
 /* M12 Fase A2 (#56 §15.3): blocco "Commercio" nella card civiltà. */

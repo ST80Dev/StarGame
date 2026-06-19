@@ -6371,7 +6371,83 @@ select.main-menu__input { cursor: pointer; }
 /* =====================================================================
    M10 Fase B (decisione #47) — Vista "Civiltà" + dossier
    ===================================================================== */
-.civ-view { padding: 8px 12px; }
+.civ-view { padding: 8px 12px; place-self: stretch; max-height: 100%; overflow-y: auto; }
+
+/* Breadcrumb di navigazione per le sotto-pagine (richiesta utente 2026-06-20).
+   Riusabile: Diplomazia → dettaglio civ, e future sotto-pagine. */
+.crumbs {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.82rem; margin-bottom: 10px;
+}
+.crumbs__link {
+  background: rgb(var(--c-surface-rgb) / 0.55);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 4px; padding: 3px 9px;
+  color: var(--c-accent); cursor: pointer;
+  font-weight: 600;
+}
+.crumbs__link:hover { border-color: var(--c-accent); }
+.crumbs__sep { color: var(--c-text-faint); }
+.crumbs__cur { color: var(--c-text); font-weight: 600; }
+
+/* Schermata di dettaglio civiltà. */
+.civ-detail__head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding-bottom: 8px; margin-bottom: 8px;
+  border-bottom: 1px solid var(--c-border);
+}
+.civ-detail__swatch {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--civ-color, #888);
+  box-shadow: 0 0 8px var(--civ-color, #888);
+  flex: 0 0 auto;
+}
+.civ-detail__name { margin: 0; font-size: 1.05rem; }
+.civ-detail__dossier { font-size: 0.84rem; color: var(--c-text-soft); margin: 0 0 12px; }
+.civ-detail__sec { margin: 0 0 14px; }
+.civ-detail__sec > h3 {
+  font-size: 0.82rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.03em; color: var(--c-violet, #b89cff);
+  margin: 0 0 6px;
+}
+.civ-detail__count {
+  font-family: var(--font-data, monospace); font-size: 0.74rem;
+  background: rgb(var(--c-surface-rgb) / 0.6); border-radius: 999px;
+  padding: 1px 7px; margin-left: 4px; color: var(--c-text-soft);
+}
+.civ-detail__cols, .civ-detail__fleets { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.civ-detail__col {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 9px; border-radius: 4px; cursor: pointer;
+  background: rgb(var(--c-surface-rgb) / 0.45);
+  border: 1px solid var(--c-border-soft);
+}
+.civ-detail__col:hover { border-color: var(--c-accent-warm); }
+.civ-detail__col-name { font-weight: 600; font-size: 0.84rem; }
+.civ-detail__fleet {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 6px 9px; border-radius: 4px;
+  background: rgb(var(--c-surface-rgb) / 0.45);
+  border-left: 3px solid var(--c-bad, #f08296);
+}
+.civ-detail__fleet-mission { font-weight: 600; font-size: 0.82rem; }
+.civ-detail__fleet-comp { font-size: 0.8rem; color: var(--c-text-soft); }
+.civ-detail__fleet-where { font-size: 0.76rem; color: var(--c-text-faint); margin-left: auto; }
+
+/* Card lista: nome cliccabile + rimando al dettaglio. */
+.civ-card__name--link {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font: inherit; color: inherit; text-align: left;
+  text-decoration: underline; text-decoration-color: rgb(255 255 255 / 0.25);
+  text-underline-offset: 2px;
+}
+.civ-card__name--link:hover { text-decoration-color: var(--c-accent); }
+.civ-card__more {
+  display: inline-block; margin-top: 6px;
+  background: none; border: none; padding: 0; cursor: pointer;
+  font-size: 0.78rem; color: var(--c-accent); text-align: left;
+}
+.civ-card__more:hover { text-decoration: underline; }
 .civ-indices { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .civ-index {
   font-size: 0.82rem; color: var(--c-text-faint);
@@ -7530,11 +7606,12 @@ select.main-menu__input { cursor: pointer; }
   color: var(--c-text);
   z-index: 3;
 }
-/* Variante SINTETICA (richiesta utente 2026-06-20): card compatta in basso a
-   sinistra, non più overlay a tutta area. Il dossier vive nella Diplomazia. */
+/* Variante SINTETICA (richiesta utente 2026-06-20): card compatta in ALTO a
+   sinistra (lontano dall'action bar in basso), non più overlay a tutta area.
+   Il dossier vive nella Diplomazia. */
 .deck-foreign--mini {
-  inset: auto auto 88px 12px;
-  width: min(360px, calc(100% - 24px));
+  inset: 64px auto auto 12px;
+  width: min(340px, calc(100% - 24px));
   height: auto;
   gap: 6px;
   padding: 10px 12px;
