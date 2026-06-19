@@ -9318,24 +9318,20 @@ function openFleetDetail(fleetId, opts) {
      disabilitati. "cambia" li abilita; "annulla" mantiene l'ordine corrente
      e li ri-disabilita (richiesta utente 2026-06-14). */
   function secOrders() {
-    const enabled = D.ordOpen;
-    /* Inverti rotta — visibile solo durante un leg inter-sistema attivo
-       (no intra, no orbita). All'arrivo (in orbita all'origine del leg)
-       i dispacci 'reach' sull'origine si chiudono al tick successivo. */
+    /* Stadio 4: l'ordine si imposta col NUOVO picker unificato (openFleetReorder),
+       lo stesso raggiungibile da mappa. Niente piu' vecchio builder qui (no
+       duplicazione di verbi). Resta "Inverti rotta" come azione rapida in volo. */
     const canReverse = fleet.location && fleet.location.status === 'in-transit' &&
       !fleet.location.intra && (fleet.legTotal || 0) > 0 &&
       Array.isArray(fleet.route) && fleet.routeIdx + 1 < fleet.route.length;
     const revBtn = canReverse
       ? '<button class="fdetail__toggle" data-act="ord-reverse" type="button" title="Torna al punto di partenza del leg corrente">↩ Inverti rotta</button>'
       : '';
-    const h = '<div class="fdetail__sec fdetail__sec--ord' + (enabled ? ' is-editing' : '') + '">' +
-      '<div class="fdetail__sec-h">' + uiIcon('fleet', 'cyan') + ' Ordine' +
-        revBtn +
-        '<button class="fdetail__toggle" data-act="ord-toggle" type="button">' +
-          (enabled ? 'annulla' : 'cambia') + '</button></div>' +
+    return '<div class="fdetail__sec fdetail__sec--ord">' +
+      '<div class="fdetail__sec-h">' + uiIcon('fleet', 'cyan') + ' Ordine' + revBtn +
+        '<button class="fdetail__toggle" data-act="reorder" type="button">riordina ▸</button></div>' +
       '<div class="fdetail__ord-cur">' + escapeHtml(orderLabel(fleet)) + '</div>' +
-      renderOrderBuilder(enabled);
-    return h + '</div>';
+    '</div>';
   }
   function renderOrderBuilder(enabled) {
     const TRIPS = [
@@ -10013,6 +10009,13 @@ function openFleetDetail(fleetId, opts) {
         'explore');
       persistGame(g);
       render();
+    });
+    /* Stadio 4: "riordina" → picker unificato (stesso modal della mappa). */
+    const reorderBtn = host.querySelector('[data-act="reorder"]');
+    if (reorderBtn) reorderBtn.addEventListener('click', function () {
+      const id = fleet.id;
+      closeDetail();
+      openFleetReorder(id);
     });
 
     /* --- composizione --- (al PORTO corrente, non alla sola origine) */
@@ -13717,12 +13720,13 @@ function renderContextActionBar(ctx) {
   if (gBtn) gBtn.addEventListener('click', function () {
     openGarrisonPicker(parseInt(gBtn.dataset.sys, 10), gBtn.dataset.body || null);
   });
-  /* Stadio 3: "Manda flotta qui" → compositore con destinazione pre-compilata. */
+  /* Stadio 3/4: "Manda flotta qui" → selettore CHI (flotte esistenti vicine
+     + nuova flotta), con destinazione pre-compilata. */
   host.querySelectorAll('[data-action="ctx-send-fleet"]').forEach(function (sf) {
     sf.addEventListener('click', function () {
       const sysId = parseInt(sf.dataset.sys, 10);
       if (isNaN(sysId)) return;
-      openFleetDetail(null, { dest: { sysId: sysId, bodyKey: sf.dataset.body || null } });
+      openSendFleetChooser(sysId, sf.dataset.body || null);
     });
   });
   /* PR-N: nuovi handler per livello SISTEMA con corpo selezionato. */
@@ -14133,7 +14137,65 @@ function openFollowContactChooser(fleetId) {
    (Destinazione + Missione via fleetTarget/actionsFor). Modal additivo:
    non tocca l'editor "Dettaglio" (renderExisting). Niente composizione: la
    flotta ha già navi/equipaggio; si sceglie solo dove e cosa fare. */
-function openFleetReorder(fleetId) {
+/* Stadio 4 — selettore CHI per "Manda flotta qui": flotte esistenti ordinate
+   per vicinanza (ETA) alla destinazione + opzione "nuova flotta". Scegliendo
+   una flotta esistente si apre il riordino con la destinazione gia' compilata
+   (cosi' puoi usare una flotta vicina o gia' sul posto, anche intra-sistema). */
+function openSendFleetChooser(sysId, bodyKey) {
+  const g = ORION.game;
+  if (!g) return;
+  const F = ORION.fleet;
+  function hopsTo(f) {
+    if (!f.location) return 1e9;
+    if (f.location.systemId === sysId) return 0;
+    const p = F.computePath ? F.computePath(g.galaxy, f.location.systemId, sysId) : null;
+    return p ? p.length - 1 : 1e9;
+  }
+  const fleets = (g.fleets || []).slice().sort(function (a, b) { return hopsTo(a) - hopsTo(b); });
+  const destName = (g.galaxy.systems[sysId] || {}).name || ('Sistema ' + sysId);
+  let bodyName = '';
+  if (bodyKey) { try { const ds = ORION.system.generate(g.galaxy, sysId); const b = ORION.system.findBody(ds, bodyKey); if (b) bodyName = ' · ' + (b.name || b.key); } catch (e) { /* */ } }
+  function stanceLabel(f) { const st = F.fleetStance ? F.fleetStance(f) : null; return st ? st.label : ''; }
+
+  const host = ensureFleetOverlayHost('fleet-detail');
+  host.hidden = false;
+  host.onclick = function (e) { if (e.target === host) closeFleetOverlay(); };
+  const rows = fleets.map(function (f) {
+    const h = hopsTo(f); const reach = h < 1e9;
+    const where = (g.galaxy.systems[f.location.systemId] || {}).name || ('Sistema ' + f.location.systemId);
+    const eta = h === 0 ? 'già qui' : (reach ? h + ' salti' : 'irraggiungibile');
+    const nShips = (f.ships || []).length;
+    return '<button class="lp-item fchooser__row" type="button" data-pick-fleet="' + escapeHtml(f.id) + '"' + (reach ? '' : ' disabled') + '>' +
+      '<span class="fchooser__nm">' + uiIcon('fleet', 'cyan') + ' ' + escapeHtml(f.name) + '</span>' +
+      '<span class="fchooser__meta">' + nShips + ' navi · ' + escapeHtml(stanceLabel(f)) + ' ' + escapeHtml(where) + ' · ' + eta + '</span>' +
+    '</button>';
+  }).join('');
+  host.innerHTML =
+    '<div class="fdetail__panel" role="document">' +
+      '<header class="fdetail__head"><div class="fdetail__title">' + uiIcon('send', 'cyan') +
+        '<h2>Manda a ' + escapeHtml(destName) + escapeHtml(bodyName) + '</h2></div>' +
+        '<button class="fdetail__x btn--icon-only" data-fc-close type="button" aria-label="Chiudi">' + uiIcon('close') + '</button></header>' +
+      '<div class="fdetail__body">' +
+        '<div class="fdetail__sec-h">' + uiIcon('fleet', 'cyan') + ' Quale flotta?</div>' +
+        (rows || '<p class="fdetail__empty">Nessuna flotta esistente.</p>') +
+        '<button class="lp-item fchooser__row fchooser__new" type="button" data-fc-new>' +
+          '<span class="fchooser__nm">' + uiIcon('plus', 'cyan') + ' Nuova flotta da colonia</span>' +
+          '<span class="fchooser__meta">componi una flotta e mandala qui</span>' +
+        '</button>' +
+      '</div>' +
+      '<div class="fdetail__foot"><button class="btn btn--mini" data-fc-close type="button">Annulla</button></div>' +
+    '</div>';
+  host.querySelectorAll('[data-fc-close]').forEach(function (b) { b.addEventListener('click', closeFleetOverlay); });
+  host.querySelectorAll('[data-pick-fleet]').forEach(function (b) {
+    if (b.disabled) return;
+    b.addEventListener('click', function () { openFleetReorder(b.dataset.pickFleet, { dest: { sysId: sysId, bodyKey: bodyKey } }); });
+  });
+  const nw = host.querySelector('[data-fc-new]');
+  if (nw) nw.addEventListener('click', function () { openFleetDetail(null, { dest: { sysId: sysId, bodyKey: bodyKey } }); });
+}
+
+function openFleetReorder(fleetId, opts) {
+  opts = opts || {};
   const g = ORION.game;
   if (!g) return;
   const fleet = (g.fleets || []).filter(function (f) { return f.id === fleetId; })[0];
@@ -14173,9 +14235,14 @@ function openFleetReorder(fleetId) {
   const hopsMap = {}; knownSys.forEach(function (s) { hopsMap[s] = hops(s); });
   knownSys.sort(function (a, b) { const ha = hopsMap[a] == null ? 1e9 : hopsMap[a], hb = hopsMap[b] == null ? 1e9 : hopsMap[b]; return ha - hb; });
   const R = { dest: { sysId: null, bodyKey: null }, mission: null };
-  const cur = fleet.orders && fleet.orders.toSysId;
-  if (cur != null && (disc[cur] || 0) >= DISC.DETECTED) { R.dest.sysId = cur; R.dest.bodyKey = fleet.orders.bodyKey || null; }
-  else { const nh = knownSys.filter(function (s) { return s !== fromSys; }); R.dest.sysId = nh.length ? nh[0] : (knownSys[0] != null ? knownSys[0] : fromSys); }
+  if (opts.dest && opts.dest.sysId != null) {
+    /* Destinazione pre-compilata (es. "Manda flotta qui" da mappa). */
+    R.dest.sysId = opts.dest.sysId; R.dest.bodyKey = opts.dest.bodyKey || null;
+  } else {
+    const cur = fleet.orders && fleet.orders.toSysId;
+    if (cur != null && (disc[cur] || 0) >= DISC.DETECTED) { R.dest.sysId = cur; R.dest.bodyKey = fleet.orders.bodyKey || null; }
+    else { const nh = knownSys.filter(function (s) { return s !== fromSys; }); R.dest.sysId = nh.length ? nh[0] : (knownSys[0] != null ? knownSys[0] : fromSys); }
+  }
 
   const host = ensureFleetOverlayHost('fleet-detail');
   host.hidden = false;
