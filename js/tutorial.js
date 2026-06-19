@@ -668,10 +668,24 @@
         '<p><strong>In arrivo (Fase A2):</strong> Tesoreria + valute regionali, accordi commerciali con le AI.</p>'
     },
     {
+      id: 'economy-hub', tag: 'Economia · ⇄', title: 'Scheda Economia',
+      body:
+        '<p>La <strong>scheda Economia</strong> (Plancia d\'Impero → <em>Economia</em>) riunisce in un solo posto ' +
+        'tutti i <strong>guadagni di risorse e crediti fuori dalla produzione delle colonie</strong>.</p>' +
+        '<p><strong>Sintesi:</strong> in cima, il colpo d\'occhio sui flussi extra-colonia (sfruttamenti in corso, ' +
+        'scambi con le AI, rotte interne).</p>' +
+        '<p><strong>Anomalie &amp; sfruttamenti §17.3:</strong> tutti i siti noti della galassia (detriti, cinture, ' +
+        'nebulose, reliquie), <em>raggruppati per sistema</em> e filtrabili per tipo di risorsa. Da qui invii una ' +
+        'flotta che <strong>resta sul posto</strong> a drenare (parte dalla colonia idonea più vicina).</p>' +
+        '<p><strong>Scambi con le AI:</strong> i contratti di export rifiuti attivi (i nuovi si aprono dalla Diplomazia).</p>' +
+        '<p><strong>Rotte interne &amp; mercato:</strong> il Mercato M12 (rotte, tesoreria, valute, Mekhari) è qui dentro.</p>' +
+        '<p>Nella scheda <em>colonia</em>, la tab Esplorazione mostra solo il riepilogo dei siti <strong>del suo sistema</strong>.</p>'
+    },
+    {
       id: 'treasury', tag: 'Commercio · ⇄', title: 'Tesoreria e valute regionali',
       body:
         '<p>Ogni <strong>regione</strong> (gruppo stellare) ha la sua <strong>valuta</strong>, col nome dal seed ' +
-        '(es. <em>Stilla di Vega</em>, <em>Lama Keth</em>). La <strong>Tesoreria</strong> (vista Mercato) è il portfolio ' +
+        '(es. <em>Stilla di Vega</em>, <em>Lama Keth</em>). La <strong>Tesoreria</strong> (scheda Economia) è il portfolio ' +
         'di tutte le valute che possiedi.</p>' +
         '<p><strong>Come la ottieni:</strong> vendendo risorse al <em>Banco regionale</em> (tab Rotte di una colonia) ottieni ' +
         'la valuta della sua regione; col <strong>cambio</strong> (sempre disponibile, digitale) la converti in un\'altra valuta.</p>' +
