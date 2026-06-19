@@ -354,7 +354,7 @@
         const prev = civ.intelLevel;
         civ.intelLevel = newLevel;
         if (events) events.push({
-          kind: 'civ-intel-upgraded', civName: civ.name, civColor: civ.color,
+          kind: 'civ-intel-upgraded', civName: civ.name, civColor: civ.color, civId: civ.id,
           from: prev || 'fragmentary', to: newLevel,
           regionLabel: regionLabelOfSystem(game.galaxy, bestSys),
           impulso: I
@@ -401,6 +401,39 @@
     for (let k = 0; k < keys.length; k++) {
       if (!activeKeys[keys[k]]) delete presence[keys[k]];
     }
+  }
+
+  /* Stadio 4 (dossier): stato avanzamento intel per una flotta che orbita un
+     sistema con civ AI / covo. `sysIdOverride` proietta su un altro sistema
+     (es. anteprima nel modal di riordino) usando comunque lo score della
+     flotta. Ritorna null se non applicabile. */
+  function intelOutlook(game, fleet, sysIdOverride) {
+    if (!game || !fleet || !fleet.location) return null;
+    const projecting = (sysIdOverride != null);
+    if (!projecting && fleet.location.status === 'in-transit') return null;
+    const sysId = projecting ? sysIdOverride : fleet.location.systemId;
+    let target = null, kind = null, name = null, id = null;
+    const civ = civForSystem(game, sysId);
+    if (civ && civ.alive) { target = civ; kind = 'civ'; name = civ.name; id = civ.id; }
+    else {
+      const nests = (game.piracy && game.piracy.nests) || [];
+      for (let i = 0; i < nests.length; i++) {
+        if (nests[i] && nests[i].sysId === sysId) { target = nests[i]; kind = 'nest'; name = 'Covo pirata'; id = 'nest:' + sysId; break; }
+      }
+    }
+    if (!target) return null;
+    const progress = target.intelProgress || 0;
+    const level = intelLevelFromProgress(progress);
+    const score = fleetIntelScore(fleet);
+    const rate = Math.max(CFG.INTEL_FLOOR, score * CFG.INTEL_RATE);
+    let nextAt = null;
+    if (progress < 3) nextAt = 3; else if (progress < 6) nextAt = 6;
+    const etaToNext = (nextAt != null && rate > 0) ? Math.ceil((nextAt - progress) / rate) : 0;
+    return {
+      kind: kind, name: name, id: id, sysId: sysId,
+      level: level, progress: progress, nextAt: nextAt,
+      rate: rate, etaToNext: etaToNext, complete: (nextAt == null)
+    };
   }
   /* Avanzamento automatico contacted→known→familiar. Chiamato a ogni AI-tick
      per ogni civ viva (vedi `tick` sopra). */
@@ -1712,6 +1745,7 @@
     fleetIntelScore: fleetIntelScore,
     intelLevelFromScore: intelLevelFromScore,
     intelLevelFromProgress: intelLevelFromProgress,
+    intelOutlook: intelOutlook,
     intelLevelRank: intelLevelRank,
     visibleCivs: visibleCivs,
     materialize: materialize,
