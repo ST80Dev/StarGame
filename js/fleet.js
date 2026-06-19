@@ -1108,24 +1108,17 @@
       const bodyKey = (type === 'move' && order.bodyKey != null) ? String(order.bodyKey) : null;
       const currentSys = fleet.location.systemId;
       if (to === currentSys) {
-        /* M2 puro (stesso sistema). */
+        /* M2 puro (stesso sistema). Una flotta in-transit inter-sistema NON
+           può "fermarsi al sistema di partenza" via setOrder: fisicamente è
+           già fuori dal sistema, e teletrasportarla indietro era controsenso
+           (vedi reverseLeg per l'inversione fisica del leg). */
+        if (fleet.location.status === 'in-transit' && !fleet.location.intra) {
+          return { ok: false, reason: 'Flotta in viaggio: usa "Inverti rotta" per tornare al punto di partenza' };
+        }
         if (bodyKey == null) {
-          /* Già in orbita generica: niente da percorrere.
-             Fix bug "rotta su qui mentre in-transit": se la flotta aveva
-             un leg attivo verso un altro sistema (status 'in-transit',
-             location.systemId ancora = sistema di partenza), il solo
-             azzeramento di ordine/route lasciava lo status 'in-transit'
-             su una rotta di lunghezza 1 → al tick successivo advanceFleet
-             faceva routeIdx=1 e location.systemId=undefined (stato zombie),
-             e i poll che richiedono un'orbita valida (es. dispaccio 'reach')
-             non scattavano mai. Forziamo l'orbita al sistema corrente:
-             "rotta su qui" = "fermati subito qui". */
+          /* Già in orbita generica: niente da percorrere. */
           fleet.orders = { type: 'idle' };
           fleet.route = [currentSys]; fleet.routeIdx = 0; fleet.etaImpulsi = 0;
-          fleet.location.status = 'orbiting';
-          fleet.location.bodyKey = null;
-          fleet.location.berth = null;
-          if (fleet.location.intra) fleet.location.intra = null;
           return { ok: true };
         }
         fleet.orders = { type: 'move', toSysId: to, bodyKey: bodyKey };
@@ -1489,6 +1482,62 @@
     }
 
     return { ok: false, reason: 'Tipo ordine sconosciuto' };
+  }
+
+  /* Inverti rotta — una flotta in viaggio inter-sistema sul leg A→B può
+     INVERTIRE il leg corrente e tornare ad A. ETA di ritorno = Ι già
+     percorsi nel leg (legTotal − etaImpulsi residuo). All'arrivo entra in
+     orbita ad A (idle) e i leg successivi della rotta originale vengono
+     scartati: è un nuovo comando, "scardinato" dal piano precedente.
+     Vincoli (recovery-friendly #22 / coerenza fisica):
+       - solo durante in-transit inter-sistema (no intra/sosta/orbiting).
+       - serve un leg corrente attivo (legTotal>0, route[routeIdx+1] esiste).
+       - clear di attackTarget/queue/follow (uniforme con setOrder, che
+         considera l'inversione un ordine MANUALE che annulla l'intento). */
+  function reverseLeg(game, fleet) {
+    if (!fleet || !fleet.location) return { ok: false, reason: 'Flotta inesistente' };
+    if (fleet.location.status !== 'in-transit') {
+      return { ok: false, reason: 'La flotta non è in viaggio inter-sistema' };
+    }
+    if (fleet.location.intra) {
+      return { ok: false, reason: 'Manovra interna in corso: non invertibile' };
+    }
+    const T = fleet.legTotal || 0;
+    const remaining = fleet.etaImpulsi || 0;
+    if (T <= 0) return { ok: false, reason: 'Leg corrente senza durata nota' };
+    if (!Array.isArray(fleet.route) || fleet.routeIdx + 1 >= fleet.route.length) {
+      return { ok: false, reason: 'Nessuna origine del leg cui tornare' };
+    }
+    const fromSys = fleet.route[fleet.routeIdx];      // A: dove era partita
+    const toSys = fleet.route[fleet.routeIdx + 1];    // B: dove era diretta
+    /* Frazione percorsa = (T − remaining) / T → ETA di ritorno coincide con
+       gli Ι già spesi. Clamp a [1, T] per evitare ritorni-istantanei (la
+       flotta è uscita dal sistema appena partita) e ritorni-più-lunghi
+       del leg originale. */
+    const elapsed = Math.max(1, Math.min(T, T - remaining));
+    fleet.attackTarget = null;
+    fleet.attackBodyKey = null;
+    fleet.queue = [];
+    fleet.follow = null;
+    /* Ordine 'move' verso A: il tick di flotta avanza il leg corrente, e
+       all'arrivo (route esaurita) l'handler 'move' chiude su 'orbiting' →
+       i poll che richiedono un'orbita valida vedono la flotta su A.
+       Un orders.type='idle' verrebbe short-circuitato a inizio tick e il
+       leg non avanzerebbe mai. */
+    fleet.orders = { type: 'move', toSysId: fromSys };
+    fleet.route = [toSys, fromSys];
+    fleet.routeIdx = 0;
+    fleet.etaImpulsi = elapsed;
+    fleet.legTotal = T;
+    /* fleet.location.systemId resta = fromSys per la convenzione "in transit
+       da route[routeIdx] a route[routeIdx+1]": ora la flotta è "in transit da
+       toSys a fromSys", quindi systemId deve essere toSys. */
+    fleet.location.systemId = toSys;
+    fleet.location.status = 'in-transit';
+    fleet.location.berth = null;
+    /* _incidentRolled NON viene resettato: stesso segmento fisico già
+       gambato (no double jeopardy sui rischi di viaggio). */
+    return { ok: true, etaImpulsi: elapsed, to: fromSys };
   }
 
   /* buildChainedRoute — verifica che una sequenza di waypoint sia
@@ -3137,6 +3186,7 @@
     transferCrew: transferCrew,
     mergeFleets: mergeFleets,
     setOrder: setOrder,
+    reverseLeg: reverseLeg,
     /* Stadio 1.4 — coda comandi (docs/FLEET_FLOW.md). */
     setPlan: setPlan,
     enqueueOrder: enqueueOrder,
