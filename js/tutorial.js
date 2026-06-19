@@ -1183,6 +1183,39 @@
         '<kbd>Alt</kbd>=<em>esplora</em>; <kbd>Esc</kbd> annulla. Coesiste col wizard per gli ordini composti.</p>'
     },
     {
+      id: 'garrison',
+      tag: 'M13 · Presidio',
+      title: 'Presidio militare di sistema',
+      body:
+        '<p>Una flotta abbastanza potente, ferma in un sistema, può <strong>dichiarare un presidio</strong>: ' +
+        'controllo militare del transito, finché la flotta resta. La proprietà di pianeti/lune <em>non cambia</em> — il ' +
+        'sistema è "tuo" solo per <em>presenza dichiarata</em>.</p>' +
+        '<p><strong>Soglia:</strong> almeno una <em>Fregata o superiore</em> nella flotta, e una <em>potenza aggregata</em> ' +
+        'di almeno 500 punti (≈ una Fregata + scorta, o un Incrociatore). Le navi civili (Esploratore, Estrattore, Pioniere) ' +
+        'non contano.</p>' +
+        '<p><strong>Effetti:</strong> bandiera ⚑ sulla mappa galassia; le flotte <em>ostili</em> in transito vengono ' +
+        'ingaggiate come al solito (riusa il combattimento esistente); le flotte di civiltà in <em>pace o alleanza</em> ' +
+        'possono chiedere passaggio via dispaccio.</p>' +
+        '<p><strong>Decadimento:</strong> se la flotta lascia il sistema, scende sotto soglia o viene distrutta, il presidio ' +
+        'diventa <em>compromesso</em> e hai 20 Ι per rinforzare; altrimenti decade da solo. Recovery-friendly: niente penalità ' +
+        'permanenti, solo il presidio si scioglie.</p>'
+    },
+    {
+      id: 'tech-capture',
+      tag: 'M13 · Bottino dati',
+      title: 'Tecnologie catturabili',
+      body:
+        '<p>Vincere uno scontro contro una civiltà <strong>tecnologicamente avanzata</strong> può portare a casa ' +
+        '<strong>dati di reverse-engineering</strong>: una tecnologia <em>che il sorteggio della partita non aveva incluso nel tuo albero</em>, ' +
+        'scelta in base alla specialità della civ (Tecnocratici → Informatica, Predoni → Armi, ecc.).</p>' +
+        '<p><strong>Chance:</strong> scala con il <em>livello tecnologico</em> della civ sconfitta. Una civ "Arretrata" non ha ' +
+        'nulla che non tu non possa ricercare; una "All\'avanguardia" porta un bottino concreto. Un <em>raid riuscito</em> ' +
+        'su una colonia AI (vittoria sul corpo specifico) ha chance <strong>maggiore</strong> di una scaramuccia spaziale.</p>' +
+        '<p><strong>Vehryn</strong> e <strong>Phaerion</strong> (custodi di tech antica) danno bonus extra.</p>' +
+        '<p>I bottini non includono le tecnologie <em>game-changer</em> (Terraformazione, Iperguida III): quelle restano traguardo ' +
+        'd\'Impero.</p>'
+    },
+    {
       id: 'fleet-supply',
       tag: 'M08 · Viveri',
       title: 'Viveri di flotta',

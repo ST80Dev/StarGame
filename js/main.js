@@ -187,7 +187,8 @@ function chronicleCategoryFromKind(kind) {
   if (kind.indexOf('raider-') === 0) return 'galaxy';
   if (kind.indexOf('cohesion-') === 0) return 'galaxy';
   if (kind.indexOf('dispatch-') === 0) return 'galaxy';
-  if (kind === 'system-occupied' || kind === 'system-released' ||
+  if (kind.indexOf('garrison-') === 0) return 'galaxy';
+  if (kind === 'tech-captured' || kind === 'tech-reaction' ||
       kind === 'system-cohesion-formed' || kind === 'system-cohesion-broken' ||
       kind === 'scan-done' || kind === 'anomaly-depleted' ||
       kind === 'commander-ranked' || kind === 'waste-deal-closed') return 'galaxy';
@@ -9565,8 +9566,27 @@ function openFleetDetail(fleetId, opts) {
     const revBtn = canReverse
       ? '<button class="fdetail__toggle" data-act="ord-reverse" type="button" title="Torna al punto di partenza del leg corrente">↩ Inverti rotta</button>'
       : '';
+    /* M13 B-2 (decisione #93): comando "Presidia qui" — disponibile se la
+       flotta è ferma in un sistema e soddisfa la soglia (Fregata+ e ≥500
+       punti). Se già presidia: bottone "Sciogli presidio". */
+    let garrBtn = '';
+    if (ORION.garrison && fleet.location && fleet.location.status !== 'in-transit') {
+      const sysId = fleet.location.systemId;
+      const cur = ORION.garrison.ofSystem(g, sysId);
+      if (cur && cur.fleetId === fleet.id) {
+        garrBtn = '<button class="fdetail__toggle" data-act="garrison-release" type="button" title="Sciogli il presidio">⊘ Sciogli presidio</button>';
+      } else {
+        const chk = ORION.garrison.canDeclare(g, fleet);
+        if (chk.ok) {
+          garrBtn = '<button class="fdetail__toggle" data-act="garrison-declare" type="button" title="Presidio militare: controlla il transito nel sistema">⚑ Presidia qui</button>';
+        } else {
+          garrBtn = '<button class="fdetail__toggle" data-act="garrison-declare" type="button" title="' +
+            escapeHtml(chk.reason || '') + '" disabled>⚑ Presidia qui</button>';
+        }
+      }
+    }
     return '<div class="fdetail__sec fdetail__sec--ord">' +
-      '<div class="fdetail__sec-h">' + uiIcon('fleet', 'cyan') + ' Ordine' + revBtn +
+      '<div class="fdetail__sec-h">' + uiIcon('fleet', 'cyan') + ' Ordine' + revBtn + garrBtn +
         '<button class="fdetail__toggle" data-act="reorder" type="button">riordina ▸</button></div>' +
       '<div class="fdetail__ord-cur">' + escapeHtml(orderLabel(fleet)) + '</div>' +
     '</div>';
@@ -10255,6 +10275,25 @@ function openFleetDetail(fleetId, opts) {
       const id = fleet.id;
       closeDetail();
       openFleetReorder(id);
+    });
+    /* M13 B-2 (decisione #93): Presidia qui / Sciogli presidio. */
+    const garrDecl = host.querySelector('[data-act="garrison-declare"]');
+    if (garrDecl) garrDecl.addEventListener('click', function () {
+      if (!ORION.garrison) return;
+      const evts = [];
+      const r = ORION.garrison.declare(g, fleet, evts);
+      if (!r.ok) { showToast(r.reason || 'Presidio rifiutato'); return; }
+      evts.forEach(function (e) { chronicleEvent(e); });
+      if (ORION.tutorial) ORION.tutorial.fire('garrison');
+      persistGame(g); render();
+    });
+    const garrRel = host.querySelector('[data-act="garrison-release"]');
+    if (garrRel) garrRel.addEventListener('click', function () {
+      if (!ORION.garrison || !fleet.location) return;
+      const evts = [];
+      ORION.garrison.release(g, fleet.location.systemId, evts, 'voluntary');
+      evts.forEach(function (e) { chronicleEvent(e); });
+      persistGame(g); render();
     });
 
     /* --- composizione --- (al PORTO corrente, non alla sola origine) */
@@ -11062,8 +11101,16 @@ const DEFAULT_AUTOPAUSE = {
   'diplo-offer': true,
   'diplo-offer-expired': false,
   'diplo-offer-rejected': false,
-  'system-occupied': true,
-  'system-released': false,
+  /* M13 B-2 (decisione #93): rimossa la "occupazione di sistema" — sostituita
+     dal PRESIDIO MILITARE (presenza flotta dichiarata). */
+  'garrison-declared': true,
+  'garrison-compromised': true,
+  'garrison-restored': false,
+  'garrison-lapsed': true,
+  'garrison-released': false,
+  /* Cattura tech (#93): bottino dati dopo vittoria contro civ avanzata. */
+  'tech-captured': true,
+  'tech-reaction': false,
   /* M10 Fase B (decisione #52 §13.6/§13.8): la coesione di sistema è
      atmosferica (consorzio locale che si forma o si scioglie ai confini) →
      OFF di default. Le federazioni emergenti, invece, sono eventi geopolitici
@@ -11485,8 +11532,13 @@ function showEventOverlay(events) {
     'diplo-offer': 'Dispaccio AI',
     'diplo-offer-expired': 'Offerta AI scaduta',
     'diplo-offer-rejected': 'Offerta AI rifiutata',
-    'system-occupied': 'Sistema occupato',
-    'system-released': 'Occupazione abbandonata',
+    'garrison-declared': 'Presidio dichiarato',
+    'garrison-compromised': 'Presidio compromesso',
+    'garrison-restored': 'Presidio ripristinato',
+    'garrison-lapsed': 'Presidio decaduto',
+    'garrison-released': 'Presidio sciolto',
+    'tech-captured': 'Tecnologia catturata',
+    'tech-reaction': 'Reazione diplomatica',
     'system-cohesion-formed': 'Sistema coeso (consorzio formato)',
     'cohesion-attack-backlash': 'Sistema coeso: solidarietà contro il tuo attacco',
     'system-cohesion-broken': 'Sistema coeso: dissolto',
@@ -12106,20 +12158,47 @@ function _chronicleEventBody(ev) {
     pushChronicle(ds + ' — L\'offerta di <strong>' + escapeHtml(ev.civName) + '</strong> è scaduta senza risposta.', 'civ');
   } else if (ev.kind === 'diplo-offer-rejected') {
     pushChronicle(ds + ' — Hai respinto l\'offerta di <strong>' + escapeHtml(ev.civName) + '</strong>.', 'civ');
-  } else if (ev.kind === 'system-occupied') {
-    /* M11 Fase B parziale: occupazione di un sistema AI dopo vittoria. */
+  } else if (ev.kind === 'garrison-declared') {
+    /* M13 B-2 (decisione #93): presidio militare dichiarato — il sistema è
+       sotto il tuo controllo militare finché la flotta lo mantiene. */
     const sys = ORION.game.galaxy.systems[ev.sysId];
     const stag = ev.sysId != null && ev.sysId >= 0 ? systemTagHtml(ev.sysId) : '';
-    pushChronicle(ds + ' — <strong>' + escapeHtml(sys ? sys.name : '—') + '</strong>' + stag +
-      ' <strong>occupato</strong>: strappato a <strong>' + escapeHtml(ev.fromCivName || 'una civiltà') +
-      '</strong>. Resta sotto il tuo controllo finché non lo abbandoni.', 'civ');
+    pushChronicle(ds + ' — <strong>Presidio dichiarato</strong> a <strong>' +
+      escapeHtml(sys ? sys.name : '—') + '</strong>' + stag + ' · ' + escapeHtml(ev.fleetName || 'flotta') +
+      ' controlla il sistema. Si scioglie se la flotta lascia o cala sotto la soglia.', 'civ');
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
-  } else if (ev.kind === 'system-released') {
+  } else if (ev.kind === 'garrison-compromised') {
     const sys = ORION.game.galaxy.systems[ev.sysId];
     const stag = ev.sysId != null && ev.sysId >= 0 ? systemTagHtml(ev.sysId) : '';
-    pushChronicle(ds + ' — Occupazione di <strong>' + escapeHtml(sys ? sys.name : '—') + '</strong>' + stag +
-      ' <strong>abbandonata</strong>.', 'civ');
+    pushChronicle(ds + ' — <strong>Presidio compromesso</strong> a <strong>' +
+      escapeHtml(sys ? sys.name : '—') + '</strong>' + stag + ' · la flotta è fuori soglia. Rinforzi entro 20 Ι o decade.', 'civ');
+  } else if (ev.kind === 'garrison-restored') {
+    const sys = ORION.game.galaxy.systems[ev.sysId];
+    const stag = ev.sysId != null && ev.sysId >= 0 ? systemTagHtml(ev.sysId) : '';
+    pushChronicle(ds + ' — Presidio a <strong>' + escapeHtml(sys ? sys.name : '—') + '</strong>' + stag +
+      ' ripristinato.', 'civ');
+  } else if (ev.kind === 'garrison-lapsed') {
+    const sys = ORION.game.galaxy.systems[ev.sysId];
+    const stag = ev.sysId != null && ev.sysId >= 0 ? systemTagHtml(ev.sysId) : '';
+    pushChronicle(ds + ' — Presidio a <strong>' + escapeHtml(sys ? sys.name : '—') + '</strong>' + stag +
+      ' <strong>decaduto</strong>: il sistema non è più sotto il tuo controllo militare.', 'civ');
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+  } else if (ev.kind === 'garrison-released') {
+    const sys = ORION.game.galaxy.systems[ev.sysId];
+    const stag = ev.sysId != null && ev.sysId >= 0 ? systemTagHtml(ev.sysId) : '';
+    pushChronicle(ds + ' — Presidio a <strong>' + escapeHtml(sys ? sys.name : '—') + '</strong>' + stag +
+      ' sciolto volontariamente.', 'civ');
+    if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+  } else if (ev.kind === 'tech-captured') {
+    /* M13 B-2 (decisione #93): bottino dati da civ avanzata sconfitta. */
+    const how = ev.captureKind === 'raid' ? 'raid sulla colonia' : 'scaramuccia';
+    pushChronicle(ds + ' — <strong>Tecnologia catturata</strong>: <em>' + escapeHtml(ev.name || ev.techId) +
+      '</em> dai dati strappati a <strong>' + escapeHtml(ev.fromCivName || 'una civiltà') +
+      '</strong> (' + how + '). Sbloccata.', 'civ');
+    if (ORION.tutorial) ORION.tutorial.fire('tech-capture');
+  } else if (ev.kind === 'tech-reaction') {
+    pushChronicle(ds + ' — <strong>Reazione diplomatica</strong>: le civiltà contattate reagiscono al tuo sblocco di <em>' +
+      escapeHtml(ev.name || ev.techId) + '</em>.', 'civ');
   } else if (ev.kind === 'cohesion-attack-backlash') {
     /* Coesione #54 (cablata in pulizia #68 Fase 3): solidarietà locale. */
     const stag = ev.sysId != null && ev.sysId >= 0 ? systemTagHtml(ev.sysId) : '';

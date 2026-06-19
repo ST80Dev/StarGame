@@ -562,6 +562,139 @@
     return 1;
   }
 
+  /* ------------------------------------------------------------------
+     M13 Fase B-2 (decisione #93) — TECH CATTURABILI §11.1.
+     Le tech catturabili sono quelle "fuori dal pool del giocatore" in
+     questa partita: tech che il sorteggio per-seed aveva escluso e che
+     restavano "impossibili". Catturarle = reverse-engineering del bottino
+     da una civ avanzata che le possiede. Bias deterministico sulla
+     VOCAZIONE della civ (tecnocratici → informatica; predoni → armi;
+     ecc.). Probabilità SCALA col techNorm della civ (M10 B-2): civ
+     avanzata = chance maggiore, arretrata ≈ nulla. Recovery-friendly
+     (#22): la cattura è SEMPRE un bonus, mai un obbligo. Lo skill check
+     fallito = niente bottino (zero punizioni).
+     ------------------------------------------------------------------ */
+  const CAPTURE_CFG = {
+    BASE_CHANCE_SKIRMISH: 0.18,   // base per vittoria scaramuccia spaziale
+    BASE_CHANCE_RAID: 0.32,       // base per raid colonia (più "vicino" ai labs)
+    FACTION_BONUS: 0.10,          // bonus per Vehryn/Phaerion ("custodi tech")
+    MAX_CHANCE: 0.55              // cap di sicurezza
+  };
+  /* Categoria preferita per vocazione (riflette la specialità §11.2). */
+  const VOCATION_CAT_BIAS = {
+    tecnocratici: 'informatica', mistici: 'biologia', isolazionisti: 'scudi',
+    mercantili: 'trasferimento', sedentari: 'estrazione',
+    imperialisti: 'armi', espansionisti: 'propulsione', predoni: 'armi'
+  };
+
+  /* Tech "fuori dal pool" che la civ POTREBBE detenere data la sua
+     specialità. Priorità: categoria di vocazione, poi qualunque tech non
+     sbloccata e non nel pool del giocatore. Filtra i game-changer per la
+     prima sessione (sono troppo forti come bottino di scaramuccia). */
+  function outOfPoolTechFor(game, civ) {
+    const pool = poolSet(game);
+    const prefCat = (civ && VOCATION_CAT_BIAS[civ.vocation]) || null;
+    const candidatesByPref = [], candidatesOther = [];
+    POOL_IDS.forEach(function (id) {
+      if (pool[id]) return;                                  // già nel tuo pool
+      if (isUnlocked(game, id)) return;
+      const t = BY_ID[id];
+      if (!t || t.gameChanger) return;                       // niente game-changer come bottino
+      if (prefCat && t.cat === prefCat) candidatesByPref.push(id);
+      else candidatesOther.push(id);
+    });
+    if (candidatesByPref.length) return candidatesByPref.sort()[0];
+    if (candidatesOther.length) return candidatesOther.sort()[0];
+    return null;
+  }
+
+  /* Tenta la cattura. Deterministico (seed:capture:<civ>:<I>:<kind>):
+     stessa situazione → stesso esito. Emette eventi narrativi (cronaca +
+     §11.3 nudge disposizione su civ vicine). */
+  function tryCaptureTech(game, civ, kind, events) {
+    if (!game || !civ || !ORION.ai) return null;
+    const AI = ORION.ai;
+    const techNorm = AI.techNorm ? AI.techNorm(game, civ) : 0.30;
+    /* La cattura ha senso solo se la civ è almeno "Standard" (tier ≥1):
+       una civ arretrata non ha tech che a te manca. */
+    if (techNorm < 0.20) return null;
+    const base = (kind === 'raid') ? CAPTURE_CFG.BASE_CHANCE_RAID : CAPTURE_CFG.BASE_CHANCE_SKIRMISH;
+    let chance = base * techNorm;
+    /* Bonus "custodi della tech antica": Vehryn + Phaerion (decisione #55
+       gancio M17; qui solo il moltiplicatore sul bottino). */
+    if (civ.faction === 'vehryn' || civ.faction === 'phaerion') {
+      chance += CAPTURE_CFG.FACTION_BONUS;
+    }
+    if (chance > CAPTURE_CFG.MAX_CHANCE) chance = CAPTURE_CFG.MAX_CHANCE;
+    const rng = ORION.rng.makeRng(String(game.seed || game.galaxy.seed) +
+      ':capture:' + civ.id + ':' + (game.timeImpulsi || 0) + ':' + kind);
+    if (!rng.chance(chance)) return null;
+    const techId = outOfPoolTechFor(game, civ);
+    if (!techId) return null;
+    /* Sblocco diretto: il bottino dati è già "pronto", non avvia un
+       progetto. Aggiungiamo alla lista unlocked se non presente. */
+    const r = ensure(game);
+    if (r.unlocked.indexOf(techId) < 0) r.unlocked.push(techId);
+    /* Invalida cache mods (la prossima `mods()` ricalcola). */
+    r._mods = null; r._modsLen = -1;
+    const t = BY_ID[techId];
+    if (events) {
+      events.push({ kind: 'tech-captured', techId: techId, name: t && t.name,
+        cat: t && t.cat, fromCivId: civ.id, fromCivName: civ.name,
+        captureKind: kind, impulso: game.timeImpulsi });
+    }
+    return techId;
+  }
+
+  /* ------------------------------------------------------------------
+     §11.3 — Conseguenze narrative (decisione #93). Chiamata dal tick di
+     research alla COMPLETION di una game-changer (sblocco normale, non
+     cattura): nudge disposizione su civ contattate per archetipo +
+     evento di cronaca. Tecnocratici diffidano, militaristi si allarmano,
+     mistici riconoscono il "presagio". Soft: nudge piccoli, MAI guerre
+     scatenate dalla tech (la diplomazia resta M11). Dispaccio occasionale
+     gancio M17 (oggi solo evento, dispatch.js lo intercetta se vuole).
+     ------------------------------------------------------------------ */
+  const TECH_REACTION_BIAS = {
+    /* per vocazione: nudge disposizione (positivo = ti apprezza di più). */
+    tecnocratici: -6,    // diffidano dei rivali tech
+    imperialisti: -4,    // minaccia strategica
+    predoni: -2,         // li impauri
+    isolazionisti: -3,
+    mistici: +2,         // "presagio cosmico"
+    mercantili: +2,      // opportunità
+    sedentari: 0,
+    espansionisti: -1
+  };
+  function applyNarrativeReactions(game, tech, events) {
+    if (!game || !tech || !tech.gameChanger) return;
+    const civs = (game.civs || []).filter(function (c) { return c && c.alive && c.contacted; });
+    if (!civs.length) return;
+    civs.forEach(function (c) {
+      const nudge = TECH_REACTION_BIAS[c.vocation];
+      if (!nudge) return;
+      c.disposition = Math.max(-100, Math.min(100, (c.disposition || 0) + nudge));
+    });
+    if (events) {
+      events.push({ kind: 'tech-reaction', techId: tech.id, name: tech.name,
+        gameChanger: true, impulso: game.timeImpulsi });
+    }
+  }
+
+  /* Wrappa tick() originale per agganciare §11.3 al completamento. */
+  const _tickOriginal = tick;
+  function tickWithReactions(game, events) {
+    const r = ensure(game);
+    const wasActive = r.activeProject;
+    _tickOriginal(game, events);
+    /* Se il progetto si è appena completato, l'unlocked è l'ultimo aggiunto. */
+    if (wasActive && !r.activeProject && r.unlocked.length) {
+      const lastId = r.unlocked[r.unlocked.length - 1];
+      const t = BY_ID[lastId];
+      if (t && t.gameChanger) applyNarrativeReactions(game, t, events);
+    }
+  }
+
   ORION.research = {
     CATALOG_VERSION: CATALOG_VERSION,
     CATEGORIES: CATEGORIES,
@@ -576,7 +709,7 @@
     setProject: setProject,
     clearProject: clearProject,
     fund: fund,
-    tick: tick,
+    tick: tickWithReactions,
     empireResearchTotal: empireResearchTotal,
     empireResearchRate: empireResearchRate,
     etaImpulsi: etaImpulsi,
@@ -584,6 +717,11 @@
     mods: mods,
     poolSet: poolSet,
     payerColonyKey: payerColonyKey,
+    /* M13 B-2 */
+    outOfPoolTechFor: outOfPoolTechFor,
+    tryCaptureTech: tryCaptureTech,
+    applyNarrativeReactions: applyNarrativeReactions,
+    CAPTURE_CFG: CAPTURE_CFG,
     get: function (id) { return BY_ID[id] || null; }
   };
 })(typeof window !== 'undefined' ? window : this);
