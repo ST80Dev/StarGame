@@ -13324,7 +13324,13 @@ function renderContextActionBar(ctx) {
       const habitable = !!(def && def.habitable);
       const colKey = sysId + ':' + ctx.bodyKey;
       const colony = g.colonies[colKey];
-      const civ = (ORION.ai && ORION.ai.civForSystem) ? ORION.ai.civForSystem(g, sysId) : null;
+      /* Proprietà a livello di CORPO, non di sistema (fix 2026-06-19): una AI
+         possiede solo i corpi che ha colonizzato (civ.planets), non tutti gli
+         oggetti del sistema — come il giocatore. civForPlanet controlla il
+         singolo corpo; civForSystem marcava ogni corpo come "occupato". */
+      const civ = (ORION.ai && ORION.ai.civForPlanet)
+        ? ORION.ai.civForPlanet(g, sysId, ctx.bodyKey)
+        : ((ORION.ai && ORION.ai.civForSystem) ? ORION.ai.civForSystem(g, sysId) : null);
       const isMine = !!(colony && colony.colonized);
       const isForeign = !!(civ && !isMine);
       const isFree = !isMine && !isForeign;
@@ -14555,9 +14561,15 @@ function refreshForeignDeck() {
   const colKey = sysId + ':' + planet.bodyKey;
   const colony = g.colonies[colKey];
   if (colony && colony.colonized) return;  /* mio: nessun foreign deck */
-  if (!ORION.ai || !ORION.ai.civForSystem) return;
-  const civ = ORION.ai.civForSystem(g, sysId);
-  if (!civ) return;  /* pianeta libero: nessun foreign deck (action bar gestisce) */
+  if (!ORION.ai) return;
+  /* Proprietà a livello di CORPO (fix 2026-06-19): mostra il deck "straniero"
+     SOLO sul corpo effettivamente colonizzato dall'AI, non su tutti i corpi
+     del sistema. I corpi liberi di un sistema "con presenza AI" restano
+     liberi/colonizzabili. */
+  const civ = ORION.ai.civForPlanet
+    ? ORION.ai.civForPlanet(g, sysId, planet.bodyKey)
+    : (ORION.ai.civForSystem ? ORION.ai.civForSystem(g, sysId) : null);
+  if (!civ) return;  /* corpo libero: nessun foreign deck (action bar gestisce) */
 
   /* Mostra solo se DETECTED o EXPLORED — nebbia di guerra (#11). */
   const disc = g.state.discovery[sysId];
