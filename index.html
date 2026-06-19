@@ -147,6 +147,10 @@
 
       <!-- Viewport centrale: qui andranno mappa galattica / sistema (Canvas, M02+) -->
       <section class="viewport" aria-label="Vista principale">
+        <!-- Striscia breadcrumb unica (decisione utente 2026-06-20): larga
+             quanto la sezione centrale, bassa, usata SIA dalla mappa SIA dalle
+             viste della sidebar. Riusa data-breadcrumb (la mappa la popola). -->
+        <nav class="viewport__crumbs" data-breadcrumb aria-label="Percorso di navigazione"></nav>
         <div class="viewport__stage" data-view-stage>
           <div class="viewport__placeholder">
             <span class="viewport__glyph" aria-hidden="true">◈</span>
