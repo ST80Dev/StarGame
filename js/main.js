@@ -1022,7 +1022,7 @@ function renderView(stage, view) {
      pianeta) la sovrascrivono con la breadcrumb di navigazione; renderCivView
      la sovrascrive per il dettaglio civ. */
   const SIDEBAR_CRUMB = {
-    civ: 'Diplomazia', market: 'Mercato', stations: 'Stazioni', research: 'Ricerca',
+    civ: 'Diplomazia', market: 'Mercato', economy: 'Economia', stations: 'Stazioni', research: 'Ricerca',
     crews: 'Equipaggi', dispatch: 'Dispacci', destiny: 'Destino', fleet: 'Flotte'
   };
   if (SIDEBAR_CRUMB[view]) setViewCrumbs('<span class="crumb is-current">' + SIDEBAR_CRUMB[view] + '</span>');
@@ -1108,6 +1108,18 @@ function renderView(stage, view) {
     if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
     if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
     renderMarketView(stage);
+    return;
+  }
+
+  // Scheda "Economia" (decisione utente 2026-06-19): hub d'impero dei
+  // guadagni extra-colonia (anomalie/sfruttamenti + scambi AI + Mercato M12
+  // inglobato). Read + azioni leggere, no Canvas.
+  if (view === 'economy') {
+    if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; } if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
+    if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
+    if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
+    if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
+    renderEconomyView(stage);
     return;
   }
 
@@ -4636,78 +4648,38 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
     { includeDetected: true, includeExplored: false });
   const hasTargets = reachable.length > 0;
 
-  /* Anomalie §17.3 raggiungibili (decisione di sessione: esplorazione
-     interna delle anomalie dalla tab Esplorazione). Inviare una flotta che
-     RESTA (ordine survey) sul sistema dell'anomalia per raccogliere/esplorare. */
-  const anomalies = reachableAnomaliesFor(colony);
-  let anomHtml;
-  if (!ORION.anomaly) {
-    anomHtml = '';
-  } else if (anomalies.length) {
-    anomHtml = '<ul class="expedition-list">' + anomalies.map(function (s) {
-      const sys = g.galaxy.systems[s.sysId];
-      const acr = regionAcronymFor(s.sysId);
-      const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
-      const meta = anomalyKindMeta(s.kind);
-      /* Per le cinture asteroidali aggiungiamo il nome del corpo: in un
-         sistema possono esserci più cinture, l'utente deve distinguerle.
-         Nota: g.galaxy.systems[id] è lo stub di galassia (name/links), non
-         il sistema generato — findBody ha bisogno di quest'ultimo. */
-      let bodyNote = '';
-      if (s.kind === 'cintura' && s.bodyKey && ORION.system && ORION.system.generate && ORION.system.findBody) {
-        const sysFull = ORION.system.generate(g.galaxy, s.sysId);
-        const body = sysFull ? ORION.system.findBody(sysFull, s.bodyKey) : null;
-        if (body && body.name) bodyNote = ' · <span class="expedition-item__body">' + escapeHtml(body.name) + '</span>';
-      }
-      let stateTxt;
-      if (s.kind === 'reliquie') {
-        const pct = Math.round(((s.progress || 0) / (ORION.anomaly.CFG.RELIC_HOLD || 40)) * 100);
-        stateTxt = 'esplorazione ' + pct + '%';
-      } else {
-        const pct = s.cap ? Math.round((s.reserve / s.cap) * 100) : 0;
-        stateTxt = meta.res + ' · riserva ' + pct + '%';
-      }
-      /* Mini riepilogo del drenaggio (richiesta utente 2026-06-16): numeri
-         assoluti delle risorse raccolte fino a quel momento + rate per Ι.
-         Visibile per i siti harvest, solo se c'è qualcosa di rilevante. */
-      let harvestTxt = '';
-      if (s.kind !== 'reliquie') {
-        const got = +(s.harvested || 0).toFixed(1);
-        const rate = s.harvestRate != null ? s.harvestRate : 0.6;
-        const resLbl = resShortLabel(s.res);
-        if (s.harvesting) {
-          harvestTxt = '<span class="xp-chip xp-chip--harvest" title="Risorse raccolte da questo sito · ritmo per Impulso">raccolti <strong>' + got + ' ' + resLbl + '</strong> · <strong>' + rate + '</strong>/' + iU() + '</span>';
-        } else if (got > 0) {
-          harvestTxt = '<span class="xp-chip" title="Risorse raccolte da questo sito (raccolta interrotta)">raccolti ' + got + ' ' + resLbl + '</span>';
-        }
-      }
-      const here = s.sysId === colony.systemId;
-      const dist = here ? 'stesso sistema' : (s.hops + ' salti');
-      const canSend = (extractors >= 1 || ships >= 1) && crews.length >= 1 && !s.harvesting;
-      const sendTitle = s.harvesting ? 'Una flotta è già presente sul sito'
-        : (canSend
-            ? (extractors >= 1
-                ? 'Invia un Estrattore a drenare (resta sul posto, rate scalato sull\'Hangar)'
-                : 'Invia un esploratore a drenare (rate base — costruisci un Estrattore per più resa)')
-            : 'Servono uno scafo (Estrattore o esploratore) e un equipaggio');
-      const bodyAttr = s.bodyKey ? (' data-body="' + escapeHtml(s.bodyKey) + '"') : '';
-      return '<li class="expedition-item">' +
-        '<div class="expedition-item__head">' +
-          '<span class="expedition-item__status expedition-status--outbound">' + meta.label + '</span>' +
-          '<span class="expedition-item__target">' + escapeHtml(sys ? sys.name : '—') + tag + bodyNote + '</span>' +
-          '<span class="expedition-item__eta">' + dist + '</span>' +
-        '</div>' +
-        '<div class="expedition-item__bars">' +
-          '<span class="xp-chip" title="Stato del sito">' + stateTxt + '</span>' +
-          harvestTxt +
-          (s.harvesting ? '<span class="xp-chip" title="Flotta presente">✦ in raccolta</span>' : '') +
-          '<button class="btn btn--mini btn--primary" data-action="anom-send" data-sys="' + s.sysId + '" data-kind="' + s.kind + '"' + bodyAttr + ' type="button"' +
-            (canSend ? '' : ' disabled') + ' title="' + sendTitle + '">Invia flotta</button>' +
-        '</div>' +
-      '</li>';
-    }).join('') + '</ul>';
-  } else {
-    anomHtml = '<p class="panel__note">Nessuna anomalia nota nei sistemi esplorati raggiungibili. Esplora i sistemi vicini per scoprirne.</p>';
+  /* Sfruttamenti §17.3 — riepilogo COLONIA-CENTRICO del solo sistema della
+     colonia (decisione utente 2026-06-19): "in questo sistema ci sono X siti
+     sfruttabili, di cui Y in corso". La gestione operativa (lista d'impero,
+     invio flotte raggruppato, filtri) vive ora nella scheda Economia. */
+  let anomBlock = '';
+  if (ORION.anomaly) {
+    if (ORION.anomaly.ensureSites) ORION.anomaly.ensureSites(g, colony.systemId);
+    const here = (ORION.anomaly.knownSites ? ORION.anomaly.knownSites(g) : []).filter(function (s) {
+      if (s.sysId !== colony.systemId) return false;
+      if (s.kind === 'reliquie') return !s.explored;   // esaurite: non contare
+      return true;
+    });
+    const total = here.length;
+    const inHarv = here.filter(function (s) { return s.harvesting; }).length;
+    const bodies = here.filter(function (s) { return !!s.bodyKey; }).length;   // cinture/gassosi su corpi
+    const anomCount = total - bodies;
+    anomBlock = '<p class="sysinfo__sub">Sfruttamenti nel sistema</p>';
+    if (total) {
+      anomBlock +=
+        '<dl class="sysinfo__list">' +
+          row('Siti sfruttabili', total + (inHarv ? ' · ' + inHarv + ' in corso' : '')) +
+          row('Anomalie', String(anomCount)) +
+          row('Corpi con giacimenti', String(bodies)) +
+        '</dl>' +
+        '<button class="btn btn--mini btn--enter btn--with-icon" data-action="exp-open-economy" type="button"' +
+          ' title="Apri la scheda Economia: invio flotte, anomalie d\'impero e commerci">' +
+          '<span class="ui-icon ui-icon--good" aria-hidden="true">' + ((ORION.icon && ORION.icon('market')) || '') + '</span> Gestisci in Economia' +
+          '<span class="ui-icon ui-icon--soft" aria-hidden="true">' + ((ORION.icon && ORION.icon('chevronRight')) || '') + '</span>' +
+        '</button>';
+    } else {
+      anomBlock += '<p class="panel__note">Nessun sito sfruttabile noto in questo sistema. Anomalie e giacimenti d\'impero si gestiscono nella scheda <em>Economia</em>.</p>';
+    }
   }
 
   host.innerHTML =
@@ -4727,7 +4699,7 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
       '</button>' +
       '<p class="sysinfo__sub">Spedizioni attive</p>' +
       listHtml +
-      (ORION.anomaly ? ('<p class="sysinfo__sub">Anomalie raggiungibili</p>' + anomHtml) : '') +
+      anomBlock +
       '<p class="panel__note">Costruisci scafi nell\'<em>Hangar di costruzione</em> e forma equipaggi nell\'<em>Accademia militare</em>. ' +
         'Ogni missione completata restituisce l\'equipaggio con +1 xp; gli scafi accumulano usura per Ι in viaggio e in raccolta. ' +
         'L\'<em>Estrattore</em> è dedicato al drenaggio: rate scalato sul livello dell\'Hangar (lvl1=0.6/Ι · lvl2=0.8 · lvl3=1.0 · lvl4=1.2 · lvl5=1.4). ' +
@@ -4741,11 +4713,8 @@ function renderPlanetEsplorazioneTab(host, planet, colony) {
   /* Link compatto al roster centrale (dedup pannello dx ↔ vista Flotte). */
   const openFleetsBtn = host.querySelector('[data-action="exp-open-fleets"]');
   if (openFleetsBtn) openFleetsBtn.addEventListener('click', function () { navigateView('fleet'); });
-  host.querySelectorAll('[data-action="anom-send"]').forEach(function (b) {
-    b.addEventListener('click', function () {
-      openAnomalySurveyPicker(colony, Number(b.dataset.sys), b.dataset.kind, b.dataset.body || null);
-    });
-  });
+  const openEconBtn = host.querySelector('[data-action="exp-open-economy"]');
+  if (openEconBtn) openEconBtn.addEventListener('click', function () { navigateView('economy'); });
   /* Decisione utente 2026-06-17: bottone "Richiama a base"/"Riporta in
      servizio" per gli esploratori monouso fermi (remoti in sosta o
      ormeggiati a casa ma non rifusi nei counter). Setta ordine `return`:
@@ -4776,6 +4745,7 @@ function anomalyKindMeta(kind) {
   if (kind === 'nebulosa') return { label: 'Nebulosa',              res: 'energia' };
   if (kind === 'reliquie') return { label: 'Reliquia antica',       res: null };
   if (kind === 'cintura')  return { label: 'Cintura asteroidale',   res: 'metalli' };
+  if (kind === 'gassoso')  return { label: 'Gigante gassoso',       res: 'energia' };
   return { label: kind, res: null };
 }
 
@@ -4786,41 +4756,6 @@ function resShortLabel(res) {
   if (res === 'food') return 'food';
   if (res === 'water') return 'water';
   return res || '';
-}
-
-/* Anomalie note (§17.3) nei sistemi ESPLORATI raggiungibili da questa
-   colonia (incluso il suo stesso sistema). Registra i siti dal seed
-   (deterministico, idempotente) e li ordina per distanza in salti. */
-function reachableAnomaliesFor(colony) {
-  const g = ORION.game;
-  if (!g || !ORION.anomaly || !ORION.anomaly.ensureSites) return [];
-  const D = ORION.galaxy.DISCOVERY;
-  const start = colony.systemId;
-  const hops = {}; hops[start] = 0;
-  const queue = [start];
-  while (queue.length) {
-    const u = queue.shift();
-    const sys = g.galaxy.systems[u];
-    const links = (sys && sys.links) || [];
-    for (let i = 0; i < links.length; i++) {
-      const v = links[i];
-      if (hops[v] != null) continue;
-      if (g.state.discovery[v] < D.EXPLORED) continue;
-      hops[v] = hops[u] + 1;
-      queue.push(v);
-    }
-  }
-  Object.keys(hops).forEach(function (sid) { ORION.anomaly.ensureSites(g, Number(sid)); });
-  /* knownSites ritorna UN sito per (sistema, tipo) — chiave canonica in
-     anomaly.js → niente doppioni. */
-  const sites = ORION.anomaly.knownSites(g).filter(function (s) {
-    if (hops[s.sysId] == null) return false;
-    if (s.kind === 'reliquie') return !s.explored;   // esaurite: non mostrare
-    return true;                                       // detriti/nebulosa: anche in rigenerazione
-  });
-  sites.forEach(function (s) { s.hops = hops[s.sysId]; });
-  sites.sort(function (a, b) { return a.hops - b.hops; });
-  return sites;
 }
 
 /* Invia una flotta di ricognizione (1 scafo + 1 equipaggio) verso il
@@ -5422,7 +5357,7 @@ function renderPlanetRotteTab(host, planet, colony) {
           '<button class="btn btn--mini" data-action="bank-buy" data-res="' + k + '" type="button" title="Compra 10 → −' + (qb.ok ? qb.cost.toFixed(1) : '0') + ' ' + escapeHtml(cur.symbol) + '">Compra 10</button>' +
         '</div>';
       }).join('') + '</div>';
-      html += '<p class="panel__note">Vendi le risorse in eccedenza per <em>valuta locale</em>, o comprala dove sei carente. Lo spread cala con reputazione alta e dove operano i Mekhari. Cambia tra valute dalla vista <em>Mercato</em>.</p>';
+      html += '<p class="panel__note">Vendi le risorse in eccedenza per <em>valuta locale</em>, o comprala dove sei carente. Lo spread cala con reputazione alta e dove operano i Mekhari. Cambia tra valute dalla scheda <em>Economia</em>.</p>';
     }
   }
   html += '</div>';
@@ -5458,15 +5393,22 @@ function renderPlanetRotteTab(host, planet, colony) {
 /* Sublabel del launcher "Mercato" (sx): rotte attive + n. valute possedute.
    Niente "crediti neutri" in UI: il giocatore non ha mai esperito un credito,
    è solo un'unità di calcolo. Mostriamo invece quante valute distinte ha. */
-function marketLauncherSub() {
+/* Sotto-etichetta del launcher "Economia": rotte + anomalie in raccolta +
+   scambi con AI in un colpo d'occhio. */
+function economyLauncherSub() {
   const g = ORION.game;
-  if (!g) return 'commercio';
+  if (!g) return 'commerci & sfruttamenti';
   const routes = (ORION.trade && ORION.trade.routesUsed(g)) || 0;
-  const held = (ORION.treasury && ORION.treasury.heldCurrencies(g)) || [];
+  let harv = 0;
+  if (ORION.anomaly && ORION.anomaly.knownSites) {
+    ORION.anomaly.knownSites(g).forEach(function (s) { if (s.harvesting) harv++; });
+  }
+  const deals = (g.wasteDeals || []).length;
   const parts = [];
-  if (routes > 0) parts.push(routes + ' rotte');
-  if (held.length > 0) parts.push(held.length + (held.length === 1 ? ' valuta' : ' valute'));
-  return parts.length ? parts.join(' · ') : 'nessuna rotta';
+  if (routes) parts.push(routes + ' rotte');
+  if (harv) parts.push(harv + ' sfrutt.');
+  if (deals) parts.push(deals + ' scambi');
+  return parts.length ? parts.join(' · ') : 'commerci & sfruttamenti';
 }
 
 const TRADE_BANK_RES = ['met', 'en', 'food', 'water'];
@@ -5536,7 +5478,7 @@ function doCancelRoute(routeId) {
       showToast('Rotta chiusa');
       persistGame(g);
       updatePlanetUI();
-      if (ORION._currentView === 'market') renderView(document.querySelector('[data-view-stage]'), 'market');
+      refreshActiveTradeView(document.querySelector('[data-view-stage]'));
     }
   });
 }
@@ -5550,7 +5492,7 @@ function doSetRouteRate(routeId, rate) {
   if (!r.ok) { showToast(r.reason || 'Rate rifiutato'); return; }
   persistGame(g);
   updatePlanetUI();
-  if (ORION._currentView === 'market') renderView(document.querySelector('[data-view-stage]'), 'market');
+  refreshActiveTradeView(document.querySelector('[data-view-stage]'));
 }
 
 /* Overlay creazione rotta: destinazione (colonia raggiungibile) + risorsa
@@ -5907,12 +5849,12 @@ function renderResearchView(stage) {
   });
 }
 
-function renderMarketView(stage) {
-  if (!stage) return;
-  const g = ORION.game;
+/* Corpo della vista Mercato (rotte + tesoreria + Mekhari), estratto come
+   builder puro così da poterlo embeddare anche nella scheda Economia
+   (decisione utente 2026-06-19: Mercato inglobato in Economia). */
+function marketBodyHtml(g) {
   const T = ORION.trade;
-  if (!g || !T) return;
-  if (ORION.tutorial) ORION.tutorial.fire('trade-routes');
+  if (!g || !T) return '';
 
   const cap = T.marketCapacity(g);
   const routes = T.activeRoutes(g);
@@ -5973,40 +5915,329 @@ function renderMarketView(stage) {
   /* ----- Mercato grigio Mekhari (M12 Fase B, §15.5) ----- */
   const mekhariHtml = buildMekhariPanel(g);
 
-  stage.innerHTML =
-    '<div class="fleet-view market-view">' +
-      '<header class="fleet-view__head">' +
-        '<h2 class="fleet-view__title">Mercato interno <span class="fleet-view__sub">M12 · Commercio</span></h2>' +
-      '</header>' +
-      '<div class="market-summary">' +
-        '<div class="market-summary__cell"><span class="market-summary__val">' + routes.length + ' / ' + cap.routes + '</span><span class="market-summary__lbl">Rotte attive</span></div>' +
-        '<div class="market-summary__cell"><span class="market-summary__val">' + cap.throughput + '</span><span class="market-summary__lbl">Throughput ' + iU() + '</span></div>' +
-        '<div class="market-summary__cell"><span class="market-summary__val">' + idleMercs + ' / ' + totalMercs + '</span><span class="market-summary__lbl">Mercantili a riposo</span></div>' +
-      '</div>' +
-      '<p class="sysinfo__sub">Rotte d\'impero</p>' +
-      routesHtml +
-      treasuryHtml +
-      mekhariHtml +
-      '<p class="panel__note">La capacità di rotte e throughput è data dai <em>Mercati</em> §10 di tutte le tue colonie. ' +
-        'Le <em>valute regionali</em> (una per regione) si guadagnano vendendo risorse al banco regionale e si cambiano qui con spread modulato da reputazione + presenza Mekhari.</p>' +
-    '</div>';
+  return '' +
+    '<div class="market-summary">' +
+      '<div class="market-summary__cell"><span class="market-summary__val">' + routes.length + ' / ' + cap.routes + '</span><span class="market-summary__lbl">Rotte attive</span></div>' +
+      '<div class="market-summary__cell"><span class="market-summary__val">' + cap.throughput + '</span><span class="market-summary__lbl">Throughput ' + iU() + '</span></div>' +
+      '<div class="market-summary__cell"><span class="market-summary__val">' + idleMercs + ' / ' + totalMercs + '</span><span class="market-summary__lbl">Mercantili a riposo</span></div>' +
+    '</div>' +
+    '<p class="sysinfo__sub">Rotte d\'impero</p>' +
+    routesHtml +
+    treasuryHtml +
+    mekhariHtml +
+    '<p class="panel__note">La capacità di rotte e throughput è data dai <em>Mercati</em> §10 di tutte le tue colonie. ' +
+      'Le <em>valute regionali</em> (una per regione) si guadagnano vendendo risorse al banco regionale e si cambiano qui con spread modulato da reputazione + presenza Mekhari.</p>';
+}
 
+/* Aggancia gli eventi del corpo Mercato (rotte/tesoreria/Mekhari) entro
+   `stage`; `refresh` è la funzione che ridisegna la vista che lo contiene
+   (Mercato standalone o Economia). */
+function bindMarketBodyEvents(stage, refresh) {
+  const g = ORION.game;
   stage.querySelectorAll('[data-action="market-route-cancel"]').forEach(function (b) {
     b.addEventListener('click', function () {
       const r = ORION.trade.cancelRoute(g, b.dataset.rid);
       if (!r.ok) { showToast(r.reason || 'Chiusura rifiutata'); return; }
       persistGame(g);
-      renderMarketView(stage);
+      refresh();
     });
   });
   const exBtn = stage.querySelector('[data-action="treasury-exchange"]');
   if (exBtn && !exBtn.disabled) exBtn.addEventListener('click', function () { openExchangeOverlay(stage); });
   /* Mekhari: selettore colonia + acquisti contrabbando. */
   const mekSel = stage.querySelector('[data-bind="mek-colony"]');
-  if (mekSel) mekSel.addEventListener('change', function () { ORION.mekhariColonyKey = this.value; renderMarketView(stage); });
+  if (mekSel) mekSel.addEventListener('change', function () { ORION.mekhariColonyKey = this.value; refresh(); });
   stage.querySelectorAll('[data-action="mek-buy"]').forEach(function (b) {
     b.addEventListener('click', function () { doSmuggle(b.dataset.res, stage); });
   });
+}
+
+/* Ridisegna la vista commercio attiva al centro (Economia), usata dalle
+   azioni che maturano dalla tab Rotte di colonia o dagli overlay. */
+function refreshActiveTradeView(stage) {
+  if (!stage) return;
+  if (ORION._currentView === 'economy') renderEconomyView(stage);
+  else if (ORION._currentView === 'market') renderMarketView(stage);
+}
+
+function renderMarketView(stage) {
+  if (!stage) return;
+  const g = ORION.game;
+  const T = ORION.trade;
+  if (!g || !T) return;
+  if (ORION.tutorial) ORION.tutorial.fire('trade-routes');
+  stage.innerHTML =
+    '<div class="fleet-view market-view">' +
+      '<header class="fleet-view__head">' +
+        '<h2 class="fleet-view__title">Mercato interno <span class="fleet-view__sub">M12 · Commercio</span></h2>' +
+      '</header>' +
+      marketBodyHtml(g) +
+    '</div>';
+  bindMarketBodyEvents(stage, function () { renderMarketView(stage); });
+}
+
+/* =====================================================================
+   Scheda "Economia" — hub d'impero dei guadagni extra-colonia
+   (decisione utente 2026-06-19). Riepiloga in un solo posto: sintesi dei
+   flussi, anomalie/sfruttamenti §17.3 (galassia, raggruppati per sistema,
+   filtrabili per risorsa), scambi rifiuti con le AI, e le rotte commerciali
+   interne (Mercato M12 inglobato). Read + azioni leggere; l'invio flotte
+   resta nel picker esistente / "crea flotte".
+   ===================================================================== */
+ORION._econResFilter = ORION._econResFilter || 'all';   /* 'all'|'met'|'en'|'reliquie' — volatile (UI_GUIDE §9) */
+
+/* Siti anomalia §17.3 noti in tutta la galassia esplorata (un sito per
+   sistema/tipo/corpo), filtrati per le reliquie esaurite. */
+function knownExploitableSites() {
+  const g = ORION.game;
+  if (!g || !ORION.anomaly || !ORION.anomaly.knownSites) return [];
+  return ORION.anomaly.knownSites(g).filter(function (s) {
+    if (s.kind === 'reliquie') return !s.explored;   // esaurite: nascondi
+    return true;
+  });
+}
+
+/* Colonia più vicina (spazio esplorato) capace di inviare una flotta di
+   ricognizione sul sistema `sysId` (almeno 1 scafo + 1 equipaggio). Se
+   nessuna ha capacità ritorna comunque la colonia più vicina (per un
+   tooltip esplicativo). */
+function nearestSurveyColony(sysId) {
+  const g = ORION.game;
+  const D = ORION.galaxy.DISCOVERY;
+  const bySystem = {};
+  myColonyKeys().forEach(function (k) {
+    const c = g.colonies[k];
+    if (c && c.colonized) (bySystem[c.systemId] = bySystem[c.systemId] || []).push(c);
+  });
+  function hasCapacity(c) {
+    const ships = (c.ships && ((c.ships.estrattore || 0) + (c.ships.explorer || 0))) || 0;
+    const crews = (c.crews && c.crews.explorer && c.crews.explorer.length) || 0;
+    return ships >= 1 && crews >= 1;
+  }
+  const seen = {}; seen[sysId] = 0;
+  const queue = [sysId];
+  let fallback = null;
+  while (queue.length) {
+    const u = queue.shift();
+    if (bySystem[u]) {
+      const cap = bySystem[u].filter(hasCapacity);
+      if (cap.length) return { colony: cap[0], hops: seen[u], capable: true };
+      if (!fallback) fallback = { colony: bySystem[u][0], hops: seen[u], capable: false };
+    }
+    const sys = g.galaxy.systems[u];
+    const links = (sys && sys.links) || [];
+    for (let i = 0; i < links.length; i++) {
+      const v = links[i];
+      if (seen[v] != null) continue;
+      if (g.state.discovery[v] < D.EXPLORED) continue;
+      seen[v] = seen[u] + 1; queue.push(v);
+    }
+  }
+  return fallback;
+}
+
+/* Sintesi flussi extra-colonia (striscia di metriche). */
+function economySummaryHtml(g) {
+  const T = ORION.trade;
+  let metRate = 0, enRate = 0, harv = 0;
+  knownExploitableSites().forEach(function (s) {
+    if (!s.harvesting || s.kind === 'reliquie') return;
+    harv++;
+    const rate = (s.harvestRate != null ? s.harvestRate : 0.6);
+    if (s.res === 'met') metRate += rate; else if (s.res === 'en') enRate += rate;
+  });
+  const anomVal = harv
+    ? (round1(metRate) + ' ' + resIcon('met') + ' · ' + round1(enRate) + ' ' + resIcon('en'))
+    : '—';
+  /* Scambi rifiuti con AI: saldo crediti/Ι (sell +, dispose −). */
+  const deals = (g.wasteDeals || []);
+  let dealNet = 0, dealsActive = 0;
+  deals.forEach(function (d) {
+    if (d.status !== 'active') return;
+    dealsActive++;
+    const v = (d.flow || 4) * 0.12;
+    dealNet += (d.mode === 'sell') ? v : -v;
+  });
+  const aiVal = deals.length ? ((dealNet >= 0 ? '+' : '−') + Math.abs(round1(dealNet)) + ' cr') : '—';
+  const routes = (T && T.routesUsed(g)) || 0;
+  const cap = (T && T.marketCapacity(g)) || { routes: 0, throughput: 0 };
+  return '<div class="market-summary">' +
+    '<div class="market-summary__cell"><span class="market-summary__val">' + harv + '</span><span class="market-summary__lbl">Sfruttamenti · ' + anomVal + '/' + iU() + '</span></div>' +
+    '<div class="market-summary__cell"><span class="market-summary__val">' + dealsActive + '</span><span class="market-summary__lbl">Scambi AI · ' + aiVal + '/' + iU() + '</span></div>' +
+    '<div class="market-summary__cell"><span class="market-summary__val">' + routes + ' / ' + cap.routes + '</span><span class="market-summary__lbl">Rotte interne</span></div>' +
+  '</div>';
+}
+
+function round1(n) { return Math.round((n || 0) * 10) / 10; }
+
+/* Sezione Anomalie / sfruttamenti: raggruppate per sistema (ordinate per
+   gruppo stellare), filtrabili per tipo risorsa. */
+function economyAnomaliesHtml(g) {
+  const filter = ORION._econResFilter || 'all';
+  function passFilter(s) {
+    if (filter === 'all') return true;
+    if (filter === 'reliquie') return s.kind === 'reliquie';
+    return s.res === filter;
+  }
+  /* Chip filtro (riusa lo stile exp-crew-chip). */
+  function fchip(val, label) {
+    const sel = filter === val;
+    return '<button class="exp-crew-chip' + (sel ? ' is-selected' : '') + '" type="button"' +
+      ' role="radio" aria-checked="' + (sel ? 'true' : 'false') + '" data-action="econ-res-filter" data-res="' + val + '">' +
+      '<span class="exp-crew-chip__rank">' + label + '</span></button>';
+  }
+  const chips = '<div class="exp-crew-select" role="radiogroup" aria-label="Filtra per risorsa">' +
+    fchip('all', 'Tutte') + fchip('met', 'Metalli') + fchip('en', 'Energia') + fchip('reliquie', 'Reliquie') +
+  '</div>';
+
+  const sites = knownExploitableSites().filter(passFilter);
+  let body;
+  if (!sites.length) {
+    body = '<p class="panel__note">' + (filter === 'all'
+      ? 'Nessun sito sfruttabile noto. Esplora i sistemi vicini per scoprirne (anomalie, cinture, nebulose, reliquie).'
+      : 'Nessun sito sfruttabile noto per questo filtro.') + '</p>';
+  } else {
+    /* Raggruppa per sistema; ordina per gruppo stellare poi nome sistema. */
+    const bySys = {};
+    sites.forEach(function (s) { (bySys[s.sysId] = bySys[s.sysId] || []).push(s); });
+    const sysIds = Object.keys(bySys).map(Number).sort(function (a, b) {
+      const sa = g.galaxy.systems[a], sb = g.galaxy.systems[b];
+      const ca = sa ? sa.cluster : 0, cb = sb ? sb.cluster : 0;
+      if (ca !== cb) return ca - cb;
+      return (sa ? sa.name : '').localeCompare(sb ? sb.name : '');
+    });
+    body = sysIds.map(function (sid) {
+      const sys = g.galaxy.systems[sid];
+      const list = bySys[sid];
+      const inHarv = list.filter(function (s) { return s.harvesting; }).length;
+      const send = nearestSurveyColony(sid);
+      const tag = systemTagHtml(sid);
+      const head = '<p class="sysinfo__sub">' + escapeHtml(sys ? sys.name : '—') + tag +
+        ' <span class="cantieri-section__hint">(' + list.length + (list.length === 1 ? ' sito' : ' siti') +
+        (inHarv ? ' · ' + inHarv + ' in corso' : '') + ')</span></p>';
+      const items = '<ul class="expedition-list">' + list.map(function (s) {
+        const meta = anomalyKindMeta(s.kind);
+        let bodyNote = '';
+        if (s.bodyKey && ORION.system && ORION.system.generate && ORION.system.findBody) {
+          const sysFull = ORION.system.generate(g.galaxy, s.sysId);
+          const body0 = sysFull ? ORION.system.findBody(sysFull, s.bodyKey) : null;
+          if (body0 && body0.name) bodyNote = ' · <span class="expedition-item__body">' + escapeHtml(body0.name) + '</span>';
+        }
+        let stateTxt;
+        if (s.kind === 'reliquie') {
+          const pct = Math.round(((s.progress || 0) / ((ORION.anomaly.CFG && ORION.anomaly.CFG.RELIC_HOLD) || 40)) * 100);
+          stateTxt = 'esplorazione ' + pct + '%';
+        } else {
+          const pct = s.cap ? Math.round((s.reserve / s.cap) * 100) : 0;
+          stateTxt = (meta.res || '') + ' · riserva ' + pct + '%';
+        }
+        let harvestTxt = '';
+        if (s.kind !== 'reliquie') {
+          const got = +(s.harvested || 0).toFixed(1);
+          const rate = s.harvestRate != null ? s.harvestRate : 0.6;
+          const resLbl = resShortLabel(s.res);
+          if (s.harvesting) harvestTxt = '<span class="xp-chip xp-chip--harvest" title="Risorse raccolte · ritmo per Impulso">raccolti <strong>' + got + ' ' + resLbl + '</strong> · <strong>' + rate + '</strong>/' + iU() + '</span>';
+          else if (got > 0) harvestTxt = '<span class="xp-chip" title="Risorse raccolte (raccolta interrotta)">raccolti ' + got + ' ' + resLbl + '</span>';
+        }
+        const canSend = !s.harvesting && send && send.capable;
+        const sendTitle = s.harvesting ? 'Una flotta è già presente sul sito'
+          : (send && send.capable
+              ? 'Invia una flotta da ' + escapeHtml(systemNameFromKey(g, send.colony.systemId + ':' + send.colony.bodyKey)) + ' (' + send.hops + ' salti)'
+              : 'Nessuna colonia con scafo + equipaggio in grado di raggiungere il sito');
+        const colAttr = (send && send.capable) ? (' data-col="' + escapeHtml(send.colony.systemId + ':' + send.colony.bodyKey) + '"') : '';
+        const bodyAttr = s.bodyKey ? (' data-body="' + escapeHtml(s.bodyKey) + '"') : '';
+        return '<li class="expedition-item">' +
+          '<div class="expedition-item__head">' +
+            '<span class="expedition-item__status expedition-status--outbound">' + meta.label + '</span>' +
+            '<span class="expedition-item__target">' + bodyNote + '</span>' +
+          '</div>' +
+          '<div class="expedition-item__bars">' +
+            '<span class="xp-chip" title="Stato del sito">' + stateTxt + '</span>' +
+            harvestTxt +
+            (s.harvesting ? '<span class="xp-chip" title="Flotta presente">✦ in raccolta</span>' : '') +
+            '<button class="btn btn--mini btn--primary" data-action="econ-anom-send" data-sys="' + s.sysId + '" data-kind="' + s.kind + '"' + bodyAttr + colAttr + ' type="button"' +
+              (canSend ? '' : ' disabled') + ' title="' + escapeHtml(sendTitle) + '">Invia flotta</button>' +
+          '</div>' +
+        '</li>';
+      }).join('') + '</ul>';
+      return head + items;
+    }).join('');
+  }
+  return '<p class="sysinfo__sub">Anomalie &amp; sfruttamenti</p>' + chips + body;
+}
+
+/* Sezione Scambi con le AI (export rifiuti). Read + chiusura contratto; i
+   nuovi contratti si aprono dalla Diplomazia (dove c'è il contesto civ). */
+function economyAiHtml(g) {
+  const T = ORION.trade;
+  const deals = (g.wasteDeals || []);
+  let body;
+  if (!T || !deals.length) {
+    body = '<p class="panel__note">Nessuno scambio attivo con le civiltà. Apri contratti di <em>export rifiuti</em> dalla scheda <em>Diplomazia</em> (servono pace o alleanza).</p>';
+  } else {
+    body = '<ul class="agr-list">' + deals.map(function (d) {
+      const civ = (g.civs || []).filter(function (c) { return c.id === d.civId; })[0];
+      const civName = civ ? civ.name : '—';
+      const stCls = d.status === 'active' ? 'ok' : 'warn';
+      const stLbl = d.status === 'active' ? 'attivo' : 'sospeso';
+      const modLbl = d.mode === 'sell' ? 'vende (+cr)' : 'smaltisce (−cr)';
+      return '<li class="agr-item">' +
+        '<span class="agr-item__deal">♻ ' + (d.flow || 4) + '/' + iU() + ' · ' + escapeHtml(civName) + ' · ' + escapeHtml(systemNameFromKey(g, d.colonyKey)) + ' · ' + modLbl + '</span>' +
+        '<span class="route-item__status is-' + stCls + '">' + stLbl + '</span>' +
+        '<button class="btn btn--mini btn--danger" data-action="econ-waste-cancel" data-deal="' + d.id + '" type="button" title="Chiudi contratto">×</button>' +
+      '</li>';
+    }).join('') + '</ul>';
+  }
+  return '<p class="sysinfo__sub">Scambi con le AI <span class="cantieri-section__hint">(rifiuti ♻)</span></p>' + body +
+    '<button class="btn btn--mini" data-action="econ-open-diplo" type="button">Apri Diplomazia →</button>';
+}
+
+function renderEconomyView(stage) {
+  if (!stage) return;
+  const g = ORION.game;
+  if (!g) return;
+  if (ORION.tutorial) ORION.tutorial.fire('economy-hub');
+  stage.innerHTML =
+    '<div class="fleet-view market-view economy-view">' +
+      '<header class="fleet-view__head">' +
+        '<h2 class="fleet-view__title">Economia <span class="fleet-view__sub">Commerci &amp; sfruttamenti</span></h2>' +
+      '</header>' +
+      economySummaryHtml(g) +
+      economyAnomaliesHtml(g) +
+      economyAiHtml(g) +
+      '<p class="sysinfo__sub">Rotte interne &amp; mercato</p>' +
+      marketBodyHtml(g) +
+      '<p class="panel__note">Tutti i guadagni di risorse e crediti <em>fuori</em> dalla produzione delle colonie: ' +
+        'anomalie §17.3 da drenare, scambi con le civiltà, rotte commerciali interne. L\'invio flotte usa lo stesso ' +
+        'picker della scheda colonia (o pianifica da <em>crea flotte</em>).</p>' +
+    '</div>';
+
+  /* ----- Eventi sezione Economia ----- */
+  stage.querySelectorAll('[data-action="econ-res-filter"]').forEach(function (b) {
+    b.addEventListener('click', function () { ORION._econResFilter = b.dataset.res; renderEconomyView(stage); });
+  });
+  stage.querySelectorAll('[data-action="econ-anom-send"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const colKey = b.dataset.col;
+      const colony = colKey ? g.colonies[colKey] : null;
+      if (!colony) { showToast('Nessuna colonia disponibile per l\'invio'); return; }
+      openAnomalySurveyPicker(colony, Number(b.dataset.sys), b.dataset.kind, b.dataset.body || null);
+    });
+  });
+  stage.querySelectorAll('[data-action="econ-waste-cancel"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const r = ORION.trade.cancelWasteDeal(g, b.dataset.deal);
+      if (!r.ok) { showToast(r.reason || 'Chiusura rifiutata'); return; }
+      showToast('Contratto chiuso');
+      persistGame(g);
+      renderEconomyView(stage);
+    });
+  });
+  const diploBtn = stage.querySelector('[data-action="econ-open-diplo"]');
+  if (diploBtn) diploBtn.addEventListener('click', function () { navigateView('civ'); });
+
+  /* Corpo Mercato (rotte/tesoreria/Mekhari): stessi eventi, refresh = economia. */
+  bindMarketBodyEvents(stage, function () { renderEconomyView(stage); });
 }
 
 /* =====================================================================
@@ -6624,7 +6855,7 @@ function doSmuggle(resource, stage) {
   if (ORION.tutorial) ORION.tutorial.fire('mekhari');
   showToast('Contrabbando: +' + MEKHARI_LOT + ' ' + tradeResLabel(resource));
   persistGame(g);
-  if (stage) renderMarketView(stage);
+  refreshActiveTradeView(stage);
 }
 
 /* Overlay di cambio valuta (M12 Fase A2, §15.4). */
@@ -6707,7 +6938,7 @@ function openExchangeOverlay(marketStage) {
       showToast('Cambiati ' + r.spent.toFixed(2) + ' → ' + r.got.toFixed(2) + ' ' + curName(toC));
       persistGame(g);
       closeExchangeOverlay();
-      if (marketStage) renderMarketView(marketStage);
+      refreshActiveTradeView(marketStage);
     });
   }
   host.addEventListener('click', function (e) { if (e.target === host) closeExchangeOverlay(); });
@@ -11796,6 +12027,12 @@ function runAdvance(impulsi) {
     const cst = document.querySelector('[data-view-stage]');
     if (cst) { const sc = cst.scrollTop; try { renderCivView(cst); } catch (_) { /* niente */ } cst.scrollTop = sc; }
   }
+  /* Stessa reattività per la scheda Economia: anomalie in raccolta, flussi
+     e saldi cambiano Impulso per Impulso (richiesta utente 2026-06-19). */
+  if (ORION._currentView === 'economy') {
+    const est = document.querySelector('[data-view-stage]');
+    if (est) { const sc = est.scrollTop; try { renderEconomyView(est); } catch (_) { /* niente */ } est.scrollTop = sc; }
+  }
   updateTimeControlsHint();
   persistGame(g);
   /* Rilancia l'animazione DS dal tick corrente (ricomincia da Ι appena maturato) */
@@ -13224,10 +13461,10 @@ function renderLeftPanel() {
       '<span>Ricerca</span>' +
       '<span class="lp-launcher__sub">M13</span>' +
     '</button>' +
-    '<button class="lp-launcher__btn" data-view="market" type="button">' +
+    '<button class="lp-launcher__btn' + (currentView === 'economy' ? ' is-active' : '') + '" data-view="economy" type="button">' +
       '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('market') + '</span>' +
-      '<span>Mercato</span>' +
-      '<span class="lp-launcher__sub">' + marketLauncherSub() + '</span>' +
+      '<span>Economia</span>' +
+      '<span class="lp-launcher__sub">' + economyLauncherSub() + '</span>' +
     '</button>' +
     '<button class="lp-launcher__btn' + (currentView === 'stations' ? ' is-active' : '') + '" data-view="stations" type="button">' +
       '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('station') + '</span>' +
