@@ -12976,7 +12976,11 @@ function renderLeftPanel() {
     });
   });
   host.querySelectorAll('[data-action="roster-fleet"]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
+    /* Singolo clic = naviga sulla mappa alla flotta; doppio clic = apre il
+       Dettaglio flotta (richiesta utente 2026-06-19). Debounce breve così il
+       singolo non scatta quando l'intento è il doppio. */
+    let clickTimer = null;
+    function doNavigate() {
       const sid = Number(btn.dataset.sys);
       const fid = btn.dataset.id;
       const fleet = (ORION.game && ORION.game.fleets || []).find(function (f) { return f.id === fid; });
@@ -13000,6 +13004,14 @@ function renderLeftPanel() {
       } else {
         navigateView('system');
       }
+    }
+    btn.addEventListener('click', function () {
+      if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
+      clickTimer = setTimeout(function () { clickTimer = null; doNavigate(); }, 220);
+    });
+    btn.addEventListener('dblclick', function () {
+      if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
+      openFleetDetail(btn.dataset.id);
     });
   });
   /* Stazioni orbitali nel Roster (decisione utente 2026-06-16): click →
