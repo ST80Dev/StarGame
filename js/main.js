@@ -10783,7 +10783,10 @@ const DEFAULT_AUTOPAUSE = {
      l'avvicinamento a una colonia e la scaramuccia sono notevoli (ON). */
   'aifleet-detected': false,
   'aifleet-approach': true,
-  'aifleet-crossed': false,
+  /* Incrocio della TUA flotta con una flotta altrui: momento + info → pausa
+     (richiesta utente 2026-06-20). È raro (serve la co-locazione/stesso tratto
+     con una tua flotta), quindi non è invasivo. */
+  'aifleet-crossed': true,
   'aifleet-hostile-encounter': true,
   'aifleet-skirmish': true,
   'aifleet-destroyed': true,
@@ -11768,7 +11771,7 @@ function _chronicleEventBody(ev) {
        decidere di "Segui" per saperne di più. */
     const whoFrag = ev.civName ? (' di <strong>' + escapeHtml(ev.civName) + '</strong>') : '';
     const compFrag = ev.compKnown ? (' (missione di <em>' + escapeHtml(ev.missionLabel) + '</em>)') : ' (composizione ignota)';
-    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName || 'La tua flotta') + '</strong> ha incrociato una flotta' + whoFrag + compFrag + ' nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">puoi dare l\'ordine «Segui» per scrutarla meglio</span>.', 'civ');
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName || 'La tua flotta') + '</strong> ha incrociato una flotta' + whoFrag + compFrag + ' nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">clicca il contatto sulla mappa per il dossier, o dai l\'ordine «Segui» per scrutarla meglio</span>.', 'civ');
   } else if (ev.kind === 'aifleet-hostile-encounter') {
     /* M18.x: incrocio con flotta OSTILE non ingaggiata (la tua non è
        aggressiva). Momento di decisione (auto-pausa), nessun danno. */

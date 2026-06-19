@@ -717,9 +717,56 @@
     pf.follow = null; // intercettazione: ordine one-shot, concluso
   }
 
-  /* Controller degli ordini di inseguimento. Gira a OGNI Impulso: riusa il
-     normale ordine `move` (setOrder) per re-instradare la flotta player
-     verso la posizione corrente della flotta AI bersaglio. */
+  /* Instrada la flotta player verso `targetNode` inseguendo un bersaglio
+     mobile (richiesta utente 2026-06-20: "Segui" usa internamente il comando
+     «Inverti rotta» quando il bersaglio è dietro).
+       - da ferma → ordine `move` normale;
+       - in volo e bersaglio DIETRO (rientrare costa meno che proseguire) →
+         riusa ORION.fleet.reverseLeg (inversione fisica a metà tratto, eta =
+         Ι già percorsi), poi estende la rotta oltre A fino al bersaglio;
+       - in volo e bersaglio AVANTI → prosegue fino a B, poi insegue.
+     Ritorna true se ha potuto instradare. */
+  function steerFollow(game, pf, targetNode) {
+    const F = ORION.fleet;
+    if (!F || !F.computePath || targetNode == null) return false;
+    if (pf.location.status !== 'in-transit') {
+      if (targetNode === pf.location.systemId) return true; // già al nodo: attende
+      const r = F.setOrder(game, pf, { type: 'move', toSysId: targetNode }, { fromFollow: true });
+      return !!(r && r.ok);
+    }
+    if (!Array.isArray(pf.route) || pf.routeIdx + 1 >= pf.route.length) return false;
+    const A = pf.route[pf.routeIdx];        // partenza leg corrente
+    const B = pf.route[pf.routeIdx + 1];    // arrivo leg corrente
+    if (targetNode === B) { pf.route = [A, B]; pf.orders = { type: 'move', toSysId: B }; return true; }
+    const pathA = F.computePath(game.galaxy, A, targetNode); // [A,…,target]
+    const pathB = F.computePath(game.galaxy, B, targetNode); // [B,…,target]
+    const dA = pathA ? pathA.length - 1 : Infinity;
+    const dB = pathB ? pathB.length - 1 : Infinity;
+    if (dA === Infinity && dB === Infinity) return false;
+    if (dA < dB && F.reverseLeg) {
+      /* Bersaglio DIETRO → comando «Inverti rotta» esistente. reverseLeg
+         azzera fleet.follow (lo tratta come ordine manuale): lo preserviamo.
+         Poi estendiamo la rotta oltre A (niente sosta) fino al bersaglio. */
+      const keep = pf.follow;
+      const r = F.reverseLeg(game, pf);
+      pf.follow = keep;
+      if (!(r && r.ok)) return false;
+      if (pathA && pathA.length > 1) {
+        pf.route = pf.route.concat(pathA.slice(1));  // [B, A, …, target]
+        pf.orders = { type: 'move', toSysId: targetNode };
+      }
+      return true;
+    }
+    /* Bersaglio AVANTI: prosegui fino a B, poi inseguI. */
+    if (!pathB || pathB.length < 2) return false;
+    pf.route = [A].concat(pathB);           // [A, B, …, target]
+    pf.routeIdx = 0;
+    pf.orders = { type: 'move', toSysId: targetNode };
+    return true;
+  }
+
+  /* Controller degli ordini di inseguimento. Gira a OGNI Impulso: instrada la
+     flotta player verso la posizione corrente della flotta AI bersaglio. */
   function processFollowing(game, fleetsAi, events) {
     const I = game.timeImpulsi || 0;
     const fleets = game.fleets || [];
@@ -738,12 +785,39 @@
                  && presenceNodes(af).indexOf(playerSys) >= 0;
 
       if (!coLoc) {
-        /* Insegui: punta al nodo verso cui la flotta AI è diretta. */
-        const dest = (af.status === 'in-transit' && af.routeIdx + 1 < af.route.length)
-          ? af.route[af.routeIdx + 1] : af.systemId;
-        if (dest != null && pf.follow.dest !== dest && ORION.fleet && ORION.fleet.setOrder) {
-          const r = ORION.fleet.setOrder(game, pf, { type: 'move', toSysId: dest }, { fromFollow: true });
-          if (r && r.ok) { pf.follow.dest = dest; }
+        /* CONVERGENZA TESTA-A-TESTA (richiesta utente 2026-06-20): se la tua
+           flotta e quella AI percorrono lo STESSO tratto in direzioni opposte,
+           si stanno avvicinando. Non invertire subito (fuggiresti davanti):
+           lasciale convergere al PUNTO D'INCONTRO intermedio e LÌ inverti la
+           tua per accodarti. */
+        const pLeg = fleetLeg(pf);
+        const aLeg = (af.status === 'in-transit' && Array.isArray(af.route) && af.routeIdx + 1 < af.route.length)
+          ? [af.route[af.routeIdx], af.route[af.routeIdx + 1]] : null;
+        if (pLeg && aLeg && pLeg[0] === aLeg[1] && pLeg[1] === aLeg[0]) {
+          const ppFromA = 1 - (pf.etaImpulsi || 0) / Math.max(1, pf.legTotal || 1); // tua frazione da A
+          const aiFromA = (af.etaImpulsi || 0) / Math.max(1, af.legTotal || 1);      // AI frazione da A
+          if (ppFromA < aiFromA) {
+            /* non ancora incrociate: prosegui dritto, vi avvicinate. */
+            pf.follow.dest = pLeg[1];
+            continue;
+          }
+          /* incrociate al punto intermedio → inverti ora per accodarti. */
+          const keep = pf.follow;
+          const r = ORION.fleet.reverseLeg(game, pf);
+          pf.follow = keep;
+          if (r && r.ok) { pf.follow.dest = aLeg[1]; }
+          else {
+            events.push({ kind: 'follow-lost', fleetId: pf.id, fleetName: pf.name, reason: 'noroute', impulso: I });
+            pf.follow = null;
+          }
+          continue;
+        }
+        /* Caso generale: insegui il nodo verso cui l'AI è diretta. Se è dietro,
+           steerFollow inverte subito a metà tratto (comando «Inverti rotta»). */
+        const dest = aLeg ? aLeg[1] : af.systemId;
+        const atNode = pf.location.status !== 'in-transit';
+        if (dest != null && (atNode || pf.follow.dest !== dest)) {
+          if (steerFollow(game, pf, dest)) { pf.follow.dest = dest; }
           else {
             events.push({ kind: 'follow-lost', fleetId: pf.id, fleetName: pf.name, reason: 'noroute', impulso: I });
             pf.follow = null;
