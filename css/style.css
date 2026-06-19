@@ -6412,6 +6412,15 @@ select.main-menu__input { cursor: pointer; }
 .civ-power--forte     { color: #f0a64a; }
 .civ-power--dominante { color: #f08296; }
 
+/* M10 Fase B-2: livello tecnologico AI (Arretrata→All'avanguardia). */
+.civ-tech { text-transform: capitalize; font-weight: 600; }
+.civ-tech--t0 { color: #8fa0c0; }
+.civ-tech--t1 { color: #aab6d0; }
+.civ-tech--t2 { color: #5fc9d6; }
+.civ-tech--t3 { color: #5fa8ff; }
+.civ-tech--t4 { color: #9d7bff; }
+.civ-tech__note { color: var(--c-text-faint); font-size: 0.72rem; }
+
 .civ-disp { margin-top: 9px; }
 .civ-disp__top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
 .civ-disp__label { font-size: 0.78rem; font-weight: 600; }

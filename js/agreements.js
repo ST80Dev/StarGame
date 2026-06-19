@@ -53,6 +53,15 @@
     const al = civ && civ.alignment;
     if (al === 'bene') s *= 0.85;
     else if (al === 'male') s *= 1.2;
+    /* M10 Fase B-2: una civ tecnologicamente superiore ha più leva
+       contrattuale → spread leggermente peggiore; una arretrata, migliore.
+       Effetto contenuto (±~7%) — il contrappeso al vantaggio tech è la
+       loro massa militare ridotta, non il prezzo. */
+    const AI = root.ORION.ai;
+    if (AI && AI.techNorm) {
+      const t = AI.techNorm(game, civ);   // 0..1
+      s *= 1 + 0.15 * (t - 0.5);
+    }
     return Math.max(0.03, Math.min(0.30, Math.round(s * 1000) / 1000));
   }
 

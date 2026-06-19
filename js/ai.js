@@ -1480,7 +1480,10 @@
       if (!best) continue;
       const eta = Math.max(25, Math.min(90, 25 + bestHops * 12));
       const id = 'inc-ai-' + (game.timeImpulsi || 0) + '-' + i;
-      const level = Math.max(1, Math.round(civ.power / 30));
+      /* M10 Fase B-2: una civ tecnologicamente avanzata telegrafa
+         un'incursione di livello più alto (≤ +25%). Lo scontro vero è
+         comunque scalato da `materialize` (fpMul/hpMul). */
+      const level = Math.max(1, Math.round((civ.power / 30) * (1 + TECH_CFG.FP_GAIN * techNorm(game, civ))));
       civ.relation = 'war';
       game.incursions.push({
         id: id, kind: 'ai', civId: civ.id, civName: civ.name, civColor: civ.color,
@@ -1622,6 +1625,69 @@
     if (power < 160) return 'forte';
     return 'dominante';
   }
+
+  /* ------------------------------------------------------------------
+     LIVELLO TECNOLOGICO (decisione #52 §13 — M10 Fase B-2).
+     `techNorm(game, civ)` ∈ [0,1] è una **funzione pura** (niente stato
+     persistito → nessun bump di schema, #5 deterministico): deriva da
+     vocazione (inclinazione tech), età della civ (maturazione satura) e
+     un piccolo termine da power. Tecnocratici/Vehryn partono alti, i
+     predoni bassi.
+
+     CONTRAPPESO recovery-friendly (#22, richiesta utente 2026-06-19): il
+     vantaggio tech NON deve creare uno svantaggio invisibile e
+     irrecuperabile. Quindi "qualità ≠ quantità": una civ avanzata ha
+     unità più toste (`fpMul`/`hpMul` ≤ +TECH_FP_GAIN) ma ne schiera
+     MENO (`massMul` fino a −TECH_MASS_PENALTY) → l'aggregato di
+     combattimento cresce al massimo ~+10%, mai un muro. In più, le
+     vocazioni "tech" espandono/guerreggiano già meno (VOCATIONS) →
+     avanzate ma piccole e pacifiche. Mai una civ grande+avanzata+ostile
+     a freddo. ------------------------------------------------------- */
+  const TECH_VOCATION_BIAS = {
+    tecnocratici: 1.00, mistici: 0.60, isolazionisti: 0.55, mercantili: 0.45,
+    sedentari: 0.40, imperialisti: 0.35, espansionisti: 0.30, predoni: 0.15
+  };
+  const TECH_CFG = {
+    AGE_HALF: 6000,        // Ι: dimezzamento della maturazione (satura)
+    BASE: 0.10,            // pavimento per tutti
+    VOC_FLOOR: 0.40,       // peso vocazione a età 0
+    VOC_AGE: 0.50,         // peso vocazione che matura con l'età
+    POW_CAP: 0.15,         // contributo massimo dal power
+    POW_DIV: 1200,         // power per saturare POW_CAP
+    FP_GAIN: 0.25,         // +25% fuoco/corazza per unità all'avanguardia
+    MASS_PENALTY: 0.12     // −12% numero unità all'avanguardia (contrappeso)
+  };
+  function techNorm(game, civ) {
+    if (!civ) return 0.30;
+    const bias = (civ.vocation && TECH_VOCATION_BIAS[civ.vocation] != null)
+      ? TECH_VOCATION_BIAS[civ.vocation] : 0.40;
+    const I = (game && game.timeImpulsi) || 0;
+    const age = Math.max(0, I - (civ.established || 0));
+    const ageNorm = age / (age + TECH_CFG.AGE_HALF);
+    const vocComp = bias * (TECH_CFG.VOC_FLOOR + TECH_CFG.VOC_AGE * ageNorm);
+    const powComp = Math.min(TECH_CFG.POW_CAP, (civ.power || 0) / TECH_CFG.POW_DIV);
+    let t = TECH_CFG.BASE + vocComp + powComp;
+    return t < 0 ? 0 : (t > 1 ? 1 : t);
+  }
+  const TECH_TIER_LABEL = ['Arretrata', 'Standard', 'Avanzata', 'Superiore', "All'avanguardia"];
+  function techTierIndex(game, civ) {
+    const t = techNorm(game, civ);
+    if (t < 0.20) return 0;
+    if (t < 0.40) return 1;
+    if (t < 0.60) return 2;
+    if (t < 0.80) return 3;
+    return 4;
+  }
+  function techTierLabel(game, civ) { return TECH_TIER_LABEL[techTierIndex(game, civ)]; }
+  /* Moltiplicatori di combattimento per le unità materializzate. */
+  function techCombatMul(game, civ) {
+    const t = techNorm(game, civ);
+    return {
+      fpMul: 1 + TECH_CFG.FP_GAIN * t,
+      hpMul: 1 + TECH_CFG.FP_GAIN * t,
+      massMul: 1 - TECH_CFG.MASS_PENALTY * t
+    };
+  }
   function knownSystemsCount(game, civ) {
     const sys = civ.systems || derivedSystems(civ);
     let n = 0;
@@ -1647,11 +1713,17 @@
 
   function materialize(game, civ, sysId) {
     if (!civ) return null;
-    const units = Math.max(1, Math.round((civ.power || 0) / 25));
+    /* M10 Fase B-2: il tech-tier ridistribuisce la forza (qualità ≠
+       quantità) — unità più toste ma in numero ridotto. */
+    const tech = techCombatMul(game, civ);
+    const rawUnits = (civ.power || 0) / 25;
+    const units = Math.max(1, Math.round(rawUnits * tech.massMul));
     return {
       civId: civ.id, civName: civ.name, alignment: civ.alignment,
       color: civ.color, atSystem: sysId,
-      units: units, power: civ.power || 0, ships: []
+      units: units, power: civ.power || 0, ships: [],
+      fpMul: tech.fpMul, hpMul: tech.hpMul,
+      techTier: techTierIndex(game, civ)
     };
   }
   function demobilize(game, civ, outcome) {
@@ -1730,6 +1802,12 @@
     reputationPreview: reputationPreview,
     dispositionLabel: dispositionLabel,
     powerTier: powerTier,
+    /* M10 Fase B-2 (decisione #52 §13): livello tecnologico AI. */
+    techNorm: techNorm,
+    techTierIndex: techTierIndex,
+    techTierLabel: techTierLabel,
+    techCombatMul: techCombatMul,
+    TECH_TIER_LABEL: TECH_TIER_LABEL,
     knownSystemsCount: knownSystemsCount,
     contactedCivs: contactedCivs,
     /* M10 Fase B punto 2 (decisione #52 §13.10): scoperta progressiva. */

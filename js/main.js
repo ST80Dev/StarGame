@@ -7795,13 +7795,21 @@ function renderCivView(stage) {
       const vocLabel = (ORION.ai.VOCATIONS && c.vocation && ORION.ai.VOCATIONS[c.vocation]) ? ORION.ai.VOCATIONS[c.vocation].label : '—';
       const affLabel = (ORION.ai.AFFINITIES && c.affinity && ORION.ai.AFFINITIES[c.affinity]) ? ORION.ai.AFFINITIES[c.affinity].label : '—';
       const force = ORION.ai.forceEstimate ? ORION.ai.forceEstimate(g, c) : 0;
+      /* M10 Fase B-2: livello tecnologico + nota sul contrappeso
+         (qualità ≠ quantità). */
+      const techTier = ORION.ai.techTierIndex ? ORION.ai.techTierIndex(g, c) : 1;
+      const techLbl = ORION.ai.techTierLabel ? ORION.ai.techTierLabel(g, c) : '—';
+      const techNote = techTier >= 3
+        ? ' <span class="civ-tech__note">(unità più toste, ma in numero contenuto)</span>'
+        : (techTier === 0 ? ' <span class="civ-tech__note">(armamenti datati)</span>' : '');
       /* Potenza/Sistemi noti vivono già nella Stima impero (estBlock): qui
          solo i dettagli più profondi (vocazione/affinità/tratto/forza). */
       const extras =
         '<div class="civ-card__row"><span class="civ-card__k">Vocazione</span><span class="civ-voc">' + escapeHtml(vocLabel) + '</span>' +
           '<span class="civ-card__k">Affinità</span><span>' + escapeHtml(affLabel) + '</span></div>' +
         '<div class="civ-card__row"><span class="civ-card__k">Tratto</span><span>' + escapeHtml(c.traitLabel || '—') + '</span>' +
-          '<span class="civ-card__k">Forza stimata</span><span>≈ ' + force + ' unità</span></div>';
+          '<span class="civ-card__k">Forza stimata</span><span>≈ ' + force + ' unità</span></div>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Tecnologia</span><span class="civ-tech civ-tech--t' + techTier + '">' + escapeHtml(techLbl) + '</span>' + techNote + '</div>';
       /* Inserisci extras DOPO i chip + sede e PRIMA della barra disposizione. */
       body = body.replace('<div class="civ-disp">', extras + '<div class="civ-disp">');
     }
