@@ -6581,6 +6581,14 @@ select.main-menu__input { cursor: pointer; }
 }
 .dip-offer--ultimatum .dip-offer__icon,
 .dip-offer--warning .dip-offer__icon { color: #ff5a5a; }
+/* M11 (decisione #95) — distress: alleato in difficoltà. Tinta verde "amica"
+   (UI_GUIDE §7 is-ok), per distinguerlo a colpo d'occhio dall'urgenza ostile. */
+.dip-offer--distress {
+  background: rgba(80, 220, 140, 0.12);
+  border-color: rgba(80, 220, 140, 0.50);
+  border-left-color: #50dc8c;
+}
+.dip-offer--distress .dip-offer__icon { color: #50dc8c; }
 
 /* M11 Fase B parziale — Sistemi occupati */
 .civ-occupations {

@@ -102,7 +102,42 @@
     /* TRATTATI DI PASSAGGIO — stato bilaterale, prereq M12 Fase B. */
     PASSAGE_DISP_MIN: 40,           // disposizione min per proporlo
     PASSAGE_REP_BONUS: 2,           // reputazione al firma
-    PASSAGE_DISP_DRIFT: 2           // disposizione/DRIFT_EVERY_I durante trattato
+    PASSAGE_DISP_DRIFT: 2,          // disposizione/DRIFT_EVERY_I durante trattato
+    /* ============== M11 residui (decisione #95) ==============
+       Vassallaggio micro-civiltà + Aiuto-ad-alleato attivo. */
+    /* VASSALLAGGIO — solo verso micro-civiltà deboli. Una civ buona NON
+       accetta vassallaggio coercitivo (vincolo d'onore, simmetria con
+       "no monetizzazione pace" #94). */
+    VASSAL_POWER_MAX: 40,           // micro deve avere power ≤ questo
+    VASSAL_DISP_MIN: -10,           // soglia disposizione (leggera: presenza basta)
+    VASSAL_DISP_FLOOR: 30,          // pavimento dopo accettazione
+    VASSAL_REP_LIGHT_GOOD: 2,       // se sottometti una micro buona = piccolo dark
+    VASSAL_REP_DARK_NEUTRAL: -3,    // se sottometti una neutrale = dark moderato
+    /* Tributo periodico dal vassallo. Cadenza generosa per leggibilità. */
+    VASSAL_TRIBUTE_EVERY_I: 80,
+    VASSAL_TRIBUTE_MET: 30,         // tributo base; scala col power
+    VASSAL_TRIBUTE_EN:  15,
+    VASSAL_TRIBUTE_POWER_DIV: 12,   // più potente la micro, più paga (entro misura)
+    /* Affrancamento: il giocatore libera il vassallo. Atto light. */
+    VASSAL_RELEASE_REP_LIGHT: 3,
+    VASSAL_RELEASE_DISP_BONUS: 25,
+    /* Ribellione: se trattati male, il vassallo si ribella → guerra.
+       Le civ buone si AFFRANCANO da sole (non guerreggiano), le neutrali/
+       maligne si ribellano. Check cadenzato. */
+    VASSAL_REBEL_DISP_MAX: -40,     // disposizione molto bassa = malcontento
+    VASSAL_REBEL_CHANCE: 0.08,
+    VASSAL_AGE_MIN: 100,            // prima di poter ribellarsi (no flip immediato)
+    /* AIUTO-AD-ALLEATO — l'alleato in difficoltà chiede aiuto in risorse. */
+    DISTRESS_PRESSURE_MIN: 0.4,     // power calo / nemici nei vicini
+    DISTRESS_CHANCE: 0.05,          // probabilità per check (cadenza PROACTIVE)
+    DISTRESS_MET: 100,
+    DISTRESS_EN: 50,
+    DISTRESS_REP_HELP: 4,           // reputazione se aiuti
+    DISTRESS_REP_IGNORE: -1,        // piccolo costo reputazione se ignori (passività vista come fredda)
+    DISTRESS_DISP_HELP: 12,
+    DISTRESS_DISP_REJECT: -8,
+    DISTRESS_DISP_IGNORE: -5,
+    DISTRESS_POWER_HELP: 5          // l'aiuto rinforza concretamente l'alleato
   };
 
   /* ---------- Reputazione globale (§14) ---------- */
@@ -127,9 +162,12 @@
     if (civ && !civ.relation) civ.relation = 'peace';
     return civ ? civ.relation : 'peace';
   }
-  /* Relazione EFFETTIVA: una tregua scaduta vale 'war'. */
+  /* Relazione EFFETTIVA: una tregua scaduta vale 'war'. Un vassallo è
+     'alliance' di fatto (gate su incursioni/garrison, simmetria con i
+     trattati di passaggio). */
   function effectiveRelation(game, civ) {
     if (!civ) return 'peace';
+    if (civ.vassal) return 'alliance';
     const rel = ensureRelation(civ);
     if (rel === 'truce') {
       const now = (game && game.timeImpulsi) || 0;
@@ -137,6 +175,18 @@
     }
     return rel;
   }
+
+  /* M11 residui (decisione #95) — discriminante micro-civiltà: il seed
+     genera id 'civ-mic-*' per le micro (1-3 pianeti), 'civ-emp-*' per
+     gli imperi. Fallback su soglia power: una micro è anche "established=
+     false" + pochi pianeti. */
+  function isMicroCiv(civ) {
+    if (!civ) return false;
+    if (typeof civ.id === 'string' && civ.id.indexOf('civ-mic-') === 0) return true;
+    if (civ.established === false && (civ.planets || []).length <= 3) return true;
+    return false;
+  }
+  function isVassal(civ) { return !!(civ && civ.vassal); }
   function relationLabel(rel) { return RELATION_LABEL[rel] || rel; }
   function relationStateClass(rel) { return RELATION_STATE[rel] || ''; }
 
@@ -154,6 +204,11 @@
   /* Restituisce gli id azione disponibili per lo stato corrente.
      Solo il giocatore propone (Fase A). */
   function availableActions(game, civ) {
+    /* M11 (decisione #95) — vassallo: contesto azioni dedicato.
+       Le azioni "normali" non si applicano (il vassallo è già vincolato). */
+    if (civ && civ.vassal) {
+      return ['release-vassal', 'declare-war'];
+    }
     const rel = effectiveRelation(game, civ);
     const hasPassage = !!(civ && civ.passageTreaty);
     if (rel === 'war')      return ['sue-peace'];
@@ -164,8 +219,16 @@
       return hasPassage ? ['break-alliance'] : ['propose-passage', 'break-alliance'];
     }
     /* peace */
-    return hasPassage ? ['propose-alliance', 'declare-war']
-                      : ['propose-alliance', 'propose-passage', 'declare-war'];
+    const acts = ['propose-alliance'];
+    if (!hasPassage) acts.push('propose-passage');
+    /* Vassallaggio: disponibile solo per micro-civ deboli e non Bene
+       (le buone non accettano sottomissione coercitiva). */
+    if (isMicroCiv(civ) && (civ.power || 0) <= CFG.VASSAL_POWER_MAX &&
+        civ.alignment !== 'bene') {
+      acts.push('propose-vassalage');
+    }
+    acts.push('declare-war');
+    return acts;
   }
 
   const ACTION_LABEL = {
@@ -173,6 +236,8 @@
     'propose-peace': 'Proponi pace',
     'propose-alliance': 'Proponi alleanza',
     'propose-passage': 'Proponi trattato di passaggio',
+    'propose-vassalage': 'Proponi vassallaggio',
+    'release-vassal': 'Affranca il vassallo',
     'declare-war': 'Dichiara guerra',
     'break-alliance': 'Rompi alleanza'
   };
@@ -254,6 +319,43 @@
                             : 'La tua reputazione non li convince.' };
     }
 
+    if (actionId === 'propose-vassalage') {
+      /* M11 (decisione #95) — vassallaggio: solo verso micro-civ deboli e
+         non allineate al bene. La micro accetta più volentieri se è già
+         circondata da nemici (pressure alta) o se la tua reputazione è
+         alta (sembri un'opzione decente di protezione). */
+      if (!isMicroCiv(civ)) {
+        return { accept: false, unilateral: false, likelihood: 'improbabile',
+          reason: 'Solo le micro-civiltà accettano il vassallaggio.' };
+      }
+      if ((civ.power || 0) > CFG.VASSAL_POWER_MAX) {
+        return { accept: false, unilateral: false, likelihood: 'improbabile',
+          reason: 'Non sono abbastanza deboli per accettare la sottomissione.' };
+      }
+      if (civ.alignment === 'bene') {
+        return { accept: false, unilateral: false, likelihood: 'improbabile',
+          reason: 'Non si piegano: troppo onorevoli per la sottomissione.' };
+      }
+      /* La pressione (war globale del giocatore) NON aiuta: una micro non
+         vuole farsi vassalla di chi è in fiamme. Pressure ALTA = riduce
+         disponibilità. La reputazione invece la convince. */
+      const okDisp = disp >= CFG.VASSAL_DISP_MIN;
+      const repBoost = rep >= 60;
+      const tooBusy = pressure >= 0.7;
+      const ok = okDisp && !tooBusy && (disp >= 0 || repBoost);
+      return { accept: ok, unilateral: false,
+        likelihood: ok ? 'probabile' : (disp >= CFG.VASSAL_DISP_MIN - 15 ? 'incerta' : 'improbabile'),
+        reason: ok ? 'Accettano la sottomissione in cambio della tua protezione.'
+                   : tooBusy ? 'Non si fidano: sei in troppi fronti aperti.'
+                   : (disp < CFG.VASSAL_DISP_MIN ? 'Non ti vedono come protettore credibile.'
+                                                : 'La tua reputazione non basta a convincerli.') };
+    }
+    if (actionId === 'release-vassal') {
+      /* Unilaterale: l'affrancamento è una scelta del giocatore. */
+      return { accept: true, unilateral: true, likelihood: 'certa',
+        reason: 'Atto di sovrana clemenza: il vassallo torna libero.' };
+    }
+
     if (actionId === 'propose-passage') {
       /* M11 Fase B (decisione #94) — Trattato di passaggio: gate su pace/
          alleanza E disposizione min. Le buone accettano più volentieri (gate
@@ -331,8 +433,15 @@
         applyMoralVerb(game, innocent ? 'dark' : 'light');
         events.push({ kind: 'diplo-war', civId: civ.id, civName: civ.name,
           civColor: civ.color, impulso: now });
-        /* La guerra cancella ogni trattato di passaggio + warning di tradimento. */
+        /* La guerra cancella ogni trattato di passaggio + warning di tradimento +
+           vassallaggio (l'atto è esplicitamente bellico — il vassallo si libera
+           prima ancora di essere tradito). */
         breakPassageTreaty(game, civ, events, 'war');
+        if (civ.vassal) {
+          civ.vassal = null;
+          events.push({ kind: 'diplo-vassal-broken', civId: civ.id, civName: civ.name,
+            civColor: civ.color, reason: 'war', impulso: now });
+        }
         civ.allianceWarning = null;
         break;
       }
@@ -375,6 +484,37 @@
         civ.disposition = Math.max(civ.disposition || 0, CFG.PASSAGE_DISP_MIN);
         adjustReputation(game, CFG.PASSAGE_REP_BONUS);
         events.push({ kind: 'diplo-passage', civId: civ.id, civName: civ.name,
+          civColor: civ.color, impulso: now });
+        break;
+      }
+      case 'propose-vassalage': {
+        /* M11 (decisione #95) — la micro accetta: stato vassallo + bookmark
+           per il tributo periodico. Verbo morale: sottomettere una neutrale
+           è "dark" (impero che si espande); le buone non si possono
+           sottomettere (gate in evaluate). */
+        civ.vassal = { since: now, lastTributeAt: now };
+        civ.relation = 'peace';     // formalmente non in guerra (effective = alliance via flag)
+        civ.truceUntil = 0;
+        civ.disposition = Math.max(civ.disposition || 0, CFG.VASSAL_DISP_FLOOR);
+        const repDelta = (civ.alignment === 'male') ? 1
+                       : (civ.alignment === 'bene') ? CFG.VASSAL_REP_LIGHT_GOOD  // mai oggi (gate), gancio
+                                                    : CFG.VASSAL_REP_DARK_NEUTRAL;
+        adjustReputation(game, repDelta);
+        applyMoralVerb(game, civ.alignment === 'male' ? 'light' : 'dark');
+        callOffAggression(game, civ);
+        events.push({ kind: 'diplo-vassal', civId: civ.id, civName: civ.name,
+          civColor: civ.color, impulso: now });
+        break;
+      }
+      case 'release-vassal': {
+        /* M11 (decisione #95) — affrancamento: atto unilaterale, verbo
+           light. Il vassallo è grato (disp +25) e torna in pace. */
+        civ.vassal = null;
+        civ.relation = 'peace';
+        civ.disposition = Math.min(100, (civ.disposition || 0) + CFG.VASSAL_RELEASE_DISP_BONUS);
+        adjustReputation(game, CFG.VASSAL_RELEASE_REP_LIGHT);
+        applyMoralVerb(game, 'light');
+        events.push({ kind: 'diplo-vassal-released', civId: civ.id, civName: civ.name,
           civColor: civ.color, impulso: now });
         break;
       }
@@ -479,6 +619,15 @@
         }
         return;
       }
+      /* M11 (decisione #95) — DISTRESS scaduto = ignore: piccolo nudge
+         negativo (rep + disp), evento atmosferico. */
+      if (off.kind === 'distress') {
+        c.disposition = Math.max(-100, (c.disposition || 0) + CFG.DISTRESS_DISP_IGNORE);
+        adjustReputation(game, CFG.DISTRESS_REP_IGNORE);
+        if (events) events.push({ kind: 'diplo-distress-ignored', civId: c.id,
+          civName: c.name, civColor: c.color, impulso: now });
+        return;
+      }
       c.disposition = (c.disposition || 0) + CFG.OFFER_EXPIRE_DISP;
       if (events) events.push({ kind: 'diplo-offer-expired', civId: c.id,
         civName: c.name, civColor: c.color, action: off.actionId, impulso: now });
@@ -514,6 +663,145 @@
        Preavviso, poi guerra se non si appiana. Le civ Buone non tradiscono
        mai (vincolo GDD §13.9). */
     tickBetrayals(game, events, now);
+
+    /* M11 (decisione #95) — VASSALLI: tributo periodico + check
+       ribellione/affrancamento. AIUTO-AD-ALLEATO: dispacci di soccorso. */
+    tickVassals(game, events, now);
+    if (now >= CFG.PROACTIVE_WARMUP_I && now % CFG.PROACTIVE_EVERY_I === 0) {
+      tickDistress(game, events, now);
+    }
+  }
+
+  /* M11 (decisione #95) — Tick dei vassalli: tributo + ribellione.
+     - Tributo: ogni VASSAL_TRIBUTE_EVERY_I dal lastTributeAt, depositato
+       sulla colonia principale del giocatore (capitale se esiste, altrimenti
+       prima per chiave).
+     - Ribellione: check su disposizione molto bassa, cadenza PROACTIVE.
+       Le buone non si ribellano per guerra (gate in evaluate: non possono
+       essere vassallizzate). Le neutrali si AFFRANCANO (release self,
+       pace), le maligne dichiarano GUERRA. */
+  function tickVassals(game, events, now) {
+    if (!Array.isArray(game.civs)) return;
+    const civs = game.civs.slice().sort(function (a, b) {
+      return String(a.id || '').localeCompare(String(b.id || ''));
+    });
+    for (let i = 0; i < civs.length; i++) {
+      const c = civs[i];
+      if (!c || !c.alive || !c.vassal) continue;
+      /* TRIBUTO */
+      const last = (c.vassal.lastTributeAt != null) ? c.vassal.lastTributeAt
+                 : (c.vassal.since != null) ? c.vassal.since : now;
+      if (now - last >= CFG.VASSAL_TRIBUTE_EVERY_I) {
+        const factor = 1 + Math.max(0, (c.power || 0)) / CFG.VASSAL_TRIBUTE_POWER_DIV;
+        const met = Math.round(CFG.VASSAL_TRIBUTE_MET * factor);
+        const en  = Math.round(CFG.VASSAL_TRIBUTE_EN  * factor);
+        receiveTribute(game, met, en);
+        c.vassal.lastTributeAt = now;
+        if (events) events.push({ kind: 'diplo-vassal-tribute', civId: c.id,
+          civName: c.name, civColor: c.color, payload: { met: met, en: en }, impulso: now });
+      }
+      /* RIBELLIONE / AFFRANCAMENTO: check cadenzato. */
+      if (now % CFG.PROACTIVE_EVERY_I !== 0) continue;
+      /* `vassal.since` può essere 0 legittimamente — uso `!= null`
+         (bug-fix del pattern già visto in tickBetrayals). */
+      const vassalAt = (c.vassal.since != null) ? c.vassal.since : now;
+      const age = now - vassalAt;
+      if (age < CFG.VASSAL_AGE_MIN) continue;
+      const disp = c.disposition || 0;
+      if (disp > CFG.VASSAL_REBEL_DISP_MAX) continue;
+      const rng = ORION.rng && ORION.rng.makeRng
+        ? ORION.rng.makeRng((game.seed || (game.galaxy && game.galaxy.seed) || 'NA') +
+          ':vassal-rebel:' + c.id + ':' + now)
+        : null;
+      const fires = rng ? rng.chance(CFG.VASSAL_REBEL_CHANCE) : false;
+      if (!fires) continue;
+      /* Le buone si affrancano (non guerreggiano); le neutrali si affrancano
+         senza guerra ma rumorosamente; le maligne dichiarano guerra. */
+      c.vassal = null;
+      if (c.alignment === 'male') {
+        c.relation = 'war';
+        c.disposition = Math.min(disp, -30);
+        if (events) {
+          events.push({ kind: 'diplo-vassal-rebel', civId: c.id, civName: c.name,
+            civColor: c.color, alignment: c.alignment, impulso: now });
+          events.push({ kind: 'diplo-war', civId: c.id, civName: c.name,
+            civColor: c.color, byAi: true, impulso: now });
+        }
+      } else {
+        /* neutrale o bene → affrancamento "freddo" */
+        c.relation = 'peace';
+        c.disposition = Math.min(disp, -10);
+        if (events) events.push({ kind: 'diplo-vassal-rebel', civId: c.id,
+          civName: c.name, civColor: c.color, alignment: c.alignment, impulso: now });
+      }
+    }
+  }
+
+  /* M11 (decisione #95) — Tick dispacci di soccorso da alleati AI in
+     difficoltà. Trigger: alleato (o vassallo) con power < 0.7 × peak
+     (lo tracciamo lazy su c.peakPower) e nessuna offerta pendente. RNG
+     deterministico, chance modesta. Emette pendingOffer kind:'distress'. */
+  function tickDistress(game, events, now) {
+    if (!Array.isArray(game.civs)) return;
+    const civs = game.civs.slice().sort(function (a, b) {
+      return String(a.id || '').localeCompare(String(b.id || ''));
+    });
+    let emitted = 0;
+    for (let i = 0; i < civs.length && emitted < CFG.PROACTIVE_MAX_PER_TICK; i++) {
+      const c = civs[i];
+      if (!c || !c.alive) continue;
+      if (c.pendingOffer) continue;
+      const rel = effectiveRelation(game, c);
+      if (rel !== 'alliance') continue;
+      /* Aggiorna picco di potenza (lazy, additivo). */
+      if (c.peakPower == null || (c.power || 0) > c.peakPower) {
+        c.peakPower = c.power || 0;
+      }
+      const peak = c.peakPower || 1;
+      const ratio = (c.power || 0) / peak;
+      if (ratio >= (1 - CFG.DISTRESS_PRESSURE_MIN)) continue;  // power calo < 40% del peak → no distress
+      /* Cooldown anti-spam (riusa lastProposalAt come anti-flood unico). */
+      if (c.lastProposalAt != null && (now - c.lastProposalAt) < CFG.PROPOSAL_COOLDOWN * 2) continue;
+      const rng = ORION.rng && ORION.rng.makeRng
+        ? ORION.rng.makeRng((game.seed || (game.galaxy && game.galaxy.seed) || 'NA') +
+          ':distress:' + c.id + ':' + now)
+        : null;
+      const fires = rng ? rng.chance(CFG.DISTRESS_CHANCE) : false;
+      if (!fires) continue;
+      c.pendingOffer = {
+        actionId: 'distress',
+        kind: 'distress',
+        payload: { met: CFG.DISTRESS_MET, en: CFG.DISTRESS_EN },
+        expiresAt: now + CFG.OFFER_TTL,
+        since: now,
+        originator: 'ai'
+      };
+      c.lastProposalAt = now;
+      events.push({ kind: 'diplo-distress', civId: c.id, civName: c.name,
+        civColor: c.color, payload: c.pendingOffer.payload,
+        expiresAt: c.pendingOffer.expiresAt, impulso: now });
+      emitted++;
+    }
+  }
+
+  /* M11 (decisione #95) — Tributo IN ENTRATA dal vassallo al giocatore.
+     Inverso di payTribute. Deposita sulla capitale (`game.capitalKey`) o
+     sulla prima colonia per chiave. */
+  function receiveTribute(game, met, en) {
+    if (!game || !game.colonies) return;
+    const keys = Object.keys(game.colonies);
+    if (!keys.length) return;
+    let targetKey = null;
+    if (game.capitalKey && game.colonies[game.capitalKey]) {
+      targetKey = game.capitalKey;
+    } else {
+      keys.sort();
+      targetKey = keys[0];
+    }
+    const colony = game.colonies[targetKey];
+    if (!colony) return;
+    colony.met = (colony.met || 0) + (met || 0);
+    colony.en = (colony.en || 0) + (en || 0);
   }
 
   function tickBetrayals(game, events, now) {
@@ -689,6 +977,15 @@
         civColor: civ.color, byAi: true, impulso: now });
       return { ok: true, accepted: false, becameWar: true };
     }
+    /* M11 (decisione #95) — DISTRESS rifiutato: nudge negativo più marcato
+       (rifiutare aiuto a un alleato è un atto leggibile come freddo). */
+    if (!accept && off.kind === 'distress') {
+      civ.pendingOffer = null;
+      civ.disposition = Math.max(-100, (civ.disposition || 0) + CFG.DISTRESS_DISP_REJECT);
+      events.push({ kind: 'diplo-distress-rejected', civId: civ.id, civName: civ.name,
+        civColor: civ.color, impulso: now });
+      return { ok: true, accepted: false };
+    }
     if (!accept) {
       civ.pendingOffer = null;
       civ.disposition = Math.max(-100, (civ.disposition || 0) + CFG.OFFER_REJECT_DISP);
@@ -699,6 +996,30 @@
     /* Controfferta/ultimatum: il giocatore PAGA il tributo. Verifica che
        l'impero abbia abbastanza, altrimenti rifiuta con motivo (recovery: non
        lascia stato corrotto, l'offerta resta in attesa). */
+    /* M11 (decisione #95) — DISTRESS accepted: paga + bonus reputazione e
+       disposizione + nudge concreto al power dell'alleato. */
+    if (off.kind === 'distress') {
+      const payload = off.payload || {};
+      if (!game.colonies) {
+        return { ok: false, reason: 'Impossibile verificare le risorse.' };
+      }
+      const colonies = Object.keys(game.colonies).map(function (k) { return game.colonies[k]; });
+      let totMet = 0, totEn = 0;
+      colonies.forEach(function (c) { totMet += c.met || 0; totEn += c.en || 0; });
+      if (totMet < (payload.met || 0) || totEn < (payload.en || 0)) {
+        return { ok: false, reason: 'Risorse insufficienti per inviare aiuto.' };
+      }
+      payTribute(game, payload.met || 0, payload.en || 0);
+      civ.pendingOffer = null;
+      civ.disposition = Math.min(100, (civ.disposition || 0) + CFG.DISTRESS_DISP_HELP);
+      civ.power = (civ.power || 0) + CFG.DISTRESS_POWER_HELP;
+      /* Aggiorna peak per evitare nuovi distress immediati. */
+      if (civ.peakPower == null || civ.power > civ.peakPower) civ.peakPower = civ.power;
+      adjustReputation(game, CFG.DISTRESS_REP_HELP);
+      events.push({ kind: 'diplo-distress-aided', civId: civ.id, civName: civ.name,
+        civColor: civ.color, payload: payload, impulso: now });
+      return { ok: true, accepted: true };
+    }
     if (off.kind === 'counter' || off.kind === 'ultimatum') {
       const payload = off.payload || {};
       if (!game.colonies) {
@@ -752,7 +1073,9 @@
     if (actionId === 'propose-peace') return 'Pace';
     if (actionId === 'propose-alliance') return 'Alleanza';
     if (actionId === 'propose-passage') return 'Passaggio';
+    if (actionId === 'propose-vassalage') return 'Vassallaggio';
     if (actionId === 'ultimatum') return 'Ultimatum';
+    if (actionId === 'distress') return 'Soccorso';
     return actionId || '—';
   }
 
@@ -821,6 +1144,12 @@
     appease: appease,
     breakPassageTreaty: breakPassageTreaty,
     payTribute: payTribute,
-    hasPassageTreaty: function (civ) { return !!(civ && civ.passageTreaty); }
+    hasPassageTreaty: function (civ) { return !!(civ && civ.passageTreaty); },
+    /* M11 residui (decisione #95) */
+    isMicroCiv: isMicroCiv,
+    isVassal: isVassal,
+    tickVassals: tickVassals,
+    tickDistress: tickDistress,
+    receiveTribute: receiveTribute
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

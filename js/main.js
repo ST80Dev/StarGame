@@ -8030,13 +8030,21 @@ function renderCivView(stage) {
           payTxt = ' · <strong>' + (pay.met || 0) + ' met</strong> + <strong>' + (pay.en || 0) + ' en</strong>';
           primary = 'Paga e accetta';
           danger = 'Rifiuta';
+        } else if (off.kind === 'distress') {
+          /* M11 (decisione #95): aiuto-ad-alleato. */
+          const pay = off.payload || {};
+          head = '<strong>Soccorso:</strong> chiedono aiuto in risorse';
+          payTxt = ' · <strong>' + (pay.met || 0) + ' met</strong> + <strong>' + (pay.en || 0) + ' en</strong>';
+          primary = 'Invia aiuto';
+          danger = 'Respingi';
         } else {
           head = '<strong>Dispaccio:</strong> offrono <strong>' + escapeHtml(DIP.offerLabel(off.actionId)) + '</strong>';
           primary = 'Accetta';
           danger = 'Rifiuta';
         }
         const klass = off.kind === 'ultimatum' ? ' dip-offer--ultimatum'
-                    : off.kind === 'counter' ? ' dip-offer--counter' : '';
+                    : off.kind === 'counter' ? ' dip-offer--counter'
+                    : off.kind === 'distress' ? ' dip-offer--distress' : '';
         offerHtml = '<div class="dip-offer' + klass + '">' +
           '<span class="dip-offer__icon" aria-hidden="true">' + (off.kind === 'ultimatum' ? '⚠' : '✉') + '</span>' +
           '<span class="dip-offer__text">' + head + payTxt + ' · scade tra ' + ttl + ' Ι</span>' +
@@ -11446,6 +11454,20 @@ const DEFAULT_AUTOPAUSE = {
   'diplo-betrayal-defused': false,
   'diplo-passage': false,
   'diplo-passage-broken': false,
+  /* M11 (decisione #95): vassallaggio + aiuto-ad-alleato. Sottomissione/
+     affrancamento/ribellione = transizioni forti (auto-pausa ON). Tributo
+     periodico e rotture automatiche = atmosferici (OFF). Distress (la AI
+     ti chiede aiuto) = richiede decisione → auto-pausa ON. Aided/ignored/
+     rejected = conseguenze già coperte dall'azione = OFF. */
+  'diplo-vassal': true,
+  'diplo-vassal-released': true,
+  'diplo-vassal-rebel': true,
+  'diplo-vassal-broken': false,
+  'diplo-vassal-tribute': false,
+  'diplo-distress': true,
+  'diplo-distress-aided': false,
+  'diplo-distress-ignored': false,
+  'diplo-distress-rejected': false,
   /* M13 B-2 (decisione #93): rimossa la "occupazione di sistema" — sostituita
      dal PRESIDIO MILITARE (presenza flotta dichiarata). */
   'garrison-declared': true,
@@ -11887,6 +11909,15 @@ function showEventOverlay(events) {
     'diplo-betrayal-defused': 'Tradimento sventato',
     'diplo-passage': 'Trattato di passaggio',
     'diplo-passage-broken': 'Passaggio revocato',
+    'diplo-vassal': 'Vassallaggio accettato',
+    'diplo-vassal-released': 'Vassallo affrancato',
+    'diplo-vassal-rebel': 'Ribellione del vassallo',
+    'diplo-vassal-broken': 'Vassallaggio rotto',
+    'diplo-vassal-tribute': 'Tributo del vassallo',
+    'diplo-distress': 'Soccorso richiesto',
+    'diplo-distress-aided': 'Soccorso inviato',
+    'diplo-distress-ignored': 'Soccorso ignorato',
+    'diplo-distress-rejected': 'Soccorso rifiutato',
     'garrison-declared': 'Presidio dichiarato',
     'garrison-compromised': 'Presidio compromesso',
     'garrison-restored': 'Presidio ripristinato',
@@ -12559,6 +12590,37 @@ function _chronicleEventBody(ev) {
   } else if (ev.kind === 'diplo-passage-broken') {
     pushChronicle(ds + ' — Trattato di passaggio con <strong>' + escapeHtml(ev.civName) +
       '</strong> revocato (' + escapeHtml(ev.reason || '') + ').', 'civ');
+  } else if (ev.kind === 'diplo-vassal') {
+    /* M11 (decisione #95): vassallaggio accettato. */
+    pushChronicle(ds + ' — <strong>Vassallaggio</strong>: <strong>' + escapeHtml(ev.civName) +
+      '</strong> si sottomette · pagherà tributo periodico in metalli ed energia.', 'civ');
+    if (ORION.tutorial) ORION.tutorial.fire('diplo-vassal');
+  } else if (ev.kind === 'diplo-vassal-released') {
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.civName) + '</strong> affrancato · torna libero.', 'civ');
+  } else if (ev.kind === 'diplo-vassal-rebel') {
+    const verb = ev.alignment === 'male' ? 'si ribella e dichiara guerra'
+                                          : 'rompe il vincolo e si dichiara libero';
+    pushChronicle(ds + ' — <strong>Ribellione</strong>: <strong>' + escapeHtml(ev.civName) + '</strong> ' + verb + '.', 'civ');
+  } else if (ev.kind === 'diplo-vassal-broken') {
+    pushChronicle(ds + ' — Vassallaggio con <strong>' + escapeHtml(ev.civName) +
+      '</strong> annullato (' + escapeHtml(ev.reason || '') + ').', 'civ');
+  } else if (ev.kind === 'diplo-vassal-tribute') {
+    const pay = ev.payload || {};
+    pushChronicle(ds + ' — Tributo da <strong>' + escapeHtml(ev.civName) + '</strong>: <strong>' +
+      (pay.met || 0) + ' met</strong> + <strong>' + (pay.en || 0) + ' en</strong> incamerati.', 'civ');
+  } else if (ev.kind === 'diplo-distress') {
+    /* M11 (decisione #95): aiuto-ad-alleato. */
+    const pay = ev.payload || {};
+    pushChronicle(ds + ' — <strong>Soccorso</strong> richiesto da <strong>' + escapeHtml(ev.civName) +
+      '</strong>: <strong>' + (pay.met || 0) + ' met</strong> + <strong>' + (pay.en || 0) +
+      ' en</strong>. Rispondi dalla vista <strong>Civiltà</strong>.', 'civ');
+    if (ORION.tutorial) ORION.tutorial.fire('diplo-distress');
+  } else if (ev.kind === 'diplo-distress-aided') {
+    pushChronicle(ds + ' — Aiuto inviato a <strong>' + escapeHtml(ev.civName) + '</strong> · gratitudine + reputazione.', 'civ');
+  } else if (ev.kind === 'diplo-distress-ignored') {
+    pushChronicle(ds + ' — Hai ignorato il soccorso di <strong>' + escapeHtml(ev.civName) + '</strong>.', 'civ');
+  } else if (ev.kind === 'diplo-distress-rejected') {
+    pushChronicle(ds + ' — Hai respinto il soccorso di <strong>' + escapeHtml(ev.civName) + '</strong>.', 'civ');
   } else if (ev.kind === 'garrison-declared') {
     /* M13 B-2 (decisione #93): presidio militare dichiarato — il sistema è
        sotto il tuo controllo militare finché la flotta lo mantiene. */
