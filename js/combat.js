@@ -277,14 +277,21 @@
   function forceFromMaterialized(descriptor, side) {
     const combatants = [];
     const units = Math.max(1, (descriptor && descriptor.units) || 1);
+    /* M10 Fase B-2: il tech-tier della civ rende ogni unità più tosta
+       (fuoco/corazza ≤ +25%). I moltiplicatori arrivano da
+       ORION.ai.materialize; default 1 per pirati/fallback. */
+    const fpMul = (descriptor && descriptor.fpMul) || 1;
+    const hpMul = (descriptor && descriptor.hpMul) || 1;
+    const uHp = Math.round(CFG.AI_UNIT_HP * hpMul);
+    const uFp = Math.round(CFG.AI_UNIT_FP * fpMul);
     for (let i = 0; i < units; i++) {
       combatants.push({
         id: 'ai-' + i,
         kind: 'nave-aliena',
         label: 'Squadrone alieno',
-        hp: CFG.AI_UNIT_HP,
-        maxHp: CFG.AI_UNIT_HP,
-        fp: CFG.AI_UNIT_FP,
+        hp: uHp,
+        maxHp: uHp,
+        fp: uFp,
         xp: 0,
         src: { type: 'ai', civId: descriptor && descriptor.civId }
       });
