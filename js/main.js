@@ -7779,20 +7779,56 @@ function renderCivView(stage) {
         '. Aumenta la presenza nel loro sistema con una flotta più potente per affinarlo.">' +
         '⌖ ' + escapeHtml(INTEL_LABEL[intelLvl] || intelLvl) + '</span>';
 
-      /* M11 Fase B parziale: dispaccio AI pendente — banner con accetta/rifiuta. */
+      /* M11 Fase B parziale: dispaccio AI pendente — banner con accetta/rifiuta.
+         M11 Fase B piena (#94): controfferte e ultimatum mostrano il payload
+         (tributo) + verbi di risposta variano (Paga / Respingi / Cedi flotte). */
       let offerHtml = '';
       if (c.pendingOffer && DIP && intelRank >= 2) {
         const off = c.pendingOffer;
-        const lab = DIP.offerLabel(off.actionId);
         const ttl = Math.max(0, (off.expiresAt || 0) - (g.timeImpulsi || 0));
-        offerHtml = '<div class="dip-offer">' +
-          '<span class="dip-offer__icon" aria-hidden="true">✉</span>' +
-          '<span class="dip-offer__text"><strong>Dispaccio:</strong> offrono <strong>' + escapeHtml(lab) +
-            '</strong> · scade tra ' + ttl + ' Ι</span>' +
-          '<button type="button" class="dip-btn dip-btn--primary" data-dip-offer="' + escapeHtml(c.id) + '" data-dip-resp="accept">Accetta</button>' +
-          '<button type="button" class="dip-btn dip-btn--danger" data-dip-offer="' + escapeHtml(c.id) + '" data-dip-resp="reject">Rifiuta</button>' +
+        let head, primary, danger, payTxt = '';
+        if (off.kind === 'ultimatum') {
+          const pay = off.payload || {};
+          head = '<strong>ULTIMATUM:</strong> cedi tributo o sarà guerra';
+          payTxt = ' · <strong>' + (pay.met || 0) + ' met</strong> + <strong>' + (pay.en || 0) + ' en</strong>';
+          primary = 'Paga il tributo';
+          danger = 'Respingi (guerra)';
+        } else if (off.kind === 'counter') {
+          const pay = off.payload || {};
+          head = '<strong>Controfferta:</strong> ' + escapeHtml(DIP.offerLabel(off.actionId)) + ' col tributo';
+          payTxt = ' · <strong>' + (pay.met || 0) + ' met</strong> + <strong>' + (pay.en || 0) + ' en</strong>';
+          primary = 'Paga e accetta';
+          danger = 'Rifiuta';
+        } else {
+          head = '<strong>Dispaccio:</strong> offrono <strong>' + escapeHtml(DIP.offerLabel(off.actionId)) + '</strong>';
+          primary = 'Accetta';
+          danger = 'Rifiuta';
+        }
+        const klass = off.kind === 'ultimatum' ? ' dip-offer--ultimatum'
+                    : off.kind === 'counter' ? ' dip-offer--counter' : '';
+        offerHtml = '<div class="dip-offer' + klass + '">' +
+          '<span class="dip-offer__icon" aria-hidden="true">' + (off.kind === 'ultimatum' ? '⚠' : '✉') + '</span>' +
+          '<span class="dip-offer__text">' + head + payTxt + ' · scade tra ' + ttl + ' Ι</span>' +
+          '<button type="button" class="dip-btn dip-btn--primary" data-dip-offer="' + escapeHtml(c.id) + '" data-dip-resp="accept">' + escapeHtml(primary) + '</button>' +
+          '<button type="button" class="dip-btn dip-btn--danger" data-dip-offer="' + escapeHtml(c.id) + '" data-dip-resp="reject">' + escapeHtml(danger) + '</button>' +
         '</div>';
       }
+      /* M11 Fase B (#94): warning di tradimento → banner con "Appiana col dono". */
+      let warnHtml = '';
+      if (c.allianceWarning && DIP && DIP.canAppease) {
+        const w = c.allianceWarning;
+        const grace = (DIP.CFG && DIP.CFG.BETRAY_GRACE_I) || 40;
+        const left = Math.max(0, (w.since || 0) + grace - (g.timeImpulsi || 0));
+        const chk = DIP.canAppease(g, c);
+        warnHtml = '<div class="dip-offer dip-offer--warning">' +
+          '<span class="dip-offer__icon" aria-hidden="true">⚠</span>' +
+          '<span class="dip-offer__text"><strong>Preavviso di tradimento</strong> · ' + left + ' Ι rimasti · Dono richiesto: ' +
+            (chk.cost ? chk.cost.met + ' met + ' + chk.cost.en + ' en' : '—') + '</span>' +
+          '<button type="button" class="dip-btn dip-btn--primary" data-dip-appease="' + escapeHtml(c.id) + '"' +
+            (chk.ok ? '' : ' disabled title="' + escapeHtml(chk.reason || '') + '"') + '>Dono di buona fede</button>' +
+        '</div>';
+      }
+      offerHtml = warnHtml + offerHtml;
 
       /* STIMA IMPERO + progresso intel — disponibili già da CONTATTATA (anche
          a frammentario), in parità con la scheda del pianeta (richiesta utente
@@ -8065,6 +8101,19 @@ function renderCivView(stage) {
         const civ = (g.civs || []).filter(function (c) { return c.id === btn.dataset.dipOffer; })[0];
         if (!civ) return;
         respondToAiOffer(civ, btn.dataset.dipResp === 'accept');
+      });
+    });
+    /* M11 Fase B (#94): dono di buona fede per disinnescare un preavviso di
+       tradimento. */
+    stage.querySelectorAll('[data-dip-appease]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const civ = (g.civs || []).filter(function (c) { return c.id === btn.dataset.dipAppease; })[0];
+        if (!civ || !ORION.diplomacy || !ORION.diplomacy.appease) return;
+        const evts = [];
+        const r = ORION.diplomacy.appease(g, civ, evts);
+        if (!r.ok) { showToast(r.reason || 'Impossibile inviare il dono'); return; }
+        evts.forEach(function (e) { chronicleEvent(e); });
+        persistGame(g); render();
       });
     });
   }
@@ -11135,6 +11184,21 @@ const DEFAULT_AUTOPAUSE = {
   'diplo-offer': true,
   'diplo-offer-expired': false,
   'diplo-offer-rejected': false,
+  /* M11 Fase B piena (decisione #94): controfferte, ultimatum, tradimenti,
+     trattati di passaggio. Tutti gli eventi che richiedono una decisione del
+     giocatore o segnano una transizione forte = auto-pausa ON. Le rotture
+     automatiche (passage-broken per guerra) = OFF (sono conseguenze, già
+     coperte dall'evento principale). */
+  'diplo-counter': true,
+  'diplo-ultimatum': true,
+  'diplo-ultimatum-paid': false,
+  'diplo-ultimatum-refused': true,
+  'diplo-ultimatum-expired': true,
+  'diplo-betrayal-warning': true,
+  'diplo-betrayed': true,
+  'diplo-betrayal-defused': false,
+  'diplo-passage': false,
+  'diplo-passage-broken': false,
   /* M13 B-2 (decisione #93): rimossa la "occupazione di sistema" — sostituita
      dal PRESIDIO MILITARE (presenza flotta dichiarata). */
   'garrison-declared': true,
@@ -11566,6 +11630,16 @@ function showEventOverlay(events) {
     'diplo-offer': 'Dispaccio AI',
     'diplo-offer-expired': 'Offerta AI scaduta',
     'diplo-offer-rejected': 'Offerta AI rifiutata',
+    'diplo-counter': 'Controfferta AI',
+    'diplo-ultimatum': 'Ultimatum AI',
+    'diplo-ultimatum-paid': 'Ultimatum pagato',
+    'diplo-ultimatum-refused': 'Ultimatum rifiutato',
+    'diplo-ultimatum-expired': 'Ultimatum scaduto',
+    'diplo-betrayal-warning': 'Preavviso di tradimento',
+    'diplo-betrayed': 'Alleanza tradita',
+    'diplo-betrayal-defused': 'Tradimento sventato',
+    'diplo-passage': 'Trattato di passaggio',
+    'diplo-passage-broken': 'Passaggio revocato',
     'garrison-declared': 'Presidio dichiarato',
     'garrison-compromised': 'Presidio compromesso',
     'garrison-restored': 'Presidio ripristinato',
@@ -12192,6 +12266,46 @@ function _chronicleEventBody(ev) {
     pushChronicle(ds + ' — L\'offerta di <strong>' + escapeHtml(ev.civName) + '</strong> è scaduta senza risposta.', 'civ');
   } else if (ev.kind === 'diplo-offer-rejected') {
     pushChronicle(ds + ' — Hai respinto l\'offerta di <strong>' + escapeHtml(ev.civName) + '</strong>.', 'civ');
+  } else if (ev.kind === 'diplo-counter') {
+    /* M11 Fase B (decisione #94): la AI rilancia invece di rifiutare. */
+    const DIP = ORION.diplomacy;
+    const lab = (DIP && DIP.offerLabel) ? DIP.offerLabel(ev.action) : ev.action;
+    const pay = ev.payload || {};
+    pushChronicle(ds + ' — <strong>Controfferta</strong> da <strong>' + escapeHtml(ev.civName) +
+      '</strong>: <strong>' + escapeHtml(lab) + '</strong> in cambio di <strong>' +
+      (pay.met || 0) + ' met</strong> + <strong>' + (pay.en || 0) + ' en</strong>. Rispondi dalla vista <strong>Civiltà</strong>.', 'civ');
+    if (ORION.tutorial) ORION.tutorial.fire('diplo-counter');
+  } else if (ev.kind === 'diplo-ultimatum') {
+    const pay = ev.payload || {};
+    pushChronicle(ds + ' — <strong>ULTIMATUM</strong> da <strong>' + escapeHtml(ev.civName) +
+      '</strong>: cedi <strong>' + (pay.met || 0) + ' met</strong> + <strong>' + (pay.en || 0) +
+      ' en</strong> o sarà guerra. Rispondi dalla vista <strong>Civiltà</strong>.', 'civ');
+    if (ORION.tutorial) ORION.tutorial.fire('diplo-ultimatum');
+  } else if (ev.kind === 'diplo-ultimatum-paid') {
+    pushChronicle(ds + ' — Hai pagato il tributo a <strong>' + escapeHtml(ev.civName) + '</strong> · guerra scongiurata.', 'civ');
+  } else if (ev.kind === 'diplo-ultimatum-refused') {
+    pushChronicle(ds + ' — Hai respinto l\'ultimatum di <strong>' + escapeHtml(ev.civName) + '</strong>.', 'civ');
+  } else if (ev.kind === 'diplo-ultimatum-expired') {
+    pushChronicle(ds + ' — L\'ultimatum di <strong>' + escapeHtml(ev.civName) + '</strong> è scaduto senza risposta.', 'civ');
+  } else if (ev.kind === 'diplo-betrayal-warning') {
+    /* M11 Fase B (decisione #94): segnali di tradimento da civ Male. */
+    pushChronicle(ds + ' — <strong>Preavviso di tradimento</strong>: <strong>' + escapeHtml(ev.civName) +
+      '</strong> trama nell\'ombra. Hai <strong>' + (ev.graceI || 40) + ' Ι</strong> per appianare ' +
+      'la disputa (dono di buona fede dalla vista <strong>Civiltà</strong>) prima che dichiarino guerra.', 'civ');
+    if (ORION.tutorial) ORION.tutorial.fire('diplo-betrayal');
+  } else if (ev.kind === 'diplo-betrayed') {
+    pushChronicle(ds + ' — <strong>Tradimento</strong>: <strong>' + escapeHtml(ev.civName) +
+      '</strong> ha rotto l\'alleanza e ti dichiara guerra.', 'civ');
+  } else if (ev.kind === 'diplo-betrayal-defused') {
+    pushChronicle(ds + ' — Tradimento sventato: il dono di buona fede a <strong>' +
+      escapeHtml(ev.civName) + '</strong> ha riportato calma.', 'civ');
+  } else if (ev.kind === 'diplo-passage') {
+    pushChronicle(ds + ' — <strong>Trattato di passaggio</strong> con <strong>' + escapeHtml(ev.civName) +
+      '</strong>: libero transito reciproco nei sistemi.', 'civ');
+    if (ORION.tutorial) ORION.tutorial.fire('diplo-passage');
+  } else if (ev.kind === 'diplo-passage-broken') {
+    pushChronicle(ds + ' — Trattato di passaggio con <strong>' + escapeHtml(ev.civName) +
+      '</strong> revocato (' + escapeHtml(ev.reason || '') + ').', 'civ');
   } else if (ev.kind === 'garrison-declared') {
     /* M13 B-2 (decisione #93): presidio militare dichiarato — il sistema è
        sotto il tuo controllo militare finché la flotta lo mantiene. */

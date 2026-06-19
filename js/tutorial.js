@@ -340,6 +340,54 @@
         'costa <strong>reputazione</strong>: i tuoi atti pesano su come tutta la galassia ti vede.</p>'
     },
     {
+      id: 'diplo-counter',
+      tag: 'Civiltà · Diplomazia',
+      title: 'Controfferte: la AI rilancia',
+      body:
+        '<p>Quando proponi pace o alleanza e siete <em>vicini</em> alla soglia, la AI può <strong>rilanciare</strong> ' +
+        'invece di rifiutare: ti chiede un <strong>tributo</strong> in metalli ed energia. Le civiltà <em>buone</em> non ' +
+        'monetizzano la pace (è una questione di principio); le altre sì.</p>' +
+        '<p>Dalla vista <strong>Civiltà ⬡</strong> trovi il banner dorato della controfferta: puoi <strong>pagare e accettare</strong> ' +
+        'o <strong>rifiutare</strong>. Il tributo è una tantum, scala col gap di disposizione (più sei lontano dalla loro fiducia, ' +
+        'più costa).</p>'
+    },
+    {
+      id: 'diplo-ultimatum',
+      tag: 'Civiltà · Diplomazia',
+      title: 'Ultimatum: il prezzo della debolezza',
+      body:
+        '<p>Una civiltà <em>ostile e potente</em> in pace con te può inviarti un <strong>ultimatum</strong>: tributo o guerra. ' +
+        'Non è negoziabile — paghi o rifiuti.</p>' +
+        '<p><strong>Paghi</strong>: la disposizione risale (la forza ostentata viene riconosciuta), niente guerra. ' +
+        '<strong>Rifiuti o lasci scadere</strong>: dichiarazione di guerra automatica.</p>' +
+        '<p>Le civiltà <em>buone</em> non usano ultimatum (preferiscono trattare apertamente).</p>'
+    },
+    {
+      id: 'diplo-betrayal',
+      tag: 'Civiltà · Diplomazia',
+      title: 'Tradimenti: alleati maligni',
+      body:
+        '<p>Le civiltà di allineamento <strong>maligno</strong> in alleanza con te <em>possono</em> tradirti se la disposizione cala ' +
+        'e ti vedono sotto pressione. Ricevi un <strong>preavviso</strong> in cronaca: hai <strong>40 Ι</strong> per agire prima ' +
+        'che dichiarino guerra.</p>' +
+        '<p>Dalla vista <strong>Civiltà ⬡</strong>, premi <strong>«Dono di buona fede»</strong> per inviare un tributo ' +
+        '(150 met + 80 en): cancella il preavviso e rialza la disposizione.</p>' +
+        '<p>Le civiltà <strong>buone</strong> non tradiscono mai (è un loro vincolo di carattere).</p>'
+    },
+    {
+      id: 'diplo-passage',
+      tag: 'Civiltà · Diplomazia',
+      title: 'Trattati di passaggio',
+      body:
+        '<p>In <strong>pace</strong> o <strong>alleanza</strong>, con disposizione abbastanza alta, puoi proporre un <strong>trattato ' +
+        'di passaggio</strong>: libero transito reciproco nei sistemi presidiati. Lo trovi tra le azioni nella vista <strong>Civiltà ⬡</strong>.</p>' +
+        '<p>Effetto immediato: <strong>nudge di reputazione</strong> e una <em>fiducia che cresce nel tempo</em> (disposizione +2 ogni ' +
+        'pochi Impulsi durante il trattato). Le tue flotte non hanno bisogno di richiedere passaggio attraverso il loro presidio ' +
+        '— e viceversa.</p>' +
+        '<p>Il trattato si <strong>rompe automaticamente</strong> se rompi l\'alleanza, dichiari guerra, o se loro tradiscono. ' +
+        'È anche il <em>prerequisito</em> per gli accordi commerciali con la civiltà (in arrivo con M12 Fase B).</p>'
+    },
+    {
       id: 'ai-vocations',
       tag: 'Civiltà · Vocazioni',
       title: 'Le 8 vocazioni delle civiltà',

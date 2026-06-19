@@ -226,7 +226,11 @@
     if (!civ || !civ.alive) return false;
     const D = root.ORION.diplomacy;
     const rel = (D && D.effectiveRelation) ? D.effectiveRelation(game, civ) : (civ.relation || 'peace');
-    return (rel === 'peace' || rel === 'alliance' || rel === 'truce');
+    if (rel !== 'peace' && rel !== 'alliance' && rel !== 'truce') return false;
+    /* M11 Fase B (decisione #94): se c'è un trattato di passaggio attivo, la
+       flotta transita senza dispaccio (passaggio già concesso). */
+    if (civ.passageTreaty) return false;
+    return true;
   }
 
   ORION.garrison = {
