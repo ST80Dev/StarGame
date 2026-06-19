@@ -2208,6 +2208,19 @@
         if (disc < DISC.CONTATTO) continue;
         const p = this.project(ph.x, ph.y, ph.z || 0);
         if (p.x < -30 || p.x > this.cssW + 30 || p.y < -30 || p.y > this.cssH + 30) continue;
+        /* varco posseduto: scorciatoia tratteggiata tra i due sistemi estremi */
+        if (st && st.owned && st.varcoTo != null) {
+          const sa = this.galaxy.systems[ph.nearSys], sb = this.galaxy.systems[st.varcoTo];
+          if (sa && sb) {
+            const pa = this.project(sa.x, sa.y, sa.z || 0), pb = this.project(sb.x, sb.y, sb.z || 0);
+            ctx.save();
+            ctx.globalAlpha = reveal * 0.7;
+            ctx.strokeStyle = 'rgba(184,156,255,0.9)';
+            ctx.lineWidth = 1.4; ctx.setLineDash([5, 5]);
+            ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+            ctx.restore();
+          }
+        }
         const base = Math.max(3, this.nodeRadius(p.parallax) * 0.85);
         const known = disc >= DISC.CLASSIFICATO;
         const color = known ? (COLORS[ph.cls] || '#cfe0ff') : 'rgba(205,214,238,0.85)';

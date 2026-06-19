@@ -14606,16 +14606,18 @@ function _renderPhenomenonPopup(id, screenX, screenY) {
     body = '<dl class="fleet-info-popup__meta">' +
       '<div><dt>Classe</dt><dd>' + escapeHtml(PH.CLASSES[ph.cls].label) + '</dd></div>' +
       '<div><dt>Esito</dt><dd>' + escapeHtml(st.outcome ? st.outcome.text : '—') + '</dd></div>' +
-      (st.owned ? '<div><dt>Stato</dt><dd>sotto il tuo controllo</dd></div>' : '') +
+      (st.owned ? '<div><dt>Stato</dt><dd>' + (st.varcoTo != null ? 'varco attivo — scorciatoia per le tue flotte' : 'sotto il tuo controllo') + '</dd></div>' : '') +
       '</dl>' +
       ((st.outcome && st.outcome.exploitable && !st.owned)
-        ? '<p class="fleet-info-popup__hint">Puoi prenderne il <strong>controllo</strong> presidiandolo con una flotta nel sistema d\'aggancio.</p>' : '');
+        ? '<p class="fleet-info-popup__hint">' + (st.varcoTo != null
+            ? 'Prendi il <strong>controllo</strong> (flotta nel sistema d\'aggancio) per <strong>aprire il varco</strong> alle tue rotte.'
+            : 'Puoi prenderne il <strong>controllo</strong> presidiandolo con una flotta nel sistema d\'aggancio.') + '</p>' : '');
   }
 
   let actions = '';
   if (disc === D.CONTATTO) { const c = PH.canScan(g, id); actions += _phenBtn('phen-scan', 'spy', 'cyan', 'Scansiona', c.ok, c.reason); }
   if (disc === D.CLASSIFICATO) { const c = PH.canInvestigate(g, id); actions += _phenBtn('phen-investigate', 'send', 'cyan', 'Investiga', c.ok, c.reason); }
-  if (revealed && st.outcome && st.outcome.exploitable && !st.owned) { const c = PH.canExploit(g, id); actions += _phenBtn('phen-exploit', 'pin', 'cyan', 'Controlla', c.ok, c.reason); }
+  if (revealed && st.outcome && st.outcome.exploitable && !st.owned) { const c = PH.canExploit(g, id); actions += _phenBtn('phen-exploit', 'pin', 'cyan', st.varcoTo != null ? 'Apri varco' : 'Controlla', c.ok, c.reason); }
   actions += _phenBtn('phen-mark', 'warning', 'pink', st.marked ? 'Non evitare' : 'Evita', true, '');
 
   const html =
@@ -14686,7 +14688,7 @@ function _renderPhenomenonPopup(id, screenX, screenY) {
     if (!r.ok) { showToast(r.reason || 'Controllo non disponibile'); return; }
     chronicleEvent({ kind: 'fsp-claimed', id: id, sysId: ph.nearSys, sysName: nearName,
       name: ph.name, impulso: g.timeImpulsi || 0 });
-    showToast(ph.name + ' · sotto il tuo controllo');
+    showToast(PH.stateOf(g, id).varcoTo != null ? (ph.name + ' · varco aperto') : (ph.name + ' · sotto il tuo controllo'));
     afterAction();
   });
   const mb = node.querySelector('[data-action="phen-mark"]');

@@ -836,6 +836,9 @@
     'dispatch-done':     { first: true,  mod: 'civ',    text: function () { return 'Primo incarico portato a termine.'; } },
     'anomaly-relic-found': { first: true, mod: 'ok',     text: function () { return 'Prima reliquia antica esplorata: tracce di una civiltà perduta.'; } },
     'crisis-raised':     { first: true,  mod: 'crit',   text: function (ev) { return 'Prima crisi galattica: ' + (ev.title || '—') + '.'; } },
+    /* FSP §17.7 — meraviglia del vuoto (unico, event-tier). Ogni occorrenza
+       è storia (0-2 per galassia, rari). */
+    'fsp-unique':        { first: false, mod: 'ok',     text: function (ev) { return 'Meraviglia del vuoto rivelata: ' + (ev.name || 'un fenomeno antico') + (ev.sysName ? ' presso ' + ev.sysName : '') + '.'; } },
     /* Svolte maggiori — non "firsts" (ogni occorrenza è storia). */
     'colony-conquered':  { first: false, mod: 'crit',   text: function (ev) { return 'Una colonia è stata conquistata dal nemico.'; } },
     'colony-razed':      { first: false, mod: 'crit',   text: function (ev) { return 'Una colonia è stata rasa al suolo.'; } },

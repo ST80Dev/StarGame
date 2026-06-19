@@ -394,7 +394,7 @@
     if (!game) return;
     if (!game.phenomena || typeof game.phenomena !== 'object') game.phenomena = {};
     // pre-genera la lista immutabile se la galassia è disponibile (cache)
-    if (game.galaxy) forGalaxy(game.galaxy);
+    if (game.galaxy) { forGalaxy(game.galaxy); applyVarchiLinks(game); }
   }
 
   function stateOf(game, id) {
@@ -640,19 +640,61 @@
         text: 'Pericolo! Le navi subiscono usura (+' + wear + '%).' + lossTxt };
     }
     if (cat === 'shortcut') {
-      // varco: individua un'estremità lontana (gancio Fase 4 per il viaggio)
+      // varco: individua un'estremità lontana e rivelala (sai dove porta)
       const sys = game.galaxy.systems;
       let far = ph.nearSys, farD = -1;
       for (let i = 0; i < sys.length; i++) {
         const dx = sys[i].x - ph.x, dy = sys[i].y - ph.y, d = dx * dx + dy * dy;
         if (d > farD) { farD = d; far = i; }
       }
+      revealOne(game, far);
       const nm = sys[far] ? sys[far].name : '—';
       return { category: 'shortcut', varcoTo: far, exploitable: true,
-        text: 'Varco instabile: punta verso ' + nm + ' (rotta utilizzabile in sviluppo).' };
+        text: 'Varco instabile verso ' + nm + '. Prendine il controllo per aprire la rotta.' };
     }
     return { category: 'dormant', exploitable: false,
       text: 'Lettura inconcludente: il fenomeno resta silente, per ora.' };
+  }
+  function revealOne(game, sysId) {
+    if (ORION.galaxy && ORION.galaxy.revealSystem) { ORION.galaxy.revealSystem(game.galaxy, sysId, game.state); return; }
+    const disc = game.state && game.state.discovery;
+    if (disc && (disc[sysId] || 0) < DISC_EXPLORED) disc[sysId] = DISC_EXPLORED;
+  }
+
+  /* ------------------------------------------------------------------
+     EFFETTO degli FSP UNICI (event-tier, §17.7.5 — gancio Faro di Orion /
+     Anziani del Vuoto). Payload distintivo: cache colossale (più risorse) +
+     dati antichi (rivela sistemi) + eventuale varco se la variante è 'varco'.
+     Sempre capato (rari, 0-2/galassia): game-changer, non game-winner.
+     Registra una voce di Memoria Storica permanente.
+     ------------------------------------------------------------------ */
+  function resolveUniqueEffect(game, ph) {
+    const rng = ORION.rng.makeRng(ph.effectSeed + ':uniq');
+    const inten = ph.intensity || 0.5;
+    const metAmt = Math.round(300 + inten * 500);   // cap ~800
+    const enAmt = Math.round(200 + inten * 400);    // cap ~600
+    deposit(game, 'met', metAmt);
+    deposit(game, 'en', enAmt);
+    const k = 3 + Math.round(inten * 3);            // 3..6 sistemi
+    const done = revealNearbySystems(game, ph, k);
+    let varcoTo = null, varcoTxt = '';
+    if (ph.variant === 'varco') {
+      const sys = game.galaxy.systems;
+      let far = ph.nearSys, farD = -1;
+      for (let i = 0; i < sys.length; i++) {
+        const dx = sys[i].x - ph.x, dy = sys[i].y - ph.y, d = dx * dx + dy * dy;
+        if (d > farD) { farD = d; far = i; }
+      }
+      revealOne(game, far);
+      varcoTo = far;
+      varcoTxt = ' Si apre inoltre un varco verso ' + (sys[far] ? sys[far].name : '—') + '.';
+    }
+    return {
+      category: 'unique', exploitable: true, res: 'met',
+      amount: metAmt, en: enAmt, reveals: done, varcoTo: varcoTo,
+      text: 'Eredità degli Anziani del Vuoto: cache colossale (+' + metAmt + ' metalli, +' +
+        enAmt + ' energia) e dati antichi (' + done + ' sistemi rivelati).' + varcoTxt
+    };
   }
 
   /* ------------------------------------------------------------------
@@ -670,11 +712,16 @@
     const c = canInvestigate(game, id); if (!c.ok) return c;
     const ph = byId(game.galaxy, id);
     const st = ensureState(game, id);
-    const outcome = resolveEffect(game, ph);
+    const outcome = ph.unique ? resolveUniqueEffect(game, ph) : resolveEffect(game, ph);
     st.d = DISCOVERY.RIVELATO;
     st.outcome = outcome;
     st.used = !outcome.exploitable; // gli effetti non sfruttabili si esauriscono
     if (outcome.varcoTo != null) st.varcoTo = outcome.varcoTo;
+    if (ph.unique && ORION.dispatch && ORION.dispatch.recordMemoria) {
+      const sys = game.galaxy.systems[ph.nearSys];
+      ORION.dispatch.recordMemoria(game, { kind: 'fsp-unique', name: ph.name,
+        sysName: sys ? sys.name : '—', impulso: game.timeImpulsi || 0 });
+    }
     return { ok: true, outcome: outcome };
   }
 
@@ -696,7 +743,42 @@
     const c = canExploit(game, id); if (!c.ok) return c;
     const st = ensureState(game, id);
     st.owned = true; st.passiveTotal = st.passiveTotal || 0;
+    if (st.varcoTo != null) applyVarchiLinks(game); // attiva subito la scorciatoia
     return { ok: true, category: st.outcome.category };
+  }
+
+  /* ------------------------------------------------------------------
+     VARCHI (§17.7.5) — i varco posseduti aggiungono una scorciatoia di
+     navigazione per le TUE flotte. Il pathfinding (fleet.js) è una BFS su
+     galaxy.systems[].links: aggiungiamo l'arco A↔B IN MEMORIA (la galassia
+     si rigenera dal seed ad ogni load → niente persistenza dell'arco; la
+     fonte di verità è la proprietà nel save, ri-applicata al boot).
+     Idempotente. Travel per-hop → un varco trasforma un viaggio multi-hop
+     in un solo hop (risparmio di Ι), preferito automaticamente dalla BFS.
+     ------------------------------------------------------------------ */
+  function varchiEdges(game) {
+    const out = [];
+    if (!game || !game.galaxy || !game.phenomena) return out;
+    const items = forGalaxy(game.galaxy);
+    for (let i = 0; i < items.length; i++) {
+      const ph = items[i];
+      const st = game.phenomena[ph.id];
+      if (st && st.owned && st.varcoTo != null) out.push({ a: ph.nearSys, b: st.varcoTo, id: ph.id });
+    }
+    return out;
+  }
+  function applyVarchiLinks(game) {
+    if (!game || !game.galaxy) return;
+    const sys = game.galaxy.systems;
+    const edges = varchiEdges(game);
+    for (let i = 0; i < edges.length; i++) {
+      const a = edges[i].a, b = edges[i].b;
+      if (a == null || b == null || !sys[a] || !sys[b] || a === b) continue;
+      if (!Array.isArray(sys[a].links)) sys[a].links = [];
+      if (!Array.isArray(sys[b].links)) sys[b].links = [];
+      if (sys[a].links.indexOf(b) < 0) sys[a].links.push(b);
+      if (sys[b].links.indexOf(a) < 0) sys[b].links.push(a);
+    }
   }
 
   /* AZIONE 4 — MARCA/EVITA (sempre disponibile da Contatto in poi). */
@@ -718,7 +800,8 @@
     for (let i = 0; i < items.length; i++) {
       const ph = items[i];
       const st = game.phenomena[ph.id];
-      if (!st || !st.owned || !st.outcome || st.outcome.category !== 'cache') continue;
+      if (!st || !st.owned || !st.outcome) continue;
+      if (st.outcome.category !== 'cache' && st.outcome.category !== 'unique') continue;
       if ((st.passiveTotal || 0) >= FX.PASSIVE_CAP) continue;
       if (!playerFleetAtSystem(game, ph.nearSys)) continue;
       const rate = FX.PASSIVE_RATE_MIN + (ph.intensity || 0.5) * FX.PASSIVE_RATE_SPAN;
@@ -751,6 +834,8 @@
     canInvestigate: canInvestigate, investigate: investigate,
     canExploit: canExploit, exploit: exploit,
     toggleMark: toggleMark,
+    varchiEdges: varchiEdges,
+    applyVarchiLinks: applyVarchiLinks,
     playerFleetAtSystem: playerFleetAtSystem,
     colonyInSystem: colonyInSystem
   };
