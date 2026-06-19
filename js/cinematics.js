@@ -217,47 +217,107 @@
       })();
     },
 
-    /* --- Volo camera galassia → gruppo → sistema (livello "piene") --- */
+    /* --- Volo camera galassia → gruppo → sistema (livello "piene") ---
+       Un SOLO percorso continuo con easing GLOBALE (accelera solo all'inizio,
+       decelera solo alla fine: nessuno "stop" ai giunti dei waypoint) e zoom
+       interpolato in spazio LOGARITMICO (velocità di zoom percepita uniforme).
+       Il punto focale (centro mondo inquadrato) è interpolato e l'offset è
+       ricalcolato ogni frame da scala+focale → niente "swoop"/zoom-out a
+       ritroso. */
     _flyGalaxy(st, targetSys, homeGroup) {
       const self = this;
       const map = ORION.map;
       if (!map || !map.cinematicTarget || !map.applyCamera) return Promise.resolve();
-      const galT = map.cinematicTarget('galaxy');
-      if (!galT) return Promise.resolve();
-      // partenza "molto out": galassia minuscola al centro
-      const s0 = galT.s * 0.4;
-      map.applyCamera(s0, (map.cssW - s0) / 2, (map.cssH - s0) / 2, galT.orient);
-      this._renderOverlay(st);
-      return self._tweenCamera(st, map, galT, 1500, function (e) {
-        st.decor = 1 - e;                 // le galassie lontane sfumano
-        self._renderOverlay(st);
-      }).then(function () {
+      // La mappa misura le proprie dimensioni in modo asincrono (ResizeObserver):
+      // attendi che fitScale/cssW siano reali, altrimenti i bersagli sono
+      // spazzatura e un resetView() a metà volo darebbe uno scatto.
+      return this._awaitMap(st, map).then(function () {
         if (st.abort) return;
-        const grpT = (homeGroup != null) ? map.cinematicTarget('group', homeGroup) : null;
-        return grpT ? self._tweenCamera(st, map, grpT, 1700) : null;
-      }).then(function () {
-        if (st.abort) return;
+        const galT = map.cinematicTarget('galaxy');
         const sysT = map.cinematicTarget('system', targetSys);
-        return sysT ? self._tweenCamera(st, map, sysT, 1500) : null;
+        if (!galT || !sysT) return;
+        const grpT = (homeGroup != null) ? map.cinematicTarget('group', homeGroup) : null;
+
+        // Waypoint di partenza: galassia un po' più "out" del fit (non minuscola).
+        const s0 = galT.s * 0.62;
+        const start = {
+          s: s0,
+          ox: (map.cssW - s0) / 2,
+          oy: (map.cssH - s0) / 2,
+          orient: galT.orient
+        };
+        map.applyCamera(start.s, start.ox, start.oy, start.orient);
+        self._renderOverlay(st);
+
+        // Tratti (waypoint + durata). Le galassie lontane sfumano sul 1° tratto.
+        const legs = [{ to: galT, ms: 2200 }];
+        if (grpT) legs.push({ to: grpT, ms: 2400 });
+        legs.push({ to: sysT, ms: 1900 });
+        return self._flyPath(st, map, start, legs);
       });
     },
 
-    _tweenCamera(st, map, to, ms, onUpdate) {
+    /* Attende che la mappa abbia dimensioni valide (failsafe a ~1.2s). */
+    _awaitMap(st, map) {
+      return new Promise(function (resolve) {
+        const t0 = perfNow();
+        function check() {
+          if (st.abort) { resolve(); return; }
+          if (map.cssW > 0 && map.fitScale > 1) { resolve(); return; }
+          if (perfNow() - t0 > 1200) { resolve(); return; }
+          st.raf = requestAnimationFrame(check);
+        }
+        check();
+      });
+    },
+
+    /* Centro-mondo (coord proiettate, pre-prospettiva) inquadrato da un
+       bersaglio di camera: cx = (W/2 − s/2 − ox) / s. Così si interpola il
+       punto focale invece degli offset grezzi. */
+    _focalOf(map, cam) {
+      return {
+        cx: (map.cssW / 2 - cam.s * 0.5 - cam.ox) / cam.s,
+        cy: (map.cssH / 2 - cam.s * 0.5 - cam.oy) / cam.s,
+        s: cam.s
+      };
+    },
+
+    _flyPath(st, map, start, legs) {
+      const self = this;
       return new Promise(function (resolve) {
         if (st.abort) { resolve(); return; }
-        const from = { s: map.scale, ox: map.offsetX, oy: map.offsetY };
+        // Waypoint come {cx, cy, s} e confini temporali cumulati.
+        const wp = [self._focalOf(map, start)];
+        const bounds = [0];
+        for (let i = 0; i < legs.length; i++) {
+          wp.push(self._focalOf(map, legs[i].to));
+          bounds.push(bounds[i] + legs[i].ms);
+        }
+        const total = bounds[bounds.length - 1];
+        const firstLegEnd = legs[0].ms;
         const t0 = perfNow();
         function frame() {
           if (st.abort) { resolve(); return; }
-          const p = clamp((perfNow() - t0) / ms, 0, 1);
-          const e = smooth(p);
-          map.applyCamera(
-            lerp(from.s, to.s, e),
-            lerp(from.ox, to.ox, e),
-            lerp(from.oy, to.oy, e)
-          );
-          if (onUpdate) onUpdate(e);
-          if (p < 1) st.raf = requestAnimationFrame(frame);
+          const now = perfNow() - t0;
+          const gp = clamp(now / total, 0, 1);
+          // Easing UNICA sull'intero volo → un solo avvio morbido e un solo
+          // arresto morbido; i giunti interni restano a velocità piena.
+          const tline = smooth(gp) * total;
+          let seg = 0;
+          while (seg < legs.length - 1 && tline > bounds[seg + 1]) seg++;
+          const localMs = bounds[seg + 1] - bounds[seg];
+          const f = localMs > 0 ? clamp((tline - bounds[seg]) / localMs, 0, 1) : 1;
+          const a = wp[seg], b = wp[seg + 1];
+          // Zoom geometrico (log) + focale interpolata → offset coerente.
+          const s = Math.exp(lerp(Math.log(a.s), Math.log(b.s), f));
+          const cx = lerp(a.cx, b.cx, f);
+          const cy = lerp(a.cy, b.cy, f);
+          map.applyCamera(s, map.cssW / 2 - cx * s - s * 0.5, map.cssH / 2 - cy * s - s * 0.5);
+          if (st.decor > 0) {
+            st.decor = clamp(1 - now / firstLegEnd, 0, 1);  // sfuma sul 1° tratto
+            self._renderOverlay(st);
+          }
+          if (gp < 1) st.raf = requestAnimationFrame(frame);
           else resolve();
         }
         st.raf = requestAnimationFrame(frame);
