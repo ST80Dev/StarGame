@@ -1072,6 +1072,60 @@
       this._emitContext(true);
     }
 
+    /* Posizione in COORDINATE MONDO di una flotta (interpolata se in transito
+       interstellare). Specularità di _fleetScreenPos ma pre-proiezione, per
+       poter calcolare la camera. */
+    _fleetWorldPos(f) {
+      const g = this.galaxy;
+      if (!f || !f.location) return null;
+      const loc = f.location;
+      const inTransit = loc.status === 'in-transit' && !loc.intra
+                     && Array.isArray(f.route) && f.routeIdx + 1 < f.route.length;
+      if (inTransit) {
+        const fromId = f.route[f.routeIdx], toId = f.route[f.routeIdx + 1];
+        const fromS = g.systems[fromId], toS = g.systems[toId];
+        if (!fromS || !toS) return null;
+        const ORN = root.ORION;
+        const minSpd = (ORN && ORN.fleet && ORN.fleet.fleetMinSpeed) ? ORN.fleet.fleetMinSpeed(f) : 1;
+        let total = (typeof f.legTotal === 'number' && f.legTotal > 0)
+                  ? f.legTotal
+                  : ((ORN && ORN.fleet && ORN.fleet.tempoLeg) ? ORN.fleet.tempoLeg(g, fromId, toId, minSpd) : 60);
+        const remain = Math.max(0, f.etaImpulsi || 0);
+        if (remain > total) total = remain;
+        const t = total > 0 ? clamp(1 - remain / total, 0, 1) : 1;
+        return {
+          x: fromS.x + (toS.x - fromS.x) * t,
+          y: fromS.y + (toS.y - fromS.y) * t,
+          z: (fromS.z || 0) + ((toS.z || 0) - (fromS.z || 0)) * t
+        };
+      }
+      const s = g.systems[loc.systemId];
+      if (!s) return null;
+      return { x: s.x, y: s.y, z: s.z || 0 };
+    }
+
+    /* Centra la camera sulla POSIZIONE EFFETTIVA di una flotta (anche a metà
+       rotta interstellare) con uno zoom più stretto del livello gruppo, così
+       da identificare con precisione l'elemento selezionato (richiesta utente
+       2026-06-19). `scaleMul` regola lo zoom (default più zoom-in del gruppo). */
+    focusFleet(fleetId, scaleMul) {
+      const game = root.ORION && root.ORION.game;
+      if (!game) return;
+      const f = (game.fleets || []).filter(function (x) { return x.id === fleetId; })[0];
+      if (!f || !f.location) return;
+      const w = this._fleetWorldPos(f);
+      if (!w) return;
+      const sysC = this.galaxy.systems[f.location.systemId];
+      if (sysC) { this.activeGroupId = sysC.cluster; this.state.selectedId = f.location.systemId; }
+      const scale = clamp(this.fitScale * (scaleMul || 4.0), this.fitScale * 0.6, this.fitScale * 9);
+      const r = this.orient.rotate(w.x - 0.5, w.y - 0.5, w.z || 0);
+      const persp = VIEWER_D / Math.max(0.4, VIEWER_D - r.z);
+      const ox = this.cssW / 2 - r.x * persp * scale - scale * 0.5;
+      const oy = this.cssH / 2 - r.y * persp * scale - scale * 0.5;
+      this._animateTo(scale, ox, oy);
+      this._emitContext(true);
+    }
+
     selectSystem(id) {
       this.state.selectedId = id;
       this.activeGroupId = this.galaxy.systems[id].cluster;

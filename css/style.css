@@ -6921,6 +6921,44 @@ select.main-menu__input { cursor: pointer; }
   text-overflow: ellipsis;
   max-width: 100%;
 }
+/* Mini-gauge a torta per viveri + usura nel roster flotte (richiesta utente
+   2026-06-19): due torte conic-gradient su una riga, compatte. Si
+   riempiono/svuotano col valore (--pct). Pure CSS, niente JS. */
+.lp-item__row--gauges { gap: 14px; }
+.fleet-gauges {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.fleet-gauge {
+  --pct: 0;
+  --gauge-color: var(--c-good);
+  --gauge-track: rgb(255 255 255 / 0.12);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  color: var(--c-text-soft);
+}
+.fleet-gauge__pie {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: conic-gradient(var(--gauge-color) calc(var(--pct) * 1%), var(--gauge-track) 0);
+  box-shadow: inset 0 0 0 1px var(--c-border-soft);
+}
+.fleet-gauge__txt {
+  font-family: var(--font-data, monospace);
+  white-space: nowrap;
+}
+.fleet-gauge--viveri { --gauge-color: var(--c-good); }
+.fleet-gauge--viveri.fleet-gauge--low  { --gauge-color: #f0d670; }
+.fleet-gauge--viveri.fleet-gauge--crit { --gauge-color: var(--c-bad); }
+.fleet-gauge--wear { --gauge-color: var(--c-accent-warm); }
+.fleet-gauge--wear.fleet-gauge--low  { --gauge-color: #f0d670; }
+.fleet-gauge--wear.fleet-gauge--crit { --gauge-color: var(--c-bad); }
 .lp-item__badge {
   font-size: 0.74rem;
   font-weight: 600;
