@@ -762,6 +762,119 @@ Le rotte sono soggette a:
 ### 17.6 Eventi ciclici — NO
 (Esclusi per scelta del designer — le stagioni galattiche non fanno parte del design)
 
+### 17.7 Fenomeni di Spazio Profondo (FSP)
+
+> **Distinzione da §17.3.** Le *Anomalie Spaziali* (§17.3, modulo `anomaly.js`)
+> vivono **dentro i sistemi** (campi di detriti, nebulose locali, reliquie,
+> cinture, gassosi) e si vedono nella vista-sistema. I **Fenomeni di Spazio
+> Profondo (FSP)** sono una categoria **separata**: vivono **sulla mappa
+> galattica, nello spazio interstellare**, anche **fuori dalle rotte** tra i
+> sistemi (negli interstizi tra cluster, ai bordi, nel vuoto). Modulo dedicato:
+> `js/phenomena.js`. Non modificano `anomaly.js`, ma ne riusano i pattern
+> collaudati (siteKey / ensure / tick / eventi Cronaca / gating su scoperta).
+
+#### 17.7.1 Intento di design
+
+Gli FSP introducono **varietà emergente** sulla mappa: posti casuali da
+**scoprire / sfruttare / evitare**, il cui significato il giocatore impara
+**giocando**, non leggendolo. Principio guida (allineato a §20 "l'opacità è by
+design"): il giocatore conosce **sempre come interagire** (i verbi), **mai
+l'effetto preciso** finché non si impegna.
+
+**Non sono game-winner.** Sono **moltiplicatori potenziali e contingenti**:
+- Il valore **dipende dalla direzione strategica** del giocatore (ricerca /
+  economia / militare / espansione): lo stesso FSP vale *molto* per una
+  vocazione e *poco* per un'altra ("da poco a molto").
+- Sono **game-changer possibili, mai garantiti**: cap sulle magnitudini,
+  rendimenti decrescenti, nessun singolo FSP che chiude la partita.
+- **Recovery-friendly (#22):** ogni malus/hazard ha una via d'uscita; non
+  interagire è sempre una scelta valida; i nodi posseduti sono **contendibili**
+  dall'AI (questo è il limite anti-game-winner).
+
+#### 17.7.2 Grammatica di scoperta (4 livelli)
+
+| Livello | Come ci arrivi | Cosa sai |
+|---|---|---|
+| **Eco** | non rilevato | nulla (al più un `?` se un sistema vicino esplorato lo sfiora coi sensori) |
+| **Contatto** | flotta/sonda nel raggio sensori, o osservatorio | *"Segnale anomalo"*: c'è e **dove**, non **cosa** |
+| **Classificato** | **scansione a distanza** (economica, basso rischio) | la **classe** + descrittore ambiguo (*"firma dormiente"*, *"eco antica"*, *"lettura instabile"*) + **il menu dei verbi** |
+| **Rivelato** | ci entri / lo sfrutti / lo attivi (impegno) | l'effetto si risolve → Cronaca + nudge tutorial |
+
+**Verbi disponibili** (noti anche da bendato):
+- **Rileva/Scansiona** — da *Contatto* a *Classificato*.
+- **Investiga (entra)** — l'impegno che rivela l'effetto; alcuni FSP richiedono
+  nave/modulo apposito (sonda, nave scientifica, scorta).
+- **Sfrutta / Controlla** — vedi §17.7.4.
+- **Evita/Marca** — lo bolli *zona interdetta*; rotte e AI lo aggirano.
+
+#### 17.7.3 Catalogo — 5 classi leggibili (glifo riconoscibile)
+
+I **tenori** indicano la tendenza, **non** l'effetto (volutamente non blindato).
+
+1. **Gravitazionali** (glifo: vortice/lente) — *Pozzo di marea* (hazard, viaggi
+   deformati/dispersione, o scorciatoia temeraria) · *Lente gravitazionale*
+   (misto, osservatorio = sensori/ricerca, o trappola) · *Varco* (raro,
+   scorciatoia potenziale tra due punti lontani, instabile — §17.7.5).
+2. **Reliquie / Artificiali** (glifo: sigillo) — *Relitto/Cimitero di navi*
+   (boon+rischio: recupero, ma sorvegliato o esca pirata) · *Megastruttura
+   dormiente / Faro spento* (misto, raro, gancio Faro di Orion) · *Avamposto
+   degli Anziani del Vuoto* (raro/unico, §17.7.5; tech unica o figura §18).
+3. **Emissione / Stellari** (glifo: pulsazione) — *Pulsar / Faro naturale*
+   (boon: beacon nav, dirada nebbia, ma radiazioni equipaggio) · *Tempesta di
+   plasma / nube di radiazioni* (hazard; **hazard-in-movimento rinviato a fase
+   futura** — in v1 statico).
+4. **Biologiche / Esotiche** (glifo: spirale organica) — *Sciame nello spazio*
+   (misto: biorisorsa o ostile se provocato) · *Marea di spore dormienti*
+   (hazard: se disturbata si diffonde, alza pericolo locale o alimenta ICG).
+5. **Temporali / Anomalie del Vuoto** (glifo: frattura) — *Eco temporale /
+   Distorsione* (wildcard imprevedibile; *stranezza fisica* §6.1 a scala
+   galattica; rara, effetto da tabella ampia).
+
+#### 17.7.4 Due modi di trarne valore
+
+- **Controllo persistente** — *rivendichi* l'FSP (avamposto/presidio sopra):
+  effetto **passivo continuo**, un nodo che possiedi. **Contendibile** da
+  Vehryn/pirati/AI (insidia o sottrazione). È il vincolo anti-game-winner.
+- **Uso una tantum** — *attivi/investighi*: bonus **o** malus immediato, una
+  scommessa. Si **consuma**.
+
+#### 17.7.5 Variabilità (due assi)
+
+**A) Tra partite — "Profilo fenomenologico" della galassia** (dal seed): ogni
+galassia tira un carattere (es. *Ricca di reliquie / povera di pericoli*,
+*Travagliata: molti vortici gravitazionali*, *Silente: pochi FSP ma estremi*).
+Manopole: moltiplicatore di densità per classe + ricchezza globale + tenore
+(boon↔hazard). Tenore di default **bilanciato**.
+
+**B) Dentro la stessa galassia** — distribuzioni mescolate:
+- **Correlate ai cluster/tier**: reliquie/artificiali → *Orlo/Spazio
+  Sconosciuto*; gravitazionali → *Nucleo*; biologiche → gruppi nebulosi.
+- **Nei vuoti** (off-lane): alcune appaiono negli **interstizi tra cluster**,
+  dove non c'è né sistema né rotta.
+- **Riding sul pericolo §5.3**: frequenza/intensità crescono con la distanza
+  da casa (riuso `s.danger`).
+- **Jitter**: conteggio per-classe con tasso dal seed + roll d'intensità per
+  istanza → due FSP "stessa classe" risultano diversi.
+- **Unici con nome**: 0–2 megastrutture/entità event-tier per galassia,
+  parzialmente garantite parzialmente seed-gated (varchi e unici **inclusi in
+  v1**).
+
+#### 17.7.6 Agganci all'esistente
+
+- **Vehryn** (§13.7) seguono le anomalie nuove → corsa alle reliquie/FSP
+  artificiali, ci piantano avamposti. **Pirati** annidati presso certi relitti.
+  **Mekhari** vendono coordinate di FSP non scoperti.
+- **ICG**: classi hazard ignorate possono spingerlo su.
+- **Determinismo (#5)**: piazzamento/classe/intensità da `seed:phenom:<id>`.
+
+#### 17.7.7 Note tecniche (estensione, non duplicazione)
+
+Modulo nuovo `js/phenomena.js`; rendering `_drawPhenomena` sulla galaxy-map con
+coordinate normalizzate `[0,1]³` (off-lane); gating su nebbia di guerra;
+persistenza **additiva** nel save (migrazione lazy, niente bump distruttivo dove
+possibile); eventi Cronaca con `kind` dedicati (KIND_LABELS + DEFAULT_AUTOPAUSE);
+lezioni tutorial ai punti di scoperta. **Fuori v1:** hazard-in-movimento.
+
 ---
 
 ## 18. ARCHETIPI RAZZE/FIGURE
