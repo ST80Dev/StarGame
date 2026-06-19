@@ -95,6 +95,9 @@ ORION.chronicleFilter = 'important';
 const CHRONICLE_NOISE_KINDS = new Set([
   /* Costruzione/produzione routine. */
   'build-done', 'ship-built', 'crew-formed', 'mercantile-built', 'mercantile-promoted',
+  /* Smantellamento/downgrade: avviato dal giocatore, log della colonia
+     basta — non serve cronaca (feedback utente 2026-06-17). */
+  'demolish-done', 'downgrade-done',
   /* Insediamento (4 voci per ogni nuova colonia → rumore). */
   'settle-stage',
   /* Coda governatore Tier 2 (azioni automatiche, log nel pannello dedicato). */
@@ -149,7 +152,9 @@ function isChronicleNoise(ev) {
    equipaggio, assemblaggio flotte): il click stesso è il feedback —
    un'aura aggiuntiva è solo rumore visivo (feedback utente 2026-06-17). */
 const CHRONICLE_SILENT_KINDS = new Set([
-  'demolish-done', 'downgrade-done'
+  /* Vuoto al momento: i completamenti routine sono stati promossi a
+     CHRONICLE_NOISE_KINDS (zero entry). Lasciato il meccanismo per
+     futuri kind che vogliamo "presenti ma senza pulsazione". */
 ]);
 function isChronicleSilent(ev) {
   return ev && ev.kind && CHRONICLE_SILENT_KINDS.has(ev.kind);
@@ -3241,11 +3246,9 @@ function runQuickColonize(planet, colonyKey, loadPop) {
     showToast('Assegnazione equipaggio: ' + (aCrew.reason || 'errore'));
     return;
   }
-  /* Cronaca: ha creato una nuova spedizione. */
-  /* Azione avviata dal giocatore (decisione 2026-06-17): entry sì,
-     aura pulsante no — il click è già il feedback. */
-  pushChronicle(ORION.time.currentDS(g) + ' — Nuova <strong>' + escapeHtml(fleetName) +
-    '</strong> assemblata su ' + escapeHtml(colonyNameFromKey(colonyKey)) + '.', 'planet', null, { silent: true });
+  /* Spedizione assemblata: azione del giocatore — nessuna voce in cronaca
+     (feedback utente 2026-06-17, rumore in Colonie). La conferma è visiva
+     nel roster flotte. */
   /* doColonize fa il resto (costo + embarkPop + setOrder).
      Se doColonize fallisce internamente (es. risorse insufficienti, ordine
      rifiutato) la flotta resta assemblata ma idle in orbita della colonia —
@@ -3673,7 +3676,8 @@ function _doBuild(id, ctxKey, ctxPlanet) {
     return;
   }
   const def = ORION.structures.get(id);
-  pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione: <strong>' + def.name + '</strong> su ' + planet.name + bodyTagHtml(planet.systemId) + ' (' + def.time + ' ' + iU() + ').', 'planet', null, { silent: true });
+  /* Avvio costruzione struttura: rumore in Colonie — la coda della
+     colonia è il feedback (build-done idem fuori dal log). */
   if (ORION.tutorial && ORION.tutorial.fire) {
     ORION.tutorial.fire('struct:' + id);
     if (id === 'centro-ingegneria-planetaria') ORION.tutorial.fire('terraforming');
@@ -3761,19 +3765,14 @@ function _doDemolish(id, ctxKey, ctxPlanet) {
   if (!colony || !planet) { showToast('Colonia non trovata'); return; }
   const def = ORION.structures.get(id);
   if (!def) return;
-  const dur = Math.max(1, Math.round((def.time || 2) / 2));
-  const struct = colony.structures[id];
-  const lvl = struct ? (struct.level || 0) : 0;
   const r = ORION.planet.startDemolish(colony, planet, id, ORION.time.currentDS(g));
   if (!r.ok) {
     console.info('Smantellamento rifiutato:', r.reason);
     showToast(r.reason || 'Smantellamento rifiutato');
     return;
   }
-  const verb = lvl >= 2
-    ? ('Avviato downgrade: <strong>' + def.name + '</strong> (lvl ' + lvl + '→' + (lvl - 1) + ')')
-    : ('Avviato smantellamento: <strong>' + def.name + '</strong>');
-  pushChronicle(ORION.time.currentDS(g) + ' — ' + verb + ' su ' + planet.name + bodyTagHtml(planet.systemId) + ' (' + dur + ' Ι).', 'planet', null, { silent: true });
+  /* Avvio smantellamento/downgrade: azione del giocatore, niente entry
+     in cronaca — la coda della colonia mostra il lavoro in corso. */
   persistGame(g);
   updateGlobalResourceHud();
   updatePlanetUI();
@@ -4251,7 +4250,8 @@ function tryBuildShip() {
     onConfirm: function () {
       const r = ORION.planet.startShipBuild(colony, planet, g, ORION.openPlanetKey, kind);
       if (!r.ok) { console.info('Costruzione scafo rifiutata:', r.reason); showToast(r.reason); return; }
-      pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione di una <strong>' + cls.name + '</strong> su ' + planet.name + bodyTagHtml(planet.systemId) + '.', 'planet', null, { silent: true });
+      /* Avvio costruzione scafo: rumore in cronaca — l'Hangar mostra
+         già la build in coda. */
       persistGame(g);
       updateGlobalResourceHud();
       updatePlanetUI();
@@ -4272,7 +4272,8 @@ function tryBuildCrew() {
     onConfirm: function () {
       const r = ORION.planet.startCrewBuild(colony, planet);
       if (!r.ok) { console.info('Formazione equipaggio rifiutata:', r.reason); showToast(r.reason); return; }
-      pushChronicle(ORION.time.currentDS(g) + ' — Avviata formazione di un <strong>equipaggio esploratore</strong> presso l\'Accademia di ' + planet.name + bodyTagHtml(planet.systemId) + '.', 'planet', null, { silent: true });
+      /* Avvio formazione equipaggio: rumore in cronaca — l'Accademia
+         mostra il training in coda. */
       persistGame(g);
       updateGlobalResourceHud();
       updatePlanetUI();
@@ -5977,8 +5978,8 @@ function openStationBuildPicker(stage) {
         const targetId = Number(b.dataset.build);
         const r = ST.build(g, ORION.stationBuildColony, targetId);
         if (!r.ok) { showToast(r.reason || 'Costruzione rifiutata'); return; }
-        const sName = g.galaxy.systems[targetId] ? g.galaxy.systems[targetId].name : 'sistema';
-        pushChronicle(ORION.time.currentDS(g) + ' — Avviata costruzione di una <strong>stazione</strong> in ' + escapeHtml(sName) + '.', 'fleet');
+        /* Avvio costruzione stazione: azione del giocatore — niente
+           entry in cronaca, la vista Stazioni mostra il cantiere. */
         persistGame(g); close(); renderStationsView(stage); updateGlobalResourceHud();
       });
     });
@@ -8803,9 +8804,8 @@ function openFleetDetail(fleetId, opts) {
         const pen = ORION.cohesion.applyTravelPenalty(g, sysIds);
         if (pen.applied < 0) showToast('Rotta attraverso ' + pen.affectedSys.length + ' sistema coeso — disposizione ' + pen.applied);
       }
-      pushChronicle(ORION.time.currentDS(g) + ' — Nuova flotta <strong>' + escapeHtml(nf.name) +
-        '</strong> formata su ' + escapeHtml(systemNameFromKey(g, colKey)) + ' · ' +
-        escapeHtml(orderLabel({ orders: order })) + '.', 'planet');
+      /* Nuova flotta formata dal giocatore: niente entry — la flotta
+         compare in tab Flotte e il toast/UI sono il feedback. */
       persistGame(g);
       fleet = nf;
       D.creating = false;
