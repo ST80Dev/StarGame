@@ -15236,7 +15236,10 @@ function handleSave(idx, overwrite) {
   const finalName = name.trim() || currentName;
   ORION.save.saveSlot(idx, g, finalName);
   /* Aggiorna la cache locale dello stato cloud cosi' la UI riflette il nome
-     subito (la POST e' gia' partita in pushNow). */
+     subito (la POST e' gia' partita in pushNow). Empire_label e ds_label
+     vanno ricalcolati dal game corrente, non copiati dalla riga vecchia,
+     altrimenti la card mostra il Popolo della partita precedente. */
+  const meta = (ORION.cloud && ORION.cloud.metaOfGame) ? ORION.cloud.metaOfGame(g) : {};
   CLOUD_ROWS['s' + idx] = {
     slot: 's' + idx,
     name: finalName,
@@ -15244,8 +15247,8 @@ function handleSave(idx, overwrite) {
     seed: g.seed || null,
     schema: (ORION.save.SCHEMA_VERSION || 0),
     updated_at: new Date().toISOString(),
-    empire_label: (cloudRow && cloudRow.empire_label) || null,
-    ds_label: null
+    empire_label: meta.empireLabel || null,
+    ds_label: meta.dsLabel || null
   };
   showToast('"' + finalName + '" salvato');
   renderSaveModal();

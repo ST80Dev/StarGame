@@ -402,6 +402,7 @@
     localAutosaveMeta: localAutosaveMeta,
     localSlotMeta: localSlotMeta,
     writeLocalAutosave: writeLocalAutosave,
-    writeLocalSlot: writeLocalSlot
+    writeLocalSlot: writeLocalSlot,
+    metaOfGame: metaOfGame
   };
 })(typeof window !== 'undefined' ? window : globalThis);
