@@ -2351,6 +2351,11 @@
     if (root.ORION.anomaly && root.ORION.anomaly.tick) {
       root.ORION.anomaly.tick(game, events);
     }
+    /* FSP §17.7: scoperta di prossimità dei Fenomeni di Spazio Profondo +
+       passivo dei nodi posseduti e presidiati. */
+    if (root.ORION.phenomena && root.ORION.phenomena.tick) {
+      root.ORION.phenomena.tick(game, events);
+    }
   }
 
   /* M06.5 (decisione #27): scriptata della fase Insediamento.

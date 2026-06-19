@@ -452,7 +452,24 @@
       '<path d="M5 19c-1-2-1-5 0-8 1-3 4-5 7-5s6 2 7 5c1 3 1 6 0 8"/>' +
       '<line x1="3" y1="19" x2="7" y2="19"/>' +
       '<line x1="17" y1="19" x2="21" y2="19"/>'
-    )
+    ),
+
+    /* ---- FSP §17.7 — Fenomeni di Spazio Profondo. Un glifo per classe
+       (un concetto = una tinta, colore impostato dal contenitore). Le
+       sagome rispecchiano i marker disegnati sulla mappa galattica. ---- */
+
+    /* Generico / Contatto non classificato — diamante (segnale ignoto). */
+    fsp: svg('<polygon points="12,3 21,12 12,21 3,12"/>'),
+    /* Gravitazionale — lente: anello + nucleo. */
+    fspGrav: svg('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/>'),
+    /* Reliquia / Artificiale — esagono. */
+    fspRelic: svg('<polygon points="12,3 19.8,7.5 19.8,16.5 12,21 4.2,16.5 4.2,7.5"/>'),
+    /* Emissione / Stellare — stella a 4 punte. */
+    fspEmis: svg('<path d="M12 2 L14 10 L22 12 L14 14 L12 22 L10 14 L2 12 L10 10 Z"/>'),
+    /* Biologica / Esotica — cellula (cerchi concentrici). */
+    fspBio: svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/>'),
+    /* Temporale / Vuoto — frattura (triangolo). */
+    fspTemp: svg('<polygon points="12,4 20,19 4,19"/>')
   };
 
   ORION.icons = ICONS;

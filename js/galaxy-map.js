@@ -155,6 +155,7 @@
       this.state = null;
       this.onContext = null;
       this.onActivateSystem = null;
+      this.onActivatePhenomenon = null;   // FSP §17.7
       this.onDiveIn = null;            // decisione #80: scroll-in → scendi nel sistema
       this._navCdUntil = 0;            // cooldown anti-rimbalzo tra livelli
 
@@ -222,6 +223,7 @@
       this.onFleetOrderRequest = opts.onFleetOrderRequest || null;
       this.onFleetPickerCancel = opts.onFleetPickerCancel || null;
       this.onAiFleetPicked = opts.onAiFleetPicked || null;   // M18.x
+      this.onActivatePhenomenon = opts.onActivatePhenomenon || null;   // FSP §17.7
       this._fleetPicker = null;
 
       container.innerHTML = '';
@@ -822,6 +824,13 @@
       }
       /* Stato idle: prima prova picking flotta, poi sistema/gruppo. */
       if (this.nodeReveal() >= 0.5) {
+        /* FSP §17.7: i Fenomeni di Spazio Profondo rilevati hanno priorità
+           sul click (marker off-lane, distinti dai sistemi/flotte). */
+        const phId = this.pickPhenomenon(sx, sy);
+        if (phId != null) {
+          if (this.onActivatePhenomenon) this.onActivatePhenomenon(phId, sx, sy);
+          return;
+        }
         /* M18.x — marker flotta AI rilevata: priorità sulle tue flotte solo
            se non c'è una tua flotta più vicina (le tue restano selezionabili). */
         const aiId = this.pickAiFleet(sx, sy);
@@ -1252,6 +1261,7 @@
           this._drawAiFleets(ctx, reveal);
           if (this._fleetPicker) this._drawFleetPickerOverlay(ctx, reveal);
           this._drawIncursions(ctx, reveal);
+          this._drawPhenomena(ctx, reveal);
         }
       }
 
@@ -2119,6 +2129,126 @@
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('⬡', p.x + (r + 8), p.y - (r + 2));
+      }
+      ctx.restore();
+    }
+
+    /* ==============================================================
+       FSP §17.7 — Fenomeni di Spazio Profondo: marker off-lane sulla
+       mappa galattica. Mostrati solo da CONTATTO in su (gating scoperta):
+       - CONTATTO: diamante cavo neutro + "?" (classe ignota).
+       - CLASSIFICATO+: glifo/tinta della classe (un concetto = una tinta).
+       - unico → più grande + anello; posseduto → anello; marcato → slash.
+       Posizione da coord normalizzate (ph.x,ph.y,ph.z), NON da un sistema.
+       ============================================================== */
+    pickPhenomenon(sx, sy) {
+      const PH = root.ORION && root.ORION.phenomena;
+      const game = root.ORION && root.ORION.game;
+      if (!PH || !game || !game.phenomena) return null;
+      const items = PH.forGalaxy(this.galaxy);
+      let best = null, bestD = Infinity;
+      const R = 14;
+      for (let i = 0; i < items.length; i++) {
+        const ph = items[i];
+        const st = game.phenomena[ph.id];
+        if (!st || (st.d || 0) < PH.DISCOVERY.CONTATTO) continue;
+        const p = this.project(ph.x, ph.y, ph.z || 0);
+        const dx = p.x - sx, dy = p.y - sy, d = dx * dx + dy * dy;
+        if (d <= R * R && d < bestD) { bestD = d; best = ph.id; }
+      }
+      return best;
+    }
+
+    _fspPoly(ctx, x, y, r, n, rot, fill) {
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        const a = rot + i * 2 * Math.PI / n;
+        const px = x + Math.cos(a) * r, py = y + Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      if (fill) ctx.fill(); else ctx.stroke();
+    }
+    _fspStar(ctx, x, y, r) {
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = -Math.PI / 2 + i * Math.PI / 4;
+        const rad = (i % 2 === 0) ? r : r * 0.4;
+        const px = x + Math.cos(a) * rad, py = y + Math.sin(a) * rad;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath(); ctx.fill();
+    }
+    _fspGlyph(ctx, cls, x, y, r) {
+      if (cls === 'relic') { this._fspPoly(ctx, x, y, r, 6, Math.PI / 6, true); }
+      else if (cls === 'emis') { this._fspStar(ctx, x, y, r); }
+      else if (cls === 'bio') {
+        ctx.beginPath(); ctx.arc(x, y, r * 0.55, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+      } else if (cls === 'temp') { this._fspPoly(ctx, x, y, r, 3, -Math.PI / 2, true); }
+      else { /* grav: lente = anello + nucleo */
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y, r * 0.4, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    _drawPhenomena(ctx, reveal) {
+      const PH = root.ORION && root.ORION.phenomena;
+      const game = root.ORION && root.ORION.game;
+      if (!PH || !game || !game.phenomena) return;
+      const items = PH.forGalaxy(this.galaxy);
+      if (!items || !items.length) return;
+      const DISC = PH.DISCOVERY;
+      const COLORS = { grav: '#b89cff', relic: '#f0a868', emis: '#f0d670', bio: '#6fe0b8', temp: '#f08296' };
+      ctx.save();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (let i = 0; i < items.length; i++) {
+        const ph = items[i];
+        const st = game.phenomena[ph.id];
+        const disc = st ? (st.d || 0) : 0;
+        if (disc < DISC.CONTATTO) continue;
+        const p = this.project(ph.x, ph.y, ph.z || 0);
+        if (p.x < -30 || p.x > this.cssW + 30 || p.y < -30 || p.y > this.cssH + 30) continue;
+        /* varco posseduto: scorciatoia tratteggiata tra i due sistemi estremi */
+        if (st && st.owned && st.varcoTo != null) {
+          const sa = this.galaxy.systems[ph.nearSys], sb = this.galaxy.systems[st.varcoTo];
+          if (sa && sb) {
+            const pa = this.project(sa.x, sa.y, sa.z || 0), pb = this.project(sb.x, sb.y, sb.z || 0);
+            ctx.save();
+            ctx.globalAlpha = reveal * 0.7;
+            ctx.strokeStyle = 'rgba(184,156,255,0.9)';
+            ctx.lineWidth = 1.4; ctx.setLineDash([5, 5]);
+            ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+            ctx.restore();
+          }
+        }
+        const base = Math.max(3, this.nodeRadius(p.parallax) * 0.85);
+        const known = disc >= DISC.CLASSIFICATO;
+        const color = known ? (COLORS[ph.cls] || '#cfe0ff') : 'rgba(205,214,238,0.85)';
+        const r = base * (ph.unique ? 1.5 : 1);
+        ctx.globalAlpha = reveal * (st && st.marked ? 0.55 : 1);
+        ctx.lineWidth = 1.6;
+        ctx.strokeStyle = color; ctx.fillStyle = color;
+        ctx.shadowColor = color; ctx.shadowBlur = 6;
+        if (!known) {
+          this._fspPoly(ctx, p.x, p.y, r, 4, -Math.PI / 2, false); // diamante cavo
+          ctx.shadowBlur = 0;
+          ctx.font = Math.max(9, r * 1.2) + 'px monospace';
+          ctx.fillText('?', p.x, p.y + 0.5);
+        } else {
+          this._fspGlyph(ctx, ph.cls, p.x, p.y, r);
+          if (ph.unique) {
+            ctx.shadowBlur = 0; ctx.globalAlpha *= 0.8;
+            ctx.beginPath(); ctx.arc(p.x, p.y, r + 4, 0, Math.PI * 2); ctx.stroke();
+          }
+        }
+        if (st && st.owned) {
+          ctx.shadowBlur = 0; ctx.globalAlpha = reveal; ctx.strokeStyle = color;
+          ctx.beginPath(); ctx.arc(p.x, p.y, r + 2.5, 0, Math.PI * 2); ctx.stroke();
+        }
+        if (st && st.marked) {
+          ctx.shadowBlur = 0; ctx.strokeStyle = 'rgba(240,130,150,0.9)';
+          ctx.beginPath(); ctx.moveTo(p.x - r - 2, p.y - r - 2); ctx.lineTo(p.x + r + 2, p.y + r + 2); ctx.stroke();
+        }
       }
       ctx.restore();
     }
