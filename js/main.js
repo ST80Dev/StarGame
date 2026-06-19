@@ -9310,8 +9310,6 @@ function openFleetDetail(fleetId, opts) {
     return '<div class="fdetail__pos">' +
       '<div class="fdetail__pos-main">' + mainInner +
         ' <span class="fleet-status fleet-status--' + statusCls + '">' + statusLabel(fleet) + '</span>' + renBtn + '</div>' +
-      '<div class="fdetail__pos-sub">' + uiIcon('roster', 'amber') + ' origine: ' +
-        escapeHtml(systemNameFromKey(g, fleet.ownerColonyKey)) + '</div>' +
     '</div>';
   }
 
@@ -9321,8 +9319,18 @@ function openFleetDetail(fleetId, opts) {
      e li ri-disabilita (richiesta utente 2026-06-14). */
   function secOrders() {
     const enabled = D.ordOpen;
+    /* Inverti rotta — visibile solo durante un leg inter-sistema attivo
+       (no intra, no orbita). All'arrivo (in orbita all'origine del leg)
+       i dispacci 'reach' sull'origine si chiudono al tick successivo. */
+    const canReverse = fleet.location && fleet.location.status === 'in-transit' &&
+      !fleet.location.intra && (fleet.legTotal || 0) > 0 &&
+      Array.isArray(fleet.route) && fleet.routeIdx + 1 < fleet.route.length;
+    const revBtn = canReverse
+      ? '<button class="fdetail__toggle" data-act="ord-reverse" type="button" title="Torna al punto di partenza del leg corrente">↩ Inverti rotta</button>'
+      : '';
     const h = '<div class="fdetail__sec fdetail__sec--ord' + (enabled ? ' is-editing' : '') + '">' +
       '<div class="fdetail__sec-h">' + uiIcon('fleet', 'cyan') + ' Ordine' +
+        revBtn +
         '<button class="fdetail__toggle" data-act="ord-toggle" type="button">' +
           (enabled ? 'annulla' : 'cambia') + '</button></div>' +
       '<div class="fdetail__ord-cur">' + escapeHtml(orderLabel(fleet)) + '</div>' +
@@ -9993,6 +10001,19 @@ function openFleetDetail(fleetId, opts) {
        richiede una flotta reale. */
     const ordConfirm = host.querySelector('[data-act="ord-confirm"]');
     if (ordConfirm) ordConfirm.addEventListener('click', doConfirmOrder);
+    /* Inverti rotta: comando one-shot, niente picker. Chiama reverseLeg
+       e dichiara in cronaca il nuovo target (il sistema di partenza). */
+    const ordReverse = host.querySelector('[data-act="ord-reverse"]');
+    if (ordReverse) ordReverse.addEventListener('click', function () {
+      const r = ORION.fleet.reverseLeg(g, fleet);
+      if (!r.ok) { showToast(r.reason || 'Inversione rifiutata'); return; }
+      const backName = (g.galaxy.systems[r.to] || {}).name || ('Sistema ' + r.to);
+      pushChronicle(ORION.time.currentDS(g) + ' — <strong>' + escapeHtml(fleet.name) +
+        '</strong> inverte rotta verso <strong>' + escapeHtml(backName) + '</strong> (' + r.etaImpulsi + ' ' + iU() + ').',
+        'explore');
+      persistGame(g);
+      render();
+    });
 
     /* --- composizione --- (al PORTO corrente, non alla sola origine) */
     host.querySelectorAll('[data-add-ship]').forEach(function (b) {
