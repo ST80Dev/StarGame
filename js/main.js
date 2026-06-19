@@ -1570,6 +1570,9 @@ function openSystem(id) {
     /* Click su marker flotta in vista sistema → stesso popup info delle
        flotte interstellari (richiesta utente 2026-06-15). */
     onFleetClick: (fleetId, cx, cy) => openFleetInfoPopup(fleetId, cx, cy),
+    /* Click su marker flotta AI rilevata in vista sistema → dossier contatto
+       (come sulla mappa galassia). */
+    onAiFleetClick: (aiFleetId, cx, cy) => openAiFleetPopup(aiFleetId, cx, cy),
     onExit: () => {
       const cluster = g.galaxy.systems[id].cluster;
       closeSystem();

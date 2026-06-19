@@ -2027,12 +2027,16 @@
           pos = { x: p.x + Math.cos(ang) * rad, y: p.y + Math.sin(ang) * rad, depth: p.depth, parallax: p.parallax };
         }
         if (pos.x < -40 || pos.x > this.cssW + 40 || pos.y < -40 || pos.y > this.cssH + 40) continue;
-        const r = Math.max(3, this.nodeRadius(pos.parallax) * 0.55);
+        /* Marker un po' più grande e che cresce leggermente con lo zoom come i
+           nodi sistema (richiesta utente 2026-06-20): prima era 0.55× e quasi
+           invisibile. */
+        const nr = this.nodeRadius(pos.parallax);
+        const r = Math.max(4.5, nr * 0.9);
         const color = af.civColor || '#d0d0d0';
         const known = (af.intel || 0) >= PARTIAL;
+        const a = alpha * (known ? 0.95 : 0.7) * (fresh ? 1 : 0.45);
         ctx.save();
-        /* Contatto "stantio" (ultimo avvistamento) reso più sbiadito. */
-        ctx.globalAlpha = alpha * (known ? 0.95 : 0.6) * (fresh ? 1 : 0.45);
+        ctx.globalAlpha = a;
         /* Rombo nel colore della civ. */
         ctx.beginPath();
         ctx.moveTo(pos.x, pos.y - r);
@@ -2042,17 +2046,46 @@
         ctx.closePath();
         ctx.fillStyle = color;
         ctx.fill();
-        ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+        ctx.strokeStyle = 'rgba(8,12,22,0.85)';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+        /* Alone tenue (come i marker flotta del giocatore). */
+        ctx.beginPath();
+        ctx.moveTo(pos.x, pos.y - (r + 3));
+        ctx.lineTo(pos.x + (r + 3), pos.y);
+        ctx.lineTo(pos.x, pos.y + (r + 3));
+        ctx.lineTo(pos.x - (r + 3), pos.y);
+        ctx.closePath();
+        ctx.strokeStyle = hexA(color, 0.35);
         ctx.lineWidth = 1;
         ctx.stroke();
         /* '?' se composizione ignota. */
         if (!known) {
-          ctx.fillStyle = 'rgba(255,255,255,0.9)';
-          ctx.font = Math.max(9, r + 2) + 'px monospace';
+          ctx.fillStyle = 'rgba(255,255,255,0.92)';
+          ctx.font = '700 ' + Math.max(9, r + 1) + 'px monospace';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText('?', pos.x, pos.y + 0.5);
         }
+        ctx.restore();
+        /* Etichetta: nome del contatto (graduato dall'intel) + ETA se in volo.
+           Font che cresce un filo con lo zoom, come gli altri marker. */
+        let lbl = (root.ORION.aifleet && root.ORION.aifleet.label) ? root.ORION.aifleet.label(game, af) : 'Contatto';
+        if (lbl.length > 22) lbl = lbl.slice(0, 21) + '…';
+        if (inTransit) lbl += ' · ' + Math.max(0, af.etaImpulsi | 0) + ' Ι';
+        const fs = Math.max(9.5, nr + 3);
+        const offX = (pos.x > this.cssW - 130) ? -(r + 6) : (r + 6);
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.font = '600 ' + fs.toFixed(1) + 'px "JetBrains Mono", ui-monospace, monospace';
+        ctx.textAlign = offX < 0 ? 'right' : 'left';
+        ctx.textBaseline = 'middle';
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = 2.6;
+        ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+        ctx.strokeText(lbl, pos.x + offX, pos.y);
+        ctx.fillStyle = hexA(color, 0.95);
+        ctx.fillText(lbl, pos.x + offX, pos.y);
         ctx.restore();
       }
       ctx.restore();

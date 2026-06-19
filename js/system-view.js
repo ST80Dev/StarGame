@@ -54,6 +54,8 @@
       this.onExit = null;
       this.onFleetClick = null;        // click su marker flotta (vista sistema)
       this._fleetHit = [];             // posizioni marker flotta per l'hit-test
+      this.onAiFleetClick = null;      // click su marker flotta AI rilevata
+      this._aiFleetHit = [];           // posizioni marker flotta AI per l'hit-test
       this._navCdUntil = 0;            // decisione #80: cooldown tra livelli
 
       this.scale = 1;
@@ -97,6 +99,7 @@
       this.onActivateBody = opts.onActivateBody || null;
       this.onExit = opts.onExit || null;
       this.onFleetClick = opts.onFleetClick || null;
+      this.onAiFleetClick = opts.onAiFleetClick || null;
 
       container.innerHTML = '';
       const canvas = document.createElement('canvas');
@@ -320,6 +323,9 @@
            Ha priorità sulla selezione del corpo. */
         const fid = this.pickFleet(p.x, p.y);
         if (fid != null && this.onFleetClick) { this.onFleetClick(fid, e.clientX, e.clientY); return; }
+        /* Click su un marker flotta AI rilevata → dossier contatto. */
+        const aid = this.pickAiFleet(p.x, p.y);
+        if (aid != null && this.onAiFleetClick) { this.onAiFleetClick(aid, e.clientX, e.clientY); return; }
         this._handleClick(p.x, p.y);
       }
     }
@@ -328,6 +334,17 @@
     pickFleet(sx, sy) {
       const hits = this._fleetHit || [];
       let best = null, bestD = 12 * 12;
+      for (let i = 0; i < hits.length; i++) {
+        const dx = hits[i].x - sx, dy = hits[i].y - sy;
+        const d = dx * dx + dy * dy;
+        if (d < bestD) { bestD = d; best = hits[i].id; }
+      }
+      return best;
+    }
+    /* Hit-test dei marker flotta AI (posizioni memorizzate in _drawAiFleets). */
+    pickAiFleet(sx, sy) {
+      const hits = this._aiFleetHit || [];
+      let best = null, bestD = 13 * 13;
       for (let i = 0; i < hits.length; i++) {
         const dx = hits[i].x - sx, dy = hits[i].y - sy;
         const d = dx * dx + dy * dy;
@@ -497,6 +514,7 @@
       this._drawBodies(ctx, star);
       if (this.revealed()) this._drawAnomalyMarkers(ctx);
       this._drawFleets(ctx);
+      this._drawAiFleets(ctx);
       this._drawFx(ctx);
     }
 
@@ -838,6 +856,74 @@
         ctx.font = '10px system-ui, sans-serif';
         ctx.textBaseline = 'middle';
         ctx.fillText((f.name || '').slice(0, 14), mx + r + 3, my);
+        ctx.restore();
+      }
+    }
+
+    /* Flotte AI RILEVATE ferme in QUESTO sistema (richiesta utente 2026-06-20:
+       "fai come le mie"). Marker a rombo nel colore della civ, un filo più
+       grande dei tuoi, con etichetta graduata dall'intel. Le flotte AI in volo
+       restano sulla mappa galassia (qui mostriamo solo quelle in orbita nel
+       sistema). Niente RNG: posizione deterministica per id. */
+    _drawAiFleets(ctx) {
+      this._aiFleetHit = [];
+      const game = root.ORION && root.ORION.game;
+      if (!game || !Array.isArray(game.aiFleets) || !game.aiFleets.length || !this.system) return;
+      const sysId = this.system.id;
+      const CFGA = (root.ORION.aifleet && root.ORION.aifleet.CFG) || {};
+      const PARTIAL = CFGA.INTEL_PARTIAL != null ? CFGA.INTEL_PARTIAL : 0.45;
+      const hash01 = (id) => {
+        let h = 0; const s = String(id || '');
+        for (let c = 0; c < s.length; c++) h = (h * 31 + s.charCodeAt(c)) | 0;
+        return (Math.abs(h) % 1000) / 1000;
+      };
+      let maxOrbit = 0.12;
+      for (let i = 0; i < this.system.bodies.length; i++) {
+        const o = this.system.bodies[i].orbit || 0; if (o > maxOrbit) maxOrbit = o;
+      }
+      const present = [];
+      for (let i = 0; i < game.aiFleets.length; i++) {
+        const af = game.aiFleets[i];
+        if (!af || !af.detected) continue;
+        if (af.status === 'in-transit') continue;      // in viaggio → mappa galassia
+        if (af.systemId !== sysId) continue;
+        present.push(af);
+      }
+      const n = present.length;
+      for (let i = 0; i < n; i++) {
+        const af = present[i];
+        const frac = 0.55 + 0.35 * hash01('air' + af.id);
+        const ang = hash01('aia' + af.id) * Math.PI * 2 + (n > 1 ? i * (Math.PI * 2 / n) : 0);
+        const lr = maxOrbit * frac;
+        const p = this.worldToScreen(Math.cos(ang) * lr, Math.sin(ang) * lr);
+        const mx = p.x, my = p.y;
+        this._aiFleetHit.push({ id: af.id, x: mx, y: my });
+        const color = af.civColor || '#d0d0d0';
+        const known = (af.intel || 0) >= PARTIAL;
+        const r = 6.5;   // un filo più grande dei marker del giocatore (5)
+        ctx.save();
+        ctx.globalAlpha = known ? 1 : 0.78;
+        ctx.fillStyle = color;
+        ctx.strokeStyle = 'rgba(8,12,24,0.85)'; ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(mx, my - r); ctx.lineTo(mx + r, my);
+        ctx.lineTo(mx, my + r); ctx.lineTo(mx - r, my); ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        if (!known) {
+          ctx.fillStyle = 'rgba(255,255,255,0.92)';
+          ctx.font = '700 10px monospace';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText('?', mx, my + 0.5);
+        }
+        let lbl = (root.ORION.aifleet && root.ORION.aifleet.label) ? root.ORION.aifleet.label(game, af) : 'Contatto';
+        if (lbl.length > 20) lbl = lbl.slice(0, 19) + '…';
+        ctx.font = '600 11px "JetBrains Mono", ui-monospace, monospace';
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.lineJoin = 'round'; ctx.lineWidth = 2.6;
+        ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+        ctx.strokeText(lbl, mx + r + 4, my);
+        ctx.fillStyle = color;
+        ctx.fillText(lbl, mx + r + 4, my);
         ctx.restore();
       }
     }
