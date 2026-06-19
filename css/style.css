@@ -7530,6 +7530,28 @@ select.main-menu__input { cursor: pointer; }
   color: var(--c-text);
   z-index: 3;
 }
+/* Variante SINTETICA (richiesta utente 2026-06-20): card compatta in basso a
+   sinistra, non più overlay a tutta area. Il dossier vive nella Diplomazia. */
+.deck-foreign--mini {
+  inset: auto auto 88px 12px;
+  width: min(360px, calc(100% - 24px));
+  height: auto;
+  gap: 6px;
+  padding: 10px 12px;
+  overflow: visible;
+}
+.deck-foreign__summary {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.4;
+  color: var(--c-text-soft);
+}
+/* Stima impero nella card Diplomazia (parità col pianeta). */
+.civ-card__est {
+  margin: 6px 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--c-border-soft);
+}
 .deck-foreign__head {
   display: flex; align-items: center; gap: 10px;
   border-bottom: 1px solid rgba(157,123,255,0.25);

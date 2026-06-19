@@ -1570,6 +1570,9 @@ function openSystem(id) {
     /* Click su marker flotta in vista sistema → stesso popup info delle
        flotte interstellari (richiesta utente 2026-06-15). */
     onFleetClick: (fleetId, cx, cy) => openFleetInfoPopup(fleetId, cx, cy),
+    /* Click su marker flotta AI rilevata in vista sistema → dossier contatto
+       (come sulla mappa galassia). */
+    onAiFleetClick: (aiFleetId, cx, cy) => openAiFleetPopup(aiFleetId, cx, cy),
     onExit: () => {
       const cluster = g.galaxy.systems[id].cluster;
       closeSystem();
@@ -1958,6 +1961,11 @@ function closePlanet() {
     if (planetHolder) planetHolder.hidden = true;
     if (sysHolder) { sysHolder.style.visibility = ''; zoomFadeIn(sysHolder); }
     if (deckHolder) deckHolder.hidden = true;
+    /* Fix 2026-06-20: il riepilogo "straniero" (.deck-foreign) è figlio diretto
+       di .galaxy-root → va rimosso esplicitamente alla chiusura del pianeta,
+       altrimenti resta sopra la vista Sistema/Gruppo facendo zoom-out. */
+    const fdeck = root.querySelector('.deck-foreign');
+    if (fdeck) fdeck.remove();
   }
   setNavActive('system');
   setGalaxyHint('system');
@@ -7720,12 +7728,37 @@ function renderCivView(stage) {
         '</div>';
       }
 
-      /* Sede + disposizione: visibili da partial in su. In fragmentary
-         restano nascoste, sostituite da un hint. */
-      const seatRow = (intelRank >= 2)
-        ? '<div class="civ-card__row"><span class="civ-card__k">Sede</span><span>' +
-            escapeHtml(seat.tierLabel || '—') + (seat.name ? ' · ' + escapeHtml(seat.name) : '') + '</span></div>'
-        : '';
+      /* STIMA IMPERO + progresso intel — disponibili già da CONTATTATA (anche
+         a frammentario), in parità con la scheda del pianeta (richiesta utente
+         2026-06-20: la Diplomazia non deve avere meno info del pianeta). */
+      const estPower = ORION.ai.powerTier ? ORION.ai.powerTier(c.power || 0) : '—';
+      const estKnown = ORION.ai.knownSystemsCount ? ORION.ai.knownSystemsCount(g, c) : ((c.systems || []).length);
+      const estLo = Math.max(1, estKnown), estHi = Math.max(estLo + 1, estKnown * 2);
+      const seatGrp = (g.galaxy.groups || []).filter(function (gp) { return gp.id === c.homeGroupId; })[0] || seat || {};
+      /* Progresso del dossier: livello attuale + quanto manca al successivo.
+         Se una tua flotta è nel loro sistema → ETA in Ι (raccolta ATTIVA);
+         altrimenti progresso statico (raccolta ferma). */
+      const iprog = c.intelProgress || 0;
+      const inextAt = iprog < 3 ? 3 : (iprog < 6 ? 6 : null);
+      const inextLbl = inextAt === 3 ? 'parziale' : 'completo';
+      let reconF = null;
+      const csys = c.systems || [];
+      (g.fleets || []).forEach(function (f) {
+        if (reconF || !f || !f.location || f.location.status === 'in-transit') return;
+        if (csys.indexOf(f.location.systemId) >= 0) reconF = f;
+      });
+      const iio = (reconF && ORION.ai.intelOutlook) ? ORION.ai.intelOutlook(g, reconF, reconF.location.systemId) : null;
+      let intelProgTxt;
+      if (inextAt == null) intelProgTxt = 'dossier completo';
+      else if (iio && !iio.complete && iio.id === c.id) intelProgTxt = '🛰 raccolta in corso · ~' + iio.etaToNext + ' Ι al livello ' + inextLbl;
+      else intelProgTxt = iprog.toFixed(1) + '/' + inextAt + ' al livello ' + inextLbl + ' · avvicina una flotta per raccogliere';
+      const estBlock = '<div class="civ-card__est">' +
+        '<div class="civ-card__row"><span class="civ-card__k">Potenza percepita</span><span class="civ-power civ-power--' + estPower + '">' + escapeHtml(estPower) + '</span>' +
+          '<span class="civ-card__k">Sistemi noti</span><span>' + estKnown + '</span></div>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Sede</span><span>' + escapeHtml(seatGrp.name || (seat && seat.name) || '—') + '</span>' +
+          '<span class="civ-card__k">Struttura stimata</span><span>tra ' + estLo + ' e ' + estHi + ' insediamenti</span></div>' +
+        '<div class="civ-card__row"><span class="civ-card__k">⌖ Dossier</span><span>' + escapeHtml(INTEL_LABEL[intelLvl] || intelLvl) + ' · ' + escapeHtml(intelProgTxt) + '</span></div>' +
+      '</div>';
       const dispBlock = (intelRank >= 2)
         ? '<div class="civ-disp">' +
             '<div class="civ-disp__top"><span class="civ-card__k">Disposizione verso di te</span>' +
@@ -7738,7 +7771,7 @@ function renderCivView(stage) {
 
       body = '<div class="civ-card__chips">' + alignChip + relChip + fedChip + intelChip + '</div>' +
         offerHtml +
-        seatRow +
+        estBlock +
         dispBlock +
         dipActions +
         ((intelRank >= 2) ? civTradeHtml(g, c) + civWasteHtml(g, c) : '');
@@ -7750,16 +7783,14 @@ function renderCivView(stage) {
     if (rank >= KNOWLEDGE.known && intelRankForExtras >= 3) {
       const vocLabel = (ORION.ai.VOCATIONS && c.vocation && ORION.ai.VOCATIONS[c.vocation]) ? ORION.ai.VOCATIONS[c.vocation].label : '—';
       const affLabel = (ORION.ai.AFFINITIES && c.affinity && ORION.ai.AFFINITIES[c.affinity]) ? ORION.ai.AFFINITIES[c.affinity].label : '—';
-      const known = ORION.ai.knownSystemsCount(g, c);
-      const ptier = ORION.ai.powerTier(c.power || 0);
       const force = ORION.ai.forceEstimate ? ORION.ai.forceEstimate(g, c) : 0;
+      /* Potenza/Sistemi noti vivono già nella Stima impero (estBlock): qui
+         solo i dettagli più profondi (vocazione/affinità/tratto/forza). */
       const extras =
         '<div class="civ-card__row"><span class="civ-card__k">Vocazione</span><span class="civ-voc">' + escapeHtml(vocLabel) + '</span>' +
           '<span class="civ-card__k">Affinità</span><span>' + escapeHtml(affLabel) + '</span></div>' +
-        '<div class="civ-card__row"><span class="civ-card__k">Tratto</span><span>' + escapeHtml(c.traitLabel || '—') + '</span></div>' +
-        '<div class="civ-card__row"><span class="civ-card__k">Potenza</span><span class="civ-power civ-power--' + ptier + '">' + ptier + '</span>' +
-          '<span class="civ-card__k">Forza stimata</span><span>≈ ' + force + ' unità</span>' +
-          '<span class="civ-card__k">Sistemi noti</span><span>' + known + '</span></div>';
+        '<div class="civ-card__row"><span class="civ-card__k">Tratto</span><span>' + escapeHtml(c.traitLabel || '—') + '</span>' +
+          '<span class="civ-card__k">Forza stimata</span><span>≈ ' + force + ' unità</span></div>';
       /* Inserisci extras DOPO i chip + sede e PRIMA della barra disposizione. */
       body = body.replace('<div class="civ-disp">', extras + '<div class="civ-disp">');
     }
@@ -10783,7 +10814,10 @@ const DEFAULT_AUTOPAUSE = {
      l'avvicinamento a una colonia e la scaramuccia sono notevoli (ON). */
   'aifleet-detected': false,
   'aifleet-approach': true,
-  'aifleet-crossed': false,
+  /* Incrocio della TUA flotta con una flotta altrui: momento + info → pausa
+     (richiesta utente 2026-06-20). È raro (serve la co-locazione/stesso tratto
+     con una tua flotta), quindi non è invasivo. */
+  'aifleet-crossed': true,
   'aifleet-hostile-encounter': true,
   'aifleet-skirmish': true,
   'aifleet-destroyed': true,
@@ -11373,6 +11407,13 @@ function runAdvance(impulsi) {
     try { renderLeftPanel(); } catch (_) { /* niente */ }
     if (lp) lp.scrollTop = st;
   }
+  /* La vista Diplomazia/Civiltà si auto-aggiorna Impulso per Impulso (nuove
+     civ rilevate, intel che sale, disposizione) senza dover ri-navigare
+     (richiesta utente 2026-06-20). */
+  if (ORION._currentView === 'civ') {
+    const cst = document.querySelector('[data-view-stage]');
+    if (cst) { const sc = cst.scrollTop; try { renderCivView(cst); } catch (_) { /* niente */ } cst.scrollTop = sc; }
+  }
   updateTimeControlsHint();
   persistGame(g);
   /* Rilancia l'animazione DS dal tick corrente (ricomincia da Ι appena maturato) */
@@ -11768,7 +11809,7 @@ function _chronicleEventBody(ev) {
        decidere di "Segui" per saperne di più. */
     const whoFrag = ev.civName ? (' di <strong>' + escapeHtml(ev.civName) + '</strong>') : '';
     const compFrag = ev.compKnown ? (' (missione di <em>' + escapeHtml(ev.missionLabel) + '</em>)') : ' (composizione ignota)';
-    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName || 'La tua flotta') + '</strong> ha incrociato una flotta' + whoFrag + compFrag + ' nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">puoi dare l\'ordine «Segui» per scrutarla meglio</span>.', 'civ');
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName || 'La tua flotta') + '</strong> ha incrociato una flotta' + whoFrag + compFrag + ' nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">clicca il contatto sulla mappa per il dossier, o dai l\'ordine «Segui» per scrutarla meglio</span>.', 'civ');
   } else if (ev.kind === 'aifleet-hostile-encounter') {
     /* M18.x: incrocio con flotta OSTILE non ingaggiata (la tua non è
        aggressiva). Momento di decisione (auto-pausa), nessun danno. */
@@ -14754,34 +14795,22 @@ function refreshForeignDeck() {
       '<span class="deck-foreign__v">' + escapeHtml(LV[io.level] || io.level) + ' · ' + escapeHtml(prog) + '</span></div>';
   }
 
+  /* Riepilogo SINTETICO (richiesta utente 2026-06-20): sul pianeta AI mostriamo
+     solo un riassunto leggero — proprietario + tipo + allineamento + rimando.
+     Il DOSSIER dettagliato (stima impero, intel, progresso) vive nella sezione
+     Diplomazia / dettaglio civiltà, raggiungibile dai pulsanti dell'action bar
+     ("Apri dossier civiltà" / "Diplomazia"). Niente più scheda pesante che
+     resta sopra la mappa. */
   const html =
-    '<div class="deck-foreign colony-deck--foreign" style="--civ-color:' + escapeHtml(civ.color) + '">' +
+    '<div class="deck-foreign deck-foreign--mini colony-deck--foreign" style="--civ-color:' + escapeHtml(civ.color) + '">' +
       '<div class="deck-foreign__head">' +
         '<span class="deck-foreign__swatch" aria-hidden="true"></span>' +
         '<span class="deck-foreign__name">' + escapeHtml(civ.name) + '</span>' +
         '<span class="deck-foreign__chip">' + (ALIGN_LABEL[civ.alignment] || civ.alignment) + '</span>' +
-        '<span class="deck-foreign__chip">' + escapeHtml(civ.traitLabel || '—') + '</span>' +
       '</div>' +
-      /* PR-D: emoji sostituiti da SVG inline (UI_GUIDE §3 strategia B).
-         Cross-OS rendering consistente, glow morbido coerente. */
-      '<section class="deck-foreign__section">' +
-        '<h4><span class="ui-icon ui-icon--blue deck-foreign__h4-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('info')) || '') + '</span> Info pubbliche</h4>' +
-        '<div class="deck-foreign__row"><span class="deck-foreign__k">Tipo corpo</span><span class="deck-foreign__v">' + escapeHtml(def ? def.label : planet.type) + '</span></div>' +
-        '<div class="deck-foreign__row"><span class="deck-foreign__k">Regione</span><span class="deck-foreign__v">' + escapeHtml(tier.name || '—') + ' · ' + escapeHtml(tier.tierLabel || '—') + '</span></div>' +
-        '<div class="deck-foreign__row"><span class="deck-foreign__k">Proprietario</span><span class="deck-foreign__v">' + escapeHtml(civ.name) + '</span></div>' +
-      '</section>' +
-      '<section class="deck-foreign__section">' +
-        '<h4><span class="ui-icon ui-icon--gold deck-foreign__h4-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('resources')) || '') + '</span> Stima impero</h4>' +
-        '<div class="deck-foreign__row"><span class="deck-foreign__k">Potenza percepita</span><span class="deck-foreign__v">' + escapeHtml(ptier) + '</span></div>' +
-        '<div class="deck-foreign__row"><span class="deck-foreign__k">Sistemi noti</span><span class="deck-foreign__v">' + known + '</span></div>' +
-        '<div class="deck-foreign__row"><span class="deck-foreign__k">Sede</span><span class="deck-foreign__v">' + escapeHtml(seat.name || '—') + '</span></div>' +
-        '<div class="deck-foreign__row"><span class="deck-foreign__k">Struttura stimata</span><span class="deck-foreign__v">tra ' + lo + ' e ' + hi + ' insediamenti</span></div>' +
-      '</section>' +
-      '<section class="deck-foreign__section">' +
-        '<h4><span class="ui-icon ui-icon--violet deck-foreign__h4-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('spy')) || '') + '</span> Intel dettagliato</h4>' +
-        reconHtml +
-        '<div class="deck-foreign__placeholder">Spionaggio (M19) — richiede una missione di intel attiva su questo mondo.</div>' +
-      '</section>' +
+      '<p class="deck-foreign__summary">Corpo di <strong>' + escapeHtml(civ.name) + '</strong> · ' +
+        escapeHtml(def ? def.label : planet.type) + '. ' +
+        'Dossier completo, intel e diplomazia nella sezione <strong>Diplomazia</strong>.</p>' +
     '</div>';
   root.insertAdjacentHTML('beforeend', html);
 }
