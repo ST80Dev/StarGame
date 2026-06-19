@@ -6745,9 +6745,9 @@ function renderFleetView(stage) {
     if (o.type === 'return') return 'rientro alla base';
     if (o.type === 'patrol') return 'pattuglia ' + sysName(o.sysA) + ' ↔ ' + sysName(o.sysB);
     if (o.type === 'move-route') {
-      const tot = (o.waypoints || []).length;
-      const cur = (o.wpIdx || 0) + 1;
-      return 'rotta a tappe (' + cur + '/' + tot + ')';
+      const wps = o.waypoints || [];
+      const finalSys = wps.length ? wps[wps.length - 1] : null;
+      return '→ ' + (finalSys != null ? sysName(finalSys) : 'tappe') + ' (' + ((o.wpIdx || 0) + 1) + '/' + wps.length + ')';
     }
     if (o.type === 'patrol-loop') {
       return 'pattuglia ciclica · ' + (o.loop || []).length + ' nodi';
@@ -7122,6 +7122,109 @@ function fleetViveriHtml(fleet) {
     '<span class="fleet-viveri__lbl">Viveri ' + label + '</span>' +
     '<span class="fleet-viveri__bar"><span class="fleet-viveri__fill" style="width:' + pct + '%"></span></span>' +
     '</div>';
+}
+
+/* Versione COMPATTA per il roster sx (richiesta utente 2026-06-19): viveri +
+   usura su una sola riga, come due mini-torte (conic-gradient) che si
+   riempiono/svuotano. Pure CSS, niente JS/animazioni. Il dettaglio resta nel
+   title; le barre estese restano nella vista Flotte. */
+function fleetGaugesHtml(fleet) {
+  const F = ORION.fleet;
+  if (!fleet || !Array.isArray(fleet.ships) || !fleet.ships.length) return '';
+  let viv = '';
+  if (F && F.viveriOf) {
+    const cap = F.viveriCapOf ? F.viveriCapOf(fleet) : (F.viveriCap ? F.viveriCap() : 250);
+    const v = Math.max(0, Math.round(F.viveriOf(fleet)));
+    const st = F.viveriStatus ? F.viveriStatus(fleet) : 'ok';
+    const pct = cap > 0 ? Math.max(0, Math.min(100, Math.round(v / cap * 100))) : 0;
+    const atPort = (ORION.game && F.fleetAtFriendlyPort) ? F.fleetAtFriendlyPort(ORION.game, fleet) : false;
+    const drift = fleet._drift ? ' · deriva' : '';
+    viv = '<span class="fleet-gauge fleet-gauge--viveri fleet-gauge--' + st + '" style="--pct:' + pct + '" ' +
+      'title="Viveri ' + v + ' / ' + cap + ' Ι' + (atPort ? ' · al porto' : '') + drift + ' — autonomia lontano da un porto amico (#69)">' +
+      '<span class="fleet-gauge__pie" aria-hidden="true"></span>' +
+      '<span class="fleet-gauge__txt">◇ ' + v + '/' + cap + '</span></span>';
+  }
+  let sum = 0, max = 0, n = 0;
+  for (let i = 0; i < fleet.ships.length; i++) {
+    const w = Math.min(100, Math.max(0, (fleet.ships[i].wear || 0)));
+    sum += w; if (w > max) max = w; n++;
+  }
+  const avg = n ? Math.round(sum / n) : 0, peak = Math.round(max);
+  const wst = peak >= 80 ? 'crit' : peak >= 50 ? 'low' : 'ok';
+  const wear = '<span class="fleet-gauge fleet-gauge--wear fleet-gauge--' + wst + '" style="--pct:' + avg + '" ' +
+    'title="Usura scafi: media ' + avg + '%' + (peak !== avg ? ' · picco ' + peak + '%' : '') + ' — si ripara solo attraccata (hangar/stazione lvl≥2)">' +
+    '<span class="fleet-gauge__pie" aria-hidden="true"></span>' +
+    '<span class="fleet-gauge__txt">⚒ ' + avg + '%</span></span>';
+  return '<span class="fleet-gauges">' + viv + wear + '</span>';
+}
+
+/* ---- Etichette "dove sta / cosa fa" condivise (sidebar + dettaglio +
+   vista flotte). Fonte unica così le tre superfici dicono la stessa cosa
+   (richiesta utente 2026-06-19: la leg A→B è più chiara di "in viaggio…" e
+   "rotta a tappe", + il comando preciso se c'è). ---- */
+function _flSysNm(g, id) {
+  const s = (id != null && id >= 0 && g.galaxy.systems[id]) ? g.galaxy.systems[id] : null;
+  return s ? s.name : '—';
+}
+function _flBodyNm(g, sysId, bodyKey) {
+  if (!bodyKey || sysId == null || sysId < 0) return null;
+  if (!ORION.system || !ORION.system.generate || !ORION.system.findBody) return null;
+  try { const ds = ORION.system.generate(g.galaxy, sysId); const b = ds && ORION.system.findBody(ds, bodyKey); return b ? b.name : null; }
+  catch (e) { return null; }
+}
+/* Posizione: durante il viaggio mostra la LEG corrente "A → B (N Ι)"; da
+   fermo "in Sistema [· Corpo]"; manovra intra "Sistema · → Corpo (N Ι)". */
+function fleetLocText(g, f) {
+  if (!g || !f || !f.location) return '—';
+  const loc = f.location;
+  const eta = (f.etaImpulsi | 0);
+  const etaFrag = eta > 0 ? ' (' + eta + ' ' + iU() + ')' : '';
+  if (loc.status === 'in-transit' && loc.intra) {
+    const sId = loc.intra.systemId;
+    const bn = _flBodyNm(g, sId, loc.intra.toBodyKey);
+    return _flSysNm(g, sId) + (bn ? ' · → ' + bn : ' · manovra interna') + etaFrag;
+  }
+  if (loc.status === 'in-transit') {
+    const fromSys = (Array.isArray(f.route) && f.routeIdx < f.route.length) ? f.route[f.routeIdx] : loc.systemId;
+    const toSys = (Array.isArray(f.route) && f.routeIdx + 1 < f.route.length) ? f.route[f.routeIdx + 1]
+                : ((f.orders && f.orders.toSysId != null) ? f.orders.toSysId : loc.systemId);
+    return _flSysNm(g, fromSys) + ' → ' + _flSysNm(g, toSys) + etaFrag;
+  }
+  const bk = (ORION.fleet && ORION.fleet.fleetCurrentBodyKey) ? ORION.fleet.fleetCurrentBodyKey(g, f) : null;
+  const bn = _flBodyNm(g, loc.systemId, bk);
+  return 'in ' + _flSysNm(g, loc.systemId) + (bn ? ' · ' + bn : '');
+}
+/* Comando preciso oltre allo spostamento. '' per un move a 1 hop (la leg
+   A→B lo dice già). Per i move multi-hop / move-route mostra la META FINALE. */
+function fleetOrderText(g, f) {
+  const o = f && f.orders;
+  if (!o || !o.type || o.type === 'idle') return '';
+  const loc = f.location || {};
+  const tn = o.toSysId != null ? _flSysNm(g, o.toSysId) : '';
+  const bn = _flBodyNm(g, o.toSysId, o.bodyKey);
+  const bodyFrag = bn ? ' · ' + bn : '';
+  const nextHop = (Array.isArray(f.route) && f.routeIdx + 1 < f.route.length) ? f.route[f.routeIdx + 1] : null;
+  switch (o.type) {
+    case 'move':
+      if (o.toSysId != null && o.toSysId !== nextHop && o.toSysId !== loc.systemId) return '→ ' + tn + bodyFrag;
+      if (bn) return '→ ' + tn + bodyFrag;
+      return '';
+    case 'explore':  return '✦ esplora ' + tn;
+    case 'attack':   return '⚔ attacco · ' + tn + bodyFrag;
+    case 'survey':   return '✦ raccolta anomalia · ' + tn + bodyFrag;
+    case 'recon':    return '⊙ ricognizione · ' + tn + bodyFrag;
+    case 'colonize': return '◉ colonizza · ' + tn + bodyFrag;
+    case 'garrison': return 'presidio · ' + tn + bodyFrag;
+    case 'return':   return 'rientro alla base';
+    case 'patrol':   return 'pattuglia ' + _flSysNm(g, o.sysA) + ' ⇄ ' + _flSysNm(g, o.sysB);
+    case 'move-route': {
+      const wps = o.waypoints || [];
+      const finalSys = wps.length ? wps[wps.length - 1] : null;
+      return '→ ' + (finalSys != null ? _flSysNm(g, finalSys) : 'tappe') + ' (' + ((o.wpIdx || 0) + 1) + '/' + wps.length + ')';
+    }
+    case 'patrol-loop': return 'pattuglia ciclica · ' + (o.loop || []).length + ' nodi';
+    default: return o.type;
+  }
 }
 
 function handleSiegeTribute(battleId, stage) {
@@ -8616,14 +8719,11 @@ function openFleetDetail(fleetId, opts) {
       if (f && f.location && f.location.status === 'orbiting') return '⏸ in sosta a ' + sysName(f.location.systemId);
       return 'in attesa di ordini';
     }
-    if (o.type === 'move') return 'rotta → ' + sysName(o.toSysId);
-    if (o.type === 'attack') return 'attacco → ' + sysName(o.toSysId);
-    if (o.type === 'explore') return 'esplorazione → ' + sysName(o.toSysId);
-    if (o.type === 'survey') return 'anomalia → ' + sysName(o.toSysId);
-    if (o.type === 'return') return 'rientro alla base';
-    if (o.type === 'patrol') return 'pattuglia ' + sysName(o.sysA) + ' ↔ ' + sysName(o.sysB);
-    if (o.type === 'move-route') return 'rotta a tappe (' + ((o.wpIdx || 0) + 1) + '/' + (o.waypoints || []).length + ')';
-    if (o.type === 'patrol-loop') return 'pattuglia ciclica · ' + (o.loop || []).length + ' nodi';
+    /* Fonte unica (richiesta utente 2026-06-19): la meta finale precisa, non
+       "rotta a tappe (1/1)". fleetOrderText ritorna '' per un move a 1 hop. */
+    const t = fleetOrderText(g, f);
+    if (t) return t;
+    if (o.type === 'move') return 'spostamento → ' + sysName(o.toSysId);
     return o.type;
   }
   function eligibleColonies() {
@@ -9182,17 +9282,35 @@ function openFleetDetail(fleetId, opts) {
 
   function secPos() {
     const loc = fleet.location || {};
-    const tag = (loc.systemId >= 0) ? systemTagHtml(loc.systemId) : '';
     const statusCls = loc.status || 'idle';
     const renBtn = D.renaming ? '' :
       '<button class="fdetail__rename-btn" data-act="rename-toggle" type="button" title="Rinomina flotta" aria-label="Rinomina flotta">✎</button>';
-    const bn = fleetBodyName(g, fleet);
-    const bodyHtml = bn ? ' <span class="fdetail__pos-body">· ' + escapeHtml(bn) + '</span>' : '';
+    /* Posizione chiara (richiesta utente 2026-06-19): in viaggio mostra la LEG
+       "A → B", non "in <sistema di partenza>". Da fermo: "in <Sistema · Corpo>".
+       La sotto-riga è l'ORIGINE (colonia di appartenenza), etichettata come
+       tale per non confonderla con la posizione attuale. */
+    let mainInner;
+    if (loc.status === 'in-transit' && loc.intra) {
+      const sId = loc.intra.systemId;
+      const bn = _flBodyNm(g, sId, loc.intra.toBodyKey);
+      mainInner = uiIcon('fleet', 'cyan') + ' <strong>' + escapeHtml(sysName(sId)) + '</strong>' + systemTagHtml(sId) +
+        (bn ? ' <span class="fdetail__pos-body">· → ' + escapeHtml(bn) + '</span>' : ' <span class="fdetail__pos-body">· manovra interna</span>');
+    } else if (loc.status === 'in-transit') {
+      const fromSys = (Array.isArray(fleet.route) && fleet.routeIdx < fleet.route.length) ? fleet.route[fleet.routeIdx] : loc.systemId;
+      const toSys = (Array.isArray(fleet.route) && fleet.routeIdx + 1 < fleet.route.length) ? fleet.route[fleet.routeIdx + 1]
+                  : ((fleet.orders && fleet.orders.toSysId != null) ? fleet.orders.toSysId : loc.systemId);
+      mainInner = uiIcon('fleet', 'cyan') + ' <strong>' + escapeHtml(sysName(fromSys)) + '</strong> → <strong>' +
+        escapeHtml(sysName(toSys)) + '</strong>' + systemTagHtml(toSys);
+    } else {
+      const tag = (loc.systemId >= 0) ? systemTagHtml(loc.systemId) : '';
+      const bn = fleetBodyName(g, fleet);
+      const bodyHtml = bn ? ' <span class="fdetail__pos-body">· ' + escapeHtml(bn) + '</span>' : '';
+      mainInner = uiIcon('system', 'amber') + ' in <strong>' + escapeHtml(sysName(loc.systemId)) + '</strong> ' + tag + bodyHtml;
+    }
     return '<div class="fdetail__pos">' +
-      '<div class="fdetail__pos-main">' + uiIcon('system', 'amber') +
-        ' in <strong>' + escapeHtml(sysName(loc.systemId)) + '</strong> ' + tag + bodyHtml +
+      '<div class="fdetail__pos-main">' + mainInner +
         ' <span class="fleet-status fleet-status--' + statusCls + '">' + statusLabel(fleet) + '</span>' + renBtn + '</div>' +
-      '<div class="fdetail__pos-sub">' + uiIcon('roster', 'amber') + ' da ' +
+      '<div class="fdetail__pos-sub">' + uiIcon('roster', 'amber') + ' origine: ' +
         escapeHtml(systemNameFromKey(g, fleet.ownerColonyKey)) + '</div>' +
     '</div>';
   }
@@ -11211,6 +11329,16 @@ function runAdvance(impulsi) {
   /* Decisione utente: ridisegna la vista Sistema così i marker flotta
      (incl. spostamenti intra-sistema) si muovono col tempo. */
   if (ORION.systemView && ORION.systemView.requestRender) ORION.systemView.requestRender();
+  /* Reattività della Plancia sx (richiesta utente 2026-06-19): il roster
+     (flotte nuove/spostate, viveri/usura, ordine in corso) deve aggiornarsi
+     Impulso per Impulso, non solo cambiando vista. Ridisegniamo preservando
+     lo scroll per non far "saltare" la lista in auto-advance. */
+  if (typeof renderLeftPanel === 'function') {
+    const lp = document.querySelector('[data-bind="left-panel"]');
+    const st = lp ? lp.scrollTop : 0;
+    try { renderLeftPanel(); } catch (_) { /* niente */ }
+    if (lp) lp.scrollTop = st;
+  }
   updateTimeControlsHint();
   persistGame(g);
   /* Rilancia l'animazione DS dal tick corrente (ricomincia da Ι appena maturato) */
@@ -12396,7 +12524,6 @@ function renderLeftPanel() {
   function fleetItemHtml(f) {
     const loc = f.location || {};
     const sysId = (loc.systemId != null && loc.systemId >= 0) ? loc.systemId : -1;
-    const sysOf = function (id) { const s = id >= 0 ? g.galaxy.systems[id] : null; return s ? s.name : '—'; };
     const status = loc.status || 'idle';
     const berth = (status === 'docked' || status === 'orbiting') ? ORION.fleet.berthOf(g, f) : null;
     const statusLbl = status === 'docked' ? (berth === 'station' ? 'stazione' : 'hangar')
@@ -12404,53 +12531,13 @@ function renderLeftPanel() {
                     : (berth === 'orbit' ? 'parcheggio' : 'orbita');
     const cls = status === 'docked' ? 'ok' : status === 'in-transit' ? 'info' : 'warn';
     const fleetIcon = (ORION.icon && ORION.icon('fleet')) || '';
-    /* Sub-text "dove sta" — corretto durante viaggi (richiesta utente
-       2026-06-18): NON mostrare il sistema-stub di partenza come posizione
-       quando la flotta è già in volo. Inter: "in viaggio → Dest (N Ι)".
-       Intra: "Sys · → Body (N Ι)". Statico: "in Sys". */
-    let subTxt;
-    if (status === 'in-transit' && loc.intra) {
-      const sId = loc.intra.systemId;
-      let bodyName = null;
-      if (loc.intra.toBodyKey && ORION.system && ORION.system.generate && ORION.system.findBody) {
-        try { const ds = ORION.system.generate(g.galaxy, sId); const b = ds && ORION.system.findBody(ds, loc.intra.toBodyKey); bodyName = b ? b.name : null; } catch (e) { /* */ }
-      }
-      const eta = (f.etaImpulsi | 0);
-      subTxt = sysOf(sId) + (bodyName ? ' · → ' + bodyName : ' · manovra interna') + (eta > 0 ? ' (' + eta + ' ' + iU() + ')' : '');
-    } else if (status === 'in-transit') {
-      const destSys = (f.orders && f.orders.toSysId != null) ? f.orders.toSysId
-        : (Array.isArray(f.route) && f.route.length ? f.route[f.route.length - 1] : sysId);
-      const eta = (f.etaImpulsi | 0);
-      subTxt = 'in viaggio → ' + sysOf(destSys) + (eta > 0 ? ' (' + eta + ' ' + iU() + ')' : '');
-    } else {
-      subTxt = 'in ' + sysOf(sysId);
-    }
-    /* Comando in corso, sotto al sub-luogo, in mini-pill — coerente con
-       l'ordine mostrato nella vista flotte (richiesta utente). */
-    const o = f.orders;
-    let orderTxt = '';
-    if (o && o.type && o.type !== 'idle') {
-      const tn = o.toSysId != null ? sysOf(o.toSysId) : '';
-      if (o.type === 'move')          orderTxt = 'spostamento a ' + tn;
-      else if (o.type === 'attack')   orderTxt = '⚔ attacco a ' + tn;
-      else if (o.type === 'explore')  orderTxt = 'esplorazione di ' + tn;
-      else if (o.type === 'survey')   orderTxt = '✦ raccolta anomalia · ' + tn;
-      else if (o.type === 'recon')    orderTxt = 'ricognizione di ' + tn;
-      else if (o.type === 'colonize') orderTxt = 'colonizzazione di ' + tn;
-      else if (o.type === 'garrison') orderTxt = 'presidio di ' + tn;
-      else if (o.type === 'return')   orderTxt = 'rientro alla base';
-      else if (o.type === 'patrol')   orderTxt = 'pattuglia';
-      else if (o.type === 'move-route') {
-        const tot = (o.waypoints || []).length, cur = (o.wpIdx || 0) + 1;
-        orderTxt = 'rotta a tappe (' + cur + '/' + tot + ')';
-      } else if (o.type === 'patrol-loop') orderTxt = 'pattuglia ciclica';
-      else orderTxt = o.type;
-    }
+    /* Posizione (leg A→B in viaggio) + comando preciso, via helper condivisi
+       (richiesta utente 2026-06-19). */
+    const subTxt = fleetLocText(g, f);
+    const orderTxt = fleetOrderText(g, f);
     const orderHtml = orderTxt ? '<span class="lp-item__order">' + escapeHtml(orderTxt) + '</span>' : '';
-    /* Decisione utente 2026-06-16: pillola usura/viveri su una SECONDA riga,
-       sotto nome+badge. Inline mangiava la prima riga e troncava il nome. */
-    const wearH = fleetWearHtml(f);
-    const viveriH = fleetViveriHtml(f);
+    /* Viveri + usura come due mini-torte su UNA riga (compatto). */
+    const gauges = fleetGaugesHtml(f);
     return '<button class="lp-item lp-item--fleet" data-action="roster-fleet" data-id="' + escapeHtml(f.id) + '" data-sys="' + sysId + '" type="button">' +
       '<span class="lp-item__head">' +
         '<span class="lp-item__glyph ui-icon" aria-hidden="true">' + fleetIcon + '</span>' +
@@ -12458,7 +12545,7 @@ function renderLeftPanel() {
         '<span class="lp-item__badges"><span class="lp-item__badge lp-item__badge--' + cls + '">' + statusLbl + '</span></span>' +
       '</span>' +
       (orderHtml ? ('<span class="lp-item__row">' + orderHtml + '</span>') : '') +
-      ((viveriH || wearH) ? ('<span class="lp-item__row">' + viveriH + wearH + '</span>') : '') +
+      (gauges ? ('<span class="lp-item__row lp-item__row--gauges">' + gauges + '</span>') : '') +
     '</button>';
   }
   /* Stazioni orbitali (M16): elencate nel Roster come pari delle colonie
