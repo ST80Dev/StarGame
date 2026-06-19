@@ -7723,12 +7723,37 @@ function renderCivView(stage) {
         '</div>';
       }
 
-      /* Sede + disposizione: visibili da partial in su. In fragmentary
-         restano nascoste, sostituite da un hint. */
-      const seatRow = (intelRank >= 2)
-        ? '<div class="civ-card__row"><span class="civ-card__k">Sede</span><span>' +
-            escapeHtml(seat.tierLabel || '—') + (seat.name ? ' · ' + escapeHtml(seat.name) : '') + '</span></div>'
-        : '';
+      /* STIMA IMPERO + progresso intel — disponibili già da CONTATTATA (anche
+         a frammentario), in parità con la scheda del pianeta (richiesta utente
+         2026-06-20: la Diplomazia non deve avere meno info del pianeta). */
+      const estPower = ORION.ai.powerTier ? ORION.ai.powerTier(c.power || 0) : '—';
+      const estKnown = ORION.ai.knownSystemsCount ? ORION.ai.knownSystemsCount(g, c) : ((c.systems || []).length);
+      const estLo = Math.max(1, estKnown), estHi = Math.max(estLo + 1, estKnown * 2);
+      const seatGrp = (g.galaxy.groups || []).filter(function (gp) { return gp.id === c.homeGroupId; })[0] || seat || {};
+      /* Progresso del dossier: livello attuale + quanto manca al successivo.
+         Se una tua flotta è nel loro sistema → ETA in Ι (raccolta ATTIVA);
+         altrimenti progresso statico (raccolta ferma). */
+      const iprog = c.intelProgress || 0;
+      const inextAt = iprog < 3 ? 3 : (iprog < 6 ? 6 : null);
+      const inextLbl = inextAt === 3 ? 'parziale' : 'completo';
+      let reconF = null;
+      const csys = c.systems || [];
+      (g.fleets || []).forEach(function (f) {
+        if (reconF || !f || !f.location || f.location.status === 'in-transit') return;
+        if (csys.indexOf(f.location.systemId) >= 0) reconF = f;
+      });
+      const iio = (reconF && ORION.ai.intelOutlook) ? ORION.ai.intelOutlook(g, reconF, reconF.location.systemId) : null;
+      let intelProgTxt;
+      if (inextAt == null) intelProgTxt = 'dossier completo';
+      else if (iio && !iio.complete && iio.id === c.id) intelProgTxt = '🛰 raccolta in corso · ~' + iio.etaToNext + ' Ι al livello ' + inextLbl;
+      else intelProgTxt = iprog.toFixed(1) + '/' + inextAt + ' al livello ' + inextLbl + ' · avvicina una flotta per raccogliere';
+      const estBlock = '<div class="civ-card__est">' +
+        '<div class="civ-card__row"><span class="civ-card__k">Potenza percepita</span><span class="civ-power civ-power--' + estPower + '">' + escapeHtml(estPower) + '</span>' +
+          '<span class="civ-card__k">Sistemi noti</span><span>' + estKnown + '</span></div>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Sede</span><span>' + escapeHtml(seatGrp.name || (seat && seat.name) || '—') + '</span>' +
+          '<span class="civ-card__k">Struttura stimata</span><span>tra ' + estLo + ' e ' + estHi + ' insediamenti</span></div>' +
+        '<div class="civ-card__row"><span class="civ-card__k">⌖ Dossier</span><span>' + escapeHtml(INTEL_LABEL[intelLvl] || intelLvl) + ' · ' + escapeHtml(intelProgTxt) + '</span></div>' +
+      '</div>';
       const dispBlock = (intelRank >= 2)
         ? '<div class="civ-disp">' +
             '<div class="civ-disp__top"><span class="civ-card__k">Disposizione verso di te</span>' +
@@ -7741,7 +7766,7 @@ function renderCivView(stage) {
 
       body = '<div class="civ-card__chips">' + alignChip + relChip + fedChip + intelChip + '</div>' +
         offerHtml +
-        seatRow +
+        estBlock +
         dispBlock +
         dipActions +
         ((intelRank >= 2) ? civTradeHtml(g, c) + civWasteHtml(g, c) : '');
@@ -7753,16 +7778,14 @@ function renderCivView(stage) {
     if (rank >= KNOWLEDGE.known && intelRankForExtras >= 3) {
       const vocLabel = (ORION.ai.VOCATIONS && c.vocation && ORION.ai.VOCATIONS[c.vocation]) ? ORION.ai.VOCATIONS[c.vocation].label : '—';
       const affLabel = (ORION.ai.AFFINITIES && c.affinity && ORION.ai.AFFINITIES[c.affinity]) ? ORION.ai.AFFINITIES[c.affinity].label : '—';
-      const known = ORION.ai.knownSystemsCount(g, c);
-      const ptier = ORION.ai.powerTier(c.power || 0);
       const force = ORION.ai.forceEstimate ? ORION.ai.forceEstimate(g, c) : 0;
+      /* Potenza/Sistemi noti vivono già nella Stima impero (estBlock): qui
+         solo i dettagli più profondi (vocazione/affinità/tratto/forza). */
       const extras =
         '<div class="civ-card__row"><span class="civ-card__k">Vocazione</span><span class="civ-voc">' + escapeHtml(vocLabel) + '</span>' +
           '<span class="civ-card__k">Affinità</span><span>' + escapeHtml(affLabel) + '</span></div>' +
-        '<div class="civ-card__row"><span class="civ-card__k">Tratto</span><span>' + escapeHtml(c.traitLabel || '—') + '</span></div>' +
-        '<div class="civ-card__row"><span class="civ-card__k">Potenza</span><span class="civ-power civ-power--' + ptier + '">' + ptier + '</span>' +
-          '<span class="civ-card__k">Forza stimata</span><span>≈ ' + force + ' unità</span>' +
-          '<span class="civ-card__k">Sistemi noti</span><span>' + known + '</span></div>';
+        '<div class="civ-card__row"><span class="civ-card__k">Tratto</span><span>' + escapeHtml(c.traitLabel || '—') + '</span>' +
+          '<span class="civ-card__k">Forza stimata</span><span>≈ ' + force + ' unità</span></div>';
       /* Inserisci extras DOPO i chip + sede e PRIMA della barra disposizione. */
       body = body.replace('<div class="civ-disp">', extras + '<div class="civ-disp">');
     }
@@ -11378,6 +11401,13 @@ function runAdvance(impulsi) {
     const st = lp ? lp.scrollTop : 0;
     try { renderLeftPanel(); } catch (_) { /* niente */ }
     if (lp) lp.scrollTop = st;
+  }
+  /* La vista Diplomazia/Civiltà si auto-aggiorna Impulso per Impulso (nuove
+     civ rilevate, intel che sale, disposizione) senza dover ri-navigare
+     (richiesta utente 2026-06-20). */
+  if (ORION._currentView === 'civ') {
+    const cst = document.querySelector('[data-view-stage]');
+    if (cst) { const sc = cst.scrollTop; try { renderCivView(cst); } catch (_) { /* niente */ } cst.scrollTop = sc; }
   }
   updateTimeControlsHint();
   persistGame(g);
