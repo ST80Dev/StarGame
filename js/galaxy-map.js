@@ -2079,11 +2079,12 @@
           ctx.fillText('?', pos.x, pos.y + 0.5);
         }
         ctx.restore();
-        /* Etichetta: nome del contatto (graduato dall'intel) + ETA se in volo.
+        /* Etichetta: SOLO l'identificazione del contatto (nome civ o "non
+           identificata"), niente missione/ETA — quelle affollano la mappa e
+           stanno nel dettaglio al click (richiesta utente 2026-06-20).
            Font che cresce un filo con lo zoom, come gli altri marker. */
-        let lbl = (root.ORION.aifleet && root.ORION.aifleet.label) ? root.ORION.aifleet.label(game, af) : 'Contatto';
+        let lbl = (root.ORION.aifleet && root.ORION.aifleet.nameLabel) ? root.ORION.aifleet.nameLabel(game, af) : 'Contatto';
         if (lbl.length > 22) lbl = lbl.slice(0, 21) + '…';
-        if (inTransit) lbl += ' · ' + Math.max(0, af.etaImpulsi | 0) + ' Ι';
         const fs = Math.max(9.5, nr + 3);
         const offX = (pos.x > this.cssW - 130) ? -(r + 6) : (r + 6);
         ctx.save();

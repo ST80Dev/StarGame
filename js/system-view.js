@@ -918,7 +918,8 @@
           ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
           ctx.fillText('?', mx, my + 0.5);
         }
-        let lbl = (root.ORION.aifleet && root.ORION.aifleet.label) ? root.ORION.aifleet.label(game, af) : 'Contatto';
+        /* Solo l'identificazione, niente missione/ETA (coerente con la mappa). */
+        let lbl = (root.ORION.aifleet && root.ORION.aifleet.nameLabel) ? root.ORION.aifleet.nameLabel(game, af) : 'Contatto';
         if (lbl.length > 20) lbl = lbl.slice(0, 19) + '…';
         ctx.font = '600 11px "JetBrains Mono", ui-monospace, monospace';
         ctx.textAlign = 'left'; ctx.textBaseline = 'middle';

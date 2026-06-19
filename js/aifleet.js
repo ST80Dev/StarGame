@@ -919,8 +919,14 @@
   /* Etichetta sintetica del contatto per la UI (rispetta l'intel). */
   function label(game, af) {
     if (!af) return 'Contatto perduto';
-    const who = (af.intel >= CFG.INTEL_FULL && af.civName) ? af.civName : 'Flotta non identificata';
-    return who + ' · ' + MISSIONS[af.mission].label;
+    return nameLabel(game, af) + ' · ' + MISSIONS[af.mission].label;
+  }
+  /* Solo l'identificazione (nome civ o "non identificata"), senza missione/ETA:
+     usata sulla mappa per non affollare la vista (richiesta utente 2026-06-20).
+     Il dettaglio (missione, ETA, composizione) sta nel popup al click. */
+  function nameLabel(game, af) {
+    if (!af) return 'Contatto perduto';
+    return (af.intel >= CFG.INTEL_FULL && af.civName) ? af.civName : 'Flotta non identificata';
   }
 
   /* ------------------------------------------------------------------
@@ -955,6 +961,7 @@
     byId: byId,
     composition: composition,
     label: label,
+    nameLabel: nameLabel,
     setFollow: setFollow,
     clearFollow: clearFollow,
     MODES: MODES,
