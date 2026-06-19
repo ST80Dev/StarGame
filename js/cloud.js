@@ -107,7 +107,8 @@
       schema:       (payload && payload.schema) || 0,
       seed:         (payload && payload.seed) || null,
       empire_label: (meta && meta.empireLabel) || null,
-      ds_label:     (meta && meta.dsLabel) || null
+      ds_label:     (meta && meta.dsLabel) || null,
+      name:         (meta && meta.name) || null
     };
     const opts = {
       method:  'POST',
@@ -192,7 +193,7 @@
       const store = raw ? JSON.parse(raw) : { autosave: null, slots: [null, null, null, null, null] };
       store.slots[idx] = {
         payload: remoteRow.payload,
-        name: 'Slot ' + (idx + 1),
+        name: remoteRow.name || ('Slot ' + (idx + 1)),
         ts: new Date(remoteRow.updated_at).getTime() || Date.now()
       };
       localStorage.setItem('orion.saves.v3', JSON.stringify(store));
@@ -290,13 +291,17 @@
     }, CFG.DEBOUNCE_MS);
   }
 
-  /* Push immediato (es. dopo "Sovrascrivi" manuale). */
-  function pushNow(slot, game) {
+  /* Push immediato (es. dopo "Sovrascrivi" manuale).
+     name (opzionale): etichetta dello slot, persistita nel cloud cosi'
+     i prompt successivi possono ripresentarla come default (UX). */
+  function pushNow(slot, game, name) {
     if (!isEnabled() || !game) return Promise.resolve(null);
     const payload = payloadOfGame(game);
     if (!payload) return Promise.resolve(null);
+    const meta = metaOfGame(game);
+    if (name) meta.name = name;
     setStatus('syncing');
-    return pushRemote(slot, payload, metaOfGame(game))
+    return pushRemote(slot, payload, meta)
       .then(function (r) { setStatus('ok'); return r; })
       .catch(function (err) { setStatus('error', String(err && err.message || err)); throw err; });
   }
