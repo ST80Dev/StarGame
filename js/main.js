@@ -8223,9 +8223,25 @@ function renderCivDetail(stage, c) {
         escapeHtml(sysNm) + (bodyNm ? ' · ' + escapeHtml(bodyNm) : '') + '</span>' + systemTagHtml(x.sid) + '</li>';
     }).join('');
     const hiddenN = planets.length - colKnown.length;
+    /* Conteggio colonie non localizzate = informazione di fog-of-war: rivelarlo
+       esatto al primo contatto equivale a conoscere la dimensione totale
+       dell'impero. Gating per livello dossier (decisione utente 2026-06-19):
+       - frammentario (rank 1): solo accenno qualitativo, nessun numero;
+       - parziale (rank 2): stima a fascia (~N), arrotondata;
+       - completo (rank 3): conteggio esatto. */
+    let hiddenHtml = '';
+    if (hiddenN > 0) {
+      if (intelRank >= 3) {
+        hiddenHtml = '<p class="panel__note">+' + hiddenN + ' colonie in sistemi non ancora esplorati — esplora per localizzarle.</p>';
+      } else if (intelRank >= 2) {
+        const lo = Math.max(1, hiddenN - 1), hi = hiddenN + 1;
+        hiddenHtml = '<p class="panel__note">Altre ~' + lo + '–' + hi + ' colonie stimate in sistemi non ancora esplorati — approfondisci il dossier per il conteggio esatto.</p>';
+      } else {
+        hiddenHtml = '<p class="panel__note">Altri insediamenti probabili, non ancora localizzati — esplora i loro sistemi o raccogli più intel.</p>';
+      }
+    }
     colHtml = (colKnown.length ? '<ul class="civ-detail__cols">' + rows + '</ul>' : '') +
-      (hiddenN > 0 ? '<p class="panel__note">+' + hiddenN + ' colonie in sistemi non ancora esplorati — esplora per localizzarle.</p>' :
-        (!colKnown.length ? '<p class="panel__note">Esplora i loro sistemi per localizzarne le colonie.</p>' : ''));
+      (hiddenHtml || (!colKnown.length ? '<p class="panel__note">Esplora i loro sistemi per localizzarne le colonie.</p>' : ''));
   }
 
   /* FLOTTE identificate di recente (dallo strato flotte ambientali AI). */
