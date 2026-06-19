@@ -6906,6 +6906,21 @@ select.main-menu__input { cursor: pointer; }
 .lp-item--fleet .lp-item__row .fleet-wear {
   margin: 0; flex: 1 1 calc(50% - 4px); min-width: 120px;
 }
+/* Riga "comando in corso" del roster flotte (richiesta utente 2026-06-18):
+   chip leggero, color muted, nasconde overflow lungo. Coerente con tono
+   flotta (ciano) ma in surface neutra per non rubare l'attenzione. */
+.lp-item__order {
+  font-size: 0.74rem;
+  color: var(--c-text-soft);
+  background: rgb(var(--c-surface-rgb) / 0.55);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 4px;
+  padding: 2px 7px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
 .lp-item__badge {
   font-size: 0.74rem;
   font-weight: 600;
