@@ -442,19 +442,23 @@
       const f = fleets[i];
       if (!f || !f.location) continue;
       const s = fs ? fs(f) : { power: 0.5, range: 0 };
-      const nodesF = (f.location.status === 'in-transit' && !f.location.intra &&
-                      Array.isArray(f.route) && f.routeIdx + 1 < f.route.length)
+      const inTransit = (f.location.status === 'in-transit' && !f.location.intra &&
+                         Array.isArray(f.route) && f.routeIdx + 1 < f.route.length);
+      const nodesF = inTransit
         ? [f.route[f.routeIdx], f.route[f.routeIdx + 1]]
         : [f.location.systemId];
       for (let k = 0; k < nodesF.length; k++) {
         const here = nodesF[k];
         if (here == null) continue;
-        /* Proprio sistema: sempre (incrocio/co-locazione). */
+        /* Proprio sistema (e, in volo, i DUE estremi del tratto): sempre. */
         bump(here, s.power);
-        /* 1 hop SOLO con scafo da ricognizione; niente 2° anello (raggio di
-           flotta < colonia, tarato sul tipo di navi — richiesta utente
-           2026-06-19). */
-        if (s.range >= 1) {
+        /* Sweep recon +1 hop SOLO da FERMA (richiesta utente 2026-06-19):
+           in volo, sommare l'anello attorno A ENTRAMBI gli estremi del tratto
+           faceva arrivare la copertura a 2 hop (estremo di arrivo + anello =
+           sistema oltre la destinazione). Una flotta che attraversa l'iperspazio
+           copre solo la sua corsia; lo sweep degli adiacenti avviene quando è
+           in orbita/attracco. La colonia resta a 2 hop (infrastruttura). */
+        if (s.range >= 1 && !inTransit) {
           const nb = neighborsOf(game, here);
           for (let j = 0; j < nb.length; j++) bump(nb[j], s.power * CFG.FLEET_RING_FALLOFF);
         }
