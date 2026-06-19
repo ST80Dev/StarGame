@@ -1985,13 +1985,22 @@
       const g = this.galaxy;
       const alpha = clamp(reveal, 0, 1);
       if (alpha < 0.05) return;
-      const PARTIAL = (root.ORION.aifleet && root.ORION.aifleet.CFG) ? root.ORION.aifleet.CFG.INTEL_PARTIAL : 0.45;
+      const CFGA = (root.ORION.aifleet && root.ORION.aifleet.CFG) || {};
+      const PARTIAL = CFGA.INTEL_PARTIAL != null ? CFGA.INTEL_PARTIAL : 0.45;
+      const PERSIST = CFGA.CONTACT_PERSIST_I != null ? CFGA.CONTACT_PERSIST_I : 32;
+      const nowI = game.timeImpulsi || 0;
       let anyTransit = false;
       ctx.save();
       ctx.globalAlpha = alpha;
       for (let i = 0; i < game.aiFleets.length; i++) {
         const af = game.aiFleets[i];
-        if (!af || !af.detected) continue;
+        if (!af) continue;
+        /* Mostra i contatti rilevati ORA (pieno) e quelli "ultimo
+           avvistamento" entro PERSIST Impulsi (sbiaditi) — così non spariscono
+           nell'istante in cui escono dai tuoi sensori (richiesta utente). */
+        const fresh = !!af.detected;
+        const stale = !fresh && (af.lastSeenI != null) && (nowI - af.lastSeenI) <= PERSIST;
+        if (!fresh && !stale) continue;
         let pos;
         const inTransit = af.status === 'in-transit'
                        && Array.isArray(af.route) && af.routeIdx + 1 < af.route.length;
@@ -2022,7 +2031,8 @@
         const color = af.civColor || '#d0d0d0';
         const known = (af.intel || 0) >= PARTIAL;
         ctx.save();
-        ctx.globalAlpha = alpha * (known ? 0.95 : 0.6);
+        /* Contatto "stantio" (ultimo avvistamento) reso più sbiadito. */
+        ctx.globalAlpha = alpha * (known ? 0.95 : 0.6) * (fresh ? 1 : 0.45);
         /* Rombo nel colore della civ. */
         ctx.beginPath();
         ctx.moveTo(pos.x, pos.y - r);

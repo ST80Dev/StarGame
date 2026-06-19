@@ -40,18 +40,26 @@
     /* Movimento ambientale attivo molto presto (NON gated dal warm-up 500
        delle incursioni): basta che la galassia/civiltà esistano. */
     START_I: 24,
-    GLOBAL_CAP: 7,          // max flottiglie ambientali simultanee
+    GLOBAL_CAP: 9,          // max flottiglie ambientali simultanee
     PER_CIV_CAP: 2,
     SPAWN_PER_TICK: 2,      // max spawn per decisione (anti-burst)
-    SPAWN_CHANCE: 0.16,     // per civ idonea per decisione
+    SPAWN_CHANCE: 0.18,     // per civ idonea per decisione
     SPAWN_RAMP_I: 1500,     // sotto: chance scalata (decollo dolce, non rigido)
     MAX_HOPS: 6,            // lunghezza massima di una rotta ambientale
     LINGER_MIN: 16,
     LINGER_MAX: 48,
+    /* Flyby verso il giocatore (richiesta utente 2026-06-19): una parte
+       delle flotte AI viene deliberatamente a "ispezionare" le vicinanze
+       delle tue colonie → contatti garantiti anche se la civiltà è a qualche
+       hop, non solo movimento nel loro territorio. */
+    SCOUT_CHANCE: 0.40,     // prob. che una missione punti verso il giocatore
+    SCOUT_MAX_HOPS: 11,     // budget rotta più ampio per raggiungerti
 
     /* Sensori. */
     COLONY_SENSOR: 0.62,    // potenza rilevamento passiva di una colonia
-    COLONY_RANGE_FALLOFF: 0.55, // copertura sui sistemi adiacenti (×)
+    COLONY_RANGE_FALLOFF: 0.55, // copertura sui sistemi adiacenti (1° anello)
+    COLONY_RANGE2_FALLOFF: 0.30, // copertura sul 2° anello (2 hop, più debole)
+    CONTACT_PERSIST_I: 32,  // un contatto resta "ultimo avvistamento" dopo l'uscita dai sensori
     DETECT_BASE: 0.22,      // offset prob. rilevamento
     INTEL_GAIN: 0.16,       // crescita intel/Impulso in copertura
     INTEL_PARTIAL: 0.45,    // soglia: stima composizione
@@ -248,19 +256,51 @@
     return ships;
   }
 
+  /* Meta "verso il giocatore" (flyby): un sistema-colonia del player o un suo
+     adiacente, raggiungibile entro SCOUT_MAX_HOPS dal territorio della civ.
+     Sceglie il più vicino → la flottiglia viene davvero a scrutarti. */
+  function playerwardGoal(game, civ) {
+    const colSys = playerColonySystems(game);
+    if (!colSys.size) return null;
+    const cand = new Set();
+    colSys.forEach(function (s) {
+      cand.add(s);
+      neighborsOf(game, s).forEach(function (n) { cand.add(n); });
+    });
+    (civ.systems || []).forEach(function (s) { cand.delete(s); });
+    if (!cand.size) return null;
+    const origin = civ.systems[0];
+    let best = null, bestHops = Infinity;
+    cand.forEach(function (t) {
+      const p = path(game, origin, t);
+      if (!p) return;
+      const h = p.length - 1;
+      if (h <= CFG.SCOUT_MAX_HOPS && h < bestHops) { bestHops = h; best = t; }
+    });
+    return best;
+  }
+
   function spawnOne(game, civ, crng, events) {
     const mission = chooseMission(game, civ, crng);
-    let goal = null;
-    if (mission === 'extractor') goal = anomalyGoal(game, civ, crng, false);
-    else if (mission === 'transport') {
-      const sys = (civ.systems || []).filter(function (s) { return s !== civ.systems[0]; });
-      goal = sys.length ? crng.pick(sys) : null;
-    } else goal = exploreGoal(game, civ, crng);
+    let goal = null, scout = false;
+    /* Flyby: una parte delle missioni (non gli estrattori) punta verso di te. */
+    if (mission !== 'extractor' && crng.chance(CFG.SCOUT_CHANCE)) {
+      goal = playerwardGoal(game, civ);
+      if (goal != null) scout = true;
+    }
+    if (goal == null) {
+      if (mission === 'extractor') goal = anomalyGoal(game, civ, crng, false);
+      else if (mission === 'transport') {
+        const sys = (civ.systems || []).filter(function (s) { return s !== civ.systems[0]; });
+        goal = sys.length ? crng.pick(sys) : null;
+      } else goal = exploreGoal(game, civ, crng);
+    }
     if (goal == null) return false;
 
     const origin = civ.systems[0];
     const route = path(game, origin, goal);
-    if (!route || route.length < 2 || route.length - 1 > CFG.MAX_HOPS) return false;
+    const maxHops = scout ? CFG.SCOUT_MAX_HOPS : CFG.MAX_HOPS;
+    if (!route || route.length < 2 || route.length - 1 > maxHops) return false;
 
     const ships = buildComposition(game, civ, mission, crng);
     const minSpeed = minSpeedOf(ships);
@@ -373,28 +413,45 @@
   /* Mappa di copertura sensori del giocatore: sysId → potenza [0..1.2]. */
   function buildCoverage(game) {
     const cov = {};
-    function bump(sysId, p) { if (cov[sysId] == null || cov[sysId] < p) cov[sysId] = p; }
-    /* Colonie: copertura passiva sul proprio sistema + adiacenti (attenuata). */
+    function bump(sysId, p) { if (sysId != null && (cov[sysId] == null || cov[sysId] < p)) cov[sysId] = p; }
+    /* Colonie: copertura passiva sul sistema + 1° anello + 2° anello (più
+       debole). Allarga la rete così cogli chi passa fino a 2 hop. */
     const colSys = playerColonySystems(game);
     colSys.forEach(function (s) {
       bump(s, CFG.COLONY_SENSOR);
-      const nb = neighborsOf(game, s);
-      for (let i = 0; i < nb.length; i++) bump(nb[i], CFG.COLONY_SENSOR * CFG.COLONY_RANGE_FALLOFF);
+      const nb1 = neighborsOf(game, s);
+      for (let i = 0; i < nb1.length; i++) {
+        bump(nb1[i], CFG.COLONY_SENSOR * CFG.COLONY_RANGE_FALLOFF);
+        const nb2 = neighborsOf(game, nb1[i]);
+        for (let j = 0; j < nb2.length; j++) bump(nb2[j], CFG.COLONY_SENSOR * CFG.COLONY_RANGE2_FALLOFF);
+      }
     });
-    /* Flotte del giocatore: copertura attiva nel sistema (e adiacenti se
-       hanno scafi da ricognizione). */
+    /* Flotte del giocatore: copertura nel/i nodo/i correnti (entrambi gli
+       estremi della leg se in volo interstellare) + 1° anello; gli scafi da
+       ricognizione estendono al 2° anello. Le tue flotte in giro fanno da
+       sensori mobili → più incroci. */
     const fleets = game.fleets || [];
     const fs = ORION.fleet && ORION.fleet.fleetSensor;
     for (let i = 0; i < fleets.length; i++) {
       const f = fleets[i];
       if (!f || !f.location) continue;
-      const here = f.location.systemId;
-      if (here == null) continue;
       const s = fs ? fs(f) : { power: 0.5, range: 0 };
-      bump(here, s.power);
-      if (s.range >= 1) {
+      const nodesF = (f.location.status === 'in-transit' && !f.location.intra &&
+                      Array.isArray(f.route) && f.routeIdx + 1 < f.route.length)
+        ? [f.route[f.routeIdx], f.route[f.routeIdx + 1]]
+        : [f.location.systemId];
+      for (let k = 0; k < nodesF.length; k++) {
+        const here = nodesF[k];
+        if (here == null) continue;
+        bump(here, s.power);
         const nb = neighborsOf(game, here);
-        for (let j = 0; j < nb.length; j++) bump(nb[j], s.power * CFG.COLONY_RANGE_FALLOFF);
+        for (let j = 0; j < nb.length; j++) {
+          bump(nb[j], s.power * CFG.COLONY_RANGE_FALLOFF);
+          if (s.range >= 1) {
+            const nb2 = neighborsOf(game, nb[j]);
+            for (let m = 0; m < nb2.length; m++) bump(nb2[m], s.power * CFG.COLONY_RANGE2_FALLOFF);
+          }
+        }
       }
     }
     return cov;
@@ -434,6 +491,7 @@
     if (!drng.chance(p)) { af.detected = false; return; }
 
     af.detected = true;
+    af.lastSeenI = I;   // persistenza "ultimo avvistamento" per il render
     af.intel = Math.min(1, af.intel + CFG.INTEL_GAIN * (0.5 + 0.5 * best));
 
     /* Vicino a una colonia? (nodo presenza è un tuo sistema colonia o adiacente). */
