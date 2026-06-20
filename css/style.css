@@ -6905,6 +6905,24 @@ select.main-menu__input { cursor: pointer; }
 .lp-tab-body--chron .chronicle__entry--explore::before { color: var(--c-accent-warm); }
 .lp-tab-body--chron .chronicle__entry--civ { color: var(--c-text); }
 .lp-tab-body--chron .chronicle__entry--civ::before { color: #9d7bff; }
+/* Voci cliccabili (decisione 2026-06-21): portano al sistema/colonia/civ.
+   Sottile sottolineatura su hover + cursor pointer per affordance, niente
+   bordo invadente. Margine sinistro extra per dare spazio al focus ring. */
+.lp-tab-body--chron .chronicle__entry--clickable {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  margin-left: -4px; padding-left: 16px;
+  transition: background 120ms, color 120ms;
+}
+.lp-tab-body--chron .chronicle__entry--clickable:hover {
+  background: rgb(var(--c-surface-rgb) / 0.5);
+  color: var(--c-text);
+}
+.lp-tab-body--chron .chronicle__entry--clickable:hover::before { color: var(--c-accent-warm); }
+.lp-tab-body--chron .chronicle__entry--clickable:focus-visible {
+  outline: 1px solid var(--c-accent);
+  outline-offset: 1px;
+}
 
 /* --- Sezione generica del launcher --- */
 /* flex-shrink:0 → ogni sezione mantiene la sua altezza naturale e non viene

@@ -225,6 +225,200 @@ function chronicleMysteryCiv(civName, regionLabel) {
   return { name: 'una potenza ignota', region: 'regioni non cartografate', mystery: true };
 }
 
+/* ID civ dato il nome — restituisce l'id solo se conosciuta almeno come
+   "spotted" (rank ≥ 1). Coerente con la misteriosità: una voce con
+   nome velato non è cliccabile (non hai dossier da aprire). */
+function chronicleCivIdByName(civName) {
+  if (!civName || !ORION.game || !Array.isArray(ORION.game.civs)) return null;
+  const c = ORION.game.civs.find(function (x) { return x.name === civName; });
+  if (!c) return null;
+  const rank = (ORION.ai && ORION.ai.knowledgeRank) ? ORION.ai.knowledgeRank(c) : 3;
+  if (rank < 1) return null;
+  return (typeof c.id !== 'undefined') ? c.id : null;
+}
+
+/* Builder del "target" cliccabile di una voce di cronaca.
+   Restituisce null se l'evento non porta da nessuna parte di sensato
+   (es. civ-emerged con nome velato, federation-formed, council-*).
+   Tipi target:
+     - { type: 'system-open', sysId }         → openSystem (vista Sistema)
+     - { type: 'system', sysId }              → mappa gruppo, focus su sistema
+     - { type: 'planet', sysId, bodyKey }     → vista Pianeta/Colonia
+     - { type: 'civ', civId }                 → vista Civiltà + focus card
+     - { type: 'view', view }                 → cambio vista semplice
+*/
+function computeChronicleTarget(ev) {
+  if (!ev || !ev.kind) return null;
+  const kind = ev.kind;
+  function planetTarget() {
+    const sid = (ev.planet && typeof ev.planet.systemId === 'number') ? ev.planet.systemId
+              : (ev.colony && typeof ev.colony.systemId === 'number') ? ev.colony.systemId
+              : null;
+    const bk = (ev.planet && ev.planet.bodyKey) ? ev.planet.bodyKey
+             : (ev.colony && ev.colony.bodyKey) ? ev.colony.bodyKey
+             : null;
+    if (sid == null) return null;
+    if (!bk) return { type: 'system-open', sysId: sid };
+    return { type: 'planet', sysId: sid, bodyKey: bk };
+  }
+  function sysOpenTarget(sid) {
+    if (typeof sid !== 'number' || sid < 0) return null;
+    return { type: 'system-open', sysId: sid };
+  }
+  function colonyKeyTarget(key) {
+    if (!key) return null;
+    const parts = String(key).split(':');
+    const sid = Number(parts[0]); const bk = parts[1];
+    if (!Number.isFinite(sid) || !bk) return null;
+    return { type: 'planet', sysId: sid, bodyKey: bk };
+  }
+  function civTarget(name) {
+    const cid = chronicleCivIdByName(name);
+    return (cid != null) ? { type: 'civ', civId: cid } : null;
+  }
+
+  /* --- pianeta/colonia --- */
+  if (kind === 'colony-done' || kind === 'settle-done' || kind === 'settle-stage' ||
+      kind === 'scarcity' || kind === 'scarcity-recover' ||
+      kind === 'waste' || kind === 'waste-recover' || kind === 'pop-loss' ||
+      kind === 'capital-built' || kind === 'capital-declared' ||
+      kind === 'capital-transition-end' || kind === 'capital-decommissioned' ||
+      kind === 'expedition-dock-overflow' ||
+      kind === 'gov-queue-empty' || kind === 'gov-slots-idle' || kind === 'gov-pop-near-cap' ||
+      kind === 'gov-supply-falling' || kind === 'gov-veterans-idle' ||
+      kind === 'gov-build-started' || kind === 'gov-expand-started' || kind === 'gov-asset-started' ||
+      kind === 'commander-promoted' || kind === 'research-complete') {
+    if (kind === 'research-complete') return { type: 'view', view: 'research' };
+    return planetTarget();
+  }
+  if (kind === 'colony-conquered' || kind === 'colony-razed' || kind === 'colony-looted') {
+    return colonyKeyTarget(ev.colonyKey);
+  }
+  if (kind === 'colony-figure-emerged') {
+    return colonyKeyTarget(ev.colonyKey);
+  }
+  if (kind === 'fleet-colonize-orbit' || kind === 'fleet-colonize-foundation' ||
+      kind === 'fleet-colonize-failed') {
+    return sysOpenTarget(ev.systemId);
+  }
+
+  /* --- sistema (vista sistema in apertura) --- */
+  if (kind === 'expedition-arrived' || kind === 'fleet-launched' ||
+      kind === 'fleet-arrived' || kind === 'fleet-route-complete' ||
+      kind === 'fleet-discovery' || kind === 'fleet-waypoint-reached' ||
+      kind === 'fleet-intercepted' || kind === 'fleet-supply-low' ||
+      kind === 'fleet-supply-critical' || kind === 'fleet-resupplied' ||
+      kind === 'garrison-threat-detected' ||
+      kind === 'anomaly-relic-found' || kind === 'anomaly-depleted' ||
+      kind === 'pirate-cleared' || kind === 'pirate-raid-won' ||
+      kind === 'raider-inbound' || kind === 'raider-hit' ||
+      kind === 'battle-skirmish' || kind === 'siege-begin' ||
+      kind === 'siege-round' || kind === 'siege-end') {
+    return sysOpenTarget(ev.systemId != null ? ev.systemId : ev.sysId);
+  }
+  if (kind === 'incursion-inbound') return sysOpenTarget(ev.targetSysId);
+  if (kind === 'trade-raid' || kind === 'fsp-contact' || kind === 'fsp-scanned' ||
+      kind === 'fsp-revealed' || kind === 'fsp-claimed' || kind === 'fsp-lost' ||
+      kind === 'mekhari-contract-done') {
+    return sysOpenTarget(ev.sysId);
+  }
+  if (kind === 'station-built' || kind === 'station-upgraded' ||
+      kind === 'station-attacked' || kind === 'station-destroyed' ||
+      kind === 'station-isolated' || kind === 'station-resupplied' ||
+      kind === 'station-captured' || kind === 'station-retaken' ||
+      kind === 'station-ship-built') {
+    return sysOpenTarget(ev.systemId);
+  }
+  if (kind === 'garrison-declared' || kind === 'garrison-compromised' ||
+      kind === 'garrison-restored' || kind === 'garrison-lapsed' ||
+      kind === 'garrison-released' ||
+      kind === 'system-cohesion-formed' || kind === 'system-cohesion-broken' ||
+      kind === 'cohesion-attack-backlash') {
+    return sysOpenTarget(ev.sysId);
+  }
+  if (kind === 'civ-battle') return sysOpenTarget(ev.systemId);
+
+  /* --- civiltà (solo se conosciute almeno come spotted) --- */
+  if (kind === 'civ-contact' || kind === 'civ-spotted' || kind === 'civ-intel-upgraded' ||
+      kind === 'civ-expand' || kind === 'civ-emerged' || kind === 'civ-fallen' ||
+      kind === 'civ-war' ||
+      kind === 'diplo-war' || kind === 'diplo-peace' || kind === 'diplo-alliance' ||
+      kind === 'diplo-alliance-broken' || kind === 'diplo-rejected' ||
+      kind === 'diplo-truce-expired' || kind === 'diplo-offer' ||
+      kind === 'diplo-offer-expired' || kind === 'diplo-offer-rejected' ||
+      kind === 'diplo-counter' || kind === 'diplo-ultimatum' ||
+      kind === 'diplo-ultimatum-paid' || kind === 'diplo-ultimatum-refused' ||
+      kind === 'diplo-ultimatum-expired' || kind === 'diplo-betrayal-warning' ||
+      kind === 'diplo-betrayed' || kind === 'diplo-betrayal-defused' ||
+      kind === 'diplo-passage' || kind === 'diplo-passage-broken' ||
+      kind === 'diplo-vassal' || kind === 'diplo-vassal-released' ||
+      kind === 'diplo-vassal-rebel' || kind === 'diplo-vassal-broken' ||
+      kind === 'diplo-vassal-tribute' || kind === 'diplo-distress' ||
+      kind === 'diplo-distress-aided' || kind === 'diplo-distress-ignored' ||
+      kind === 'diplo-distress-rejected' ||
+      kind === 'aifleet-detected' || kind === 'aifleet-approach' || kind === 'aifleet-crossed' ||
+      kind === 'aifleet-hostile-encounter' || kind === 'aifleet-skirmish' ||
+      kind === 'aifleet-destroyed' ||
+      kind === 'tech-captured') {
+    /* civ-war: usa il winner come riferimento (la storia parla di chi vince). */
+    const name = (kind === 'civ-war') ? ev.winner : (ev.civName || ev.fromCivName);
+    return civTarget(name);
+  }
+  if (kind === 'agreement-suspended' || kind === 'agreement-resumed' || kind === 'agreement-ended') {
+    if (ev.civId == null || !ORION.game || !Array.isArray(ORION.game.civs)) return null;
+    const c = ORION.game.civs.find(function (x) { return x.id === ev.civId; });
+    if (!c) return null;
+    const rank = (ORION.ai && ORION.ai.knowledgeRank) ? ORION.ai.knowledgeRank(c) : 3;
+    if (rank < 1) return null;
+    return { type: 'civ', civId: ev.civId };
+  }
+
+  /* --- viste (pannello dedicato) --- */
+  if (kind === 'dispatch-offered' || kind === 'dispatch-done' || kind === 'dispatch-failed' ||
+      kind === 'crisis-raised' || kind === 'crisis-lapsed') {
+    return { type: 'view', view: 'dispatch' };
+  }
+
+  /* --- nessun target --- */
+  return null;
+}
+
+/* Naviga al target di una voce di cronaca cliccata. Best-effort: in caso
+   di vista/funzione mancante restiamo silenziosi (zero crash). */
+function navigateChronicleTarget(target) {
+  if (!target || typeof target !== 'object') return;
+  try {
+    switch (target.type) {
+      case 'view':
+        if (target.view && typeof navigateView === 'function') navigateView(target.view);
+        return;
+      case 'system':
+        if (typeof navigateView === 'function') navigateView('group');
+        if (ORION.map && ORION.map.focusSystem && typeof target.sysId === 'number') {
+          ORION.map.focusSystem(target.sysId);
+        }
+        return;
+      case 'system-open':
+        if (typeof openSystem === 'function' && typeof target.sysId === 'number') {
+          openSystem(target.sysId);
+        }
+        return;
+      case 'planet':
+        if (typeof openSystem === 'function' && typeof target.sysId === 'number') openSystem(target.sysId);
+        if (typeof openPlanet === 'function' && typeof target.sysId === 'number' && target.bodyKey) {
+          openPlanet(target.sysId, target.bodyKey);
+        }
+        return;
+      case 'civ':
+        if (target.civId != null) ORION.pendingCivFocus = target.civId;
+        if (typeof navigateView === 'function') navigateView('civ');
+        return;
+      default:
+        return;
+    }
+  } catch (_) { /* niente */ }
+}
+
 /* Sezioni dell'accordion Plancia d'Impero (la cronaca è gestita a parte).
    Tenuta come unica fonte così aggiungere una sezione non rompe il toggle
    (bug #78: 'council' mancava qui → non si riapriva più). */
@@ -12224,8 +12418,15 @@ function chronicleEvent(ev) {
      dal giocatore): l'entry compare nel log ma non fa pulsare la linguetta.
      Flag transitorio consumato da pushChronicle e resettato a fine evento. */
   ORION._chronicleSilentNext = isChronicleSilent(ev);
+  /* Target cliccabile (decisione 2026-06-21): le voci di cronaca portano
+     l'utente alla vista rilevante al click. Flag transitorio letto da
+     pushChronicle e resettato a fine evento. */
+  ORION._chronicleTargetNext = computeChronicleTarget(ev);
   try { return _chronicleEventBody(ev); }
-  finally { ORION._chronicleSilentNext = false; }
+  finally {
+    ORION._chronicleSilentNext = false;
+    ORION._chronicleTargetNext = null;
+  }
 }
 function _chronicleEventBody(ev) {
   const ds = ORION.time.format(ev.impulso);
@@ -13708,10 +13909,7 @@ function renderLeftPanel() {
       '</button>' +
     '</div>';
   const cronHtml = sectionsHtml + '<ul class="chronicle__log">' + (cronFiltered.length
-    ? cronFiltered.map(function (e) {
-        const mod = e.mod ? ' chronicle__entry--' + e.mod : '';
-        return '<li class="chronicle__entry' + mod + '">' + e.html + '</li>';
-      }).join('')
+    ? cronFiltered.map(chronicleEntryHtml).join('')
     : '<li class="chronicle__entry chronicle__entry--system">Nessuna voce.</li>'
   ) + '</ul>';
 
@@ -13884,6 +14082,25 @@ function renderLeftPanel() {
       renderLeftPanel();
     });
   });
+  /* Bind voci di cronaca cliccabili (decisione 2026-06-21): click/Enter
+     porta alla vista rilevante. Event delegation sulla <ul> per restare
+     idempotente al ridisegno. */
+  const chronLog = host.querySelector('.chronicle__log');
+  if (chronLog) {
+    function handleChronClick(e) {
+      const li = e.target.closest('[data-chron-target]');
+      if (!li || !chronLog.contains(li)) return;
+      let target = null;
+      try { target = JSON.parse(li.getAttribute('data-chron-target') || 'null'); }
+      catch (_) { return; }
+      if (!target) return;
+      if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
+      if (e.type === 'keydown') e.preventDefault();
+      navigateChronicleTarget(target);
+    }
+    chronLog.addEventListener('click', handleChronClick);
+    chronLog.addEventListener('keydown', handleChronClick);
+  }
 
   /* Identità popolo: click sul banner → editor (decisione #65). */
   const empBtn = host.querySelector('[data-action="empire-edit"]');
@@ -15939,16 +16156,21 @@ function pushChronicle(html, modifier, category, opts) {
      di fallback per chiamate dirette non passate da chronicleEvent).
      `opts.silent` (o `ORION._chronicleSilentNext` settato da chronicleEvent
      per un kind in CHRONICLE_SILENT_KINDS): l'entry entra nel log ma non
-     attiva l'aura pulsante sulla linguetta. */
+     attiva l'aura pulsante sulla linguetta.
+     `opts.target` (o `ORION._chronicleTargetNext`): metadata cliccabile
+     {type, sysId?, bodyKey?, civId?, view?}; null = entry non cliccabile. */
   const cat = (category === 'galaxy' || category === 'colony')
     ? category
     : chronicleCategoryFromMod(modifier || '');
   const silent = !!((opts && opts.silent) || ORION._chronicleSilentNext);
+  const target = (opts && opts.target) || ORION._chronicleTargetNext || null;
   /* Persist nel game state: il DOM lo ricaviamo, ma la fonte di verità
      per il save (e il replay dopo F5) è game.chronicle[]. */
   if (ORION.game) {
     if (!Array.isArray(ORION.game.chronicle)) ORION.game.chronicle = [];
-    ORION.game.chronicle.unshift({ html: html, mod: modifier || '', cat: cat });
+    const entry = { html: html, mod: modifier || '', cat: cat };
+    if (target) entry.target = target;
+    ORION.game.chronicle.unshift(entry);
     if (ORION.game.chronicle.length > MAX_CHRONICLE) {
       ORION.game.chronicle.length = MAX_CHRONICLE;
     }
@@ -15973,7 +16195,13 @@ function pushChronicle(html, modifier, category, opts) {
   const log = document.querySelector('[data-bind="chronicle"]');
   if (!log) return;
   const li = document.createElement('li');
-  li.className = 'chronicle__entry' + (modifier ? ' chronicle__entry--' + modifier : '');
+  li.className = 'chronicle__entry' + (modifier ? ' chronicle__entry--' + modifier : '') +
+    (target ? ' chronicle__entry--clickable' : '');
+  if (target) {
+    li.setAttribute('data-chron-target', JSON.stringify(target));
+    li.setAttribute('role', 'button');
+    li.setAttribute('tabindex', '0');
+  }
   li.innerHTML = html;
   log.insertBefore(li, log.firstChild);
   while (log.children.length > MAX_CHRONICLE) log.removeChild(log.lastChild);
@@ -15990,11 +16218,21 @@ function restoreChronicleDom(game) {
     return cat === sec;
   });
   log.innerHTML = (filtered.length
-    ? filtered.map(function (e) {
-        const mod = e.mod ? ' chronicle__entry--' + e.mod : '';
-        return '<li class="chronicle__entry' + mod + '">' + e.html + '</li>';
-      }).join('')
+    ? filtered.map(chronicleEntryHtml).join('')
     : '<li class="chronicle__entry chronicle__entry--system">Nessuna voce.</li>');
+}
+
+/* HTML di una singola voce di cronaca (cliccabile se ha `target`).
+   Centralizzato perché usato da restoreChronicleDom + renderLeftPanel +
+   (indirettamente, via createElement) pushChronicle DOM insert. */
+function chronicleEntryHtml(e) {
+  if (!e) return '';
+  const mod = e.mod ? ' chronicle__entry--' + e.mod : '';
+  const t = e.target;
+  if (!t) return '<li class="chronicle__entry' + mod + '">' + e.html + '</li>';
+  const tAttr = JSON.stringify(t).replace(/"/g, '&quot;');
+  return '<li class="chronicle__entry chronicle__entry--clickable' + mod +
+    '" role="button" tabindex="0" data-chron-target="' + tAttr + '">' + e.html + '</li>';
 }
 
 /* ---------------------------------------------------------------------
