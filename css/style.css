@@ -6655,6 +6655,46 @@ select.main-menu__input { cursor: pointer; }
 .war-siege__hint { font-size: 0.74rem; color: var(--c-text-faint); margin: 6px 0 0; }
 .war-quiet { margin: 8px 0 0; }
 
+/* Pannello "Forze in campo" dentro la card d'assedio (decisione 2026-06-20) */
+.war-forces {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px;
+  margin: 6px 0 8px; padding: 8px 10px; border-radius: 5px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 0.78rem;
+}
+.war-forces__col { min-width: 0; }
+.war-forces__col h5 {
+  margin: 0 0 4px; font-size: 0.74rem; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--c-text-faint); font-weight: 600;
+}
+.war-forces__col--def h5 { color: #6fe0b8; }
+.war-forces__col--atk h5 { color: #f0a6b4; }
+.war-forces__col ul { list-style: none; margin: 0; padding: 0; }
+.war-forces__col li {
+  margin: 1px 0; line-height: 1.35;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.war-forces__hp { color: var(--c-text-soft); }
+.war-forces__fp { color: #f0c878; }
+.war-forces__empty { margin: 0; font-size: 0.76rem; color: #f0a6b4; }
+.war-forces__warn {
+  grid-column: 1 / -1;
+  margin: 4px 0 0; font-size: 0.74rem; color: #f0c878;
+  display: flex; align-items: center; gap: 5px;
+}
+.war-forces__forecast {
+  grid-column: 1 / -1;
+  margin: 4px 0 0; padding-top: 4px; font-size: 0.78rem;
+  border-top: 1px dashed rgba(255, 255, 255, 0.10);
+}
+.war-forces__forecast--win  strong { color: #6fe0b8; }
+.war-forces__forecast--even strong { color: #f0c878; }
+.war-forces__forecast--lose strong { color: #f0a6b4; }
+@media (max-width: 540px) {
+  .war-forces { grid-template-columns: 1fr; }
+}
+
 /* veteranità navi */
 .fleet-item__vets { display: flex; gap: 5px; flex-wrap: wrap; margin: 5px 0 0; }
 .vet-chip {
