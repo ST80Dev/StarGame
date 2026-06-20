@@ -3969,10 +3969,101 @@ select.main-menu__input { cursor: pointer; }
   color: #a8d8a0;
   border-color: rgba(140, 200, 130, 0.36);
 }
-.econ-item__send { flex: 0 0 auto; }
+/* Bottone "Invia" compatto, in linea col linguaggio dei chip ghost (R2):
+   niente più mini-primary cyan-bright. Resta riconoscibile grazie all'icona. */
+.econ-item__send {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  background: rgba(120, 150, 220, 0.10);
+  border: 1px solid rgba(120, 150, 220, 0.34);
+  border-radius: 10px;
+  color: var(--c-text, #e9ecf6);
+  font-family: var(--font-display, sans-serif);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.econ-item__send:hover:not(:disabled) {
+  background: rgba(47, 230, 224, 0.16);
+  border-color: var(--c-accent, #2fe6e0);
+  color: var(--c-accent, #2fe6e0);
+}
+.econ-item__send:disabled { opacity: 0.4; cursor: not-allowed; }
+.econ-item__send .ui-icon { font-size: 0.85rem; }
+.econ-item__send-lbl { line-height: 1; }
+
+.econ-item__glyph {
+  flex: 0 0 auto;
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: rgba(120, 150, 220, 0.08);
+  border: 1px solid rgba(120, 150, 220, 0.22);
+}
+.econ-item__glyph .ui-icon { font-size: 1rem; }
+.econ-item--cintura  .econ-item__glyph,
+.econ-item--detriti  .econ-item__glyph { background: rgba(47, 230, 224, 0.08);  border-color: rgba(47, 230, 224, 0.30); }
+.econ-item--nebulosa .econ-item__glyph,
+.econ-item--gassoso  .econ-item__glyph { background: rgba(255, 175, 60, 0.08);  border-color: rgba(255, 175, 60, 0.32); }
+.econ-item--reliquie .econ-item__glyph { background: rgba(184, 156, 255, 0.10); border-color: rgba(184, 156, 255, 0.36); }
+
 @media (max-width: 640px) {
   .econ-item { flex-wrap: wrap; }
-  .econ-item__send { width: 100%; }
+  .econ-item__send { width: 100%; justify-content: center; }
+}
+
+/* Ripartizione per colonia (chi riceve il bottino delle flotte in raccolta). */
+.econ-bycol {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  background: rgba(140, 200, 130, 0.05);
+  border: 1px solid rgba(140, 200, 130, 0.22);
+  border-radius: 8px;
+}
+.econ-bycol__h {
+  margin: 0 0 6px;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-text-faint, #98a3c8);
+  font-weight: 600;
+}
+.econ-bycol__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.econ-bycol__row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 3px 0;
+}
+.econ-bycol__name { font-size: 0.92rem; font-weight: 600; color: var(--c-text, #e9ecf6); }
+.econ-bycol__chips { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.econ-bycol__chip {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.84rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+.econ-bycol__chip em { font-style: normal; font-weight: 400; opacity: 0.75; font-size: 0.78rem; }
+.econ-bycol__chip.is-met { background: rgba(47, 230, 224, 0.14); color: #6deae3; border-color: rgba(47, 230, 224, 0.32); }
+.econ-bycol__chip.is-en  { background: rgba(255, 175, 60, 0.14); color: #ffc080; border-color: rgba(255, 175, 60, 0.34); }
+
+/* Chip "surplus da anomalie" nella card risorsa della Plancia Colonia. */
+.deck-res__anom {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 7px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  color: #a8d8a0;
+  background: rgba(140, 200, 130, 0.16);
+  border: 1px solid rgba(140, 200, 130, 0.36);
+  border-radius: 8px;
+  letter-spacing: 0.02em;
 }
 
 /* Overlay scelta sistema target */
