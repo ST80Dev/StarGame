@@ -3802,6 +3802,170 @@ select.main-menu__input { cursor: pointer; }
   font-size: 0.85em;
 }
 
+/* =====================================================================
+   Anomalie & sfruttamenti — riepilogo testata + gruppi collassabili per
+   sistema + card compatte con info leggibili (richiesta utente 2026-06-20).
+   ===================================================================== */
+.econ-sum {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  background: rgba(80, 110, 200, 0.08);
+  border: 1px solid rgba(120, 150, 220, 0.22);
+  border-radius: 8px;
+}
+.econ-sum__cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.econ-sum__icon { flex: 0 0 auto; display: inline-flex; opacity: 0.9; }
+.econ-sum__txt { display: flex; flex-direction: column; min-width: 0; }
+.econ-sum__val {
+  font-family: var(--font-data, var(--font-mono, monospace));
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--c-text, #e9ecf6);
+  line-height: 1.15;
+}
+.econ-sum__lbl {
+  font-size: 0.78rem;
+  color: var(--c-text-faint, #98a3c8);
+  letter-spacing: 0.02em;
+}
+.econ-sum__cell.is-met .econ-sum__val { color: #6deae3; }
+.econ-sum__cell.is-en  .econ-sum__val { color: #ffc080; }
+.econ-sum__cell.is-act .econ-sum__val { color: #c8b6ff; }
+@media (max-width: 640px) {
+  .econ-sum { grid-template-columns: 1fr; }
+}
+
+.econ-groups { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.econ-group { display: flex; flex-direction: column; }
+.econ-group__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+  padding: 8px 10px;
+  background: rgba(80, 110, 200, 0.05);
+  border: 1px solid rgba(120, 150, 220, 0.18);
+  border-radius: 6px;
+  color: var(--c-text, #e9ecf6);
+  font-size: 0.95rem;
+  cursor: pointer;
+  text-align: left;
+}
+.econ-group__head:hover { border-color: rgba(140, 110, 230, 0.45); }
+.econ-group.is-collapsed .econ-group__head { border-radius: 6px; }
+.econ-group:not(.is-collapsed) .econ-group__head {
+  border-radius: 6px 6px 0 0;
+  border-bottom: 0;
+}
+.econ-group__caret { font-size: 0.8rem; color: var(--c-text-faint, #98a3c8); width: 12px; }
+.econ-group__name { font-size: 1rem; letter-spacing: 0.02em; }
+.econ-group__meta {
+  margin-left: 4px;
+  font-size: 0.86rem;
+  color: var(--c-text-faint, #98a3c8);
+}
+.econ-group__meta em { color: #a8d8a0; font-style: normal; }
+.econ-group__rates {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.econ-group__rate {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.84rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+.econ-group__rate.is-met { background: rgba(47, 230, 224, 0.14); color: #6deae3; border-color: rgba(47, 230, 224, 0.32); }
+.econ-group__rate.is-en  { background: rgba(255, 175, 60, 0.14); color: #ffc080; border-color: rgba(255, 175, 60, 0.34); }
+
+.econ-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(80, 110, 200, 0.03);
+  border: 1px solid rgba(120, 150, 220, 0.18);
+  border-top: 0;
+  border-radius: 0 0 6px 6px;
+}
+.econ-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: rgba(80, 110, 200, 0.06);
+  border: 1px solid rgba(120, 150, 220, 0.18);
+  border-radius: 6px;
+}
+.econ-item.is-harvesting {
+  background: rgba(140, 200, 130, 0.07);
+  border-color: rgba(140, 200, 130, 0.32);
+}
+.econ-item__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.econ-item__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.econ-item__kind {
+  font-size: 0.74rem;
+  padding: 2px 7px;
+  border-radius: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: rgba(47, 230, 224, 0.18);
+  color: #6deae3;
+  font-family: var(--font-display, sans-serif);
+}
+.econ-item__body {
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-style: italic;
+  color: var(--c-text-soft, #c4c9de);
+}
+.econ-item__live {
+  font-size: 0.8rem;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: rgba(140, 200, 130, 0.18);
+  color: #a8d8a0;
+  border: 1px solid rgba(140, 200, 130, 0.36);
+  font-family: var(--font-mono, monospace);
+}
+.econ-item__chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.econ-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  background: rgba(140, 110, 230, 0.18);
+  color: #c8b6ff;
+  border: 1px solid rgba(140, 110, 230, 0.35);
+  border-radius: 10px;
+  font-size: 0.88rem;
+  font-family: var(--font-mono, monospace);
+}
+.econ-chip strong { font-weight: 700; }
+.econ-chip--harvest {
+  background: rgba(140, 200, 130, 0.16);
+  color: #a8d8a0;
+  border-color: rgba(140, 200, 130, 0.36);
+}
+.econ-item__send { flex: 0 0 auto; }
+@media (max-width: 640px) {
+  .econ-item { flex-wrap: wrap; }
+  .econ-item__send { width: 100%; }
+}
+
 /* Overlay scelta sistema target */
 .expedition-pick-overlay {
   position: fixed;
