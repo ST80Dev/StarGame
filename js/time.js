@@ -798,6 +798,28 @@
     scar.famineI = famish ? scar.famineI + 1 : 0;
   }
 
+  /* Capacità abitativa + sovraffollamento — funzione PURA riusata sia da
+     `colonyMorale` (calcolo penalità), sia dalla UI (badge tab Popolazione,
+     riga esplicita nel pannello, cronaca con isteresi). Estratta per
+     evitare duplicazione tra time.js e main.js (single source). */
+  function colonyHousing(_game, colony) {
+    if (!colony) return { cap: 0, total: 0, crowd: 0, penalty: 1, over: false };
+    const structures = colony.structures || {};
+    const pop = colony.pop || { total: 0 };
+    const habit = (structures['centro-abitativo'] && structures['centro-abitativo'].level) || 0;
+    const hosp = (structures['ospedale'] && structures['ospedale'].level) || 0;
+    const Sm = root.ORION.structures;
+    const cap = CFG.POP_HOUSING_BASE
+      + (habit > 0 ? Sm.moduleSum(habit) : 0) * CFG.POP_HOUSING_PER_LEVEL
+      + (hosp > 0 ? Sm.moduleSum(hosp) : 0) * CFG.POP_HOSPITAL_HOUSING;
+    const total = pop.total || 0;
+    const crowd = cap > 0 ? total / cap : 99;
+    const penalty = crowd > CFG.POP_CROWD_START
+      ? Math.max(0.05, 1 - (crowd - CFG.POP_CROWD_START) * CFG.POP_CROWD_SLOPE)
+      : 1;
+    return { cap: cap, total: total, crowd: crowd, penalty: penalty, over: crowd > CFG.POP_CROWD_START };
+  }
+
   /* Morale di colonia §9.3 — funzione PURA (nessuna scrittura sullo stato),
      single source of truth riusata sia dal loop crescita popolazione sia
      dalla Dashboard Impero (M07.3, decisione #62). Replica esatta del
@@ -809,7 +831,6 @@
   function colonyMorale(game, colony) {
     if (!colony) return 1;
     const scar = colony._scar || { food: { state: 'ok' }, water: { state: 'ok' } };
-    const pop = colony.pop || { total: 0 };
     const structures = colony.structures || {};
     let morale = 1.0;
     if (colony.isHomeBase) morale += CFG.POP_MORALE_HOMEBASE;
@@ -826,16 +847,9 @@
     }
     // penalità "allerta" su cibo/acqua
     if (scar.food.state === 'low' || scar.water.state === 'low') morale *= 0.6;
-    // sovraffollamento (cancello strutturale implicito, decisione #37bis)
-    const hosp = (structures['ospedale'] && structures['ospedale'].level) || 0;
-    const Sm = root.ORION.structures;
-    const housingCap = CFG.POP_HOUSING_BASE
-      + (habit > 0 ? Sm.moduleSum(habit) : 0) * CFG.POP_HOUSING_PER_LEVEL
-      + (hosp > 0 ? Sm.moduleSum(hosp) : 0) * CFG.POP_HOSPITAL_HOUSING;
-    const crowd = housingCap > 0 ? (pop.total || 0) / housingCap : 99;
-    if (crowd > CFG.POP_CROWD_START) {
-      morale *= Math.max(0.05, 1 - (crowd - CFG.POP_CROWD_START) * CFG.POP_CROWD_SLOPE);
-    }
+    // sovraffollamento (cancello strutturale implicito, decisione #37bis):
+    // moltiplica per la penalità calcolata da colonyHousing (single source).
+    morale *= colonyHousing(game, colony).penalty;
     return morale;
   }
 
@@ -954,6 +968,49 @@
     // Shift lento del mix di classi verso il "target" suggerito dalle
     // strutture costruite. Non sposta più di POP_CLASS_SHIFT/Impulso.
     shiftClassMix(colony);
+
+    /* Cronaca sovraffollamento con isteresi (entra ≥ 0.85, esce ≤ 0.78) —
+       solo per colonie dove il giocatore *vorrebbe* far crescere la pop:
+       mondi-giardino (decisione #38) o colonia con Centro Abitativo costruito
+       (segno deliberato di investimento sulla popolazione). Sulle altre il
+       sovraffollamento è accettato implicitamente (colonie estrattive) e
+       non genera rumore. Stato persistito in `colony.crowdAlert` (additivo,
+       lazy-init: undefined → false, niente bump schema). */
+    const h = colonyHousing(game, colony);
+    const wantsGrowth = isGrowthColony(colony, planet);
+    if (wantsGrowth) {
+      const wasAlert = !!colony.crowdAlert;
+      if (!wasAlert && h.crowd >= CROWD_ALERT_ENTER) {
+        colony.crowdAlert = true;
+        events.push({
+          kind: 'pop-crowd', colony: colony, planet: planet, impulso: game.timeImpulsi,
+          crowd: h.crowd, penalty: h.penalty, cap: h.cap, total: h.total
+        });
+      } else if (wasAlert && h.crowd <= CROWD_ALERT_EXIT) {
+        colony.crowdAlert = false;
+        events.push({
+          kind: 'pop-crowd-recover', colony: colony, planet: planet, impulso: game.timeImpulsi
+        });
+      }
+    } else if (colony.crowdAlert) {
+      // Smette di voler crescere (es. centro abitativo smantellato su mondo non-giardino)
+      // → spegni l'allerta senza generare evento di "rientro".
+      colony.crowdAlert = false;
+    }
+  }
+
+  /* Soglie isteresi sovraffollamento — separate per evitare ping-pong.
+     Entra ≥ 0.85 (pop > 85% del cap → penalità già ~−12%); esce ≤ 0.78
+     (sotto la soglia POP_CROWD_START 0.80, con un margine). */
+  const CROWD_ALERT_ENTER = 0.85;
+  const CROWD_ALERT_EXIT  = 0.78;
+
+  /* Mondo-giardino o colonia con investimento abitativo deliberato? */
+  function isGrowthColony(colony, planet) {
+    if (!colony || !planet) return false;
+    if (planet.type === 'terrestre' || planet.type === 'oceanico' || planet.type === 'forestale') return true;
+    const habit = colony.structures && colony.structures['centro-abitativo'];
+    return !!(habit && habit.level > 0);
   }
 
   function targetClassWeights(colony) {
@@ -2706,6 +2763,7 @@
     nextCrewId: nextCrewId,
     targetClassWeights: targetClassWeights,
     colonyMorale: colonyMorale,
+    colonyHousing: colonyHousing,
     productionFactors: productionFactors,
     ensureScarcity: ensureScarcity,
     /* Decisione #48 — gestione rifiuti (Fase 0) */

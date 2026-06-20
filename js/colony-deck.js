@@ -271,19 +271,23 @@
         );
       }
 
-      /* === Morale d'impero (warState M09) === */
-      const ws = game.warState;
-      if (ws && typeof ws.morale === 'number') {
-        const mor = Math.round(ws.morale * 100);
-        const mStateCls = mor < 70 ? ' is-crit' : mor < 90 ? ' is-low' : '';
+      /* === Morale di colonia (§9.3) === */
+      /* Sostituisce il vecchio morale d'impero, che era globale e fuori
+         contesto sulla scheda di un singolo pianeta. Il morale d'impero
+         (warState) resta in vista Civiltà e Flotta. */
+      if (ORION.time && ORION.time.colonyMorale) {
+        const cm = ORION.time.colonyMorale(game, colony);
+        const cmCap = (ORION.time.CFG && ORION.time.CFG.POP_MORALE_MAX) || 1.35;
+        const morPct = Math.round((cm / cmCap) * 100);
+        const cmStateCls = morPct < 50 ? ' is-crit' : morPct < 75 ? ' is-low' : '';
         cards.push(
-          '<div class="deck-res deck-status-card deck-status-card--morale' + mStateCls + '" title="Morale d\'impero — sotto pressione cala con perdite belliche">' +
+          '<div class="deck-res deck-status-card deck-status-card--morale' + cmStateCls + '" title="Morale colonia — modulatore della crescita popolazione (base + pianeta base + centri abitativi; ridotto da scorte basse e sovraffollamento)">' +
             '<div class="deck-res__head">' +
-              glyph('forces') +
-              '<span class="deck-res__label">Morale</span>' +
+              glyph('home') +
+              '<span class="deck-res__label">Morale colonia</span>' +
             '</div>' +
-            '<div class="deck-res__value">' + mor + '%</div>' +
-            '<div class="deck-status-card__bar"><i style="width:' + mor + '%"></i></div>' +
+            '<div class="deck-res__value">' + cm.toFixed(2) + '</div>' +
+            '<div class="deck-status-card__bar"><i style="width:' + Math.min(100, morPct) + '%"></i></div>' +
           '</div>'
         );
       }
