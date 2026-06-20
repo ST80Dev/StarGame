@@ -6199,8 +6199,13 @@ function nearestSurveyColony(sysId) {
 
 function round1(n) { return Math.round((n || 0) * 10) / 10; }
 
-/* Sezione Anomalie / sfruttamenti: raggruppate per sistema (ordinate per
-   gruppo stellare), filtrabili per tipo risorsa. */
+/* Stato collassamento per-sistema della vista "Anomalie & sfruttamenti".
+   Volatile (di sessione, come ORION._fleetGroupCollapsed): è una scelta
+   UI che non vive nel save (UI_GUIDE §9). Default: tutti espansi. */
+ORION._econGroupCollapsed = ORION._econGroupCollapsed || {};
+
+/* Sezione Anomalie / sfruttamenti: testata di riepilogo + gruppi per sistema
+   (collassabili, ordinati per gruppo stellare), filtrabili per tipo risorsa. */
 function economyAnomaliesHtml(g) {
   const filter = ORION._econResFilter || 'all';
   function passFilter(s) {
@@ -6219,7 +6224,35 @@ function economyAnomaliesHtml(g) {
     fchip('all', 'Tutte') + fchip('met', 'Metalli') + fchip('en', 'Energia') + fchip('reliquie', 'Reliquie') +
   '</div>';
 
-  const sites = knownExploitableSites().filter(passFilter);
+  /* Riepilogo testata: aggrega TUTTI i siti noti (non filtrati) per dare
+     un colpo d'occhio "quanto sto estraendo ora" indipendente dal filtro. */
+  const allSites = knownExploitableSites();
+  let sumMet = 0, sumEn = 0, activeMet = 0, activeEn = 0, relicProg = 0;
+  allSites.forEach(function (s) {
+    if (s.kind === 'reliquie') { if (s.harvesting) relicProg++; return; }
+    if (s.harvesting) {
+      const rate = s.harvestRate != null ? s.harvestRate : 0.6;
+      if (s.res === 'met') { sumMet += rate; activeMet++; }
+      else if (s.res === 'en') { sumEn += rate; activeEn++; }
+    }
+  });
+  const totalActive = activeMet + activeEn + relicProg;
+  function sumCell(icon, value, sub, cls) {
+    return '<div class="econ-sum__cell ' + (cls || '') + '">' +
+      '<span class="econ-sum__icon">' + (uiIcon(icon, cls === 'is-met' ? 'cyan' : (cls === 'is-en' ? 'amber' : 'violet'))) + '</span>' +
+      '<div class="econ-sum__txt">' +
+        '<span class="econ-sum__val">' + value + '</span>' +
+        '<span class="econ-sum__lbl">' + sub + '</span>' +
+      '</div>' +
+    '</div>';
+  }
+  const summary = '<section class="econ-sum" aria-label="Riepilogo estrazione">' +
+    sumCell('forces', totalActive + '/' + allSites.length, 'siti in raccolta', 'is-act') +
+    sumCell('resources', round1(sumMet) + '/' + iU(), activeMet + ' siti · metalli', 'is-met') +
+    sumCell('star', round1(sumEn) + '/' + iU(), activeEn + ' siti · energia', 'is-en') +
+  '</section>';
+
+  const sites = allSites.filter(passFilter);
   let body;
   if (!sites.length) {
     body = '<p class="panel__note">' + (filter === 'all'
@@ -6235,22 +6268,37 @@ function economyAnomaliesHtml(g) {
       if (ca !== cb) return ca - cb;
       return (sa ? sa.name : '').localeCompare(sb ? sb.name : '');
     });
-    body = sysIds.map(function (sid) {
+    body = '<div class="econ-groups">' + sysIds.map(function (sid) {
       const sys = g.galaxy.systems[sid];
       const list = bySys[sid];
       const inHarv = list.filter(function (s) { return s.harvesting; }).length;
+      let sysMet = 0, sysEn = 0;
+      list.forEach(function (s) {
+        if (!s.harvesting || s.kind === 'reliquie') return;
+        const r = s.harvestRate != null ? s.harvestRate : 0.6;
+        if (s.res === 'met') sysMet += r; else if (s.res === 'en') sysEn += r;
+      });
       const send = nearestSurveyColony(sid);
       const tag = systemTagHtml(sid);
-      const head = '<p class="sysinfo__sub">' + escapeHtml(sys ? sys.name : '—') + tag +
-        ' <span class="cantieri-section__hint">(' + list.length + (list.length === 1 ? ' sito' : ' siti') +
-        (inHarv ? ' · ' + inHarv + ' in corso' : '') + ')</span></p>';
-      const items = '<ul class="expedition-list">' + list.map(function (s) {
+      const collapsed = !!ORION._econGroupCollapsed[sid];
+      const caret = collapsed ? '▸' : '▾';
+      let rateChip = '';
+      if (sysMet > 0) rateChip += '<span class="econ-group__rate is-met" title="Metalli/Impulso da questo sistema">' + round1(sysMet) + ' met/' + iU() + '</span>';
+      if (sysEn > 0)  rateChip += '<span class="econ-group__rate is-en" title="Energia/Impulso da questo sistema">' + round1(sysEn) + ' en/' + iU() + '</span>';
+      const head = '<button class="econ-group__head" type="button" data-action="econ-group-toggle" data-sys="' + sid + '" aria-expanded="' + (!collapsed) + '" title="' + (collapsed ? 'Espandi' : 'Collassa') + '">' +
+        '<span class="econ-group__caret">' + caret + '</span>' +
+        '<strong class="econ-group__name">' + escapeHtml(sys ? sys.name : '—') + '</strong>' + tag +
+        '<span class="econ-group__meta">' + list.length + (list.length === 1 ? ' sito' : ' siti') +
+          (inHarv ? ' · <em>' + inHarv + ' in corso</em>' : '') + '</span>' +
+        '<span class="econ-group__rates">' + rateChip + '</span>' +
+      '</button>';
+      const items = collapsed ? '' : ('<ul class="econ-list">' + list.map(function (s) {
         const meta = anomalyKindMeta(s.kind);
-        let bodyNote = '';
+        let bodyName = '';
         if (s.bodyKey && ORION.system && ORION.system.generate && ORION.system.findBody) {
           const sysFull = ORION.system.generate(g.galaxy, s.sysId);
           const body0 = sysFull ? ORION.system.findBody(sysFull, s.bodyKey) : null;
-          if (body0 && body0.name) bodyNote = ' · <span class="expedition-item__body">' + escapeHtml(body0.name) + '</span>';
+          if (body0 && body0.name) bodyName = escapeHtml(body0.name);
         }
         let stateTxt;
         if (s.kind === 'reliquie') {
@@ -6265,8 +6313,8 @@ function economyAnomaliesHtml(g) {
           const got = +(s.harvested || 0).toFixed(1);
           const rate = s.harvestRate != null ? s.harvestRate : 0.6;
           const resLbl = resShortLabel(s.res);
-          if (s.harvesting) harvestTxt = '<span class="xp-chip xp-chip--harvest" title="Risorse raccolte · ritmo per Impulso">raccolti <strong>' + got + ' ' + resLbl + '</strong> · <strong>' + rate + '</strong>/' + iU() + '</span>';
-          else if (got > 0) harvestTxt = '<span class="xp-chip" title="Risorse raccolte (raccolta interrotta)">raccolti ' + got + ' ' + resLbl + '</span>';
+          if (s.harvesting) harvestTxt = '<span class="econ-chip econ-chip--harvest" title="Risorse raccolte · ritmo per Impulso">raccolti <strong>' + got + ' ' + resLbl + '</strong> · <strong>' + rate + '</strong>/' + iU() + '</span>';
+          else if (got > 0) harvestTxt = '<span class="econ-chip" title="Risorse raccolte (raccolta interrotta)">raccolti ' + got + ' ' + resLbl + '</span>';
         }
         const canSend = !s.harvesting && send && send.capable;
         const sendTitle = s.harvesting ? 'Una flotta è già presente sul sito'
@@ -6275,24 +6323,26 @@ function economyAnomaliesHtml(g) {
               : 'Nessuna colonia con scafo + equipaggio in grado di raggiungere il sito');
         const colAttr = (send && send.capable) ? (' data-col="' + escapeHtml(send.colony.systemId + ':' + send.colony.bodyKey) + '"') : '';
         const bodyAttr = s.bodyKey ? (' data-body="' + escapeHtml(s.bodyKey) + '"') : '';
-        return '<li class="expedition-item">' +
-          '<div class="expedition-item__head">' +
-            '<span class="expedition-item__status expedition-status--outbound">' + meta.label + '</span>' +
-            '<span class="expedition-item__target">' + bodyNote + '</span>' +
+        return '<li class="econ-item' + (s.harvesting ? ' is-harvesting' : '') + '">' +
+          '<div class="econ-item__main">' +
+            '<div class="econ-item__head">' +
+              '<span class="econ-item__kind">' + meta.label + '</span>' +
+              (bodyName ? '<span class="econ-item__body">' + bodyName + '</span>' : '') +
+              (s.harvesting ? '<span class="econ-item__live" title="Flotta presente">✦ in raccolta</span>' : '') +
+            '</div>' +
+            '<div class="econ-item__chips">' +
+              '<span class="econ-chip" title="Stato del sito">' + stateTxt + '</span>' +
+              harvestTxt +
+            '</div>' +
           '</div>' +
-          '<div class="expedition-item__bars">' +
-            '<span class="xp-chip" title="Stato del sito">' + stateTxt + '</span>' +
-            harvestTxt +
-            (s.harvesting ? '<span class="xp-chip" title="Flotta presente">✦ in raccolta</span>' : '') +
-            '<button class="btn btn--mini btn--primary" data-action="econ-anom-send" data-sys="' + s.sysId + '" data-kind="' + s.kind + '"' + bodyAttr + colAttr + ' type="button"' +
-              (canSend ? '' : ' disabled') + ' title="' + escapeHtml(sendTitle) + '">Invia flotta</button>' +
-          '</div>' +
+          '<button class="btn btn--mini btn--primary econ-item__send" data-action="econ-anom-send" data-sys="' + s.sysId + '" data-kind="' + s.kind + '"' + bodyAttr + colAttr + ' type="button"' +
+            (canSend ? '' : ' disabled') + ' title="' + escapeHtml(sendTitle) + '">Invia flotta</button>' +
         '</li>';
-      }).join('') + '</ul>';
-      return head + items;
-    }).join('');
+      }).join('') + '</ul>');
+      return '<section class="econ-group' + (collapsed ? ' is-collapsed' : '') + '">' + head + items + '</section>';
+    }).join('') + '</div>';
   }
-  return chips + body;
+  return summary + chips + body;
 }
 
 /* Sezione Scambi con le AI (export rifiuti). Read + chiusura contratto; i
@@ -6399,6 +6449,13 @@ function renderEconAnomaliesView(stage) {
       const colony = colKey ? g.colonies[colKey] : null;
       if (!colony) { showToast('Nessuna colonia disponibile per l\'invio'); return; }
       openAnomalySurveyPicker(colony, Number(b.dataset.sys), b.dataset.kind, b.dataset.body || null);
+    });
+  });
+  stage.querySelectorAll('[data-action="econ-group-toggle"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const sid = b.dataset.sys;
+      ORION._econGroupCollapsed[sid] = !ORION._econGroupCollapsed[sid];
+      renderEconAnomaliesView(stage);
     });
   });
 }
