@@ -6330,8 +6330,9 @@ function renderEconAnomaliesView(stage) {
       econViewHead('Anomalie &amp; sfruttamenti', 'Economia · §17.3') +
       economyAnomaliesHtml(g) +
       '<p class="panel__note">Tutti i siti §17.3 noti della galassia, raggruppati per sistema. Inviare una flotta che ' +
-        '<strong>resta sul posto</strong> a drenare: parte dalla colonia idonea più vicina. Detriti/cinture→metalli, ' +
-        'nebulose/giganti gassosi→energia, reliquie→ricompensa una-tantum.</p>' +
+        '<strong>resta sul posto</strong> a drenare: parte dalla colonia idonea più vicina. Il bottino viene depositato ' +
+        'sulla <strong>colonia attiva più vicina al sito</strong> — usa le rotte commerciali per ridistribuirlo. ' +
+        'Detriti/cinture→metalli, nebulose/giganti gassosi→energia, reliquie→ricompensa una-tantum.</p>' +
     '</div>';
   stage.querySelectorAll('[data-action="econ-res-filter"]').forEach(function (b) {
     b.addEventListener('click', function () { ORION._econResFilter = b.dataset.res; renderEconAnomaliesView(stage); });
