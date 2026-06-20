@@ -4962,74 +4962,6 @@ function resShortLabel(res) {
   return res || '';
 }
 
-/* Invia una flotta di ricognizione (1 scafo + 1 equipaggio) verso il
-   sistema di un'anomalia con ordine `survey`: arriva e RESTA a
-   raccogliere/esplorare. Stesso pattern di doLaunchExpedition (decisione
-   #60), ma l'ordine non rientra. */
-function doSurveyAnomaly(colony, targetSystemId, anomalyKind, bodyKey, opts) {
-  opts = opts || {};
-  const g = ORION.game;
-  const key = colony.systemId + ':' + colony.bodyKey;
-  if (!ORION.fleet || !ORION.fleet.createFleet) { showToast('Modulo flotta non disponibile'); return; }
-  const extractorsAvail = (colony.ships && colony.ships.estrattore) || 0;
-  const explorersAvail  = (colony.ships && colony.ships.explorer)   || 0;
-  /* Decisione utente 2026-06-17: se l'opt.shipKind è esplicito (picker),
-     rispettarlo. Altrimenti preferiamo Esploratore per le reliquie (l'
-     Estrattore non porta vantaggi quando anomaly.harvest=false: meglio
-     tenerlo per cinture/detriti/nebulose) e Estrattore per il resto. */
-  let shipKind = opts.shipKind;
-  if (shipKind !== 'estrattore' && shipKind !== 'explorer') {
-    if (anomalyKind === 'reliquie') {
-      shipKind = explorersAvail >= 1 ? 'explorer' : (extractorsAvail >= 1 ? 'estrattore' : null);
-    } else {
-      shipKind = extractorsAvail >= 1 ? 'estrattore' : (explorersAvail >= 1 ? 'explorer' : null);
-    }
-  }
-  if (shipKind === 'estrattore' && extractorsAvail < 1) {
-    shipKind = explorersAvail >= 1 ? 'explorer' : null;
-  }
-  if (shipKind === 'explorer' && explorersAvail < 1) {
-    shipKind = extractorsAvail >= 1 ? 'estrattore' : null;
-  }
-  const crewsAvail = (colony.crews && Array.isArray(colony.crews.explorer)) ? colony.crews.explorer.length : 0;
-  if (!shipKind) { showToast('Nessuno scafo idoneo (Estrattore o Esploratore) disponibile'); return; }
-  if (crewsAvail < 1) { showToast('Nessun equipaggio disponibile'); return; }
-  const cf = ORION.fleet.createFleet(g, key, null);
-  if (!cf.ok) { showToast(cf.reason || 'Creazione flotta fallita'); return; }
-  const fleet = cf.fleet;
-  const as = ORION.fleet.assignShips(g, fleet, key, shipKind, 1);
-  if (!as.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(as.reason || 'Assegnazione nave fallita'); return; }
-  let ac = null;
-  if (opts.crewId != null && ORION.fleet.assignCrewById) {
-    ac = ORION.fleet.assignCrewById(g, fleet, key, opts.crewId);
-  }
-  if (!ac || !ac.ok) ac = ORION.fleet.assignCrew(g, fleet, key, 1);
-  if (!ac.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(ac.reason || 'Assegnazione equipaggio fallita'); return; }
-  const so = ORION.fleet.setOrder(g, fleet, { type: 'survey', toSysId: targetSystemId, anomalyKind: anomalyKind || null, bodyKey: bodyKey || null });
-  if (!so.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(so.reason || 'Ordine ricognizione rifiutato'); return; }
-  /* Callsign d'esordio "Vedetta N". */
-  maybeAutoRenameFleet(g, fleet, { type: 'survey', toSysId: targetSystemId });
-  const sys = g.galaxy.systems[targetSystemId];
-  const acr = regionAcronymFor(targetSystemId);
-  const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
-  const where = (targetSystemId === colony.systemId)
-    ? 'verso l\'anomalia nel sistema'
-    : 'verso l\'anomalia di <strong>' + (sys ? sys.name : 'sistema') + '</strong>' + tag;
-  pushChronicle(ORION.time.currentDS(g) + ' — Flotta di ricognizione in rotta ' + where + '.', 'explore');
-  if (ORION.tutorial) ORION.tutorial.fire('anomalies');
-  persistGame(g);
-  /* Conferma visiva immediata (richiesta utente 2026-06-20): senza toast
-     l'azione era silenziosa e il giocatore non capiva di aver lanciato. */
-  showToast('Flotta in rotta verso ' + (sys ? sys.name : 'sistema') + (targetSystemId === colony.systemId ? '' : ' (' + (anomalyKind === 'reliquie' ? 'reliquia' : 'sito di drenaggio') + ')'));
-  updatePlanetUI();
-  /* Refresh immediato della vista "Anomalie & sfruttamenti" così la riga
-     mostra subito il badge "in viaggio" (richiesta utente 2026-06-20). */
-  if (ORION._currentView === 'econ-anomalies') {
-    const est = document.querySelector('[data-view-stage]');
-    if (est) { const sc = est.scrollTop; try { renderEconAnomaliesView(est); } catch (_) { /* niente */ } est.scrollTop = sc; }
-  }
-}
-
 /* Decisione #76: stima del tempo di viaggio (sola andata) verso un sistema,
    sommando ORION.fleet.tempoLeg lungo il percorso BFS reale. minSpeed 1.1 =
    velocità della nave coloniale/esploratore "Pioniere". È un'indicazione: a
@@ -5180,172 +5112,6 @@ function openExpeditionPicker(colony, opts) {
 
 function closeExpeditionPicker() {
   const host = document.querySelector('[data-bind="exp-picker"]');
-  if (host) { host.hidden = true; host.innerHTML = ''; }
-}
-
-/* Picker per "Invia flotta" su anomalia (decisione utente 2026-06-17):
-   prima era un quick-action che usava primo scafo idoneo + primo
-   equipaggio in lista, senza scelta. Disallineato dal picker spedizione
-   e fastidioso quando si vuole mandare un equipaggio specifico a una
-   reliquia. Apriamo un dialog con stessa estetica del picker spedizione:
-   scelta scafo (Estrattore/Esploratore) + scelta equipaggio (chip per xp).
-   Per le reliquie il default è Esploratore (sull'anomalia.harvest=false
-   l'Estrattore non aggiunge nulla: meglio tenerlo per le miniere vere). */
-function openAnomalySurveyPicker(colony, targetSystemId, anomalyKind, bodyKey, opts) {
-  opts = opts || {};
-  const g = ORION.game;
-  const extractors = (colony.ships && colony.ships.estrattore) || 0;
-  const explorers  = (colony.ships && colony.ships.explorer)   || 0;
-  const crews = (colony.crews && colony.crews.explorer) || [];
-  const crewsSorted = crews.slice().sort(function (a, b) { return (b.xp || 0) - (a.xp || 0); });
-
-  /* Default scafo: reliquie → esploratore (estrattore non porta vantaggi
-     sui siti relic), altrimenti estrattore (rate scalato sull'Hangar).
-     Fallback all'unico disponibile. */
-  const isRelic = anomalyKind === 'reliquie';
-  let defaultKind;
-  if (extractors >= 1 && explorers >= 1) {
-    defaultKind = isRelic ? 'explorer' : 'estrattore';
-  } else if (extractors >= 1) {
-    defaultKind = 'estrattore';
-  } else if (explorers >= 1) {
-    defaultKind = 'explorer';
-  } else {
-    defaultKind = null;
-  }
-  let selectedKind = opts.shipKind;
-  if (selectedKind !== 'estrattore' && selectedKind !== 'explorer') selectedKind = defaultKind;
-  if (selectedKind === 'estrattore' && extractors < 1) selectedKind = explorers >= 1 ? 'explorer' : null;
-  if (selectedKind === 'explorer'   && explorers   < 1) selectedKind = extractors >= 1 ? 'estrattore' : null;
-
-  let selectedCrewId = opts.selectedCrewId;
-  if (selectedCrewId == null || !crews.some(function (c) { return c.id === selectedCrewId; })) {
-    selectedCrewId = crewsSorted.length ? crewsSorted[0].id : null;
-  }
-
-  let host = document.querySelector('[data-bind="anom-picker"]');
-  if (!host) {
-    host = document.createElement('div');
-    host.className = 'expedition-pick-overlay';
-    host.setAttribute('data-bind', 'anom-picker');
-    host.setAttribute('role', 'dialog');
-    host.setAttribute('aria-modal', 'true');
-    host.setAttribute('aria-label', 'Invia flotta su anomalia');
-    document.body.appendChild(host);
-  }
-
-  const meta = anomalyKindMeta(anomalyKind);
-  const sys = g.galaxy.systems[targetSystemId];
-  const acr = regionAcronymFor(targetSystemId);
-  const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
-  /* Colonia sorgente (riga riepilogo): aiuta a capire da DOVE parte la
-     flotta (richiesta utente 2026-06-20: prima non era esplicito). */
-  const fromName = escapeHtml(systemNameFromKey(g, colony.systemId + ':' + colony.bodyKey));
-  const fromAcr = regionAcronymFor(colony.systemId);
-  const fromTag = fromAcr ? ' <span class="name-tag">[' + fromAcr + ']</span>' : '';
-
-  /* Chip selettore tipo scafo. Mostriamo solo i tipi disponibili (≥1):
-     "Estrattore 0 disp." era rumore — richiesta utente 2026-06-20. */
-  function shipChip(kind, label, sub, count) {
-    const sel = selectedKind === kind;
-    return '<button class="exp-crew-chip' + (sel ? ' is-selected' : '') + '" type="button"' +
-      ' role="radio" aria-checked="' + (sel ? 'true' : 'false') + '"' +
-      ' data-action="anom-ship-pick" data-kind="' + escapeHtml(kind) + '"' +
-      ' title="' + escapeHtml(sub) + '">' +
-      '<span class="exp-crew-chip__rank">' + escapeHtml(label) + '</span>' +
-      '<span class="exp-crew-chip__xp">' + count + ' disp.</span>' +
-    '</button>';
-  }
-  const shipChipsArr = [];
-  if (extractors >= 1) shipChipsArr.push(shipChip('estrattore', 'Estrattore', 'rate scalato sull\'Hangar — consigliato per harvest', extractors));
-  if (explorers  >= 1) shipChipsArr.push(shipChip('explorer',   'Esploratore', 'rate base, niente bonus harvest', explorers));
-  const shipChips = shipChipsArr.length
-    ? '<div class="exp-crew-select" role="radiogroup" aria-label="Scegli scafo">' + shipChipsArr.join('') + '</div>'
-    : '<p class="panel__note">Nessuno scafo idoneo (Estrattore o Esploratore) nella colonia di partenza.</p>';
-
-  let crewChips;
-  if (!crewsSorted.length) {
-    crewChips = '<p class="panel__note">Nessun equipaggio disponibile: formane uno nell\'<em>Accademia militare</em>.</p>';
-  } else {
-    crewChips = '<div class="exp-crew-select" role="radiogroup" aria-label="Scegli equipaggio">' +
-      crewsSorted.map(function (c) {
-        const xp = c.xp || 0;
-        const enr = ORION.expedition.enrichmentForXp(xp);
-        const sel = c.id === selectedCrewId;
-        return '<button class="exp-crew-chip' + (sel ? ' is-selected' : '') + '" type="button"' +
-          ' role="radio" aria-checked="' + (sel ? 'true' : 'false') + '"' +
-          ' data-action="anom-crew-pick" data-crew="' + escapeHtml(String(c.id)) + '"' +
-          ' title="' + escapeHtml(enr.label) + ' · xp ' + xp + '">' +
-          '<span class="exp-crew-chip__rank">' + escapeHtml(enr.label) + '</span>' +
-          '<span class="exp-crew-chip__xp">xp ' + xp + '</span>' +
-        '</button>';
-      }).join('') +
-    '</div>';
-  }
-
-  const canSend = selectedKind != null && selectedCrewId != null;
-  const sendTitle = !selectedKind ? 'Nessuno scafo idoneo disponibile'
-    : !selectedCrewId ? 'Serve un equipaggio'
-    : 'Invia la flotta sul sito (resta in raccolta finché non la richiami)';
-
-  host.innerHTML =
-    '<div class="expedition-pick-overlay__panel" role="document">' +
-      '<header class="expedition-pick-overlay__head">' +
-        '<h2 class="expedition-pick-overlay__title">Invia flotta su anomalia</h2>' +
-        '<button class="btn btn--mini btn--icon-only" data-action="anom-pick-close" type="button" aria-label="Chiudi">' +
-          '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
-        '</button>' +
-      '</header>' +
-      '<p class="panel__note">' + escapeHtml(meta.label) + ' nel sistema <strong>' + (sys ? escapeHtml(sys.name) : '—') + '</strong>' + tag +
-        ' · da <strong>' + fromName + '</strong>' + fromTag + '.</p>' +
-      '<p class="sysinfo__sub">Scafo</p>' +
-      shipChips +
-      '<p class="sysinfo__sub">Equipaggio</p>' +
-      crewChips +
-      '<div class="expedition-card__actions" style="margin-top:12px">' +
-        '<button class="btn btn--mini btn--primary btn--with-icon" data-action="anom-launch" type="button"' +
-          (canSend ? '' : ' disabled') + ' title="' + escapeHtml(sendTitle) + '">' +
-          '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('send')) || '') + '</span> Invia flotta' +
-        '</button>' +
-      '</div>' +
-    '</div>';
-  host.hidden = false;
-
-  function reopen(next) {
-    openAnomalySurveyPicker(colony, targetSystemId, anomalyKind, bodyKey, {
-      shipKind: (next && 'shipKind' in next) ? next.shipKind : selectedKind,
-      selectedCrewId: (next && 'selectedCrewId' in next) ? next.selectedCrewId : selectedCrewId
-    });
-  }
-
-  host.addEventListener('click', function (e) {
-    if (e.target === host || e.target.closest('[data-action="anom-pick-close"]')) {
-      closeAnomalySurveyPicker();
-    }
-  });
-  host.querySelectorAll('[data-action="anom-ship-pick"]').forEach(function (b) {
-    if (b.disabled) return;
-    b.addEventListener('click', function () { reopen({ shipKind: b.dataset.kind }); });
-  });
-  host.querySelectorAll('[data-action="anom-crew-pick"]').forEach(function (b) {
-    b.addEventListener('click', function () { reopen({ selectedCrewId: b.dataset.crew }); });
-  });
-  const launchBtn = host.querySelector('[data-action="anom-launch"]');
-  if (launchBtn && !launchBtn.disabled) {
-    launchBtn.addEventListener('click', function () {
-      /* Chiusura immediata per dare feedback visivo (richiesta utente
-         2026-06-20): prima la close era dopo doSurveyAnomaly e in alcuni
-         casi il modal "restava fisso" senza alcun segnale. */
-      closeAnomalySurveyPicker();
-      doSurveyAnomaly(colony, targetSystemId, anomalyKind, bodyKey, {
-        shipKind: selectedKind, crewId: selectedCrewId
-      });
-    });
-  }
-}
-
-function closeAnomalySurveyPicker() {
-  const host = document.querySelector('[data-bind="anom-picker"]');
   if (host) { host.hidden = true; host.innerHTML = ''; }
 }
 
@@ -6192,45 +5958,6 @@ function knownExploitableSites() {
   });
 }
 
-/* Colonia più vicina (spazio esplorato) capace di inviare una flotta di
-   ricognizione sul sistema `sysId` (almeno 1 scafo + 1 equipaggio). Se
-   nessuna ha capacità ritorna comunque la colonia più vicina (per un
-   tooltip esplicativo). */
-function nearestSurveyColony(sysId) {
-  const g = ORION.game;
-  const D = ORION.galaxy.DISCOVERY;
-  const bySystem = {};
-  myColonyKeys().forEach(function (k) {
-    const c = g.colonies[k];
-    if (c && c.colonized) (bySystem[c.systemId] = bySystem[c.systemId] || []).push(c);
-  });
-  function hasCapacity(c) {
-    const ships = (c.ships && ((c.ships.estrattore || 0) + (c.ships.explorer || 0))) || 0;
-    const crews = (c.crews && c.crews.explorer && c.crews.explorer.length) || 0;
-    return ships >= 1 && crews >= 1;
-  }
-  const seen = {}; seen[sysId] = 0;
-  const queue = [sysId];
-  let fallback = null;
-  while (queue.length) {
-    const u = queue.shift();
-    if (bySystem[u]) {
-      const cap = bySystem[u].filter(hasCapacity);
-      if (cap.length) return { colony: cap[0], hops: seen[u], capable: true };
-      if (!fallback) fallback = { colony: bySystem[u][0], hops: seen[u], capable: false };
-    }
-    const sys = g.galaxy.systems[u];
-    const links = (sys && sys.links) || [];
-    for (let i = 0; i < links.length; i++) {
-      const v = links[i];
-      if (seen[v] != null) continue;
-      if (g.state.discovery[v] < D.EXPLORED) continue;
-      seen[v] = seen[u] + 1; queue.push(v);
-    }
-  }
-  return fallback;
-}
-
 function round1(n) { return Math.round((n || 0) * 10) / 10; }
 
 /* Stato collassamento per-sistema della vista "Anomalie & sfruttamenti".
@@ -6257,6 +5984,14 @@ function economyAnomaliesHtml(g) {
   const chips = '<div class="exp-crew-select" role="radiogroup" aria-label="Filtra per risorsa">' +
     fchip('all', 'Tutte') + fchip('met', 'Metalli') + fchip('en', 'Energia') + fchip('reliquie', 'Reliquie') +
   '</div>';
+
+  /* Esiste almeno una colonia con cantiere navale? — gate per il
+     bottone Invia. Il Fleet Wizard (openFleetDetail) richiede una
+     colonia eleggibile; senza, il pannello apparirebbe vuoto. */
+  const hasShipyard = Object.keys(g.colonies || {}).some(function (k) {
+    const c = g.colonies[k];
+    return c && c.colonized && c.structures && c.structures['cantiere-navale'];
+  });
 
   /* Mappa "flotte survey inbound" per sito: chiave sysId|bodyKey|kind.
      Serve a mostrare "in viaggio" sulla riga dell'anomalia quando la
@@ -6353,7 +6088,6 @@ function economyAnomaliesHtml(g) {
         const r = s.harvestRate != null ? s.harvestRate : 0.6;
         if (s.res === 'met') sysMet += r; else if (s.res === 'en') sysEn += r;
       });
-      const send = nearestSurveyColony(sid);
       const tag = systemTagHtml(sid);
       const collapsed = !!ORION._econGroupCollapsed[sid];
       const caret = collapsed ? '▸' : '▾';
@@ -6393,13 +6127,11 @@ function economyAnomaliesHtml(g) {
         }
         const inbound = inboundForSite(s);
         const inboundTransit = inbound.filter(function (f) { return f.location.status === 'in-transit'; });
-        const canSend = !s.harvesting && !inboundTransit.length && send && send.capable;
+        const canSend = !s.harvesting && !inboundTransit.length && hasShipyard;
         const sendTitle = s.harvesting ? 'Una flotta è già presente sul sito'
           : inboundTransit.length ? 'Una flotta è già in viaggio verso questo sito'
-          : (send && send.capable
-              ? 'Invia una flotta da ' + escapeHtml(systemNameFromKey(g, send.colony.systemId + ':' + send.colony.bodyKey)) + ' (' + send.hops + ' salti)'
-              : 'Nessuna colonia con scafo + equipaggio in grado di raggiungere il sito');
-        const colAttr = (send && send.capable) ? (' data-col="' + escapeHtml(send.colony.systemId + ':' + send.colony.bodyKey) + '"') : '';
+          : !hasShipyard ? 'Serve una colonia con Cantiere navale per costruire la flotta'
+          : 'Apri il pannello Crea flotta con destinazione e missione "Estrai" pre-compilate';
         const bodyAttr = s.bodyKey ? (' data-body="' + escapeHtml(s.bodyKey) + '"') : '';
         const inboundBadge = (!s.harvesting && inboundTransit.length)
           ? '<span class="econ-item__live econ-item__live--enroute" title="Flotta in viaggio verso il sito">✈ in viaggio</span>'
@@ -6419,7 +6151,7 @@ function economyAnomaliesHtml(g) {
               harvestTxt +
             '</div>' +
           '</div>' +
-          '<button class="econ-item__send" data-action="econ-anom-send" data-sys="' + s.sysId + '" data-kind="' + s.kind + '"' + bodyAttr + colAttr + ' type="button"' +
+          '<button class="econ-item__send" data-action="econ-anom-send" data-sys="' + s.sysId + '" data-kind="' + s.kind + '"' + bodyAttr + ' type="button"' +
             (canSend ? '' : ' disabled') + ' title="' + escapeHtml(sendTitle) + '">' +
             '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('send')) || '→') + '</span>' +
             '<span class="econ-item__send-lbl">Invia</span>' +
@@ -6523,20 +6255,27 @@ function renderEconAnomaliesView(stage) {
     '<div class="fleet-view market-view economy-view">' +
       econViewHead('Anomalie &amp; sfruttamenti', 'Economia · §17.3') +
       economyAnomaliesHtml(g) +
-      '<p class="panel__note">Tutti i siti §17.3 noti della galassia, raggruppati per sistema. Inviare una flotta che ' +
-        '<strong>resta sul posto</strong> a drenare: parte dalla colonia idonea più vicina. Il bottino viene depositato ' +
-        'sulla <strong>colonia attiva più vicina al sito</strong> — usa le rotte commerciali per ridistribuirlo. ' +
-        'Detriti/cinture→metalli, nebulose/giganti gassosi→energia, reliquie→ricompensa una-tantum.</p>' +
+      '<p class="panel__note">Tutti i siti §17.3 noti della galassia, raggruppati per sistema. <strong>Invia</strong> apre ' +
+        'il pannello <em>Crea flotta</em> con destinazione e missione <em>Estrai</em> pre-compilate: scegli colonia di origine ' +
+        '(serve un cantiere navale) e composizione, poi conferma. La flotta <strong>resta sul posto</strong> a drenare; ' +
+        'il bottino viene depositato sulla <strong>colonia attiva più vicina al sito</strong> — usa le rotte commerciali ' +
+        'per ridistribuirlo. Detriti/cinture→metalli, nebulose/giganti gassosi→energia, reliquie→ricompensa una-tantum.</p>' +
     '</div>';
   stage.querySelectorAll('[data-action="econ-res-filter"]').forEach(function (b) {
     b.addEventListener('click', function () { ORION._econResFilter = b.dataset.res; renderEconAnomaliesView(stage); });
   });
   stage.querySelectorAll('[data-action="econ-anom-send"]').forEach(function (b) {
     b.addEventListener('click', function () {
-      const colKey = b.dataset.col;
-      const colony = colKey ? g.colonies[colKey] : null;
-      if (!colony) { showToast('Nessuna colonia disponibile per l\'invio'); return; }
-      openAnomalySurveyPicker(colony, Number(b.dataset.sys), b.dataset.kind, b.dataset.body || null);
+      /* Decisione utente 2026-06-20: unifichiamo TUTTI i flussi di invio
+         flotta su openFleetDetail (Fleet Wizard). Niente picker paralleli
+         che potrebbero materializzare spedizioni senza passare dalla
+         pipeline standard. Pre-compiliamo destinazione + missione
+         "extract"; la colonia d'origine la sceglie il Wizard fra le
+         eleggibili (cantiere navale). */
+      openFleetDetail(null, {
+        dest: { sysId: Number(b.dataset.sys), bodyKey: b.dataset.body || null },
+        mission: 'extract'
+      });
     });
   });
   stage.querySelectorAll('[data-action="econ-group-toggle"]').forEach(function (b) {
@@ -10296,14 +10035,26 @@ function openFleetDetail(fleetId, opts) {
     const selectableIds = misOpts.filter(function (a) {
       return a.available && !a.future && MISSION_META[a.id];
     }).map(function (a) { return a.id; });
-    if (!D.mission || selectableIds.indexOf(D.mission) < 0) {
+    /* Missioni "intenzionabili": presenti nel target anche se non ancora
+       disponibili (es. extract senza estrattore in flotta). Servono a
+       preservare l'intent passato da fuori (es. econ-anom-send con
+       mission='extract'): il chip resta selezionato e disabilitato finché
+       l'utente non aggiunge il tipo di nave richiesto. */
+    const intentIds = misOpts.filter(function (a) {
+      return !a.future && MISSION_META[a.id];
+    }).map(function (a) { return a.id; });
+    if (!D.mission || (selectableIds.indexOf(D.mission) < 0 && intentIds.indexOf(D.mission) < 0)) {
       /* Default suggerito: Colonizza se possibile, altrimenti solo spostamento. */
       D.mission = selectableIds.indexOf('colonize') >= 0 ? 'colonize' : 'move';
     }
     const misChips = misOpts.map(function (a) {
       const meta = MISSION_META[a.id]; if (!meta) return '';
       const disabled = !a.available || a.future;
-      const sel = (D.mission === a.id) && !disabled;
+      /* Sel resta truthy anche se "disabled" quando l'intent arriva da
+         fuori (es. econ-anom-send mission='extract' senza estrattore): il
+         chip mostra l'intenzione, e il footer "Crea e parti" resta
+         disabilitato finché la flotta non soddisfa il gate. */
+      const sel = (D.mission === a.id);
       const gateTxt = (!a.available && a.gate) ? (GATE_LABEL[a.gate] || a.gate) : '';
       const title = gateTxt ? 'Serve: ' + gateTxt : meta.arr;
       const sfx = gateTxt ? ' <span class="fdetail__chip-note">' + escapeHtml(gateTxt) + '</span>' : '';
