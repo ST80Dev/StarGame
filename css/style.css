@@ -7381,6 +7381,12 @@ select.main-menu__input { cursor: pointer; }
 .lp-launcher__btn[data-view="civ"]      .lp-launcher__glyph { color: #f08296; }
 .lp-launcher__btn[data-view="research"] .lp-launcher__glyph { color: #b89cff; }
 .lp-launcher__btn[data-view="market"]   .lp-launcher__glyph { color: #9fd0a8; }
+/* Sotto-voci della linguetta Economia (decisione UI: stesso pattern di
+   tinta+glow tramite drop-shadow su .ui-icon-svg, palette UI_GUIDE §1.2). */
+.lp-launcher__btn[data-view="econ-anomalies"] .lp-launcher__glyph { color: #f0a868; }
+.lp-launcher__btn[data-view="econ-market"]    .lp-launcher__glyph { color: #9fd0a8; }
+.lp-launcher__btn[data-view="econ-treasury"]  .lp-launcher__glyph { color: #f0d670; }
+.lp-launcher__btn[data-view="econ-ai"]        .lp-launcher__glyph { color: #f08296; }
 .lp-launcher__sub {
   margin-left: auto;
   font-size: 0.78rem;
