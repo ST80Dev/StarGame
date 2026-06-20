@@ -1744,6 +1744,11 @@
     };
     /* M10 Fase B punto 2 (decisione #52 §13.10): uno scontro vero è un atto
        diretto → contatto formale + interazione che conta per "Conosciuta". */
+    /* Bugfix 2026-06-20: il contatto per battaglia non scriveva intelLevel,
+       e il fallback UI ('complete') faceva passare le civ contattate via
+       scontro come a dossier pieno. Inizializza coerentemente dal progresso
+       cumulato (di solito 'fragmentary' se non c'era ricognizione attiva). */
+    if (!civ.intelLevel) civ.intelLevel = intelLevelFromProgress(civ.intelProgress || 0);
     markContact(game, civ, null, 'battle');
   }
   function forceEstimate(game, civ) {
