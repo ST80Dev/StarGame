@@ -6986,6 +6986,17 @@ function renderFleetView(stage) {
   /* M08 Fase B: tutorial — overview alla prima apertura della vista. */
   if (ORION.tutorial) ORION.tutorial.fire('fleet-overview');
 
+  /* Modalità DETTAGLIO assedio (decisione utente 2026-06-20): se è
+     selezionato un assedio (click sulla card compatta o auto-apertura a fine
+     round), mostra la sottopagina dedicata invece della lista flotte. Se la
+     battaglia non è più attiva (assedio concluso) il flag si azzera e si
+     ricade sulla vista normale. */
+  if (ORION._siegeDetailId) {
+    const sb = (g.battles || []).filter(function (x) { return x.id === ORION._siegeDetailId && x.status === 'active'; })[0];
+    if (sb) { renderSiegeDetailView(stage, sb); return; }
+    ORION._siegeDetailId = null;
+  }
+
   /* Helpers locali */
   function sysName(id) {
     const s = g.galaxy.systems[id];
@@ -7220,6 +7231,9 @@ function renderFleetView(stage) {
     });
   });
   /* Sezione Guerra (buildWarSection) — handler invariati. */
+  stage.querySelectorAll('[data-action="siege-open"]').forEach(function (b) {
+    b.addEventListener('click', function () { ORION._siegeDetailId = b.dataset.battle; renderFleetView(stage); });
+  });
   stage.querySelectorAll('[data-action="siege-tribute"]').forEach(function (b) {
     b.addEventListener('click', function () { handleSiegeTribute(b.dataset.battle, stage); });
   });
@@ -7333,26 +7347,29 @@ function buildWarSection(g) {
     battles.forEach(function (b) {
       const C = ORION.combat;
       const atkHp = C ? Math.round(C.totalHp({ combatants: b.attacker.combatants })) : 0;
-      const cost = siegeTributeCost(b);
-      const costStr = ['met', 'en'].filter(function (k) { return cost[k] > 0; })
-        .map(function (k) { return resIcon(k) + ' ' + cost[k]; }).join(' · ');
       const isAi = b.attackerKind === 'ai';
       const who = isAi ? escapeHtml(b.attacker.name) : 'predoni';
-      const tributeLbl = isAi ? 'Tributo → tregua' : 'Paga tributo';
-      html += '<div class="war-siege' + (isAi ? ' war-siege--ai' : '') + '">' +
+      /* Riepilogo COMPATTO (decisione utente 2026-06-20): solo i numeri
+         essenziali + pronostico; le forze in dettaglio, la cronologia e le
+         leve d'azione vivono nella sottopagina che si apre col click. */
+      const fx = computeSiegeForces(ORION.game, b);
+      const fcCls = fx ? fx.forecastCls : 'even';
+      const defLine = fx
+        ? ('difensori ' + Math.round(fx.defHp) + ' hp · fp ' + Math.round(fx.defFp))
+        : 'difensori —';
+      const fcLine = fx
+        ? ('<span class="war-siege__forecast war-siege__forecast--' + fcCls + '">' + escapeHtml(fx.forecastShort) + '</span>')
+        : '';
+      html += '<button class="war-siege war-siege--compact' + (isAi ? ' war-siege--ai' : '') + '" ' +
+        'data-action="siege-open" data-battle="' + escapeHtml(b.id) + '" type="button">' +
         '<div class="war-siege__head">Assedio di ' + colonyNameFromKey(b.colonyKey) +
-          ' · round ' + (b.round | 0) + ' · ' + who + ' ' + atkHp + ' hp</div>' +
-        buildSiegeForcesPanel(ORION.game, b) +
-        '<div class="war-siege__actions">' +
-          '<button class="btn btn--mini btn--with-icon" data-action="siege-retreat" data-battle="' + escapeHtml(b.id) + '" type="button">' +
-            uiIcon('refresh', 'cyan') + ' Ritira flotte</button>' +
-          '<button class="btn btn--mini btn--with-icon" data-action="siege-tribute" data-battle="' + escapeHtml(b.id) + '" type="button">' +
-            uiIcon('diplomacy', 'amber') + ' ' + tributeLbl + ' (' + (costStr || 'gratis') + ')</button>' +
-          '<button class="btn btn--mini btn--with-icon btn--danger" data-action="siege-evacuate" data-colony="' + escapeHtml(b.colonyKey) + '" type="button" title="Abbandona la colonia recuperando metà delle risorse alla capitale">' +
-            uiIcon('warning', 'pink') + ' Evacua colonia</button>' +
+          ' · round ' + (b.round | 0) + ' · ' + who + '</div>' +
+        '<div class="war-siege__compact">' +
+          '<span class="war-siege__nums">' + defLine + ' &nbsp;vs&nbsp; ' + who + ' ' + atkHp + ' hp</span>' +
+          fcLine +
         '</div>' +
-        '<p class="war-siege__hint">Rinforza spostando una flotta su questo sistema (si unisce alla difesa al prossimo round); oppure consolida altrove.</p>' +
-      '</div>';
+        '<span class="war-siege__cta">Apri dettaglio ' + uiIcon('chevronRight', 'soft') + '</span>' +
+      '</button>';
     });
     html += '</div>';
   }
@@ -7373,22 +7390,23 @@ function siegeTributeCost(battle) {
   return { met: Math.round(atkHp * 0.6), en: Math.round(atkHp * 0.3) };
 }
 
-/* Pannello "Forze in campo" per un assedio in corso (decisione utente
-   2026-06-20: dare al giocatore una preview del rapporto di forze prima
-   del prossimo round, così può decidere se richiamare flotte o no).
-   Usa esattamente le stesse fonti del round vivo in time.js: difese della
-   colonia (forceFromDefenses) + flotte presenti AL CORPO assediato. */
-function buildSiegeForcesPanel(g, battle) {
+/* computeSiegeForces — dati grezzi delle forze in campo di un assedio.
+   Fonte UNICA condivisa dalla card compatta del riepilogo, dal pannello
+   "Forze in campo" e dalla sottopagina dettaglio (DRY). Usa esattamente le
+   stesse fonti del round vivo in time.js: difese della colonia
+   (forceFromDefenses) + flotte presenti AL CORPO assediato. Ritorna null se
+   i dati non sono disponibili. */
+function computeSiegeForces(g, battle) {
   const C = ORION.combat;
-  if (!C || !g) return '';
+  if (!C || !g) return null;
   const colony = g.colonies && g.colonies[battle.colonyKey];
-  if (!colony) return '';
+  if (!colony) return null;
   const parts = String(battle.colonyKey).split(':');
   const colonyBodyKey = parts.length === 2 ? parts[1] : null;
 
   /* ---- Difensori ---- */
   const defForce = C.forceFromDefenses(g, colony, battle.colonyKey, 'B');
-  const defGroups = [];   // {label, count, hp, fp}
+  const defGroups = [];   // {label, count, hp, fp, isFleet}
 
   // Difese coloniali raggruppate per struttura (Batteria, Scudo, ...)
   const byStruct = {};
@@ -7416,9 +7434,8 @@ function buildSiegeForcesPanel(g, battle) {
     const fhp = C.totalHp(ff);
     const ffp = C.totalFp(ff);
     defGroups.push({
-      label: '🚀 ' + escapeHtml(f.name || 'Flotta'),
-      count: f.ships.length, hp: fhp, fp: ffp,
-      isFleet: true
+      label: escapeHtml(f.name || 'Flotta'), count: f.ships.length,
+      hp: fhp, fp: ffp, isFleet: true
     });
     if (ffp <= 0 && f.ships.length > 0) hasCannonFodder = true;
   }
@@ -7427,18 +7444,19 @@ function buildSiegeForcesPanel(g, battle) {
   const atk = { combatants: battle.attacker.combatants || [] };
   const atkHp = C.totalHp(atk);
   let atkFp = 0;
+  const atkGroups = [];
   const atkByKind = {};
   atk.combatants.forEach(function (c) {
     const k = c.kind || 'unit';
-    if (!atkByKind[k]) atkByKind[k] = { label: c.label, count: 0, hp: 0 };
+    if (!atkByKind[k]) { atkByKind[k] = { label: c.label, count: 0, hp: 0 }; atkGroups.push(atkByKind[k]); }
     atkByKind[k].count++;
     atkByKind[k].hp += c.hp;
     atkFp += C.combatantFp(c);
   });
 
   /* ---- Totali e pronostico ---- */
-  const defHp = defGroups.reduce(function (a, g) { return a + g.hp; }, 0);
-  const defFp = defGroups.reduce(function (a, g) { return a + g.fp; }, 0);
+  const defHp = defGroups.reduce(function (a, gr) { return a + gr.hp; }, 0);
+  const defFp = defGroups.reduce(function (a, gr) { return a + gr.fp; }, 0);
   const ratio = atkFp > 0 ? (defFp / atkFp) : (defFp > 0 ? Infinity : 1);
   let forecast, forecastCls;
   if (defGroups.length === 0) { forecast = 'difesa nulla — assedio perso al prossimo round'; forecastCls = 'lose'; }
@@ -7447,39 +7465,172 @@ function buildSiegeForcesPanel(g, battle) {
   else if (ratio >= 0.8) { forecast = 'equilibrio (' + ratio.toFixed(1) + '×)'; forecastCls = 'even'; }
   else { forecast = 'difesa sotto (' + ratio.toFixed(1) + '×) — valuta rinforzi'; forecastCls = 'lose'; }
 
-  function row(g) {
-    const cnt = g.count > 1 ? (' ×' + g.count) : '';
-    return '<li>' + g.label + cnt +
-      ' · <span class="war-forces__hp">' + Math.round(g.hp) + ' hp</span>' +
-      ' · <span class="war-forces__fp">fp ' + Math.round(g.fp || 0) + '</span></li>';
-  }
-  function atkRow(g) {
-    const cnt = g.count > 1 ? (' ×' + g.count) : '';
-    return '<li>' + escapeHtml(g.label) + cnt +
-      ' · <span class="war-forces__hp">' + Math.round(g.hp) + ' hp</span></li>';
-  }
+  return {
+    defGroups: defGroups, atkGroups: atkGroups,
+    defHp: defHp, defFp: defFp, atkHp: atkHp, atkFp: atkFp,
+    hasCannonFodder: hasCannonFodder,
+    forecast: forecast, forecastCls: forecastCls,
+    forecastShort: forecastCls === 'win' ? 'difesa avanti' : forecastCls === 'even' ? 'equilibrio' : 'difesa sotto'
+  };
+}
 
+/* Pannello "Forze in campo" completo (due colonne difensori/attaccante +
+   pronostico). Vive nella sottopagina dettaglio (decisione utente
+   2026-06-20). */
+function buildSiegeForcesPanel(g, battle) {
+  const fx = computeSiegeForces(g, battle);
+  if (!fx) return '';
+  function row(gr) {
+    const cnt = gr.count > 1 ? (' ×' + gr.count) : '';
+    const icon = gr.isFleet ? (uiIcon('fleet', 'cyan') + ' ') : '';
+    return '<li>' + icon + gr.label + cnt +
+      ' · <span class="war-forces__hp">' + Math.round(gr.hp) + ' hp</span>' +
+      ' · <span class="war-forces__fp">fp ' + Math.round(gr.fp || 0) + '</span></li>';
+  }
+  function atkRow(gr) {
+    const cnt = gr.count > 1 ? (' ×' + gr.count) : '';
+    return '<li>' + escapeHtml(gr.label) + cnt +
+      ' · <span class="war-forces__hp">' + Math.round(gr.hp) + ' hp</span></li>';
+  }
   let html = '<div class="war-forces">';
   html += '<div class="war-forces__col war-forces__col--def">';
-  html += '<h5>Difensori · ' + Math.round(defHp) + ' hp · fp ' + Math.round(defFp) + '</h5>';
-  if (defGroups.length) {
-    html += '<ul>' + defGroups.map(row).join('') + '</ul>';
+  html += '<h5>Difensori · ' + Math.round(fx.defHp) + ' hp · fp ' + Math.round(fx.defFp) + '</h5>';
+  if (fx.defGroups.length) {
+    html += '<ul>' + fx.defGroups.map(row).join('') + '</ul>';
   } else {
     html += '<p class="war-forces__empty">Nessun difensore al pianeta. Manda una flotta sul corpo o costruisci difese.</p>';
   }
-  if (hasCannonFodder) {
+  if (fx.hasCannonFodder) {
     html += '<p class="war-forces__warn">' + uiIcon('warning', 'gold') +
       ' Flotte senza armi al pianeta: assorbono colpi senza restituirli. Considera di spostarle.</p>';
   }
   html += '</div>';
   html += '<div class="war-forces__col war-forces__col--atk">';
-  html += '<h5>Attaccante · ' + Math.round(atkHp) + ' hp · fp ' + Math.round(atkFp) + '</h5>';
-  html += '<ul>' + Object.keys(atkByKind).map(function (k) { return atkRow(atkByKind[k]); }).join('') + '</ul>';
+  html += '<h5>Attaccante · ' + Math.round(fx.atkHp) + ' hp · fp ' + Math.round(fx.atkFp) + '</h5>';
+  html += '<ul>' + fx.atkGroups.map(atkRow).join('') + '</ul>';
   html += '</div>';
-  html += '<p class="war-forces__forecast war-forces__forecast--' + forecastCls + '">' +
-    'Pronostico round: <strong>' + forecast + '</strong></p>';
+  html += '<p class="war-forces__forecast war-forces__forecast--' + fx.forecastCls + '">' +
+    'Pronostico round: <strong>' + fx.forecast + '</strong></p>';
   html += '</div>';
   return html;
+}
+
+/* Sottopagina DETTAGLIO di un assedio (decisione utente 2026-06-20):
+   raggiunta cliccando la card compatta nel riepilogo, oppure aperta in
+   automatico ad ogni round (vedi maybeAutoOpenSiege / pref siegeAutoOpen).
+   Mostra le forze in campo, la CRONOLOGIA round-per-round (compreso quello
+   appena avvenuto) e le leve d'azione (ritira/tributo/evacua). Vive DENTRO
+   la vista Flotte come modalità detail (pattern _civDetailId). */
+function renderSiegeDetailView(stage, battle) {
+  const g = ORION.game;
+  const isAi = battle.attackerKind === 'ai';
+  const who = isAi ? escapeHtml(battle.attacker.name) : 'predoni';
+  const cost = siegeTributeCost(battle);
+  const costStr = ['met', 'en'].filter(function (k) { return cost[k] > 0; })
+    .map(function (k) { return resIcon(k) + ' ' + cost[k]; }).join(' · ');
+  const tributeLbl = isAi ? 'Tributo → tregua' : 'Paga tributo';
+
+  /* Cronologia round (battle.log: {round, lostDef, lostAtk, atkHp, defHp}).
+     L'ultima riga è il round appena concluso → evidenziata. */
+  const log = (battle.log || []).slice();
+  let rowsHtml;
+  if (!log.length) {
+    rowsHtml = '<tr><td colspan="4" class="siege-detail__noround">Nessuno scambio ancora: l\'assedio si è appena formato. Il primo round arriva al prossimo Impulso.</td></tr>';
+  } else {
+    rowsHtml = log.map(function (r, i) {
+      const last = (i === log.length - 1);
+      const lostDef = r.lostDef | 0, lostAtk = r.lostAtk | 0;
+      const defCell = lostDef > 0
+        ? '<span class="siege-detail__loss">−' + lostDef + '</span>'
+        : '<span class="siege-detail__hold">—</span>';
+      const atkCell = lostAtk > 0
+        ? '<span class="siege-detail__kill">−' + lostAtk + '</span>'
+        : '<span class="siege-detail__hold">—</span>';
+      return '<tr' + (last ? ' class="siege-detail__row--last"' : '') + '>' +
+        '<td>' + (r.round | 0) + (last ? ' <span class="siege-detail__nowtag">ora</span>' : '') + '</td>' +
+        '<td>' + Math.round(r.defHp || 0) + ' hp · ' + defCell + '</td>' +
+        '<td>' + Math.round(r.atkHp || 0) + ' hp · ' + atkCell + '</td>' +
+        '<td>' + (lostDef > 0 ? '<strong class="is-crit">perse ' + lostDef + '</strong>' : (lostAtk > 0 ? '<span class="is-ok">respinge</span>' : 'tiene')) + '</td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  stage.innerHTML =
+    '<div class="fleet-view">' +
+      '<div class="siege-detail">' +
+        '<header class="siege-detail__head">' +
+          '<button class="btn btn--mini btn--with-icon" data-action="siege-back" type="button">' +
+            uiIcon('chevronRight', 'soft') + ' Torna agli assedi</button>' +
+          '<h2 class="siege-detail__title">' + uiIcon('sword', 'pink') +
+            ' Assedio di ' + colonyNameFromKey(battle.colonyKey) +
+            ' <span class="siege-detail__sub">round ' + (battle.round | 0) + ' · ' + who + '</span></h2>' +
+        '</header>' +
+        buildSiegeForcesPanel(g, battle) +
+        '<div class="siege-detail__log">' +
+          '<h4 class="war-h">Cronologia round</h4>' +
+          '<table class="siege-detail__table">' +
+            '<thead><tr><th>R</th><th>Difensori</th><th>Attaccante</th><th>Esito</th></tr></thead>' +
+            '<tbody>' + rowsHtml + '</tbody>' +
+          '</table>' +
+        '</div>' +
+        '<div class="siege-detail__actions">' +
+          '<button class="btn btn--mini btn--with-icon" data-action="siege-retreat" data-battle="' + escapeHtml(battle.id) + '" type="button">' +
+            uiIcon('refresh', 'cyan') + ' Ritira flotte</button>' +
+          '<button class="btn btn--mini btn--with-icon" data-action="siege-tribute" data-battle="' + escapeHtml(battle.id) + '" type="button">' +
+            uiIcon('diplomacy', 'amber') + ' ' + tributeLbl + ' (' + (costStr || 'gratis') + ')</button>' +
+          '<button class="btn btn--mini btn--with-icon btn--danger" data-action="siege-evacuate" data-colony="' + escapeHtml(battle.colonyKey) + '" type="button" title="Abbandona la colonia recuperando metà delle risorse alla capitale">' +
+            uiIcon('warning', 'pink') + ' Evacua colonia</button>' +
+        '</div>' +
+        '<p class="war-siege__hint">Rinforza spostando una flotta sul pianeta assediato (si unisce alla difesa al prossimo round); oppure consolida altrove.</p>' +
+      '</div>' +
+    '</div>';
+
+  /* Wiring locale (la sottopagina fa return prima del wiring generale). */
+  const back = stage.querySelector('[data-action="siege-back"]');
+  if (back) back.addEventListener('click', function () { ORION._siegeDetailId = null; renderFleetView(stage); });
+  stage.querySelectorAll('[data-action="siege-tribute"]').forEach(function (b) {
+    b.addEventListener('click', function () { handleSiegeTribute(b.dataset.battle, stage); });
+  });
+  stage.querySelectorAll('[data-action="siege-retreat"]').forEach(function (b) {
+    b.addEventListener('click', function () { handleSiegeRetreat(b.dataset.battle, stage); });
+  });
+  stage.querySelectorAll('[data-action="siege-evacuate"]').forEach(function (b) {
+    b.addEventListener('click', function () { handleEvacuate(b.dataset.colony, stage); });
+  });
+}
+
+/* Auto-apertura della sottopagina dettaglio assedio (decisione utente
+   2026-06-20). A fine batch di Impulso, se è avvenuto un round (o la fine)
+   di un assedio e la preferenza lo consente, naviga alla vista Flotte e apre
+   il dettaglio del combattimento (con la cronologia aggiornata). Ritorna true
+   se ha gestito la navigazione (così il chiamante salta l'overlay generico).
+   Modalità (ORION.prefs.siegeAutoOpen): 'every' ogni round · 'strong' solo
+   eventi forti (perdita difensiva o fine assedio) · 'off' mai. */
+function maybeAutoOpenSiege(events) {
+  const mode = (ORION.prefs && ORION.prefs.siegeAutoOpen) || 'every';
+  if (mode === 'off' || !events || !events.length) return false;
+  const g = ORION.game;
+  if (!g) return false;
+  let detailId = null;     // ultimo round osservato (battaglia target)
+  let strongId = null;     // round con perdita difensiva
+  let anyEnd = false;
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    if (e.kind === 'siege-round') {
+      detailId = e.battleId;
+      if ((e.lostDef | 0) > 0) strongId = e.battleId;
+    } else if (e.kind === 'siege-end') {
+      anyEnd = true;
+    }
+  }
+  if (!detailId && !anyEnd) return false;
+  const isStrong = !!strongId || anyEnd;
+  if (mode === 'strong' && !isStrong) return false;
+  const pick = strongId || detailId;
+  const live = pick && (g.battles || []).some(function (b) { return b.id === pick && b.status === 'active'; });
+  ORION._siegeDetailId = live ? pick : null;   // assedio finito → torna alla lista
+  navigateView('fleet');
+  return true;
 }
 
 /* Veteranità di una flotta (§12.3): righe per le navi non-Verdi. */
@@ -11195,8 +11346,20 @@ const PREFS_LS_KEY = 'orion.prefs';
 const DEFAULT_PREFS = {
   confirmActions: true,   // chiede conferma su build/demolisci/colonizza/...
   surfaceLevel: 'medio-scuro', // luminosità superfici (regolabile per ambiente)
-  cinematics: 'piene'     // scenografia accadimenti: piene | ridotte | off
+  cinematics: 'piene',    // scenografia accadimenti: piene | ridotte | off
+  siegeAutoOpen: 'every'  // auto-apertura dettaglio assedio: every | strong | off
 };
+
+/* Auto-apertura sottopagina dettaglio assedio (decisione utente 2026-06-20).
+   Ad ogni round di un assedio (o alla fine), naviga al dettaglio combattimento.
+   'every' = ogni round di ogni battaglia · 'strong' = solo eventi forti
+   (perdita di un difensore o fine assedio) · 'off' = mai (resta in cronaca). */
+const SIEGE_AUTOOPEN_LEVELS = {
+  'every':  { label: 'Ogni round' },
+  'strong': { label: 'Eventi forti' },
+  'off':    { label: 'Mai' }
+};
+const SIEGE_AUTOOPEN_ORDER = ['every', 'strong', 'off'];
 
 /* Cinematiche degli accadimenti (Fase 1). reduced-motion le forza a "off"
    lato ORION.cinematics; qui resta la sola preferenza utente. */
@@ -11237,6 +11400,7 @@ function loadPrefs() {
   } catch (_) { ORION.prefs = Object.assign({}, DEFAULT_PREFS); }
   if (!SURFACE_LEVELS[ORION.prefs.surfaceLevel]) ORION.prefs.surfaceLevel = 'medio-scuro';
   if (!CINEMATICS_LEVELS[ORION.prefs.cinematics]) ORION.prefs.cinematics = 'piene';
+  if (!SIEGE_AUTOOPEN_LEVELS[ORION.prefs.siegeAutoOpen]) ORION.prefs.siegeAutoOpen = 'every';
   applySurfaceLevel(ORION.prefs.surfaceLevel);
 }
 function savePrefs() {
@@ -11365,6 +11529,20 @@ function openPrefsModal() {
           '<strong>Ridotte</strong>: solo micro-effetti leggeri · <strong>Off</strong>: nessuno. ' +
           'Se il sistema richiede animazioni ridotte vengono disattivate comunque. Non influisce sulla partita.</span>' +
         '</div>' +
+        '<div class="prefs-row prefs-row--levels">' +
+          '<span class="prefs-row__label">Dettaglio assedio automatico</span>' +
+          '<div class="prefs-levels" role="group" aria-label="Apertura automatica dettaglio assedio">' +
+            SIEGE_AUTOOPEN_ORDER.map(function (id) {
+              return '<button type="button" class="prefs-level' +
+                (id === ORION.prefs.siegeAutoOpen ? ' is-active' : '') +
+                '" data-siege-autoopen="' + id + '">' + escapeHtml(SIEGE_AUTOOPEN_LEVELS[id].label) + '</button>';
+            }).join('') +
+          '</div>' +
+          '<span class="prefs-row__hint">Durante un assedio il gioco si mette in pausa e apre la pagina dettaglio del ' +
+          'combattimento (forze in campo + cronologia round). <strong>Ogni round</strong>: ad ogni scambio di ogni ' +
+          'battaglia · <strong>Eventi forti</strong>: solo quando perdi un difensore o l\'assedio si chiude · ' +
+          '<strong>Mai</strong>: nessuna apertura automatica (resta tutto in cronaca).</span>' +
+        '</div>' +
       '</div>' +
     '</div>';
   host.hidden = false;
@@ -11395,6 +11573,18 @@ function openPrefsModal() {
       savePrefs();
       host.querySelectorAll('[data-cine-level]').forEach(function (x) {
         x.classList.toggle('is-active', x.dataset.cineLevel === id);
+      });
+    });
+  });
+  /* Dettaglio assedio automatico: preferenza pura, persisti + stato attivo. */
+  host.querySelectorAll('[data-siege-autoopen]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const id = b.dataset.siegeAutoopen;
+      if (!SIEGE_AUTOOPEN_LEVELS[id]) return;
+      ORION.prefs.siegeAutoOpen = id;
+      savePrefs();
+      host.querySelectorAll('[data-siege-autoopen]').forEach(function (x) {
+        x.classList.toggle('is-active', x.dataset.siegeAutoopen === id);
       });
     });
   });
@@ -11760,9 +11950,17 @@ function playTick() {
      per decidere se l'utente vuole essere fermato. */
   const res = runAdvance(1);
   if (ORION.cinematics && res) ORION.cinematics.onEvents(res.events);
-  if (res && res.events && shouldAutoPause(res.events)) {
-    stopPlay();
-    showEventOverlay(res.events);
+  if (res && res.events) {
+    /* Assedio: auto-pausa + navigazione alla sottopagina dettaglio
+       (decisione utente 2026-06-20). Quando scatta, sostituisce l'overlay
+       generico — la pagina dettaglio è il feedback ricco del round. */
+    const siegeHandled = maybeAutoOpenSiege(res.events);
+    if (siegeHandled) {
+      stopPlay();
+    } else if (shouldAutoPause(res.events)) {
+      stopPlay();
+      showEventOverlay(res.events);
+    }
   }
 }
 /* Avanzamento manuale (pulsante +1 Ι · → · "Prossimo evento" · E):
@@ -11772,8 +11970,11 @@ function playTick() {
 function manualAdvance(impulsi) {
   const res = runAdvance(impulsi);
   if (ORION.cinematics && res) ORION.cinematics.onEvents(res.events);
-  if (res && res.events && shouldAutoPause(res.events)) {
-    showEventOverlay(res.events);
+  if (res && res.events) {
+    const siegeHandled = maybeAutoOpenSiege(res.events);
+    if (!siegeHandled && shouldAutoPause(res.events)) {
+      showEventOverlay(res.events);
+    }
   }
   return res;
 }
@@ -13937,6 +14138,10 @@ function renderLeftPanel() {
   });
   host.querySelectorAll('[data-view]').forEach(function (btn) {
     btn.addEventListener('click', function () {
+      /* Nav manuale alla vista Flotte = lista pulita (non un dettaglio
+         assedio rimasto aperto da un'auto-apertura precedente). L'auto-
+         apertura passa da maybeAutoOpenSiege, non da qui. */
+      if (btn.dataset.view === 'fleet') ORION._siegeDetailId = null;
       navigateView(btn.dataset.view);
     });
   });
@@ -17029,7 +17234,7 @@ function onMobileNav(which) {
   if (!ORION.game) return;
   switch (which) {
     case 'map':    closeMobileSheets(); navigateView('galaxy'); break;
-    case 'fleet':  closeMobileSheets(); navigateView('fleet');  break;
+    case 'fleet':  closeMobileSheets(); ORION._siegeDetailId = null; navigateView('fleet');  break;
     case 'civ':    closeMobileSheets(); navigateView('civ');    break;
     case 'colony': toggleMobileSheet('right'); break;
     case 'more':   toggleMobileSheet('left');  break;

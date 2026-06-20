@@ -542,9 +542,14 @@
         '<p>Quando una forza ostile punta una tua colonia ricevi un <strong>preavviso</strong> (incursione in arrivo, con ETA): ' +
         'preparati. L\'<strong>assedio</strong> dura più Impulsi — un round di scambio ogni ~5 <span class="ds-unit">Ι</span>, con <strong>auto-pausa</strong> ' +
         'a ogni round per darti tempo di reagire.</p>' +
-        '<p>Difendono le <strong>Batterie ⊕</strong> / <strong>Scudi ◈</strong> della colonia e qualunque <strong>flotta presente</strong>. ' +
-        'A ogni round puoi: <strong>rinforzare</strong> (manda una flotta sul sistema, si unisce al round dopo), <strong>ritirare</strong> ' +
+        '<p>Difendono le <strong>Batterie ⊕</strong> / <strong>Scudi ◈</strong> della colonia e le <strong>flotte armate al pianeta ' +
+        'assediato</strong> (in porto o in orbita al corpo: gli estrattori che lavorano altrove nel sistema restano al loro posto). ' +
+        'A ogni round puoi: <strong>rinforzare</strong> (manda una flotta sul pianeta, si unisce al round dopo), <strong>ritirare</strong> ' +
         'le flotte (le difese restano sole), o <strong>pagare un tributo</strong> ai pirati per farli desistere.</p>' +
+        '<p>Nel riepilogo della vista <strong>Flotte</strong> ogni assedio è una <strong>card compatta</strong>: cliccala per la ' +
+        '<strong>pagina dettaglio</strong> con le forze in campo, il pronostico del round e la <strong>cronologia round-per-round</strong> ' +
+        '(quante navi/difese hai perso, evidenziato il round appena avvenuto). Di default questa pagina si apre <strong>da sola ad ogni ' +
+        'round</strong>; in <em>Preferenze → Dettaglio assedio automatico</em> puoi limitarla agli <em>eventi forti</em> o disattivarla.</p>' +
         '<p>Se le difese cadono la colonia viene <strong>saccheggiata</strong> (risorse, danni alle strutture, pop) — mai distrutta ' +
         'in un colpo. Ma una <strong>catena di sconfitte</strong> abbassa il <strong>morale d\'impero</strong> (produzione in calo) e ' +
         'alza la <strong>pressione</strong> nemica: reagisci con scelte oculate o rischi una spirale.</p>'
