@@ -338,7 +338,7 @@
       var proChip = cw.promotable
         ? '<span class="lp-crew-promochip" title="Vicino alla promozione">★</span>'
         : '';
-      return '<button class="lp-crew-row lp-crew-row--' + cw.status + '" type="button" ' +
+      return '<button class="lp-crew-row lp-crew-row--' + cw.status + (cw.promotable ? ' is-promo' : '') + '" type="button" ' +
           'data-crew-focus="1" ' +
           'data-status="' + esc(cw.status) + '" ' +
           'data-sys="' + (cw.systemId | 0) + '" ' +
