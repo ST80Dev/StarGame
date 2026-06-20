@@ -54,7 +54,7 @@
   --gap:          12px;
   --radius:       8px;
   --radius-sm:    4px;
-  --panel-left-w: 280px;
+  --panel-left-w: 312px;
   --panel-right-w:400px;
   --hud-top-h:    64px;
   --hud-bottom-h: 130px;
@@ -1879,6 +1879,10 @@ button { font-family: inherit; }
     flex: 0 1 auto;
     padding-bottom: calc(var(--mnav-h, 60px) + 20px);
   }
+  /* In modalità sheet (mobile) lo scroller è la sheet stessa, non
+     .panel__content → l'header sticky farebbe overlap col panel__header
+     (anch'esso sticky top:0). Disattiva la sticky qui. */
+  .panel--left .lp-stickyhead { position: static; }
   /* Sheet a tutto schermo = un solo contenitore scrollabile: la cronaca
      scorre con la sheet, non come scroll annidato (override del flex:1
      desktop che la farebbe scrollare a parte). */
@@ -6756,6 +6760,20 @@ select.main-menu__input { cursor: pointer; }
    e stile della Plancia Operativa dx). Riusa .planet-tabs/.planet-tab →
    glow identico; qui solo il layout del corpo della linguetta attiva. */
 .lp-tabs { margin-bottom: 8px; flex-shrink: 0; }
+/* Header sticky della Plancia d'Impero: nome impero + nav (Galassia/Gruppo/
+   Sistema/Pianeta) + linguette schede restano visibili durante lo scroll del
+   corpo della linguetta attiva. Usa il fondo solido del pannello per coprire
+   il contenuto che scorre sotto. */
+.lp-stickyhead {
+  position: sticky;
+  top: -1px;
+  z-index: 3;
+  background: var(--c-panel-solid, #101630);
+  padding-top: 1px;
+  margin: -1px -2px 0;
+  padding-left: 2px;
+  padding-right: 2px;
+}
 .lp-tab-body {
   display: flex; flex-direction: column; gap: 4px;
   flex: 1 1 auto; min-height: 0;
