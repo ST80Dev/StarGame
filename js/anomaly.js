@@ -206,19 +206,67 @@
     return null;
   }
 
-  /* Colonia su cui depositare il raccolto: origine della flotta, altrimenti
-     fallback (capitale/prima colonia via dispatch). */
-  function depositColonyKey(game, fleet) {
+  /* Colonia su cui depositare il raccolto (decisione utente 2026-06-20):
+     **colonia attiva più vicina al sito** in distanza-hop sui collegamenti
+     di galassia. Il giocatore può poi usare le rotte commerciali per
+     spostare le risorse altrove. Fallback: origine della flotta →
+     capitale/prima colonia colonizzata. BFS limitato ai sistemi del
+     grafo (niente vincolo discovery: il giacimento è "stato scoperto"
+     altrimenti la flotta non lo starebbe drenando). */
+  function nearestActiveColonyKey(game, sysId) {
+    if (!game || !game.colonies || !game.galaxy || !game.galaxy.systems) return null;
+    /* Indicizza colonie per sistema (solo quelle effettivamente colonizzate). */
+    const bySys = {};
+    Object.keys(game.colonies).forEach(function (k) {
+      const c = game.colonies[k];
+      if (!c || !c.colonized) return;
+      (bySys[c.systemId] = bySys[c.systemId] || []).push(k);
+    });
+    /* BFS sui link di galassia partendo dal sistema del sito. */
+    const seen = {}; seen[sysId] = 0;
+    const queue = [sysId];
+    while (queue.length) {
+      const u = queue.shift();
+      if (bySys[u]) return bySys[u][0];
+      const sys = game.galaxy.systems[u];
+      const links = (sys && sys.links) || [];
+      for (let i = 0; i < links.length; i++) {
+        const v = links[i];
+        if (seen[v] != null) continue;
+        seen[v] = seen[u] + 1;
+        queue.push(v);
+      }
+    }
+    return null;
+  }
+  function depositColonyKey(game, fleet, site) {
+    /* 1) Colonia attiva più vicina al sito (priorità nuova). Se non
+       conosciamo il `site`, lo cerchiamo via reverse-lookup sulla flotta
+       (caso raro: chiamanti vecchi). */
+    let s = site;
+    if (!s && fleet && game.anomalies) {
+      const ks = Object.keys(game.anomalies);
+      for (let i = 0; i < ks.length; i++) {
+        const cand = game.anomalies[ks[i]];
+        if (fleetSurveyingSite(game, cand.sysId, cand.kind, cand.bodyKey) === fleet) { s = cand; break; }
+      }
+    }
+    if (s) {
+      const near = nearestActiveColonyKey(game, s.sysId);
+      if (near) return near;
+    }
+    /* 2) Fallback: colonia d'origine della flotta. */
     const ok = fleet && fleet.ownerColonyKey;
     if (ok && game.colonies[ok] && game.colonies[ok].colonized) return ok;
+    /* 3) Fallback estremo: dispatch o prima colonia colonizzata. */
     if (ORION.dispatch && ORION.dispatch.payColonyKey) return ORION.dispatch.payColonyKey(game);
     const keys = Object.keys(game.colonies || {});
     for (let i = 0; i < keys.length; i++) if (game.colonies[keys[i]].colonized) return keys[i];
     return null;
   }
 
-  function deposit(game, fleet, res, amt) {
-    const k = depositColonyKey(game, fleet);
+  function deposit(game, fleet, res, amt, site) {
+    const k = depositColonyKey(game, fleet, site);
     const col = k && game.colonies[k];
     if (col && col.stock) col.stock[res] = (col.stock[res] || 0) + amt;
   }
@@ -303,7 +351,7 @@
           site.progress = (site.progress || 0) + 1;
           if (site.progress >= CFG.RELIC_HOLD) {
             site.explored = true;
-            const colKey = depositColonyKey(game, fleet);
+            const colKey = depositColonyKey(game, fleet, site);
             const col = colKey && game.colonies[colKey];
             if (col && col.stock) {
               Object.keys(CFG.RELIC_REWARD).forEach(function (r) { col.stock[r] = (col.stock[r] || 0) + CFG.RELIC_REWARD[r]; });
@@ -322,7 +370,7 @@
       if (fleet && site.reserve > 0) {
         const rate = harvestRateFor(game, fleet);
         const take = Math.min(rate, site.reserve);
-        deposit(game, fleet, site.res, take);
+        deposit(game, fleet, site.res, take, site);
         site.reserve -= take;
         site.harvested = (site.harvested || 0) + take;
         /* Usura/XP per Ι in survey (decisione utente 2026-06-16): le navi che
@@ -396,7 +444,7 @@
       if (!s || s.kind === 'reliquie' || !(s.reserve > 0)) return;
       const fleet = fleetSurveyingSite(game, s.sysId, s.kind, s.bodyKey);
       if (!fleet) return;
-      const colKey = depositColonyKey(game, fleet);
+      const colKey = depositColonyKey(game, fleet, s);
       if (!colKey) return;
       const rate = Math.min(harvestRateFor(game, fleet), s.reserve);
       if (rate <= 0) return;
