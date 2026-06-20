@@ -13850,7 +13850,7 @@ function renderLeftPanel() {
     bodyHtml = '<div class="lp-tab-body lp-tab-body--chron" data-bind="chronicle-host">' + cronHtml + '</div>';
   }
 
-  host.innerHTML = empHtml + navHorizontalHtml + tabsHtml + bodyHtml;
+  host.innerHTML = '<div class="lp-stickyhead">' + empHtml + navHorizontalHtml + tabsHtml + '</div>' + bodyHtml;
 
   /* Bind tab Equipaggi (richiesta utente 2026-06-16): ordinamento ciclico
      + click su riga (focus colonia o sistema/gruppo). Idempotente: cerca
