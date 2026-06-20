@@ -35,9 +35,13 @@
   /* Catalogo classi navi (Fase A). Parametri dalla scheda task M08. */
   const CLASSES = {
     explorer: {
+      /* fp: 2 — autodifesa minima (decisione utente 2026-06-20). Esplora
+         nell'ignoto: deve poter "graffiare" un raider improvviso, anche se
+         non è una nave da guerra. Tutte le statistiche restano derivate da
+         CLASSES → nessun bump di schema. */
       id: 'explorer', name: 'Scafo esploratore', glyph: '✦',
       cost: { met: 25, en: 12 }, time: 10,
-      hp: 20, fp: 0, speed: 1.1, crew: 1, hangarLvl: 1, maintMet: 0.05
+      hp: 20, fp: 2, speed: 1.1, crew: 1, hangarLvl: 1, maintMet: 0.05
     },
     /* Estrattore §17.3 (richiesta utente 2026-06-16): scafo industriale per
        il drenaggio sostenuto delle anomalie/cinture. Resta sul sito a

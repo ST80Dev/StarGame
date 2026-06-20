@@ -1613,8 +1613,22 @@
         combatants: battle.attacker.combatants
       };
       // Ricostruisci difensore dallo stato vivo: difese + flotte presenti
+      // AL CORPO ASSEDIATO (in porto alla colonia o in orbita a quel corpo).
+      // Una flotta che mina un'anomalia in un ALTRO corpo dello stesso sistema
+      // resta al suo lavoro: l'assedio è sul pianeta, non sul sistema intero.
+      // È compito del giocatore portar via per tempo gli estrattori parcheggiati
+      // sulla colonia se non vuole rischiarli (recovery-friendly #22: la scelta
+      // c'è, non è un fail-state nascosto).
       const defDef = C.forceFromDefenses(game, colony, colonyKey, 'B');
-      const present = fleetsPresentAt(game, battle.systemId);
+      const colonyBodyKey = (function () {
+        const parts = String(colonyKey).split(':');
+        return parts.length === 2 ? parts[1] : null;
+      })();
+      const F = root.ORION.fleet;
+      const present = fleetsPresentAt(game, battle.systemId).filter(function (f) {
+        const bk = (F && F.fleetCurrentBodyKey) ? F.fleetCurrentBodyKey(game, f) : null;
+        return bk != null && bk === colonyBodyKey;
+      });
       const defShips = [];
       for (let i = 0; i < present.length; i++) {
         const ff = C.forceFromFleet(game, present[i], 'B');

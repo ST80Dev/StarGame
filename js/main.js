@@ -7342,6 +7342,7 @@ function buildWarSection(g) {
       html += '<div class="war-siege' + (isAi ? ' war-siege--ai' : '') + '">' +
         '<div class="war-siege__head">Assedio di ' + colonyNameFromKey(b.colonyKey) +
           ' · round ' + (b.round | 0) + ' · ' + who + ' ' + atkHp + ' hp</div>' +
+        buildSiegeForcesPanel(ORION.game, b) +
         '<div class="war-siege__actions">' +
           '<button class="btn btn--mini btn--with-icon" data-action="siege-retreat" data-battle="' + escapeHtml(b.id) + '" type="button">' +
             uiIcon('refresh', 'cyan') + ' Ritira flotte</button>' +
@@ -7370,6 +7371,115 @@ function siegeTributeCost(battle) {
   const C = ORION.combat;
   const atkHp = C ? C.totalHp({ combatants: battle.attacker.combatants }) : 50;
   return { met: Math.round(atkHp * 0.6), en: Math.round(atkHp * 0.3) };
+}
+
+/* Pannello "Forze in campo" per un assedio in corso (decisione utente
+   2026-06-20: dare al giocatore una preview del rapporto di forze prima
+   del prossimo round, così può decidere se richiamare flotte o no).
+   Usa esattamente le stesse fonti del round vivo in time.js: difese della
+   colonia (forceFromDefenses) + flotte presenti AL CORPO assediato. */
+function buildSiegeForcesPanel(g, battle) {
+  const C = ORION.combat;
+  if (!C || !g) return '';
+  const colony = g.colonies && g.colonies[battle.colonyKey];
+  if (!colony) return '';
+  const parts = String(battle.colonyKey).split(':');
+  const colonyBodyKey = parts.length === 2 ? parts[1] : null;
+
+  /* ---- Difensori ---- */
+  const defForce = C.forceFromDefenses(g, colony, battle.colonyKey, 'B');
+  const defGroups = [];   // {label, count, hp, fp}
+
+  // Difese coloniali raggruppate per struttura (Batteria, Scudo, ...)
+  const byStruct = {};
+  defForce.combatants.forEach(function (c) {
+    const key = (c.src && c.src.structId) || c.kind;
+    if (!byStruct[key]) byStruct[key] = { label: c.label, count: 0, hp: 0, fp: 0 };
+    byStruct[key].count++;
+    byStruct[key].hp += c.hp;
+    byStruct[key].fp += C.combatantFp(c);
+  });
+  Object.keys(byStruct).forEach(function (k) { defGroups.push(byStruct[k]); });
+
+  // Flotte presenti al corpo assediato (stesso filtro di time.js)
+  const fleets = g.fleets || [];
+  let hasCannonFodder = false;
+  for (let i = 0; i < fleets.length; i++) {
+    const f = fleets[i];
+    if (!f || !f.location) continue;
+    if (f.location.systemId !== battle.systemId) continue;
+    if (f.location.status === 'in-transit') continue;
+    const bk = ORION.fleet && ORION.fleet.fleetCurrentBodyKey
+      ? ORION.fleet.fleetCurrentBodyKey(g, f) : null;
+    if (bk == null || bk !== colonyBodyKey) continue;
+    const ff = C.forceFromFleet(g, f, 'B');
+    const fhp = C.totalHp(ff);
+    const ffp = C.totalFp(ff);
+    defGroups.push({
+      label: '🚀 ' + escapeHtml(f.name || 'Flotta'),
+      count: f.ships.length, hp: fhp, fp: ffp,
+      isFleet: true
+    });
+    if (ffp <= 0 && f.ships.length > 0) hasCannonFodder = true;
+  }
+
+  /* ---- Attaccante ---- */
+  const atk = { combatants: battle.attacker.combatants || [] };
+  const atkHp = C.totalHp(atk);
+  let atkFp = 0;
+  const atkByKind = {};
+  atk.combatants.forEach(function (c) {
+    const k = c.kind || 'unit';
+    if (!atkByKind[k]) atkByKind[k] = { label: c.label, count: 0, hp: 0 };
+    atkByKind[k].count++;
+    atkByKind[k].hp += c.hp;
+    atkFp += C.combatantFp(c);
+  });
+
+  /* ---- Totali e pronostico ---- */
+  const defHp = defGroups.reduce(function (a, g) { return a + g.hp; }, 0);
+  const defFp = defGroups.reduce(function (a, g) { return a + g.fp; }, 0);
+  const ratio = atkFp > 0 ? (defFp / atkFp) : (defFp > 0 ? Infinity : 1);
+  let forecast, forecastCls;
+  if (defGroups.length === 0) { forecast = 'difesa nulla — assedio perso al prossimo round'; forecastCls = 'lose'; }
+  else if (ratio === Infinity) { forecast = 'attaccante senza fuoco'; forecastCls = 'win'; }
+  else if (ratio >= 1.5) { forecast = 'difesa in vantaggio (' + ratio.toFixed(1) + '×)'; forecastCls = 'win'; }
+  else if (ratio >= 0.8) { forecast = 'equilibrio (' + ratio.toFixed(1) + '×)'; forecastCls = 'even'; }
+  else { forecast = 'difesa sotto (' + ratio.toFixed(1) + '×) — valuta rinforzi'; forecastCls = 'lose'; }
+
+  function row(g) {
+    const cnt = g.count > 1 ? (' ×' + g.count) : '';
+    return '<li>' + g.label + cnt +
+      ' · <span class="war-forces__hp">' + Math.round(g.hp) + ' hp</span>' +
+      ' · <span class="war-forces__fp">fp ' + Math.round(g.fp || 0) + '</span></li>';
+  }
+  function atkRow(g) {
+    const cnt = g.count > 1 ? (' ×' + g.count) : '';
+    return '<li>' + escapeHtml(g.label) + cnt +
+      ' · <span class="war-forces__hp">' + Math.round(g.hp) + ' hp</span></li>';
+  }
+
+  let html = '<div class="war-forces">';
+  html += '<div class="war-forces__col war-forces__col--def">';
+  html += '<h5>Difensori · ' + Math.round(defHp) + ' hp · fp ' + Math.round(defFp) + '</h5>';
+  if (defGroups.length) {
+    html += '<ul>' + defGroups.map(row).join('') + '</ul>';
+  } else {
+    html += '<p class="war-forces__empty">Nessun difensore al pianeta. Manda una flotta sul corpo o costruisci difese.</p>';
+  }
+  if (hasCannonFodder) {
+    html += '<p class="war-forces__warn">' + uiIcon('warning', 'gold') +
+      ' Flotte senza armi al pianeta: assorbono colpi senza restituirli. Considera di spostarle.</p>';
+  }
+  html += '</div>';
+  html += '<div class="war-forces__col war-forces__col--atk">';
+  html += '<h5>Attaccante · ' + Math.round(atkHp) + ' hp · fp ' + Math.round(atkFp) + '</h5>';
+  html += '<ul>' + Object.keys(atkByKind).map(function (k) { return atkRow(atkByKind[k]); }).join('') + '</ul>';
+  html += '</div>';
+  html += '<p class="war-forces__forecast war-forces__forecast--' + forecastCls + '">' +
+    'Pronostico round: <strong>' + forecast + '</strong></p>';
+  html += '</div>';
+  return html;
 }
 
 /* Veteranità di una flotta (§12.3): righe per le navi non-Verdi. */
@@ -7838,12 +7948,20 @@ function handleSiegeRetreat(battleId, stage) {
   const g = ORION.game;
   const battle = (g.battles || []).filter(function (b) { return b.id === battleId; })[0];
   if (!battle) { renderFleetView(stage); return; }
+  // Disimpegna le flotte che stanno DIFENDENDO la colonia (stesso filtro
+  // del round d'assedio: al corpo assediato). Chi mina un'anomalia altrove
+  // nel sistema non viene toccato: non è in combattimento.
+  const parts = String(battle.colonyKey || '').split(':');
+  const colonyBodyKey = parts.length === 2 ? parts[1] : null;
   let n = 0;
   (g.fleets || []).forEach(function (f) {
-    if (f.location && f.location.systemId === battle.systemId && f.location.status !== 'in-transit') {
-      const r = ORION.fleet.setOrder(g, f, { type: 'return' });
-      if (r.ok) n++;
-    }
+    if (!f.location || f.location.systemId !== battle.systemId) return;
+    if (f.location.status === 'in-transit') return;
+    const bk = ORION.fleet.fleetCurrentBodyKey
+      ? ORION.fleet.fleetCurrentBodyKey(g, f) : null;
+    if (bk == null || bk !== colonyBodyKey) return;
+    const r = ORION.fleet.setOrder(g, f, { type: 'return' });
+    if (r.ok) n++;
   });
   showToast(n ? (n + ' flotta/e in ritirata') : 'Nessuna flotta da ritirare');
   persistGame(g);
