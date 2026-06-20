@@ -4746,6 +4746,19 @@ function anomalyKindMeta(kind) {
   return { label: kind, res: null };
 }
 
+/* Icona + tinta canoniche per tipo di anomalia/giacimento.
+   Richiesta utente 2026-06-20: differenziare cinture/detriti/nebulose/
+   gassosi/reliquie con icone glow coerenti (UI_GUIDE §3) invece del solo
+   testo. Glow è già fornito da .ui-icon-svg (drop-shadow currentColor). */
+function anomalyKindIcon(kind) {
+  if (kind === 'detriti')  return uiIcon('fspEmis', 'cyan');   /* scintille metalliche */
+  if (kind === 'cintura')  return uiIcon('dotCircle', 'cyan'); /* anello di asteroidi */
+  if (kind === 'nebulosa') return uiIcon('fspBio', 'amber');   /* nube concentrica */
+  if (kind === 'gassoso')  return uiIcon('fspGrav', 'amber');  /* orbita gravitazionale */
+  if (kind === 'reliquie') return uiIcon('fspRelic', 'violet');/* esagono reliquia */
+  return uiIcon('star', 'soft');
+}
+
 /* Etichetta breve della risorsa per UI "raccolti X met". */
 function resShortLabel(res) {
   if (res === 'met') return 'met';
@@ -6097,6 +6110,29 @@ function economyAnomaliesHtml(g) {
     sumCell('star', round1(sumEn) + '/' + iU(), activeEn + ' siti · energia', 'is-en') +
   '</section>';
 
+  /* Ripartizione per colonia ricevente (richiesta utente 2026-06-20):
+     il raccolto va in capo alla COLONIA D'ORIGINE della flotta — non
+     alla più vicina al sito — quindi qui mostriamo esplicitamente
+     "+X met/Ι · +Y en/Ι" per ogni colonia attualmente beneficiaria. */
+  const byColony = (ORION.anomaly && ORION.anomaly.harvestByColony) ? ORION.anomaly.harvestByColony(g) : {};
+  const colKeys = Object.keys(byColony).sort(function (a, b) { return byColony[b].total - byColony[a].total; });
+  let byColonyHtml = '';
+  if (colKeys.length) {
+    byColonyHtml = '<section class="econ-bycol" aria-label="Surplus estrattivo per colonia">' +
+      '<h3 class="econ-bycol__h">Ripartizione per colonia</h3>' +
+      '<ul class="econ-bycol__list">' + colKeys.map(function (ck) {
+        const r = byColony[ck];
+        let chips = '';
+        if (r.met > 0) chips += '<span class="econ-bycol__chip is-met">+' + round1(r.met) + ' met/' + iU() + ' <em>· ' + r.sitesMet + (r.sitesMet === 1 ? ' sito' : ' siti') + '</em></span>';
+        if (r.en  > 0) chips += '<span class="econ-bycol__chip is-en">+' + round1(r.en) + ' en/' + iU() + ' <em>· ' + r.sitesEn + (r.sitesEn === 1 ? ' sito' : ' siti') + '</em></span>';
+        return '<li class="econ-bycol__row">' +
+          '<span class="econ-bycol__name">' + escapeHtml(systemNameFromKey(g, ck)) + '</span>' +
+          '<span class="econ-bycol__chips">' + chips + '</span>' +
+        '</li>';
+      }).join('') + '</ul>' +
+    '</section>';
+  }
+
   const sites = allSites.filter(passFilter);
   let body;
   if (!sites.length) {
@@ -6174,7 +6210,9 @@ function economyAnomaliesHtml(g) {
         const inboundBadge = (!s.harvesting && inboundTransit.length)
           ? '<span class="econ-item__live econ-item__live--enroute" title="Flotta in viaggio verso il sito">✈ in viaggio</span>'
           : '';
-        return '<li class="econ-item' + (s.harvesting ? ' is-harvesting' : (inboundTransit.length ? ' is-enroute' : '')) + '">' +
+        const kindIcon = anomalyKindIcon(s.kind);
+        return '<li class="econ-item econ-item--' + escapeHtml(s.kind) + (s.harvesting ? ' is-harvesting' : (inboundTransit.length ? ' is-enroute' : '')) + '">' +
+          '<span class="econ-item__glyph" aria-hidden="true">' + kindIcon + '</span>' +
           '<div class="econ-item__main">' +
             '<div class="econ-item__head">' +
               '<span class="econ-item__kind">' + meta.label + '</span>' +
@@ -6187,14 +6225,17 @@ function economyAnomaliesHtml(g) {
               harvestTxt +
             '</div>' +
           '</div>' +
-          '<button class="btn btn--mini btn--primary econ-item__send" data-action="econ-anom-send" data-sys="' + s.sysId + '" data-kind="' + s.kind + '"' + bodyAttr + colAttr + ' type="button"' +
-            (canSend ? '' : ' disabled') + ' title="' + escapeHtml(sendTitle) + '">Invia flotta</button>' +
+          '<button class="econ-item__send" data-action="econ-anom-send" data-sys="' + s.sysId + '" data-kind="' + s.kind + '"' + bodyAttr + colAttr + ' type="button"' +
+            (canSend ? '' : ' disabled') + ' title="' + escapeHtml(sendTitle) + '">' +
+            '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('send')) || '→') + '</span>' +
+            '<span class="econ-item__send-lbl">Invia</span>' +
+          '</button>' +
         '</li>';
       }).join('') + '</ul>');
       return '<section class="econ-group' + (collapsed ? ' is-collapsed' : '') + '">' + head + items + '</section>';
     }).join('') + '</div>';
   }
-  return summary + chips + body;
+  return summary + byColonyHtml + chips + body;
 }
 
 /* Sezione Scambi con le AI (export rifiuti). Read + chiusura contratto; i

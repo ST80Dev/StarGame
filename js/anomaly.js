@@ -381,6 +381,34 @@
     });
   }
 
+  /* Surplus estrattivo per colonia (in capo all'origine della flotta che
+     drena, NON alla colonia più vicina al sito). Ritorna una mappa
+     { [colKey]: { met, en, sitesMet, sitesEn, fleets, total } } usata
+     dalla UI (vista Anomalie & sfruttamenti + scheda risorse colonia)
+     per mostrare in modo esplicito da dove vengono i +X met/Ι extra.
+     Stesso calcolo di `tick`: harvestRateFor (scala con Hangar) sul lato
+     attivo del sito, cappato da reserve. */
+  function harvestByColony(game) {
+    const out = {};
+    if (!game || !game.anomalies) return out;
+    Object.keys(game.anomalies).forEach(function (k) {
+      const s = game.anomalies[k];
+      if (!s || s.kind === 'reliquie' || !(s.reserve > 0)) return;
+      const fleet = fleetSurveyingSite(game, s.sysId, s.kind, s.bodyKey);
+      if (!fleet) return;
+      const colKey = depositColonyKey(game, fleet);
+      if (!colKey) return;
+      const rate = Math.min(harvestRateFor(game, fleet), s.reserve);
+      if (rate <= 0) return;
+      const slot = out[colKey] = out[colKey] || { met: 0, en: 0, sitesMet: 0, sitesEn: 0, fleets: 0, total: 0 };
+      slot.fleets += 1;
+      slot.total  += rate;
+      if (s.res === 'met') { slot.met += rate; slot.sitesMet += 1; }
+      else if (s.res === 'en') { slot.en += rate; slot.sitesEn += 1; }
+    });
+    return out;
+  }
+
   ORION.anomaly = {
     CFG: CFG,
     KINDS: KINDS,
@@ -389,6 +417,7 @@
     tick: tick,
     nextEventDelta: nextEventDelta,
     knownSites: knownSites,
+    harvestByColony: harvestByColony,
     bodyGiacimento: bodyGiacimento
   };
 })(typeof window !== 'undefined' ? window : this);
