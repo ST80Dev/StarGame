@@ -3219,7 +3219,7 @@ select.main-menu__input { cursor: pointer; }
 }
 .lp-crew-totals strong { color: #f0d8a0; }
 .lp-crew-totals__sep { opacity: 0.4; }
-.lp-crew-pro { color: #f0d8a0; }
+/* .lp-crew-pro: stile esteso sotto (insieme alle altre regole "promo"). */
 .lp-crew-sort,
 .lp-crew-open {
   display: inline-flex;
@@ -3315,9 +3315,24 @@ select.main-menu__input { cursor: pointer; }
   font-family: var(--font-mono, monospace);
 }
 .lp-crew-promochip {
-  color: #f0d8a0;
+  color: #f0d670;
   margin-left: 4px;
-  font-size: 0.9em;
+  font-size: 1.05em;
+  filter: drop-shadow(0 0 4px rgba(240, 214, 112, 0.7));
+}
+/* Riga "vicino alla promozione": è la ragione del lampeggio della linguetta
+   Equipaggi (decisione utente). Bordo sx gold + tinta soffusa così l'utente
+   capisce subito chi è promuovibile aprendo la sezione. */
+.lp-crew-row.is-promo {
+  border-left: 3px solid #f0d670;
+  background: linear-gradient(180deg, rgba(240, 214, 112, 0.08), rgba(240, 214, 112, 0.03));
+}
+/* Totale "★ N" nella card di intestazione: in evidenza quando >0, così
+   il numero è chiaramente legato al motivo dell'alert sulla linguetta. */
+.lp-crew-pro {
+  color: #f0d670;
+  font-weight: 600;
+  filter: drop-shadow(0 0 4px rgba(240, 214, 112, 0.45));
 }
 
 /* Vista centrale espansa */
