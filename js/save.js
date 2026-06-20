@@ -256,7 +256,13 @@
       /* M18.x (richiesta utente 2026-06-18): flotte ambientali AI in volo
          (schema 32, additivo). Save vecchi → lista vuota: si ripopola dal
          seed giocando. */
-      aiFleets: Array.isArray(game.aiFleets) ? game.aiFleets : []
+      aiFleets: Array.isArray(game.aiFleets) ? game.aiFleets : [],
+      /* M-journal (Diario Strategico): appunti del giocatore. Additivo /
+         lazy-init: NIENTE bump di schemaVersion (i save vecchi caricano e
+         ORION.journal.ensure() crea la struttura vuota al boot). */
+      journal: (ORION.journal && ORION.journal.serialize)
+        ? ORION.journal.serialize(game)
+        : ((game.journal && typeof game.journal === 'object') ? game.journal : { pins: [], nextId: 1 })
     };
   }
 

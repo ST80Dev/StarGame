@@ -893,6 +893,15 @@ function newGame(seed, opts) {
     if (Array.isArray(saved.battles)) ORION.game.battles = saved.battles.slice();
     /* M18.x (richiesta utente 2026-06-18): flotte ambientali AI in volo. */
     if (Array.isArray(saved.aiFleets)) ORION.game.aiFleets = saved.aiFleets.slice();
+    /* M-journal (Diario Strategico): applica lo stato del Diario dal save.
+       Additivo / lazy: se il save non ha `journal`, l'ensure al boot crea
+       la struttura vuota. */
+    if (saved.journal && typeof saved.journal === 'object') {
+      ORION.game.journal = {
+        pins: Array.isArray(saved.journal.pins) ? saved.journal.pins.slice() : [],
+        nextId: (typeof saved.journal.nextId === 'number') ? saved.journal.nextId : 1
+      };
+    }
     if (saved.warState && typeof saved.warState === 'object') ORION.game.warState = saved.warState;
     /* M09 Fase B: sconfitta + verbi morali. */
     if (saved.defeated !== undefined) ORION.game.defeated = saved.defeated;
@@ -1034,6 +1043,10 @@ function newGame(seed, opts) {
      lista immutabile dal seed (cache su galaxy._phenomena). Idempotente:
      funziona identico su partita nuova e su save pre-FSP (delta vuoto → tutti
      a "Eco"). Niente rendering/interazione qui (Fasi 2-3). */
+  /* M-journal: lazy-init del Diario Strategico. Idempotente. */
+  if (ORION.journal && ORION.journal.ensure) {
+    ORION.journal.ensure(ORION.game);
+  }
   if (ORION.phenomena && ORION.phenomena.ensure) {
     ORION.phenomena.ensure(ORION.game);
     /* Baseline SILENZIOSA al boot/load: marca a CONTATTO gli FSP già in zone
@@ -14268,6 +14281,8 @@ function renderLeftPanel() {
      eventi importanti non visti (e la tab Cronaca non è quella attiva). */
   const chronUnreadAny = !!((ORION.chronicleUnread && (ORION.chronicleUnread.galaxy || ORION.chronicleUnread.colony)));
   lpTabs.push({ id: 'chronicle', iconName: 'chronicle', tone: 'green', label: 'Cronaca', alert: chronUnreadAny ? 'info' : null });
+  /* M-journal: Diario Strategico — appunti del giocatore. */
+  lpTabs.push({ id: 'journal',   iconName: 'pin',       tone: 'amber', label: 'Diario',  alert: null });
 
   /* Linguetta attiva: se 'council' ma il Consiglio non è costituito, fallback. */
   let activeLp = ORION.lpTab;
@@ -14304,6 +14319,8 @@ function renderLeftPanel() {
     bodyHtml = '<div class="lp-tab-body">' + councilBody + '</div>';
   } else if (activeLp === 'chronicle') {
     bodyHtml = '<div class="lp-tab-body lp-tab-body--chron" data-bind="chronicle-host">' + cronHtml + '</div>';
+  } else if (activeLp === 'journal') {
+    bodyHtml = '<div class="lp-tab-body lp-tab-body--journal" data-bind="journal-host">' + journalSidebarHtml() + '</div>';
   }
 
   host.innerHTML = '<div class="lp-stickyhead">' + empHtml + navHorizontalHtml + tabsHtml + '</div>' + bodyHtml;
@@ -14363,6 +14380,9 @@ function renderLeftPanel() {
   /* Identità popolo: click sul banner → editor (decisione #65). */
   const empBtn = host.querySelector('[data-action="empire-edit"]');
   if (empBtn) empBtn.addEventListener('click', openEmpireEditor);
+
+  /* M-journal: bind handlers Diario (se la tab è attiva). */
+  if (activeLp === 'journal') bindJournalSidebar(host);
 
   /* Bind handlers — linguette: cambia ORION.lpTab e ridisegna.
      Aprendo la tab Cronaca azzeriamo l'aura della sezione attualmente
@@ -15153,6 +15173,20 @@ function renderContextActionBar(ctx) {
       buttons.push('<button class="actionbar__btn btn--with-icon" data-action="ctx-garrison" data-sys="' + sysId + '" data-body="' + escapeHtml(planet.bodyKey) + '" title="Schiera una tua flotta in osservazione di questo pianeta. Una minaccia in arrivo metterà in pausa il tempo e ti chiederà cosa fare.">' +
         icnHtml('shield', 'cyan') + ' Schiera in difesa</button>');
     }
+    /* M-journal: appunta il pianeta nel Diario. */
+    buttons.push('<button class="actionbar__btn btn--with-icon" data-action="ctx-pin" data-pin-kind="planet" data-sys="' + sysId + '" data-body="' + escapeHtml(planet.bodyKey) + '" title="Appunta nel Diario Strategico">' +
+      icnHtml('pin', 'amber') + ' 📌 Appunta</button>');
+  }
+
+  /* M-journal: appunta il sistema (livello system con o senza corpo). */
+  if (ctx && ctx.level === 'system' && ctx.systemId != null) {
+    if (ctx.bodyKey) {
+      buttons.push('<button class="actionbar__btn btn--with-icon" data-action="ctx-pin" data-pin-kind="planet" data-sys="' + ctx.systemId + '" data-body="' + escapeHtml(ctx.bodyKey) + '" title="Appunta questo corpo nel Diario Strategico">' +
+        icnHtml('pin', 'amber') + ' 📌 Appunta</button>');
+    } else {
+      buttons.push('<button class="actionbar__btn btn--with-icon" data-action="ctx-pin" data-pin-kind="system" data-sys="' + ctx.systemId + '" title="Appunta il sistema nel Diario Strategico">' +
+        icnHtml('pin', 'amber') + ' 📌 Appunta</button>');
+    }
   }
 
   /* PR-N: l'action bar a livello sistema appare anche con la sola info
@@ -15212,6 +15246,431 @@ function renderContextActionBar(ctx) {
     }
     if (p) tryColonize(p);
   });
+  /* M-journal: 📌 Appunta dall'action bar. */
+  host.querySelectorAll('[data-action="ctx-pin"]').forEach(function (pb) {
+    pb.addEventListener('click', function () {
+      const kind = pb.dataset.pinKind || 'system';
+      const sysId = parseInt(pb.dataset.sys, 10);
+      const bodyKey = pb.dataset.body || null;
+      openJournalPinModal({ kind: kind, sysId: sysId, bodyKey: bodyKey });
+    });
+  });
+}
+
+/* =====================================================================
+   M-journal — Diario Strategico: helper UI (sidebar + overlay nuovo pin)
+   ===================================================================== */
+/* Stato volatile UI (non nel save): filtro categoria + toggle "mostra
+   risolti/archiviati". */
+ORION.journalFilter = ORION.journalFilter || 'all';
+ORION.journalShowDone = !!ORION.journalShowDone;
+
+function journalCatTintClass(tint) {
+  /* Mappa tint del catalogo CATS a classe ui-icon-- esistente. */
+  switch (tint) {
+    case 'info':   return 'cyan';   // azzurro non ha classe dedicata, fallback cyan
+    case 'amber':  return 'amber';
+    case 'pink':   return 'pink';
+    case 'violet': return 'violet';
+    case 'soft':   return 'soft';
+    default:       return 'cyan';
+  }
+}
+
+function journalRefLabel(g, kind, idOrKey) {
+  /* Snapshot leggibile del riferimento — viene memorizzato così
+     se il ref viene rimosso/distrutto rimane comunque visibile. */
+  try {
+    if (kind === 'system') {
+      const sid = parseInt(idOrKey, 10);
+      const s = g && g.galaxy && g.galaxy.systems && g.galaxy.systems[sid];
+      return s ? s.name : ('Sistema #' + sid);
+    }
+    if (kind === 'planet') {
+      // idOrKey atteso = "sysId:bodyKey"
+      const parts = String(idOrKey).split(':');
+      const sid = parseInt(parts[0], 10);
+      const bk = parts[1] || '';
+      const s = g && g.galaxy && g.galaxy.systems && g.galaxy.systems[sid];
+      if (s && ORION.system && ORION.system.generate) {
+        try {
+          const ss = ORION.system.generate(g.galaxy, sid);
+          const body = ss && ORION.system.findBody(ss, bk);
+          if (body) return body.name + ' · ' + s.name;
+        } catch (_) {}
+      }
+      return s ? s.name : ('Pianeta ' + idOrKey);
+    }
+    if (kind === 'fleet') {
+      const f = (g.fleets || []).find(function (x) { return x && x.id === idOrKey; });
+      return f ? f.name : ('Flotta ' + idOrKey);
+    }
+    if (kind === 'civ') {
+      const c = (g.civs || []).find(function (x) { return x && x.id === idOrKey; });
+      return c ? c.name : ('Civiltà ' + idOrKey);
+    }
+    if (kind === 'tech') {
+      return 'Ricerca ' + idOrKey;
+    }
+  } catch (_) {}
+  return String(idOrKey || '—');
+}
+
+function journalSidebarHtml() {
+  const g = ORION.game;
+  if (!g) return '';
+  if (ORION.journal && ORION.journal.ensure) ORION.journal.ensure(g);
+  const J = ORION.journal;
+  const pins = (g.journal && Array.isArray(g.journal.pins)) ? g.journal.pins : [];
+
+  /* Conteggi per categoria (status active). */
+  const counts = { all: 0 };
+  J.CATS.forEach(function (c) { counts[c.key] = 0; });
+  pins.forEach(function (p) {
+    if (!p || p.status !== 'active') return;
+    counts.all++;
+    if (counts[p.cat] != null) counts[p.cat]++;
+  });
+
+  const cur = ORION.journalFilter || 'all';
+  const chips = ['<button class="deck-chip lp-journal__chip' + (cur === 'all' ? ' is-active' : '') + '" data-jchip="all" type="button">Tutti <span class="lp-journal__cnt">' + counts.all + '</span></button>']
+    .concat(J.CATS.map(function (c) {
+      const tint = journalCatTintClass(c.tint);
+      const cls = 'deck-chip lp-journal__chip lp-journal__chip--' + tint + (cur === c.key ? ' is-active' : '');
+      return '<button class="' + cls + '" data-jchip="' + c.key + '" type="button" title="' + escapeHtml(c.label) + '">' +
+        '<span class="ui-icon ui-icon--' + tint + '" aria-hidden="true">' + ((ORION.icon && ORION.icon(c.iconName)) || '') + '</span>' +
+        '<span class="lp-journal__cnt">' + counts[c.key] + '</span>' +
+      '</button>';
+    }))
+    .join('');
+
+  /* Filtra lista visibile. */
+  const wantStatus = ORION.journalShowDone ? 'any' : 'active';
+  const visible = pins.filter(function (p) {
+    if (!p) return false;
+    if (!ORION.journalShowDone && p.status !== 'active') return false;
+    if (cur !== 'all' && p.cat !== cur) return false;
+    return true;
+  });
+
+  let listHtml;
+  if (!visible.length) {
+    listHtml = '<p class="lp-empty">Nessun appunto. Naviga e usa <strong>📌 Appunta</strong> su sistema, pianeta, flotta, civiltà o tech.</p>';
+  } else {
+    /* Ordina: priorità (hi > med > lo), poi i più recenti in coda all'array per ultimi. */
+    const PR = { hi: 0, med: 1, lo: 2 };
+    const sorted = visible.slice().sort(function (a, b) {
+      const pa = PR[a.tags && a.tags.priority] != null ? PR[a.tags && a.tags.priority] : 1;
+      const pb = PR[b.tags && b.tags.priority] != null ? PR[b.tags && b.tags.priority] : 1;
+      if (pa !== pb) return pa - pb;
+      const ai = parseInt(String(a.id || '0').split('_')[1] || '0', 10);
+      const bi = parseInt(String(b.id || '0').split('_')[1] || '0', 10);
+      return bi - ai;
+    });
+    listHtml = sorted.map(function (p) {
+      const cm = J.catMeta(p.cat);
+      const tint = journalCatTintClass(cm.tint);
+      const icon = (ORION.icon && ORION.icon(cm.iconName)) || '';
+      const prio = (p.tags && p.tags.priority) || 'med';
+      const prioCls = prio === 'hi' ? 'crit' : (prio === 'lo' ? 'ok' : 'warn');
+      const prioLbl = J.PRIORITY_LABEL[prio] || 'Media';
+      const noteHtml = p.note ? ('<span class="lp-journal__note">' + escapeHtml(p.note) + '</span>') : '';
+      const refLbl = p.refLabel || (p.ref ? journalRefLabel(g, p.ref.kind, p.ref.id) : '—');
+      const statusCls = p.status === 'active' ? '' : ' is-done';
+      let extraTagHtml = '';
+      if (p.cat === 'presidio' && p.tags && p.tags.role) {
+        extraTagHtml = '<span class="lp-journal__tag">' + escapeHtml(J.ROLE_LABEL[p.tags.role] || p.tags.role) + '</span>';
+      } else if (p.cat === 'colonize' && p.tags && p.tags.reason) {
+        extraTagHtml = '<span class="lp-journal__tag">' + escapeHtml(J.REASON_LABEL[p.tags.reason] || p.tags.reason) + '</span>';
+      }
+      return '<div class="lp-journal__item' + statusCls + '" data-jid="' + escapeHtml(p.id) + '">' +
+        '<button class="lp-journal__row" type="button" data-jaction="focus" data-jid="' + escapeHtml(p.id) + '" title="Vai al riferimento">' +
+          '<span class="lp-journal__glyph ui-icon ui-icon--' + tint + '" aria-hidden="true">' + icon + '</span>' +
+          '<span class="lp-journal__body">' +
+            '<span class="lp-journal__head">' +
+              '<strong class="lp-journal__ref">' + escapeHtml(refLbl) + '</strong>' +
+              '<span class="lp-item__badge lp-item__badge--' + prioCls + '" title="Priorità: ' + escapeHtml(prioLbl) + '">' + escapeHtml(prio.toUpperCase()) + '</span>' +
+              extraTagHtml +
+            '</span>' +
+            noteHtml +
+          '</span>' +
+        '</button>' +
+        '<div class="lp-journal__ops">' +
+          (p.status === 'active'
+            ? '<button class="btn btn--mini" type="button" data-jaction="resolve" data-jid="' + escapeHtml(p.id) + '" title="Segna come risolto">✓</button>'
+            : '<button class="btn btn--mini" type="button" data-jaction="reopen" data-jid="' + escapeHtml(p.id) + '" title="Riapri">↺</button>') +
+          '<button class="btn btn--mini" type="button" data-jaction="delete" data-jid="' + escapeHtml(p.id) + '" title="Elimina">' +
+            ((ORION.icon && ORION.icon('trash')) || '✕') +
+          '</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  const toggleLbl = ORION.journalShowDone ? 'Nascondi risolti' : 'Mostra risolti';
+  return '<div class="lp-journal">' +
+    '<div class="lp-journal__chips">' + chips + '</div>' +
+    '<div class="lp-journal__list">' + listHtml + '</div>' +
+    '<div class="lp-journal__foot">' +
+      '<button class="btn btn--mini" type="button" data-jaction="toggle-done">' + escapeHtml(toggleLbl) + '</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function bindJournalSidebar(host) {
+  if (!host) return;
+  const g = ORION.game;
+  host.querySelectorAll('[data-jchip]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      ORION.journalFilter = b.dataset.jchip;
+      renderLeftPanel();
+    });
+  });
+  const toggle = host.querySelector('[data-jaction="toggle-done"]');
+  if (toggle) toggle.addEventListener('click', function () {
+    ORION.journalShowDone = !ORION.journalShowDone;
+    renderLeftPanel();
+  });
+  host.querySelectorAll('[data-jaction="resolve"]').forEach(function (b) {
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      ORION.journal.setStatus(g, b.dataset.jid, 'resolved');
+      persistGame(g);
+      renderLeftPanel();
+    });
+  });
+  host.querySelectorAll('[data-jaction="reopen"]').forEach(function (b) {
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      ORION.journal.setStatus(g, b.dataset.jid, 'active');
+      persistGame(g);
+      renderLeftPanel();
+    });
+  });
+  host.querySelectorAll('[data-jaction="delete"]').forEach(function (b) {
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      ORION.journal.removePin(g, b.dataset.jid);
+      persistGame(g);
+      renderLeftPanel();
+    });
+  });
+  host.querySelectorAll('[data-jaction="focus"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const id = b.dataset.jid;
+      const pin = (g.journal && g.journal.pins || []).find(function (p) { return p && p.id === id; });
+      if (!pin || !pin.ref) return;
+      focusJournalRef(pin.ref);
+    });
+  });
+}
+
+function focusJournalRef(ref) {
+  if (!ref || !ref.kind) return;
+  try {
+    if (ref.kind === 'system') {
+      const sid = parseInt(ref.id, 10);
+      if (!isNaN(sid)) {
+        if (typeof openSystem === 'function') openSystem(sid);
+        else if (ORION.map && ORION.map.focusSystem) ORION.map.focusSystem(sid);
+      }
+    } else if (ref.kind === 'planet') {
+      const parts = String(ref.id).split(':');
+      const sid = parseInt(parts[0], 10);
+      const bk = parts[1];
+      if (!isNaN(sid)) {
+        if (typeof openSystem === 'function') openSystem(sid);
+        if (bk && typeof openPlanet === 'function') openPlanet(sid, bk);
+      }
+    } else if (ref.kind === 'fleet') {
+      if (typeof navigateView === 'function') navigateView('fleet');
+    } else if (ref.kind === 'civ') {
+      ORION.pendingCivFocus = ref.id;
+      if (typeof navigateView === 'function') navigateView('civ');
+    } else if (ref.kind === 'tech') {
+      if (typeof navigateView === 'function') navigateView('research');
+    }
+  } catch (_) {}
+}
+
+/* ---- Overlay nuovo-pin --------------------------------------------- */
+function openJournalPinModal(seed) {
+  const host = document.querySelector('[data-bind="journal-pin-modal"]');
+  if (!host) return;
+  const g = ORION.game;
+  if (!g || !ORION.journal) return;
+  ORION.journal.ensure(g);
+  seed = seed || {};
+
+  /* Deduzioni dal contesto. */
+  let initKind = seed.kind || null;
+  let initId = null;
+  let initLabel = '';
+  if (initKind === 'system' && seed.sysId != null) {
+    initId = seed.sysId;
+    initLabel = journalRefLabel(g, 'system', seed.sysId);
+  } else if (initKind === 'planet' && seed.sysId != null && seed.bodyKey) {
+    initId = seed.sysId + ':' + seed.bodyKey;
+    initLabel = journalRefLabel(g, 'planet', initId);
+  } else if (initKind === 'fleet' && seed.fleetId) {
+    initId = seed.fleetId;
+    initLabel = journalRefLabel(g, 'fleet', initId);
+  } else if (initKind === 'civ' && seed.civId) {
+    initId = seed.civId;
+    initLabel = journalRefLabel(g, 'civ', initId);
+  } else if (initKind === 'tech' && seed.techId) {
+    initId = seed.techId;
+    initLabel = journalRefLabel(g, 'tech', initId);
+  }
+
+  /* Categoria di default sensata: planet → colonize, civ → diplo, tech → tech. */
+  let defaultCat = 'note';
+  if (initKind === 'planet') defaultCat = 'colonize';
+  else if (initKind === 'system') defaultCat = 'presidio';
+  else if (initKind === 'civ') defaultCat = 'diplo';
+  else if (initKind === 'tech') defaultCat = 'tech';
+  else if (initKind === 'fleet') defaultCat = 'target';
+
+  const state = {
+    cat: defaultCat,
+    priority: 'med',
+    role: '',
+    reason: '',
+    note: ''
+  };
+
+  function render() {
+    const J = ORION.journal;
+    const catBtns = J.CATS.map(function (c) {
+      const tint = journalCatTintClass(c.tint);
+      const isAct = (c.key === state.cat);
+      return '<button class="journal-modal__cat' + (isAct ? ' is-active' : '') + '" type="button" data-jcat="' + c.key + '">' +
+        '<span class="ui-icon ui-icon--' + tint + '" aria-hidden="true">' + ((ORION.icon && ORION.icon(c.iconName)) || '') + '</span>' +
+        '<span>' + escapeHtml(c.label) + '</span>' +
+      '</button>';
+    }).join('');
+
+    const prioBtns = J.PRIORITIES.map(function (p) {
+      const isAct = (p === state.priority);
+      return '<button class="journal-modal__prio journal-modal__prio--' + p + (isAct ? ' is-active' : '') + '" type="button" data-jprio="' + p + '">' +
+        escapeHtml(J.PRIORITY_LABEL[p]) +
+      '</button>';
+    }).join('');
+
+    let extraHtml = '';
+    if (state.cat === 'presidio') {
+      const roleOpts = '<option value="">— Ruolo (opzionale) —</option>' +
+        J.ROLES_PRESIDIO.map(function (r) {
+          return '<option value="' + r + '"' + (state.role === r ? ' selected' : '') + '>' + escapeHtml(J.ROLE_LABEL[r] || r) + '</option>';
+        }).join('');
+      extraHtml = '<label class="journal-modal__field"><span>Ruolo</span><select data-jrole>' + roleOpts + '</select></label>';
+    } else if (state.cat === 'colonize') {
+      const rOpts = '<option value="">— Motivo (opzionale) —</option>' +
+        J.REASONS_COLONIZE.map(function (r) {
+          return '<option value="' + r + '"' + (state.reason === r ? ' selected' : '') + '>' + escapeHtml(J.REASON_LABEL[r] || r) + '</option>';
+        }).join('');
+      extraHtml = '<label class="journal-modal__field"><span>Motivo</span><select data-jreason>' + rOpts + '</select></label>';
+    }
+
+    const counterTxt = state.note.length + '/' + J.NOTE_MAX;
+    const refTxt = initLabel ? initLabel : 'Appunto libero';
+
+    host.innerHTML =
+      '<div class="journal-modal__scrim" data-jclose></div>' +
+      '<div class="journal-modal__panel" role="document">' +
+        '<header class="journal-modal__head">' +
+          '<h3 class="journal-modal__title">' +
+            '<span class="ui-icon ui-icon--amber" aria-hidden="true">' + ((ORION.icon && ORION.icon('pin')) || '📌') + '</span> ' +
+            'Nuovo appunto' +
+          '</h3>' +
+          '<button class="btn btn--mini btn--icon-only" type="button" data-jclose aria-label="Chiudi">' +
+            ((ORION.icon && ORION.icon('close')) || '✕') +
+          '</button>' +
+        '</header>' +
+        '<div class="journal-modal__body">' +
+          '<div class="journal-modal__ref"><span class="lp-journal__ref"><strong>' + escapeHtml(refTxt) + '</strong></span></div>' +
+          '<div class="journal-modal__form">' +
+            '<div class="journal-modal__cats">' + catBtns + '</div>' +
+            '<div class="journal-modal__field"><span>Priorità</span><div class="journal-modal__prios">' + prioBtns + '</div></div>' +
+            extraHtml +
+            '<label class="journal-modal__field journal-modal__field--note">' +
+              '<span>Nota (max ' + J.NOTE_MAX + ' caratteri)</span>' +
+              '<textarea data-jnote maxlength="' + J.NOTE_MAX + '" rows="3">' + escapeHtml(state.note) + '</textarea>' +
+              '<span class="journal-modal__counter" data-jcount>' + counterTxt + '</span>' +
+            '</label>' +
+          '</div>' +
+        '</div>' +
+        '<footer class="journal-modal__foot">' +
+          '<button class="btn" type="button" data-jclose>Annulla</button>' +
+          '<button class="btn btn--primary" type="button" data-jsave>Appunta</button>' +
+        '</footer>' +
+      '</div>';
+    host.hidden = false;
+    bind();
+  }
+
+  function close() {
+    host.hidden = true;
+    host.innerHTML = '';
+    document.removeEventListener('keydown', escHandler);
+  }
+  function escHandler(e) { if (e.key === 'Escape') close(); }
+
+  function bind() {
+    host.querySelectorAll('[data-jclose]').forEach(function (b) {
+      b.addEventListener('click', close);
+    });
+    host.querySelectorAll('[data-jcat]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.cat = b.dataset.jcat;
+        if (state.cat !== 'presidio') state.role = '';
+        if (state.cat !== 'colonize') state.reason = '';
+        render();
+      });
+    });
+    host.querySelectorAll('[data-jprio]').forEach(function (b) {
+      b.addEventListener('click', function () { state.priority = b.dataset.jprio; render(); });
+    });
+    const roleSel = host.querySelector('[data-jrole]');
+    if (roleSel) roleSel.addEventListener('change', function () { state.role = roleSel.value || ''; });
+    const reasonSel = host.querySelector('[data-jreason]');
+    if (reasonSel) reasonSel.addEventListener('change', function () { state.reason = reasonSel.value || ''; });
+    const ta = host.querySelector('[data-jnote]');
+    const counter = host.querySelector('[data-jcount]');
+    if (ta) ta.addEventListener('input', function () {
+      state.note = ta.value || '';
+      if (counter) counter.textContent = state.note.length + '/' + ORION.journal.NOTE_MAX;
+    });
+    const saveBtn = host.querySelector('[data-jsave]');
+    if (saveBtn) saveBtn.addEventListener('click', function () {
+      const tags = { priority: state.priority };
+      if (state.cat === 'presidio' && state.role) tags.role = state.role;
+      if (state.cat === 'colonize' && state.reason) tags.reason = state.reason;
+      const ref = (initKind && initId != null) ? { kind: initKind, id: initId } : null;
+      const ds = (ORION.time && ORION.time.currentDS) ? ORION.time.currentDS(g) : '';
+      ORION.journal.addPin(g, {
+        cat: state.cat,
+        ref: ref,
+        refLabel: initLabel || '',
+        tags: tags,
+        note: state.note,
+        createdAt: ds
+      });
+      persistGame(g);
+      if (typeof showToast === 'function') showToast('Appunto aggiunto al Diario');
+      if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('journal');
+      close();
+      /* Aggiorna sidebar se la tab Diario è aperta. */
+      if (ORION.lpTab === 'journal') renderLeftPanel();
+    });
+    host.addEventListener('click', function (e) {
+      const scrim = host.querySelector('.journal-modal__scrim');
+      if (e.target === scrim) close();
+    });
+    document.addEventListener('keydown', escHandler);
+  }
+
+  render();
 }
 
 /* M09 (decisione #49): flotte armate (fp>0) che possono raggiungere `sysId`
