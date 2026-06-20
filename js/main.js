@@ -5005,7 +5005,16 @@ function doSurveyAnomaly(colony, targetSystemId, anomalyKind, bodyKey, opts) {
   pushChronicle(ORION.time.currentDS(g) + ' — Flotta di ricognizione in rotta ' + where + '.', 'explore');
   if (ORION.tutorial) ORION.tutorial.fire('anomalies');
   persistGame(g);
+  /* Conferma visiva immediata (richiesta utente 2026-06-20): senza toast
+     l'azione era silenziosa e il giocatore non capiva di aver lanciato. */
+  showToast('Flotta in rotta verso ' + (sys ? sys.name : 'sistema') + (targetSystemId === colony.systemId ? '' : ' (' + (anomalyKind === 'reliquie' ? 'reliquia' : 'sito di drenaggio') + ')'));
   updatePlanetUI();
+  /* Refresh immediato della vista "Anomalie & sfruttamenti" così la riga
+     mostra subito il badge "in viaggio" (richiesta utente 2026-06-20). */
+  if (ORION._currentView === 'econ-anomalies') {
+    const est = document.querySelector('[data-view-stage]');
+    if (est) { const sc = est.scrollTop; try { renderEconAnomaliesView(est); } catch (_) { /* niente */ } est.scrollTop = sc; }
+  }
 }
 
 /* Decisione #76: stima del tempo di viaggio (sola andata) verso un sistema,
@@ -5216,22 +5225,30 @@ function openAnomalySurveyPicker(colony, targetSystemId, anomalyKind, bodyKey, o
   const sys = g.galaxy.systems[targetSystemId];
   const acr = regionAcronymFor(targetSystemId);
   const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
+  /* Colonia sorgente (riga riepilogo): aiuta a capire da DOVE parte la
+     flotta (richiesta utente 2026-06-20: prima non era esplicito). */
+  const fromName = escapeHtml(systemNameFromKey(g, colony.systemId + ':' + colony.bodyKey));
+  const fromAcr = regionAcronymFor(colony.systemId);
+  const fromTag = fromAcr ? ' <span class="name-tag">[' + fromAcr + ']</span>' : '';
 
-  /* Chip selettore tipo scafo. */
-  function shipChip(kind, label, sub, count, disabled) {
+  /* Chip selettore tipo scafo. Mostriamo solo i tipi disponibili (≥1):
+     "Estrattore 0 disp." era rumore — richiesta utente 2026-06-20. */
+  function shipChip(kind, label, sub, count) {
     const sel = selectedKind === kind;
     return '<button class="exp-crew-chip' + (sel ? ' is-selected' : '') + '" type="button"' +
       ' role="radio" aria-checked="' + (sel ? 'true' : 'false') + '"' +
       ' data-action="anom-ship-pick" data-kind="' + escapeHtml(kind) + '"' +
-      (disabled ? ' disabled title="Nessuno disponibile"' : ' title="' + escapeHtml(sub) + '"') + '>' +
+      ' title="' + escapeHtml(sub) + '">' +
       '<span class="exp-crew-chip__rank">' + escapeHtml(label) + '</span>' +
       '<span class="exp-crew-chip__xp">' + count + ' disp.</span>' +
     '</button>';
   }
-  const shipChips = '<div class="exp-crew-select" role="radiogroup" aria-label="Scegli scafo">' +
-    shipChip('estrattore', 'Estrattore', 'rate scalato sull\'Hangar — consigliato per harvest', extractors, extractors < 1) +
-    shipChip('explorer',   'Esploratore', 'rate base, niente bonus harvest', explorers, explorers < 1) +
-  '</div>';
+  const shipChipsArr = [];
+  if (extractors >= 1) shipChipsArr.push(shipChip('estrattore', 'Estrattore', 'rate scalato sull\'Hangar — consigliato per harvest', extractors));
+  if (explorers  >= 1) shipChipsArr.push(shipChip('explorer',   'Esploratore', 'rate base, niente bonus harvest', explorers));
+  const shipChips = shipChipsArr.length
+    ? '<div class="exp-crew-select" role="radiogroup" aria-label="Scegli scafo">' + shipChipsArr.join('') + '</div>'
+    : '<p class="panel__note">Nessuno scafo idoneo (Estrattore o Esploratore) nella colonia di partenza.</p>';
 
   let crewChips;
   if (!crewsSorted.length) {
@@ -5266,7 +5283,8 @@ function openAnomalySurveyPicker(colony, targetSystemId, anomalyKind, bodyKey, o
           '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
         '</button>' +
       '</header>' +
-      '<p class="panel__note">' + escapeHtml(meta.label) + ' nel sistema <strong>' + (sys ? escapeHtml(sys.name) : '—') + '</strong>' + tag + '.</p>' +
+      '<p class="panel__note">' + escapeHtml(meta.label) + ' nel sistema <strong>' + (sys ? escapeHtml(sys.name) : '—') + '</strong>' + tag +
+        ' · da <strong>' + fromName + '</strong>' + fromTag + '.</p>' +
       '<p class="sysinfo__sub">Scafo</p>' +
       shipChips +
       '<p class="sysinfo__sub">Equipaggio</p>' +
@@ -5302,10 +5320,13 @@ function openAnomalySurveyPicker(colony, targetSystemId, anomalyKind, bodyKey, o
   const launchBtn = host.querySelector('[data-action="anom-launch"]');
   if (launchBtn && !launchBtn.disabled) {
     launchBtn.addEventListener('click', function () {
+      /* Chiusura immediata per dare feedback visivo (richiesta utente
+         2026-06-20): prima la close era dopo doSurveyAnomaly e in alcuni
+         casi il modal "restava fisso" senza alcun segnale. */
+      closeAnomalySurveyPicker();
       doSurveyAnomaly(colony, targetSystemId, anomalyKind, bodyKey, {
         shipKind: selectedKind, crewId: selectedCrewId
       });
-      closeAnomalySurveyPicker();
     });
   }
 }
@@ -6224,6 +6245,24 @@ function economyAnomaliesHtml(g) {
     fchip('all', 'Tutte') + fchip('met', 'Metalli') + fchip('en', 'Energia') + fchip('reliquie', 'Reliquie') +
   '</div>';
 
+  /* Mappa "flotte survey inbound" per sito: chiave sysId|bodyKey|kind.
+     Serve a mostrare "in viaggio" sulla riga dell'anomalia quando la
+     flotta è stata inviata ma non è ancora arrivata (richiesta utente
+     2026-06-20: senza questo, dopo "Invia flotta" il giocatore non
+     vedeva alcun riscontro fino all'inizio della raccolta). */
+  const inboundBySite = {};
+  (g.fleets || []).forEach(function (f) {
+    const o = f && f.orders;
+    if (!o || o.type !== 'survey') return;
+    const k = (o.toSysId == null ? '' : o.toSysId) + '|' + (o.bodyKey || '') + '|' + (o.anomalyKind || '');
+    (inboundBySite[k] = inboundBySite[k] || []).push(f);
+  });
+  function inboundForSite(s) {
+    const k = s.sysId + '|' + (s.bodyKey || '') + '|' + (s.kind || '');
+    const list = inboundBySite[k] || [];
+    return list.filter(function (f) { return !s.harvesting || f.location.status === 'in-transit'; });
+  }
+
   /* Riepilogo testata: aggrega TUTTI i siti noti (non filtrati) per dare
      un colpo d'occhio "quanto sto estraendo ora" indipendente dal filtro. */
   const allSites = knownExploitableSites();
@@ -6316,19 +6355,26 @@ function economyAnomaliesHtml(g) {
           if (s.harvesting) harvestTxt = '<span class="econ-chip econ-chip--harvest" title="Risorse raccolte · ritmo per Impulso">raccolti <strong>' + got + ' ' + resLbl + '</strong> · <strong>' + rate + '</strong>/' + iU() + '</span>';
           else if (got > 0) harvestTxt = '<span class="econ-chip" title="Risorse raccolte (raccolta interrotta)">raccolti ' + got + ' ' + resLbl + '</span>';
         }
-        const canSend = !s.harvesting && send && send.capable;
+        const inbound = inboundForSite(s);
+        const inboundTransit = inbound.filter(function (f) { return f.location.status === 'in-transit'; });
+        const canSend = !s.harvesting && !inboundTransit.length && send && send.capable;
         const sendTitle = s.harvesting ? 'Una flotta è già presente sul sito'
+          : inboundTransit.length ? 'Una flotta è già in viaggio verso questo sito'
           : (send && send.capable
               ? 'Invia una flotta da ' + escapeHtml(systemNameFromKey(g, send.colony.systemId + ':' + send.colony.bodyKey)) + ' (' + send.hops + ' salti)'
               : 'Nessuna colonia con scafo + equipaggio in grado di raggiungere il sito');
         const colAttr = (send && send.capable) ? (' data-col="' + escapeHtml(send.colony.systemId + ':' + send.colony.bodyKey) + '"') : '';
         const bodyAttr = s.bodyKey ? (' data-body="' + escapeHtml(s.bodyKey) + '"') : '';
-        return '<li class="econ-item' + (s.harvesting ? ' is-harvesting' : '') + '">' +
+        const inboundBadge = (!s.harvesting && inboundTransit.length)
+          ? '<span class="econ-item__live econ-item__live--enroute" title="Flotta in viaggio verso il sito">✈ in viaggio</span>'
+          : '';
+        return '<li class="econ-item' + (s.harvesting ? ' is-harvesting' : (inboundTransit.length ? ' is-enroute' : '')) + '">' +
           '<div class="econ-item__main">' +
             '<div class="econ-item__head">' +
               '<span class="econ-item__kind">' + meta.label + '</span>' +
               (bodyName ? '<span class="econ-item__body">' + bodyName + '</span>' : '') +
               (s.harvesting ? '<span class="econ-item__live" title="Flotta presente">✦ in raccolta</span>' : '') +
+              inboundBadge +
             '</div>' +
             '<div class="econ-item__chips">' +
               '<span class="econ-chip" title="Stato del sito">' + stateTxt + '</span>' +
