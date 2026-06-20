@@ -1081,7 +1081,10 @@
     if ((!opts || !opts.fromFollow) && fleet.follow) fleet.follow = null;
     /* Stadio 1.6: ogni nuovo ordine apre un nuovo segmento di viaggio →
        riarma il tiro incidente (uno per segmento). Gli ordini intra/idle non
-       tireranno comunque (gate in tick: rotta > 1, non intra). */
+       tireranno comunque (gate in tick: rotta > 1, non intra). NB: se
+       rerouteTo preserva il leg in volo (keptLeg=true) il chiamante ripristina
+       prevIncidentRolled per non ri-tirare sullo stesso segmento fisico (#60). */
+    const prevIncidentRolled = fleet._incidentRolled;
     fleet._incidentRolled = false;
     if (type === 'idle') {
       fleet.orders = { type: 'idle' };
@@ -1110,15 +1113,23 @@
          il corpo (handler d'arrivo). Intra-sistema (to == sistema corrente):
          solo M2. Senza bodyKey resta M1 puro (orbita generica). */
       const bodyKey = (type === 'move' && order.bodyKey != null) ? String(order.bodyKey) : null;
+      /* In-transit inter-sistema: a impulso I la posizione (legTotal, etaImpulsi)
+         è "fissa" → rerouteTo sceglie push-through o inversione automatica in
+         base al tempo minimo. Bypassa la logica M2 (la flotta NON è fisicamente
+         a currentSys ma a metà jump). Decisione utente 2026-06-20. */
+      if (fleet.location.status === 'in-transit' && !fleet.location.intra
+          && Array.isArray(fleet.route) && fleet.route[fleet.routeIdx + 1] != null
+          && (fleet.legTotal || 0) > 0) {
+        const r = rerouteTo(game, fleet, to);
+        if (!r.ok) return r;
+        fleet.orders = { type: type, toSysId: to, bodyKey: bodyKey };
+        if (r.keptLeg) fleet._incidentRolled = prevIncidentRolled;
+        return { ok: true };
+      }
       const currentSys = fleet.location.systemId;
       if (to === currentSys) {
-        /* M2 puro (stesso sistema). Una flotta in-transit inter-sistema NON
-           può "fermarsi al sistema di partenza" via setOrder: fisicamente è
-           già fuori dal sistema, e teletrasportarla indietro era controsenso
-           (vedi reverseLeg per l'inversione fisica del leg). */
-        if (fleet.location.status === 'in-transit' && !fleet.location.intra) {
-          return { ok: false, reason: 'Flotta in viaggio: usa "Inverti rotta" per tornare al punto di partenza' };
-        }
+        /* M2 puro (stesso sistema). La flotta NON è in-transit inter-sistema
+           (caso gestito sopra da rerouteTo). */
         if (bodyKey == null) {
           /* Già in orbita generica: niente da percorrere. */
           fleet.orders = { type: 'idle' };
@@ -1162,6 +1173,18 @@
       if (to == null) return { ok: false, reason: 'Sistema di destinazione assente' };
       if (!fleetHasGunsLocal(fleet)) return { ok: false, reason: 'La flotta è disarmata (nessuna potenza di fuoco)' };
       const bodyKey = (order.bodyKey != null) ? String(order.bodyKey) : null;
+      /* In-transit inter-sistema: reroute preservando il leg (vedi rerouteTo). */
+      if (fleet.location.status === 'in-transit' && !fleet.location.intra
+          && Array.isArray(fleet.route) && fleet.route[fleet.routeIdx + 1] != null
+          && (fleet.legTotal || 0) > 0) {
+        const r = rerouteTo(game, fleet, to);
+        if (!r.ok) return r;
+        fleet.orders = { type: 'attack', toSysId: to, bodyKey: bodyKey };
+        fleet.attackTarget = to;
+        fleet.attackBodyKey = bodyKey;
+        if (r.keptLeg) fleet._incidentRolled = prevIncidentRolled;
+        return { ok: true };
+      }
       const currentSys = fleet.location.systemId;
       /* Intra-sistema: traversata corpo→corpo (se distante), poi ingaggio.
          attackTarget viene impostato all'ARRIVO (processSkirmishes salta le
@@ -1207,8 +1230,18 @@
       if (to == null || !bodyKey) return { ok: false, reason: 'Sistema/pianeta target assenti' };
       const sys = game.galaxy.systems[to];
       if (!sys) return { ok: false, reason: 'Sistema target inesistente' };
-      const currentSys = fleet.location.systemId;
       const baseOrder = { type: 'garrison', toSysId: to, bodyKey: bodyKey };
+      /* In-transit inter-sistema: reroute preservando il leg (vedi rerouteTo). */
+      if (fleet.location.status === 'in-transit' && !fleet.location.intra
+          && Array.isArray(fleet.route) && fleet.route[fleet.routeIdx + 1] != null
+          && (fleet.legTotal || 0) > 0) {
+        const r = rerouteTo(game, fleet, to);
+        if (!r.ok) return r;
+        fleet.orders = baseOrder;
+        if (r.keptLeg) fleet._incidentRolled = prevIncidentRolled;
+        return { ok: true };
+      }
+      const currentSys = fleet.location.systemId;
       if (to === currentSys) {
         fleet.orders = baseOrder;
         /* Intra-sistema: traversata corpo→corpo (se distante), poi osserva. */
@@ -1244,12 +1277,22 @@
       if (to == null) return { ok: false, reason: 'Sistema target assente' };
       const sys = game.galaxy.systems[to];
       if (!sys) return { ok: false, reason: 'Sistema target inesistente' };
-      const currentSys = fleet.location.systemId;
       /* Decisione di sessione: la ricognizione è mirata a UNA anomalia
          specifica (sistema + tipo). Una flotta sui detriti NON drena anche
          la nebulosa dello stesso sistema. `anomalyKind` ∈ detriti/nebulosa/
          reliquie. */
       const baseOrder = { type: 'survey', toSysId: to, anomalyKind: order.anomalyKind || null, bodyKey: order.bodyKey || null };
+      /* In-transit inter-sistema: reroute preservando il leg (vedi rerouteTo). */
+      if (fleet.location.status === 'in-transit' && !fleet.location.intra
+          && Array.isArray(fleet.route) && fleet.route[fleet.routeIdx + 1] != null
+          && (fleet.legTotal || 0) > 0) {
+        const r = rerouteTo(game, fleet, to);
+        if (!r.ok) return r;
+        fleet.orders = baseOrder;
+        if (r.keptLeg) fleet._incidentRolled = prevIncidentRolled;
+        return { ok: true };
+      }
+      const currentSys = fleet.location.systemId;
       if (to === currentSys) {
         fleet.orders = baseOrder;
         fleet.route = [currentSys];
@@ -1283,9 +1326,19 @@
       if (to == null) return { ok: false, reason: 'Sistema target assente' };
       const sys = game.galaxy.systems[to];
       if (!sys) return { ok: false, reason: 'Sistema target inesistente' };
-      const currentSys = fleet.location.systemId;
       const bodyKey = order.bodyKey != null ? String(order.bodyKey) : null;
       const baseOrder = { type: 'recon', toSysId: to, bodyKey: bodyKey };
+      /* In-transit inter-sistema: reroute preservando il leg (vedi rerouteTo). */
+      if (fleet.location.status === 'in-transit' && !fleet.location.intra
+          && Array.isArray(fleet.route) && fleet.route[fleet.routeIdx + 1] != null
+          && (fleet.legTotal || 0) > 0) {
+        const r = rerouteTo(game, fleet, to);
+        if (!r.ok) return r;
+        fleet.orders = baseOrder;
+        if (r.keptLeg) fleet._incidentRolled = prevIncidentRolled;
+        return { ok: true };
+      }
+      const currentSys = fleet.location.systemId;
       if (to === currentSys) {
         fleet.orders = baseOrder;
         const intraI = bodyKey != null ? intraTravelI(game, fleet, bodyKey) : 0;
@@ -1327,6 +1380,19 @@
       if (!fleetHasColonial(fleet)) return { ok: false, reason: 'Nessuna nave coloniale in flotta' };
       const foundationI = Math.max(20, order.foundationI || 60);
       const orbitI = (typeof order.orbitI === 'number') ? Math.max(0, order.orbitI) : COLONIZE_ORBIT_DURATION;
+      /* In-transit inter-sistema: reroute preservando il leg (vedi rerouteTo). */
+      if (fleet.location.status === 'in-transit' && !fleet.location.intra
+          && Array.isArray(fleet.route) && fleet.route[fleet.routeIdx + 1] != null
+          && (fleet.legTotal || 0) > 0) {
+        const r = rerouteTo(game, fleet, to);
+        if (!r.ok) return r;
+        fleet.orders = {
+          type: 'colonize', toSysId: to, bodyKey: bodyKey,
+          phase: 'travel', orbitI: orbitI, foundationI: foundationI
+        };
+        if (r.keptLeg) fleet._incidentRolled = prevIncidentRolled;
+        return { ok: true };
+      }
       const currentSys = fleet.location.systemId;
       const intraSystem = (to === currentSys);
       if (!intraSystem) {
@@ -1542,6 +1608,87 @@
     /* _incidentRolled NON viene resettato: stesso segmento fisico già
        gambato (no double jeopardy sui rischi di viaggio). */
     return { ok: true, etaImpulsi: elapsed, to: fromSys };
+  }
+
+  /* rerouteTo — riassegna route/etaImpulsi/legTotal verso `to`, preservando
+     il leg in volo se la flotta è in-transit inter-sistema (decisione di
+     sessione 2026-06-20). A impulso I la posizione è "fissa", rappresentata
+     dalla coppia (legTotal, etaImpulsi) — stesso modello di reverseLeg. Sceglie
+     automaticamente fra:
+       - push-through: completa il leg corrente fino a B, poi instrada B→to
+       - inversione:   torna ad A (Ι di ritorno = elapsed), poi instrada A→to
+     Vince il percorso con tempo totale minimo in Ι; tie-break = push-through.
+     Casi degeneri: to===B (solo completa leg), to===A (= reverseLeg).
+     Se NON in transit inter-sistema, fallback al classico computePath + startNextLeg.
+     Ritorna { ok, keptLeg, reason? }. keptLeg=true quando il leg corrente è
+     stato preservato (il chiamante può ripristinare _incidentRolled per non
+     ri-tirare l'incidente sullo stesso segmento — decisione #60). */
+  function rerouteTo(game, fleet, to) {
+    const galaxy = game.galaxy;
+    const inTransit = fleet.location.status === 'in-transit'
+                      && !fleet.location.intra
+                      && Array.isArray(fleet.route)
+                      && fleet.route[fleet.routeIdx + 1] != null
+                      && (fleet.legTotal || 0) > 0;
+    if (!inTransit) {
+      const path = computePath(galaxy, fleet.location.systemId, to);
+      if (!path) return { ok: false, reason: 'Nessuna rotta verso il sistema target' };
+      fleet.route = path;
+      fleet.routeIdx = 0;
+      fleet.etaImpulsi = startNextLeg(galaxy, fleet);
+      return { ok: true, keptLeg: false };
+    }
+    const A = fleet.route[fleet.routeIdx];
+    const B = fleet.route[fleet.routeIdx + 1];
+    const T = fleet.legTotal;
+    const remaining = fleet.etaImpulsi || 0;
+    const elapsed = Math.max(1, Math.min(T, T - remaining));
+    if (to === B) {
+      fleet.route = [A, B];
+      fleet.routeIdx = 0;
+      fleet.etaImpulsi = remaining;
+      fleet.legTotal = T;
+      return { ok: true, keptLeg: true };
+    }
+    if (to === A) {
+      /* Inversione pura: equivalente a reverseLeg. */
+      fleet.route = [B, A];
+      fleet.routeIdx = 0;
+      fleet.etaImpulsi = elapsed;
+      fleet.legTotal = T;
+      fleet.location.systemId = B;
+      return { ok: true, keptLeg: true };
+    }
+    const pathB = computePath(galaxy, B, to);
+    const pathA = computePath(galaxy, A, to);
+    function sumLegs(path) {
+      if (!path || path.length < 2) return 0;
+      const ms = fleetMinSpeed(fleet);
+      let s = 0;
+      for (let i = 0; i + 1 < path.length; i++) s += tempoLeg(galaxy, path[i], path[i + 1], ms);
+      return s;
+    }
+    const tB = pathB ? remaining + sumLegs(pathB) : Infinity;
+    const tA = pathA ? elapsed + sumLegs(pathA) : Infinity;
+    if (!isFinite(tA) && !isFinite(tB)) {
+      return { ok: false, reason: 'Nessuna rotta verso il sistema target' };
+    }
+    if (tB <= tA) {
+      /* Push-through: completa il leg A→B, poi continua per pathB[1..]. */
+      fleet.route = [A].concat(pathB);
+      fleet.routeIdx = 0;
+      fleet.etaImpulsi = remaining;
+      fleet.legTotal = T;
+      return { ok: true, keptLeg: true };
+    } else {
+      /* Inversione + nuovo instradamento da A. */
+      fleet.route = [B].concat(pathA);
+      fleet.routeIdx = 0;
+      fleet.etaImpulsi = elapsed;
+      fleet.legTotal = T;
+      fleet.location.systemId = B;
+      return { ok: true, keptLeg: true };
+    }
   }
 
   /* buildChainedRoute — verifica che una sequenza di waypoint sia
@@ -3191,6 +3338,7 @@
     mergeFleets: mergeFleets,
     setOrder: setOrder,
     reverseLeg: reverseLeg,
+    rerouteTo: rerouteTo,
     /* Stadio 1.4 — coda comandi (docs/FLEET_FLOW.md). */
     setPlan: setPlan,
     enqueueOrder: enqueueOrder,
