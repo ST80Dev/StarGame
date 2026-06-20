@@ -2372,8 +2372,8 @@ function planetTabAlerts(colony) {
       else if (s === 'low' && a.risorse !== 'bad') a.risorse = 'warn';
     });
   }
-  // popolazione: malus morale temporaneo
-  if (colony.moraleMalus) a.popolazione = 'warn';
+  // popolazione: malus morale temporaneo o sovraffollamento attivo
+  if (colony.moraleMalus || colony.crowdAlert) a.popolazione = 'warn';
   // colonia: insediamento o colonizzazione in corso
   if (colony.colonizing || colony.phase === 'settling') a.colonia = 'info';
   // forze: coda scafi/equipaggi attiva
@@ -2393,7 +2393,7 @@ function alertTitle(tab, colony, level) {
   }
   if (tab === 'strutture') return 'Osservatorio in scansione';
   if (tab === 'risorse') return level === 'bad' ? 'Scarsità critica' : 'Scarsità in allerta';
-  if (tab === 'popolazione') return 'Morale in calo';
+  if (tab === 'popolazione') return colony.crowdAlert ? 'Sovraffollamento' : 'Morale in calo';
   if (tab === 'colonia') return colony.phase === 'settling' ? 'Insediamento in corso' : 'Colonizzazione in corso';
   if (tab === 'forze') return 'Reclutamento in corso';
   return '';
@@ -11296,6 +11296,18 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
     targetHtml = '<p class="panel__note panel__note--target">Vocazione a regime: ' + targetBits + '</p>';
   }
 
+  /* Riga "Sovraffollamento" esplicita: prima il giocatore vedeva la causa
+     solo nel tooltip `(dettagli)` del morale. Adesso, quando attivo, esce
+     una riga warn dedicata col cap abitativo e il modificatore — coerente
+     col badge sulla tab Popolazione e con la cronaca `pop-crowd`. */
+  let crowdRow = '';
+  if (crowd > CFG.POP_CROWD_START) {
+    const crowdPct = Math.round(crowd * 100);
+    const crowdMul = Math.max(0.05, 1 - (crowd - CFG.POP_CROWD_START) * CFG.POP_CROWD_SLOPE);
+    crowdRow = row('Sovraffollamento',
+      '<span class="rate rate--neg">' + crowdPct + '% del cap abitativo (' + (total | 0) + ' / ' + (housingCap | 0) +
+      ' livelli) · morale ×' + crowdMul.toFixed(2) + ' · espandi Centro Abitativo</span>');
+  }
   host.innerHTML =
     '<div class="sysinfo">' +
       '<dl class="sysinfo__list">' +
@@ -11304,6 +11316,7 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
             ' <span class="pop-limit">(limite: ' + limitRes + ')</span>') +
         row('Morale', morale.toFixed(2) + ' / ' + CFG.POP_MORALE_MAX.toFixed(2) +
             ' <span class="rate-aux" title="' + escapeHtml(moraleParts.join(' · ')) + '">(dettagli)</span>') +
+        crowdRow +
         row('Crescita', '<span class="rate ' + (canGrow ? 'rate--pos' : 'rate--neg') + '">' + growthStr + '</span>') +
       '</dl>' +
       '<p class="sysinfo__sub">Classi funzionali</p>' +
@@ -11714,6 +11727,14 @@ const PLAY_LS_PAUSES = 'orion.autopause';
 const DEFAULT_AUTOPAUSE = {
   'build-done': true, 'demolish-done': true, 'downgrade-done': true, 'colony-done': true, 'scan-done': true,
   'scarcity': true, 'scarcity-recover': true, 'pop-loss': true,
+  /* Sovraffollamento (decisione #37bis, reso esplicito 2026-06-20):
+     l'entrata in sovraffollamento è un nudge — non blocca, ma vale far
+     vedere all'utente che la crescita pop sta venendo schiacciata. Default
+     OFF (non interrompe il tempo); compare in cronaca e badge tab. Solo
+     per colonie "che vogliono crescere" (mondi-giardino o con Centro
+     Abitativo costruito), per non spammare sui mondi-fabbrica. Il rientro
+     è buona notizia → OFF anche lui. */
+  'pop-crowd': false, 'pop-crowd-recover': false,
   /* Decisione #48 (Fase 0): la saturazione rifiuti (saturo/critico) merita
      una pausa — è il nudge per agire prima del deperimento. Il rientro è
      buona notizia, non interrompe. */
@@ -12224,6 +12245,8 @@ function showEventOverlay(events) {
     'waste': 'Rifiuti: saturazione',
     'waste-recover': 'Rifiuti: rientrata',
     'pop-loss': 'Calo popolazione',
+    'pop-crowd': 'Sovraffollamento',
+    'pop-crowd-recover': 'Sovraffollamento rientrato',
     'victory': 'Pista chiusa',
     'settle-stage': 'Fase Insediamento',
     'settle-done': 'Insediamento completato',
@@ -12570,6 +12593,13 @@ function _chronicleEventBody(ev) {
     pushChronicle(ds + ' — ' + pname + ptag + ': saturazione rifiuti <strong>rientrata</strong>.', 'system');
   } else if (ev.kind === 'pop-loss') {
     pushChronicle(ds + ' — ' + pname + ptag + ': la popolazione cala per la carestia prolungata.', 'system');
+  } else if (ev.kind === 'pop-crowd') {
+    const crowdPct = Math.round((ev.crowd || 0) * 100);
+    const mul = (ev.penalty != null) ? ev.penalty.toFixed(2) : '—';
+    pushChronicle(ds + ' — ' + pname + ptag + ': <strong>sovraffollamento</strong> (' + crowdPct +
+      '% del cap abitativo, morale ×' + mul + '). Espandi il Centro Abitativo per riprendere la crescita.', 'system');
+  } else if (ev.kind === 'pop-crowd-recover') {
+    pushChronicle(ds + ' — ' + pname + ptag + ': sovraffollamento <strong>rientrato</strong>.', 'system');
   } else if (ev.kind === 'victory') {
     const label = (ORION.victory && ORION.victory.TRACK_LABELS[ev.track]) || ev.track;
     pushChronicle(ds + ' — <strong>Pista chiusa</strong>: ' + label + '.', 'explore');
