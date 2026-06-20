@@ -8260,8 +8260,10 @@ function renderCivView(stage) {
   if (ORION._civDetailId) {
     const dc = (g.civs || []).filter(function (c) { return c.id === ORION._civDetailId; })[0];
     const dcRank = dc && ORION.ai.knowledgeRank ? ORION.ai.knowledgeRank(dc) : 0;
-    if (dc && (dcRank >= 1 || dc.faction)) { renderCivDetail(stage, dc); return; }
-    ORION._civDetailId = null; // non più valido (caduta/sconosciuta)
+    /* Bugfix 2026-06-20: solo CONTACTED+ può aprire il dossier dettagliato.
+       Ad "Avvistata" non esiste ancora un dossier (vedi gating in card). */
+    if (dc && dcRank >= KNOWLEDGE.contacted) { renderCivDetail(stage, dc); return; }
+    ORION._civDetailId = null; // non più valido (caduta / solo avvistata / sconosciuta)
   }
   /* Breadcrumb striscia: lista = solo "Diplomazia" (corrente). */
   setViewCrumbs('<span class="crumb is-current">Diplomazia</span>');
@@ -8291,8 +8293,10 @@ function renderCivView(stage) {
     /* Header sempre presente: nome, swatch colore, eventuale chip grado.
        4 Costanti: ruolo SEMPRE noto anche in unknown. */
     /* Nome cliccabile → schermata di dettaglio piena (richiesta utente
-       2026-06-20). Cliccabile da avvistata in su (e per le Costanti). */
-    const nameClickable = (rank >= KNOWLEDGE.spotted) || !!factionDef;
+       2026-06-20). Solo da CONTACTED in su: ad "Avvistata" non esiste ancora
+       un dossier da aprire (bugfix 2026-06-20: prima si apriva un dettaglio
+       che, per fallback, mostrava tutto come 'Completo'). */
+    const nameClickable = (rank >= KNOWLEDGE.contacted);
     const nameEl = nameClickable
       ? '<button type="button" class="civ-card__name civ-card__name--link" data-civ-detail="' + escapeHtml(c.id) + '" title="Apri il dossier dettagliato">' + escapeHtml(c.name) + '</button>'
       : '<span class="civ-card__name">' + escapeHtml(c.name) + '</span>';
@@ -8329,10 +8333,12 @@ function renderCivView(stage) {
     }
     /* CONTACTED+ — dossier base. Il grado di intel (fragmentary/partial/
        complete) attenua i dettagli per chi è stato contattato con una
-       flotta esile. Default 'complete' per backward compat con civ
-       contattate prima dell'introduzione del meccanismo. */
+       flotta esile. Fallback ricavato da intelProgress (bugfix 2026-06-20:
+       prima era 'complete' come backward-compat e rivelava tutto a civ
+       contattate per battaglia, dove intelLevel non viene scritto). */
     if (rank >= KNOWLEDGE.contacted) {
-      const intelLvl = c.intelLevel || 'complete';
+      const intelLvl = c.intelLevel ||
+        (ORION.ai.intelLevelFromProgress ? ORION.ai.intelLevelFromProgress(c.intelProgress || 0) : 'fragmentary');
       const intelRank = ORION.ai.intelLevelRank ? ORION.ai.intelLevelRank(intelLvl) : 3;
       const disp = Math.round(c.disposition || 0);
       const dispLabel = ORION.ai.dispositionLabel(disp);
@@ -8490,7 +8496,9 @@ function renderCivView(stage) {
     /* KNOWN+ — vocazione + tratto + intel forza. Vincolato a intel
        'complete': anche se le interazioni promuovono a known, i dettagli
        interni richiedono una buona presenza di flotta. */
-    const intelRankForExtras = ORION.ai.intelLevelRank ? ORION.ai.intelLevelRank(c.intelLevel || 'complete') : 3;
+    const intelLvlForExtras = c.intelLevel ||
+      (ORION.ai.intelLevelFromProgress ? ORION.ai.intelLevelFromProgress(c.intelProgress || 0) : 'fragmentary');
+    const intelRankForExtras = ORION.ai.intelLevelRank ? ORION.ai.intelLevelRank(intelLvlForExtras) : 1;
     if (rank >= KNOWLEDGE.known && intelRankForExtras >= 3) {
       const vocLabel = (ORION.ai.VOCATIONS && c.vocation && ORION.ai.VOCATIONS[c.vocation]) ? ORION.ai.VOCATIONS[c.vocation].label : '—';
       const affLabel = (ORION.ai.AFFINITIES && c.affinity && ORION.ai.AFFINITIES[c.affinity]) ? ORION.ai.AFFINITIES[c.affinity].label : '—';
@@ -8829,8 +8837,11 @@ function renderCivDetail(stage, c) {
   const DIP = ORION.diplomacy;
   const KN = AI.KNOWLEDGE || { unknown: 0, spotted: 1, contacted: 2, known: 3, familiar: 4 };
   const rank = AI.knowledgeRank ? AI.knowledgeRank(c) : 0;
-  const intelLvl = c.intelLevel || 'complete';
-  const intelRank = AI.intelLevelRank ? AI.intelLevelRank(intelLvl) : 3;
+  /* Bugfix 2026-06-20: fallback da intelProgress, non 'complete'. Vedi
+     renderCivCard per il razionale. */
+  const intelLvl = c.intelLevel ||
+    (AI.intelLevelFromProgress ? AI.intelLevelFromProgress(c.intelProgress || 0) : 'fragmentary');
+  const intelRank = AI.intelLevelRank ? AI.intelLevelRank(intelLvl) : 1;
   const ALIGN_LABEL = { bene: 'Bene', male: 'Male', neutrale: 'Neutrale' };
   const INTEL_LABEL = { fragmentary: 'Frammentario', partial: 'Parziale', complete: 'Completo' };
   const seat = (g.galaxy.groups || []).filter(function (gp) { return gp.id === c.homeGroupId; })[0] || {};
