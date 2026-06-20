@@ -686,9 +686,12 @@
     const E = root.ORION && root.ORION.expedition;
     const crewPort = (E && E.crewPortConsumption && colony.phase !== 'settling')
       ? E.crewPortConsumption(game, colony) : { food: 0, water: 0 };
+    const CF_yield = root.ORION && root.ORION.colonyFigure;
+    const yieldM = (CF_yield && CF_yield.yieldMul) ? CF_yield.yieldMul(colony) : 1;
     const net = {};
     ['met', 'en', 'food', 'water'].forEach(function (k) {
-      const r = (out.rates[k] || 0) * malus * wMalus * warM * settling;
+      let r = (out.rates[k] || 0) * malus * wMalus * warM * settling;
+      if ((k === 'met' || k === 'en') && yieldM !== 1) r *= yieldM;
       const u = out.upkeep[k] || 0;
       let n = r - u;
       if (k === 'met')   n -= shipMetMaint + shipRepairMet + popMetDemand;
@@ -884,10 +887,13 @@
       if (colony.moraleMalus && game.timeImpulsi >= colony.moraleMalus.expiresAt) {
         colony.moraleMalus = null;
       }
-      const morale = colonyMorale(game, colony);
+      let morale = colonyMorale(game, colony);
+      const CF_civ = root.ORION && root.ORION.colonyFigure;
+      if (CF_civ && CF_civ.moraleBonus) morale += CF_civ.moraleBonus(colony);
 
       let growth = CFG.POP_GROWTH_BASE * morale;
       if (colony.structures['ospedale']) growth *= (1 + CFG.POP_GROWTH_HOSPITAL);
+      if (CF_civ && CF_civ.popGrowthMul) growth *= CF_civ.popGrowthMul(colony);
 
       /* Decisione #66 estensione (sessione 2026-06-09): Bonus Diaspora —
          dopo un imbarco di coloni, la colonia sorgente ha crescita ×2 per
