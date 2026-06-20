@@ -6713,6 +6713,57 @@ select.main-menu__input { cursor: pointer; }
   .war-forces { grid-template-columns: 1fr; }
 }
 
+/* Card assedio COMPATTA cliccabile nel riepilogo (decisione 2026-06-20):
+   meno dati, niente pulsanti → click apre la sottopagina dettaglio. */
+.war-siege--compact {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  color: inherit; font: inherit;
+  border: 1px solid transparent; border-left: 3px solid #e0556e;
+  transition: background var(--transition), border-color var(--transition);
+}
+.war-siege--compact:hover { background: rgba(224, 85, 110, 0.16); }
+.war-siege--compact:focus-visible { outline: none; border-color: var(--c-accent); box-shadow: inset 2px 0 0 var(--c-accent); }
+.war-siege__compact {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  font-size: 0.8rem;
+}
+.war-siege__nums { color: var(--c-text-soft); }
+.war-siege__forecast {
+  font-size: 0.74rem; font-weight: 600; padding: 1px 8px; border-radius: 999px;
+  border: 1px solid currentColor;
+}
+.war-siege__forecast--win  { color: #6fe0b8; }
+.war-siege__forecast--even { color: #f0c878; }
+.war-siege__forecast--lose { color: #f0a6b4; }
+.war-siege__cta {
+  display: inline-flex; align-items: center; gap: 3px;
+  margin-top: 5px; font-size: 0.74rem; color: var(--c-accent);
+}
+
+/* Sottopagina DETTAGLIO assedio (decisione 2026-06-20) */
+.siege-detail { padding: 2px; }
+.siege-detail__head { margin-bottom: 8px; }
+.siege-detail__title {
+  margin: 8px 0 0; font-size: 1.0rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.siege-detail__sub { font-size: 0.78rem; font-weight: 400; color: var(--c-text-faint); }
+.siege-detail__log { margin: 10px 0 8px; }
+.siege-detail__table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.siege-detail__table th, .siege-detail__table td {
+  padding: 4px 8px; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.siege-detail__table th { color: var(--c-text-faint); font-weight: 600; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.03em; }
+.siege-detail__row--last { background: rgba(47, 230, 224, 0.08); }
+.siege-detail__nowtag {
+  font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--c-accent); margin-left: 4px;
+}
+.siege-detail__loss { color: #f0a6b4; font-weight: 600; }
+.siege-detail__kill { color: #6fe0b8; font-weight: 600; }
+.siege-detail__hold { color: var(--c-text-faint); }
+.siege-detail__noround { color: var(--c-text-faint); font-style: italic; }
+.siege-detail__actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+
 /* veteranità navi */
 .fleet-item__vets { display: flex; gap: 5px; flex-wrap: wrap; margin: 5px 0 0; }
 .vet-chip {
