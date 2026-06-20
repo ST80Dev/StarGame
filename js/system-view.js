@@ -330,25 +330,30 @@
       }
     }
 
-    /* Hit-test dei marker flotta (posizioni memorizzate in _drawFleets). */
+    /* Hit-test dei marker flotta (posizioni memorizzate in _drawFleets).
+       Raggio di hit derivato dalla dimensione corrente del marker (auto-zoom,
+       decisione 2026-06-20) + margine fisso, così cliccare resta affidabile
+       a qualunque livello di zoom. */
     pickFleet(sx, sy) {
       const hits = this._fleetHit || [];
-      let best = null, bestD = 12 * 12;
+      let best = null, bestD = Infinity;
       for (let i = 0; i < hits.length; i++) {
         const dx = hits[i].x - sx, dy = hits[i].y - sy;
         const d = dx * dx + dy * dy;
-        if (d < bestD) { bestD = d; best = hits[i].id; }
+        const hr = (hits[i].r || 7) + 6;   // marker + alone di tolleranza
+        if (d < hr * hr && d < bestD) { bestD = d; best = hits[i].id; }
       }
       return best;
     }
     /* Hit-test dei marker flotta AI (posizioni memorizzate in _drawAiFleets). */
     pickAiFleet(sx, sy) {
       const hits = this._aiFleetHit || [];
-      let best = null, bestD = 13 * 13;
+      let best = null, bestD = Infinity;
       for (let i = 0; i < hits.length; i++) {
         const dx = hits[i].x - sx, dy = hits[i].y - sy;
         const d = dx * dx + dy * dy;
-        if (d < bestD) { bestD = d; best = hits[i].id; }
+        const hr = (hits[i].r || 8) + 6;
+        if (d < hr * hr && d < bestD) { bestD = d; best = hits[i].id; }
       }
       return best;
     }
@@ -847,18 +852,25 @@
         this._fleetPos[f.id] = { x: mx, y: my };
         const st = f.location.status;
         const col = (st === 'in-transit') ? '#7fd0f0' : (st === 'docked') ? '#9fd0a8' : '#f0d670';
+        /* Decisione utente 2026-06-20: marker FLOTTA come icona "glow"
+           (non più rombo geometrico semplice), auto-dimensionato in base
+           al livello di zoom (con cap min/max) — stessa convenzione delle
+           altre viste (galaxy-map.nodeRadius). */
+        const r = clamp(this.scale * 0.022, 7, 16);
+        const fontPx = Math.round(clamp(this.scale * 0.016, 10, 16));
+        /* aggiorna hit-test con la dimensione corrente (vedi pickFleet). */
+        this._fleetHit[this._fleetHit.length - 1].r = r;
+        this._drawFleetGlow(ctx, mx, my, r, col);
+        /* etichetta con stroke per leggibilità su nebulose/polvere */
         ctx.save();
-        ctx.fillStyle = col;
-        ctx.strokeStyle = 'rgba(8,12,24,0.85)'; ctx.lineWidth = 1.5;
-        const r = 5;
-        ctx.beginPath();
-        ctx.moveTo(mx, my - r); ctx.lineTo(mx + r, my);
-        ctx.lineTo(mx, my + r); ctx.lineTo(mx - r, my); ctx.closePath();
-        ctx.fill(); ctx.stroke();
-        ctx.fillStyle = 'rgba(222,236,255,0.92)';
-        ctx.font = '10px system-ui, sans-serif';
-        ctx.textBaseline = 'middle';
-        ctx.fillText((f.name || '').slice(0, 14), mx + r + 3, my);
+        ctx.font = '600 ' + fontPx + 'px "JetBrains Mono", ui-monospace, monospace';
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2, fontPx / 4);
+        ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+        const lbl = (f.name || '').slice(0, 18);
+        ctx.strokeText(lbl, mx + r + 5, my);
+        ctx.fillStyle = 'rgba(222,236,255,0.96)';
+        ctx.fillText(lbl, mx + r + 5, my);
         ctx.restore();
       }
     }
@@ -903,33 +915,75 @@
         this._aiFleetHit.push({ id: af.id, x: mx, y: my });
         const color = af.civColor || '#d0d0d0';
         const known = (af.intel || 0) >= PARTIAL;
-        const r = 6.5;   // un filo più grande dei marker del giocatore (5)
+        /* Decisione utente 2026-06-20: marker AI come icona "glow" (non più
+           rombo semplice), auto-dimensionato con zoom — un filo più grande
+           del giocatore (×1.10) per distinguere subito le AI. */
+        const r = clamp(this.scale * 0.024, 8, 18);
+        const fontPx = Math.round(clamp(this.scale * 0.017, 11, 17));
+        this._aiFleetHit[this._aiFleetHit.length - 1].r = r;
         ctx.save();
-        ctx.globalAlpha = known ? 1 : 0.78;
-        ctx.fillStyle = color;
-        ctx.strokeStyle = 'rgba(8,12,24,0.85)'; ctx.lineWidth = 1.6;
-        ctx.beginPath();
-        ctx.moveTo(mx, my - r); ctx.lineTo(mx + r, my);
-        ctx.lineTo(mx, my + r); ctx.lineTo(mx - r, my); ctx.closePath();
-        ctx.fill(); ctx.stroke();
+        if (!known) ctx.globalAlpha = 0.78;
+        this._drawFleetGlow(ctx, mx, my, r, color, { hostile: true });
         if (!known) {
-          ctx.fillStyle = 'rgba(255,255,255,0.92)';
-          ctx.font = '700 10px monospace';
+          ctx.fillStyle = 'rgba(255,255,255,0.96)';
+          ctx.font = '700 ' + Math.max(10, Math.round(r * 0.85)) + 'px monospace';
           ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
           ctx.fillText('?', mx, my + 0.5);
         }
         /* Solo l'identificazione, niente missione/ETA (coerente con la mappa). */
         let lbl = (root.ORION.aifleet && root.ORION.aifleet.nameLabel) ? root.ORION.aifleet.nameLabel(game, af) : 'Contatto';
         if (lbl.length > 20) lbl = lbl.slice(0, 19) + '…';
-        ctx.font = '600 11px "JetBrains Mono", ui-monospace, monospace';
+        ctx.font = '600 ' + fontPx + 'px "JetBrains Mono", ui-monospace, monospace';
         ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-        ctx.lineJoin = 'round'; ctx.lineWidth = 2.6;
+        ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2, fontPx / 4);
         ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-        ctx.strokeText(lbl, mx + r + 4, my);
+        ctx.strokeText(lbl, mx + r + 5, my);
         ctx.fillStyle = color;
-        ctx.fillText(lbl, mx + r + 4, my);
+        ctx.fillText(lbl, mx + r + 5, my);
         ctx.restore();
       }
+    }
+
+    /* Helper condiviso: icona "glow" della flotta (halo radiale + scafo a
+       rombo allungato + highlight chiaro al centro). Coerente con la
+       resa NASA/Visions del sistema (UI_GUIDE §1) — più riconoscibile del
+       semplice rombo. `hostile:true` rende il rombo più appuntito (silhouette
+       militare) e l'halo più aggressivo. */
+    _drawFleetGlow(ctx, x, y, r, color, opts) {
+      opts = opts || {};
+      const hostile = !!opts.hostile;
+      ctx.save();
+      /* halo esterno radiale */
+      const haloA = hostile ? 0.62 : 0.55;
+      const glow = ctx.createRadialGradient(x, y, 0, x, y, r * 3);
+      glow.addColorStop(0, hexA(color, haloA));
+      glow.addColorStop(0.45, hexA(color, haloA * 0.36));
+      glow.addColorStop(1, hexA(color, 0));
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(x, y, r * 3, 0, Math.PI * 2); ctx.fill();
+      /* scafo a rombo allungato in verticale */
+      ctx.translate(x, y);
+      const top  = -r * (hostile ? 1.30 : 1.15);
+      const bot  =  r * (hostile ? 1.00 : 0.85);
+      const side =  r * (hostile ? 0.60 : 0.70);
+      ctx.beginPath();
+      ctx.moveTo(0, top);
+      ctx.lineTo(side, r * 0.5);
+      ctx.lineTo(0, bot);
+      ctx.lineTo(-side, r * 0.5);
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(8,12,24,0.92)';
+      ctx.lineWidth = Math.max(1, r * 0.12);
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+      /* highlight bianco al centro (riflesso) */
+      ctx.beginPath();
+      ctx.arc(0, -r * 0.10, r * 0.26, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.fill();
+      ctx.restore();
     }
 
     _drawDust(ctx) {
