@@ -4940,6 +4940,19 @@ function anomalyKindMeta(kind) {
   return { label: kind, res: null };
 }
 
+/* Icona + tinta canoniche per tipo di anomalia/giacimento.
+   Richiesta utente 2026-06-20: differenziare cinture/detriti/nebulose/
+   gassosi/reliquie con icone glow coerenti (UI_GUIDE §3) invece del solo
+   testo. Glow è già fornito da .ui-icon-svg (drop-shadow currentColor). */
+function anomalyKindIcon(kind) {
+  if (kind === 'detriti')  return uiIcon('fspEmis', 'cyan');   /* scintille metalliche */
+  if (kind === 'cintura')  return uiIcon('dotCircle', 'cyan'); /* anello di asteroidi */
+  if (kind === 'nebulosa') return uiIcon('fspBio', 'amber');   /* nube concentrica */
+  if (kind === 'gassoso')  return uiIcon('fspGrav', 'amber');  /* orbita gravitazionale */
+  if (kind === 'reliquie') return uiIcon('fspRelic', 'violet');/* esagono reliquia */
+  return uiIcon('star', 'soft');
+}
+
 /* Etichetta breve della risorsa per UI "raccolti X met". */
 function resShortLabel(res) {
   if (res === 'met') return 'met';
@@ -5005,7 +5018,16 @@ function doSurveyAnomaly(colony, targetSystemId, anomalyKind, bodyKey, opts) {
   pushChronicle(ORION.time.currentDS(g) + ' — Flotta di ricognizione in rotta ' + where + '.', 'explore');
   if (ORION.tutorial) ORION.tutorial.fire('anomalies');
   persistGame(g);
+  /* Conferma visiva immediata (richiesta utente 2026-06-20): senza toast
+     l'azione era silenziosa e il giocatore non capiva di aver lanciato. */
+  showToast('Flotta in rotta verso ' + (sys ? sys.name : 'sistema') + (targetSystemId === colony.systemId ? '' : ' (' + (anomalyKind === 'reliquie' ? 'reliquia' : 'sito di drenaggio') + ')'));
   updatePlanetUI();
+  /* Refresh immediato della vista "Anomalie & sfruttamenti" così la riga
+     mostra subito il badge "in viaggio" (richiesta utente 2026-06-20). */
+  if (ORION._currentView === 'econ-anomalies') {
+    const est = document.querySelector('[data-view-stage]');
+    if (est) { const sc = est.scrollTop; try { renderEconAnomaliesView(est); } catch (_) { /* niente */ } est.scrollTop = sc; }
+  }
 }
 
 /* Decisione #76: stima del tempo di viaggio (sola andata) verso un sistema,
@@ -5216,22 +5238,30 @@ function openAnomalySurveyPicker(colony, targetSystemId, anomalyKind, bodyKey, o
   const sys = g.galaxy.systems[targetSystemId];
   const acr = regionAcronymFor(targetSystemId);
   const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
+  /* Colonia sorgente (riga riepilogo): aiuta a capire da DOVE parte la
+     flotta (richiesta utente 2026-06-20: prima non era esplicito). */
+  const fromName = escapeHtml(systemNameFromKey(g, colony.systemId + ':' + colony.bodyKey));
+  const fromAcr = regionAcronymFor(colony.systemId);
+  const fromTag = fromAcr ? ' <span class="name-tag">[' + fromAcr + ']</span>' : '';
 
-  /* Chip selettore tipo scafo. */
-  function shipChip(kind, label, sub, count, disabled) {
+  /* Chip selettore tipo scafo. Mostriamo solo i tipi disponibili (≥1):
+     "Estrattore 0 disp." era rumore — richiesta utente 2026-06-20. */
+  function shipChip(kind, label, sub, count) {
     const sel = selectedKind === kind;
     return '<button class="exp-crew-chip' + (sel ? ' is-selected' : '') + '" type="button"' +
       ' role="radio" aria-checked="' + (sel ? 'true' : 'false') + '"' +
       ' data-action="anom-ship-pick" data-kind="' + escapeHtml(kind) + '"' +
-      (disabled ? ' disabled title="Nessuno disponibile"' : ' title="' + escapeHtml(sub) + '"') + '>' +
+      ' title="' + escapeHtml(sub) + '">' +
       '<span class="exp-crew-chip__rank">' + escapeHtml(label) + '</span>' +
       '<span class="exp-crew-chip__xp">' + count + ' disp.</span>' +
     '</button>';
   }
-  const shipChips = '<div class="exp-crew-select" role="radiogroup" aria-label="Scegli scafo">' +
-    shipChip('estrattore', 'Estrattore', 'rate scalato sull\'Hangar — consigliato per harvest', extractors, extractors < 1) +
-    shipChip('explorer',   'Esploratore', 'rate base, niente bonus harvest', explorers, explorers < 1) +
-  '</div>';
+  const shipChipsArr = [];
+  if (extractors >= 1) shipChipsArr.push(shipChip('estrattore', 'Estrattore', 'rate scalato sull\'Hangar — consigliato per harvest', extractors));
+  if (explorers  >= 1) shipChipsArr.push(shipChip('explorer',   'Esploratore', 'rate base, niente bonus harvest', explorers));
+  const shipChips = shipChipsArr.length
+    ? '<div class="exp-crew-select" role="radiogroup" aria-label="Scegli scafo">' + shipChipsArr.join('') + '</div>'
+    : '<p class="panel__note">Nessuno scafo idoneo (Estrattore o Esploratore) nella colonia di partenza.</p>';
 
   let crewChips;
   if (!crewsSorted.length) {
@@ -5266,7 +5296,8 @@ function openAnomalySurveyPicker(colony, targetSystemId, anomalyKind, bodyKey, o
           '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
         '</button>' +
       '</header>' +
-      '<p class="panel__note">' + escapeHtml(meta.label) + ' nel sistema <strong>' + (sys ? escapeHtml(sys.name) : '—') + '</strong>' + tag + '.</p>' +
+      '<p class="panel__note">' + escapeHtml(meta.label) + ' nel sistema <strong>' + (sys ? escapeHtml(sys.name) : '—') + '</strong>' + tag +
+        ' · da <strong>' + fromName + '</strong>' + fromTag + '.</p>' +
       '<p class="sysinfo__sub">Scafo</p>' +
       shipChips +
       '<p class="sysinfo__sub">Equipaggio</p>' +
@@ -5302,10 +5333,13 @@ function openAnomalySurveyPicker(colony, targetSystemId, anomalyKind, bodyKey, o
   const launchBtn = host.querySelector('[data-action="anom-launch"]');
   if (launchBtn && !launchBtn.disabled) {
     launchBtn.addEventListener('click', function () {
+      /* Chiusura immediata per dare feedback visivo (richiesta utente
+         2026-06-20): prima la close era dopo doSurveyAnomaly e in alcuni
+         casi il modal "restava fisso" senza alcun segnale. */
+      closeAnomalySurveyPicker();
       doSurveyAnomaly(colony, targetSystemId, anomalyKind, bodyKey, {
         shipKind: selectedKind, crewId: selectedCrewId
       });
-      closeAnomalySurveyPicker();
     });
   }
 }
@@ -6224,6 +6258,24 @@ function economyAnomaliesHtml(g) {
     fchip('all', 'Tutte') + fchip('met', 'Metalli') + fchip('en', 'Energia') + fchip('reliquie', 'Reliquie') +
   '</div>';
 
+  /* Mappa "flotte survey inbound" per sito: chiave sysId|bodyKey|kind.
+     Serve a mostrare "in viaggio" sulla riga dell'anomalia quando la
+     flotta è stata inviata ma non è ancora arrivata (richiesta utente
+     2026-06-20: senza questo, dopo "Invia flotta" il giocatore non
+     vedeva alcun riscontro fino all'inizio della raccolta). */
+  const inboundBySite = {};
+  (g.fleets || []).forEach(function (f) {
+    const o = f && f.orders;
+    if (!o || o.type !== 'survey') return;
+    const k = (o.toSysId == null ? '' : o.toSysId) + '|' + (o.bodyKey || '') + '|' + (o.anomalyKind || '');
+    (inboundBySite[k] = inboundBySite[k] || []).push(f);
+  });
+  function inboundForSite(s) {
+    const k = s.sysId + '|' + (s.bodyKey || '') + '|' + (s.kind || '');
+    const list = inboundBySite[k] || [];
+    return list.filter(function (f) { return !s.harvesting || f.location.status === 'in-transit'; });
+  }
+
   /* Riepilogo testata: aggrega TUTTI i siti noti (non filtrati) per dare
      un colpo d'occhio "quanto sto estraendo ora" indipendente dal filtro. */
   const allSites = knownExploitableSites();
@@ -6251,6 +6303,29 @@ function economyAnomaliesHtml(g) {
     sumCell('resources', round1(sumMet) + '/' + iU(), activeMet + ' siti · metalli', 'is-met') +
     sumCell('star', round1(sumEn) + '/' + iU(), activeEn + ' siti · energia', 'is-en') +
   '</section>';
+
+  /* Ripartizione per colonia ricevente (richiesta utente 2026-06-20):
+     il raccolto va in capo alla COLONIA D'ORIGINE della flotta — non
+     alla più vicina al sito — quindi qui mostriamo esplicitamente
+     "+X met/Ι · +Y en/Ι" per ogni colonia attualmente beneficiaria. */
+  const byColony = (ORION.anomaly && ORION.anomaly.harvestByColony) ? ORION.anomaly.harvestByColony(g) : {};
+  const colKeys = Object.keys(byColony).sort(function (a, b) { return byColony[b].total - byColony[a].total; });
+  let byColonyHtml = '';
+  if (colKeys.length) {
+    byColonyHtml = '<section class="econ-bycol" aria-label="Surplus estrattivo per colonia">' +
+      '<h3 class="econ-bycol__h">Ripartizione per colonia</h3>' +
+      '<ul class="econ-bycol__list">' + colKeys.map(function (ck) {
+        const r = byColony[ck];
+        let chips = '';
+        if (r.met > 0) chips += '<span class="econ-bycol__chip is-met">+' + round1(r.met) + ' met/' + iU() + ' <em>· ' + r.sitesMet + (r.sitesMet === 1 ? ' sito' : ' siti') + '</em></span>';
+        if (r.en  > 0) chips += '<span class="econ-bycol__chip is-en">+' + round1(r.en) + ' en/' + iU() + ' <em>· ' + r.sitesEn + (r.sitesEn === 1 ? ' sito' : ' siti') + '</em></span>';
+        return '<li class="econ-bycol__row">' +
+          '<span class="econ-bycol__name">' + escapeHtml(systemNameFromKey(g, ck)) + '</span>' +
+          '<span class="econ-bycol__chips">' + chips + '</span>' +
+        '</li>';
+      }).join('') + '</ul>' +
+    '</section>';
+  }
 
   const sites = allSites.filter(passFilter);
   let body;
@@ -6316,33 +6391,45 @@ function economyAnomaliesHtml(g) {
           if (s.harvesting) harvestTxt = '<span class="econ-chip econ-chip--harvest" title="Risorse raccolte · ritmo per Impulso">raccolti <strong>' + got + ' ' + resLbl + '</strong> · <strong>' + rate + '</strong>/' + iU() + '</span>';
           else if (got > 0) harvestTxt = '<span class="econ-chip" title="Risorse raccolte (raccolta interrotta)">raccolti ' + got + ' ' + resLbl + '</span>';
         }
-        const canSend = !s.harvesting && send && send.capable;
+        const inbound = inboundForSite(s);
+        const inboundTransit = inbound.filter(function (f) { return f.location.status === 'in-transit'; });
+        const canSend = !s.harvesting && !inboundTransit.length && send && send.capable;
         const sendTitle = s.harvesting ? 'Una flotta è già presente sul sito'
+          : inboundTransit.length ? 'Una flotta è già in viaggio verso questo sito'
           : (send && send.capable
               ? 'Invia una flotta da ' + escapeHtml(systemNameFromKey(g, send.colony.systemId + ':' + send.colony.bodyKey)) + ' (' + send.hops + ' salti)'
               : 'Nessuna colonia con scafo + equipaggio in grado di raggiungere il sito');
         const colAttr = (send && send.capable) ? (' data-col="' + escapeHtml(send.colony.systemId + ':' + send.colony.bodyKey) + '"') : '';
         const bodyAttr = s.bodyKey ? (' data-body="' + escapeHtml(s.bodyKey) + '"') : '';
-        return '<li class="econ-item' + (s.harvesting ? ' is-harvesting' : '') + '">' +
+        const inboundBadge = (!s.harvesting && inboundTransit.length)
+          ? '<span class="econ-item__live econ-item__live--enroute" title="Flotta in viaggio verso il sito">✈ in viaggio</span>'
+          : '';
+        const kindIcon = anomalyKindIcon(s.kind);
+        return '<li class="econ-item econ-item--' + escapeHtml(s.kind) + (s.harvesting ? ' is-harvesting' : (inboundTransit.length ? ' is-enroute' : '')) + '">' +
+          '<span class="econ-item__glyph" aria-hidden="true">' + kindIcon + '</span>' +
           '<div class="econ-item__main">' +
             '<div class="econ-item__head">' +
               '<span class="econ-item__kind">' + meta.label + '</span>' +
               (bodyName ? '<span class="econ-item__body">' + bodyName + '</span>' : '') +
               (s.harvesting ? '<span class="econ-item__live" title="Flotta presente">✦ in raccolta</span>' : '') +
+              inboundBadge +
             '</div>' +
             '<div class="econ-item__chips">' +
               '<span class="econ-chip" title="Stato del sito">' + stateTxt + '</span>' +
               harvestTxt +
             '</div>' +
           '</div>' +
-          '<button class="btn btn--mini btn--primary econ-item__send" data-action="econ-anom-send" data-sys="' + s.sysId + '" data-kind="' + s.kind + '"' + bodyAttr + colAttr + ' type="button"' +
-            (canSend ? '' : ' disabled') + ' title="' + escapeHtml(sendTitle) + '">Invia flotta</button>' +
+          '<button class="econ-item__send" data-action="econ-anom-send" data-sys="' + s.sysId + '" data-kind="' + s.kind + '"' + bodyAttr + colAttr + ' type="button"' +
+            (canSend ? '' : ' disabled') + ' title="' + escapeHtml(sendTitle) + '">' +
+            '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('send')) || '→') + '</span>' +
+            '<span class="econ-item__send-lbl">Invia</span>' +
+          '</button>' +
         '</li>';
       }).join('') + '</ul>');
       return '<section class="econ-group' + (collapsed ? ' is-collapsed' : '') + '">' + head + items + '</section>';
     }).join('') + '</div>';
   }
-  return summary + chips + body;
+  return summary + byColonyHtml + chips + body;
 }
 
 /* Sezione Scambi con le AI (export rifiuti). Read + chiusura contratto; i
@@ -6437,8 +6524,9 @@ function renderEconAnomaliesView(stage) {
       econViewHead('Anomalie &amp; sfruttamenti', 'Economia · §17.3') +
       economyAnomaliesHtml(g) +
       '<p class="panel__note">Tutti i siti §17.3 noti della galassia, raggruppati per sistema. Inviare una flotta che ' +
-        '<strong>resta sul posto</strong> a drenare: parte dalla colonia idonea più vicina. Detriti/cinture→metalli, ' +
-        'nebulose/giganti gassosi→energia, reliquie→ricompensa una-tantum.</p>' +
+        '<strong>resta sul posto</strong> a drenare: parte dalla colonia idonea più vicina. Il bottino viene depositato ' +
+        'sulla <strong>colonia attiva più vicina al sito</strong> — usa le rotte commerciali per ridistribuirlo. ' +
+        'Detriti/cinture→metalli, nebulose/giganti gassosi→energia, reliquie→ricompensa una-tantum.</p>' +
     '</div>';
   stage.querySelectorAll('[data-action="econ-res-filter"]').forEach(function (b) {
     b.addEventListener('click', function () { ORION._econResFilter = b.dataset.res; renderEconAnomaliesView(stage); });

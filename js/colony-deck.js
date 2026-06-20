@@ -310,17 +310,30 @@
       const tradeNet = (ORION.trade && ORION.trade.colonyTradeFlow)
         ? ORION.trade.colonyTradeFlow(ORION.game, colKey)
         : { met: 0, en: 0, food: 0, water: 0 };
+      /* Surplus estrattivo da anomalie/cinture/nebulose (richiesta utente
+         2026-06-20): le flotte in raccolta versano il bottino sulla colonia
+         d'origine, non sulla più vicina. Lo includiamo nel saldo e lo
+         mostriamo come chip esplicito così è chiaro DA DOVE viene. */
+      const anomFlow = (ORION.anomaly && ORION.anomaly.harvestByColony)
+        ? (ORION.anomaly.harvestByColony(ORION.game)[colKey] || null)
+        : null;
+      const anomMet = anomFlow ? anomFlow.met : 0;
+      const anomEn  = anomFlow ? anomFlow.en  : 0;
 
       let html = '<aside class="deck-resources" aria-label="Risorse della colonia">';
       keys.forEach(function (k) {
         const stock = colony.stock[k] || 0;
         const popDrain = k === 'food' ? pf.popFood : k === 'water' ? pf.popWater : 0;
         const crewDrain = k === 'food' ? (pf.crewFood || 0) : k === 'water' ? (pf.crewWater || 0) : 0;
-        const net = (out.rates[k] || 0) * pf.prodMul - (out.upkeep[k] || 0) - popDrain - crewDrain + (tradeNet[k] || 0);
+        const anomBonus = k === 'met' ? anomMet : k === 'en' ? anomEn : 0;
+        const net = (out.rates[k] || 0) * pf.prodMul - (out.upkeep[k] || 0) - popDrain - crewDrain + (tradeNet[k] || 0) + anomBonus;
         const state = scar && scar[k] ? scar[k].state : 'ok';
         const stateCls = state === 'crit' ? ' is-crit' : state === 'low' ? ' is-low' : '';
         const stateLabel = state === 'crit' ? 'critica' : state === 'low' ? 'allerta' : 'ok';
         const netCls = net > 0.01 ? 'is-pos' : net < -0.01 ? 'is-neg' : '';
+        const anomChip = anomBonus > 0
+          ? '<span class="deck-res__anom" title="Surplus da flotte in raccolta su anomalie">✦ +' + (Math.round(anomBonus * 10) / 10) + '/Ι</span>'
+          : '';
         html +=
           '<div class="deck-res' + stateCls + '" data-res="' + k + '" title="' + RES_LABEL[k] + ' · ' + stateLabel + '">' +
             '<div class="deck-res__head">' +
@@ -329,6 +342,7 @@
             '</div>' +
             '<div class="deck-res__value">' + fmtNum(stock) + '</div>' +
             '<div class="deck-res__rate ' + netCls + '">' + fmtRate(net) + ' / Ι</div>' +
+            anomChip +
           '</div>';
       });
       /* PR-M: status cards (slot/rifiuti/capitale/morale) sotto le 4 res
