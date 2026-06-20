@@ -1761,14 +1761,28 @@ button { font-family: inherit; }
    Scrollbar coerente col tema
    ===================================================================== */
 .panel__content::-webkit-scrollbar,
-.chronicle__log::-webkit-scrollbar { width: 8px; }
+.chronicle__log::-webkit-scrollbar,
+.viewport__stage::-webkit-scrollbar,
+.viewport__stage ::-webkit-scrollbar { width: 8px; height: 8px; }
 .panel__content::-webkit-scrollbar-thumb,
-.chronicle__log::-webkit-scrollbar-thumb {
+.chronicle__log::-webkit-scrollbar-thumb,
+.viewport__stage::-webkit-scrollbar-thumb,
+.viewport__stage ::-webkit-scrollbar-thumb {
   background: var(--c-border);
   border-radius: 4px;
 }
 .panel__content::-webkit-scrollbar-track,
-.chronicle__log::-webkit-scrollbar-track { background: transparent; }
+.chronicle__log::-webkit-scrollbar-track,
+.viewport__stage::-webkit-scrollbar-track,
+.viewport__stage ::-webkit-scrollbar-track { background: transparent; }
+/* Firefox: stessa tinta tema sui scroller del viewport centrale. */
+.panel__content,
+.chronicle__log,
+.viewport__stage,
+.viewport__stage * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-border) transparent;
+}
 
 /* =====================================================================
    Responsive — riduzione su schermi stretti.
