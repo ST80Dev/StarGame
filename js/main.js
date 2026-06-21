@@ -11906,6 +11906,9 @@ const DEFAULT_AUTOPAUSE = {
      congedo sono atmosferici (OFF). */
   'council-constituted': true, 'luminary-emerged': false,
   'council-succession': false, 'figure-retired': false,
+  /* M18 bridge: figura persa con colonia (notevole), congedo onorato
+     (atmosferico). Entrambi influenzano reputazione (−3/+2). */
+  'figure-lost': true, 'figure-retired-honored': false,
   /* M08 Fase A (decisione #42): arrivo flotta + rotta completata + scoperta
      fortuita auto-pausano (esiti notevoli). Il launch è azione utente,
      non sorpresa. Hop intermedi mai. */
@@ -12409,6 +12412,8 @@ function showEventOverlay(events) {
     'luminary-emerged': 'Nuovo Luminare',
     'council-succession': 'Consiglio: avvicendamento',
     'figure-retired': 'Figura in congedo',
+    'figure-retired-honored': 'Figura: congedo onorato',
+    'figure-lost': 'Figura persa in servizio',
     'fleet-arrived': 'Flotta arrivata',
     'fleet-route-complete': 'Flotta: rotta completata',
     'fleet-discovery': 'Flotta: sistema esplorato',
@@ -12870,6 +12875,10 @@ function _chronicleEventBody(ev) {
   } else if (ev.kind === 'figure-retired') {
     const where = ev.scope === 'colony' ? 'amministrativo' : 'di flotta';
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.name) + '</strong> (' + escapeHtml(ev.roleLabel || where) + ') si congeda dopo un lungo servizio.', 'figure');
+  } else if (ev.kind === 'figure-retired-honored') {
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.name) + '</strong> (' + escapeHtml(ev.roleLabel || '') + ') si congeda al culmine della carriera: <strong>+2 reputazione</strong>.', 'figure');
+  } else if (ev.kind === 'figure-lost') {
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.name) + '</strong> (' + escapeHtml(ev.roleLabel || '') + ') è <strong>perso/a in servizio</strong> con la caduta della colonia: <strong>−3 reputazione</strong>.', 'figure');
   } else if (ev.kind === 'expedition-arrived') {
     const sys = ORION.game.galaxy.systems[ev.systemId];
     const tag = ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';

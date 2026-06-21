@@ -1111,10 +1111,15 @@
     maybePirateIncursion(game, grng, events);
     maybeAiIncursion(game, grng, events);
 
-    /* --- ICG: applica + decadimento dolce. --- */
+    /* --- ICG: applica + decadimento dolce. ---
+       M18 bridge: ogni figura Integerrimo a rango Console in servizio
+       potenzia il decadimento verso il basale (+0.005/figura), narrativamente
+       "amministratore incorruttibile contrasta la corruzione galattica". */
     if (game.icg == null) game.icg = 20;
     game.icg += icgDelta;
-    game.icg += (20 - game.icg) * CFG.ICG_DECAY;
+    const CF = ORION.colonyFigure;
+    const icgDecayBonus = (CF && CF.icgDecayBonusFromFigures) ? CF.icgDecayBonusFromFigures(game) : 0;
+    game.icg += (20 - game.icg) * (CFG.ICG_DECAY + icgDecayBonus);
     game.icg = Math.max(0, Math.min(100, game.icg));
 
     /* --- Fase B (decisione #52 §13.6 §13.8): coesione di sistema +

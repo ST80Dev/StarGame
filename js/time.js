@@ -1858,7 +1858,7 @@
       // morale crollo (catena della spirale C): doppio + extra se capitale
       warRegisterLoss(game, CFG.WAR_MORALE_PER_LOOT * 2 + (wasCapital ? 0.10 : 0), CFG.WAR_PRESSURE_PER_LOSS * 1.5);
       if (raze) {
-        removeColony(game, colonyKey);
+        removeColony(game, colonyKey, events);
         bumpIcg(game, 3);
         events.push({ kind: 'colony-razed', colonyKey: colonyKey, systemId: sysId,
           civName: civ ? civ.name : battle.attacker.name, wasCapital: wasCapital, impulso: game.timeImpulsi });
@@ -1876,7 +1876,7 @@
         }
         civ.power += 15;
       }
-      removeColony(game, colonyKey);
+      removeColony(game, colonyKey, events);
       bumpIcg(game, 4);
       events.push({ kind: 'colony-conquered', colonyKey: colonyKey, systemId: sysId,
         civName: civ ? civ.name : battle.attacker.name, wasCapital: wasCapital, impulso: game.timeImpulsi });
@@ -2007,8 +2007,15 @@
   /* Rimozione di una colonia dal gioco (conquista/rasa/evacuazione).
      Pulisce il mapping capitale e le incursioni/assedi che la puntavano.
      Recovery-friendly: le flotte NON vengono distrutte (restano operative,
-     orfane della base). */
-  function removeColony(game, colonyKey) {
+     orfane della base).
+     M18 bridge: se la colonia aveva una figura assegnata, emette evento
+     cronaca 'figure-lost' e applica −3 reputazione (la figura "muore in
+     servizio"). La figura non rientra nel pool d'Impero. */
+  function removeColony(game, colonyKey, events) {
+    if (game.colonies && game.colonies[colonyKey] && game.colonies[colonyKey].figure) {
+      const CF = root.ORION && root.ORION.colonyFigure;
+      if (CF && CF.onColonyLost) CF.onColonyLost(game, game.colonies[colonyKey], colonyKey, events);
+    }
     if (game.capitals) {
       Object.keys(game.capitals).forEach(function (gid) {
         if (game.capitals[gid] === colonyKey) delete game.capitals[gid];

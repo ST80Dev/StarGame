@@ -194,11 +194,20 @@
     };
   }
 
+  /* M18 bridge — modulatore reputazione su pipeline figure.
+     Reputazione alta attira talento (+15% al max), bassa lo allontana (−15%).
+     fRep = 0.85 + (rep/100) × 0.30, range [0.85..1.15]. Rep 50 = neutra. */
+  function reputationFactor(game) {
+    var rep = (game && typeof game.reputation === 'number') ? game.reputation : 50;
+    return 0.85 + (Math.max(0, Math.min(100, rep)) / 100) * 0.30;
+  }
+
   /* Tasso di maturazione per Ι, modulato in modo deterministico:
        fPop = clamp(0.75 + pop/12, 0.75, 2.0)
        fSpec = 1.30 se vocazione estrattiva/civica (mondo "vocato")
        fCapital = 1.5 se capitale di gruppo
        fGov = 1.25 se Governatore #59 attivo
+       fRep = 0.85..1.15 da game.reputation (M18 bridge)
      Nessun RNG, nessuna dipendenza dal tempo: stesso stato → stesso rate. */
   function emergenceRate(game, colony, colonyKey) {
     var pop = (colony.pop && colony.pop.total) || 1;
@@ -209,7 +218,8 @@
     var fCapital = (cap && cap.isCapital && cap.isCapital(game, colonyKey)) ? 1.5 : 1.0;
     var govActive = !!(colony.governor && colony.governor.level && colony.governor.level !== 'off');
     var fGov = govActive ? 1.25 : 1.0;
-    return ADMIN_RATE * fPop * fSpec * fCapital * fGov;
+    var fRep = reputationFactor(game);
+    return ADMIN_RATE * fPop * fSpec * fCapital * fGov * fRep;
   }
 
   /* Emergenza: chiamata dal tick per ogni colonia operativa. Accumula
@@ -348,9 +358,79 @@
     return parts.join(' · ');
   }
 
+  /* ================ M18 bridge — Figure → Reputazione/ICG ================
+     Contributi calcolati ad ogni tick di drift di diplomacy.js (cadenza
+     DRIFT_EVERY_I = 8 Ι). Sommati su TUTTE le figure ASSEGNATE in servizio.
+
+     Per-tick di drift (8 Ι):
+       Prefetto civile  : +0.04  rep  (×1.5 a rango Console = +0.06)
+       Logista          : +0.02  rep  (×1.5 a Console = +0.03)
+       Capomastro / Ingegnere capo / Governatore : 0 (ruoli neutri)
+
+     Esempio: 1 Prefetto Console mantiene ~+0.06/8Ι ≈ +0.75/100Ι, compensa
+     una pista dark blanda. Effetto sentibile solo se la civiltà davvero
+     coltiva figure civiche di lunga carriera. */
+  function repDriftContribution(role, rankIdx) {
+    var base = 0;
+    if (role === 'prefetto-civile') base = 0.04;
+    else if (role === 'logista')    base = 0.02;
+    else return 0;
+    return rankIdx >= 2 ? base * 1.5 : base;   // Console boost
+  }
+  /* Somma il contributo di reputazione da tutte le figure ASSEGNATE.
+     Chiamata da diplomacy.js dentro il blocco DRIFT_EVERY_I. */
+  function reputationDriftFromFigures(game) {
+    var cols = game && game.colonies;
+    if (!cols) return 0;
+    var total = 0;
+    Object.keys(cols).forEach(function (k) {
+      var fig = cols[k] && cols[k].figure;
+      if (!fig) return;
+      total += repDriftContribution(fig.role, rankIndexForXp(fig.xp || 0));
+    });
+    return total;
+  }
+  /* Bonus ICG decay da Integerrimo a rango Console (trait + rank congiunti).
+     Restituisce il moltiplicatore aggiuntivo da SOMMARE a ICG_DECAY base.
+     Chiamato da ai.js subito prima del decadimento ICG. */
+  function icgDecayBonusFromFigures(game) {
+    var bonus = 0;
+    var cols = game && game.colonies;
+    if (!cols) return 0;
+    Object.keys(cols).forEach(function (k) {
+      var fig = cols[k] && cols[k].figure;
+      if (!fig) return;
+      if (fig.trait === 'integerrimo' && rankIndexForXp(fig.xp || 0) >= 2) {
+        bonus += 0.005;
+      }
+    });
+    return bonus;
+  }
+  /* Hook chiamato da time.js → removeColony quando una colonia sparisce
+     con una figura assegnata. Effetto: −3 reputazione + evento cronaca
+     'figure-lost'. Recovery-friendly: la figura non torna nel pool. */
+  function onColonyLost(game, colony, colonyKey, events) {
+    var fig = colony && colony.figure;
+    if (!fig) return;
+    if (game && typeof game.reputation === 'number') {
+      game.reputation = Math.max(0, Math.min(100, game.reputation - 3));
+    }
+    if (events) {
+      events.push({
+        kind: 'figure-lost', scope: 'colony',
+        name: (fig.rank || '') + ' ' + fig.name,
+        roleLabel: roleLabel(fig), colonyKey: colonyKey,
+        impulso: game && game.timeImpulsi
+      });
+    }
+    colony.figure = null;
+  }
+
   /* Ricambio automatico (decisione #79): le figure di colonia hanno un
      mandato lungo; superato, vanno in congedo da sole (notifica). La
-     pipeline (adminXp) genera i successori. */
+     pipeline (adminXp) genera i successori.
+     M18 bridge: se la figura si congeda a rango Console (carriera piena
+     onorata) → evento 'figure-retired-honored' + 2 reputazione. */
   var CF_TENURE_BASE = 8000, CF_TENURE_SPREAD = 4000;
   function cfHash(s) {
     var h = 2166136261; s = '' + s;
@@ -364,7 +444,19 @@
     var now = game.timeImpulsi || 0;
     function expired(f) { return (now - (f.bornAt || 0)) >= cfTenure(f.id); }
     function notify(f) {
-      if (events) events.push({ kind: 'figure-retired', scope: 'colony', name: (f.rank || '') + ' ' + f.name, roleLabel: roleLabel(f), impulso: now });
+      var honored = rankIndexForXp(f.xp || 0) >= 2;
+      if (honored && typeof game.reputation === 'number') {
+        game.reputation = Math.max(0, Math.min(100, game.reputation + 2));
+      }
+      if (events) {
+        events.push({
+          kind: honored ? 'figure-retired-honored' : 'figure-retired',
+          scope: 'colony',
+          name: (f.rank || '') + ' ' + f.name,
+          roleLabel: roleLabel(f),
+          impulso: now
+        });
+      }
     }
     /* assegnate (su colony.figure) */
     var cols = game.colonies || {};
@@ -372,10 +464,14 @@
       var f = cols[k] && cols[k].figure;
       if (f && expired(f)) { cols[k].figure = null; notify(f); }
     });
-    /* idle nel pool */
+    /* idle nel pool — il bonus reputazione di congedo onorato si applica
+       solo agli assegnati (chi ha servito davvero), non agli idle scaduti. */
     var pool = list(game);
     for (var j = pool.length - 1; j >= 0; j--) {
-      if (expired(pool[j])) { var fig = pool.splice(j, 1)[0]; notify(fig); }
+      if (expired(pool[j])) {
+        var fig = pool.splice(j, 1)[0];
+        if (events) events.push({ kind: 'figure-retired', scope: 'colony', name: (fig.rank || '') + ' ' + fig.name, roleLabel: roleLabel(fig), impulso: now });
+      }
     }
   }
 
@@ -412,6 +508,10 @@
     vocationOf: vocationOf,
     roleForVocation: roleForVocation,
     emergenceRate: emergenceRate,
+    reputationFactor: reputationFactor,
+    reputationDriftFromFigures: reputationDriftFromFigures,
+    icgDecayBonusFromFigures: icgDecayBonusFromFigures,
+    onColonyLost: onColonyLost,
     retireOld: retireOld
   };
 }(typeof window !== 'undefined' ? window : this));
