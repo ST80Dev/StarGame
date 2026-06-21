@@ -14882,6 +14882,20 @@ function renderContextActionBar(ctx) {
               '<span class="bodyinfo__chip-k">Pop max</span>' +
               '<span class="bodyinfo__chip-v">' + planet.popCap + '</span></span>');
           }
+          /* Vocazione del mondo (M14 ext): dedotta dai potentials, determina
+             il ruolo della figura amministrativa che emergerà. */
+          if (ORION.colonyFigure && ORION.colonyFigure.vocationOf && planet.potentials) {
+            const VOC_INFO = {
+              estrattiva: { label: 'Estrattiva',  cls: 'is-warn',   role: 'Capomastro estrattivo',  tip: 'Vocazione dedotta dai potenziali del mondo: la figura amministrativa che emergerà sarà un Capomastro estrattivo (+yield met/en). Pipeline accelerata ×1.30.' },
+              civica:     { label: 'Civica',      cls: 'is-ok',     role: 'Prefetto civile',        tip: 'Vocazione dedotta dai potenziali del mondo: la figura amministrativa che emergerà sarà un Prefetto civile (+morale, +crescita pop). Pipeline accelerata ×1.30.' },
+              frontiera:  { label: 'Frontiera',   cls: 'is-mute',   role: 'Logista',                tip: 'Vocazione mista: la figura amministrativa che emergerà sarà un Logista (+cargo rotte). Pipeline a velocità base.' }
+            };
+            const voc = ORION.colonyFigure.vocationOf({ planet: planet });
+            const info = VOC_INFO[voc] || VOC_INFO.frontiera;
+            chips.push('<span class="bodyinfo__chip ' + info.cls + '" title="' + info.tip + '">' +
+              '<span class="bodyinfo__chip-k">Vocazione</span>' +
+              '<span class="bodyinfo__chip-v">' + info.label + '</span></span>');
+          }
         } else {
           chips.push('<span class="bodyinfo__chip is-mute" title="' + (isBelt ? 'Cintura asteroidale: solo estrazione orbitale' : 'Gigante gassoso: solo estrazione orbitale') + '">' +
             '<span class="bodyinfo__chip-k">' + (isBelt ? 'Cintura' : 'Gassoso') + '</span>' +
