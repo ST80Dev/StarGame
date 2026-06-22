@@ -8254,6 +8254,8 @@ function renderCivView(stage) {
   /* Tutorial: concetti sulle civiltà alla prima apertura della vista. */
   if (ORION.tutorial) ORION.tutorial.fire('civilizations');
 
+  const ALIGN_LABEL = { bene: 'Bene', male: 'Male', neutrale: 'Neutrale' };
+  const KNOWLEDGE = ORION.ai.KNOWLEDGE || { unknown:0, spotted:1, contacted:2, known:3, familiar:4 };
   /* Modalità DETTAGLIO a tutta schermata (richiesta utente 2026-06-20): se è
      selezionata una civ (click sul nome), mostra il dossier completo invece
      della lista. */
@@ -8267,9 +8269,6 @@ function renderCivView(stage) {
   }
   /* Breadcrumb striscia: lista = solo "Diplomazia" (corrente). */
   setViewCrumbs('<span class="crumb is-current">Diplomazia</span>');
-
-  const ALIGN_LABEL = { bene: 'Bene', male: 'Male', neutrale: 'Neutrale' };
-  const KNOWLEDGE = ORION.ai.KNOWLEDGE || { unknown:0, spotted:1, contacted:2, known:3, familiar:4 };
   /* M10 Fase B punto 2 (decisione #52 §13.10): scoperta progressiva a 5 gradi.
      `visibleCivs` ritorna tutte le civiltà ≥ avvistate (esclude le sconosciute).
      Le **4 Costanti** sono sempre visibili nella loro sezione fissa anche se
