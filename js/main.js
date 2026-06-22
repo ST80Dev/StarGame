@@ -8254,22 +8254,23 @@ function renderCivView(stage) {
   /* Tutorial: concetti sulle civiltà alla prima apertura della vista. */
   if (ORION.tutorial) ORION.tutorial.fire('civilizations');
 
+  const ALIGN_LABEL = { bene: 'Bene', male: 'Male', neutrale: 'Neutrale' };
+  const KNOWLEDGE = ORION.ai.KNOWLEDGE || { unknown:0, spotted:1, contacted:2, known:3, familiar:4 };
   /* Modalità DETTAGLIO a tutta schermata (richiesta utente 2026-06-20): se è
      selezionata una civ (click sul nome), mostra il dossier completo invece
      della lista. */
   if (ORION._civDetailId) {
     const dc = (g.civs || []).filter(function (c) { return c.id === ORION._civDetailId; })[0];
     const dcRank = dc && ORION.ai.knowledgeRank ? ORION.ai.knowledgeRank(dc) : 0;
-    /* Bugfix 2026-06-20: solo CONTACTED+ può aprire il dossier dettagliato.
-       Ad "Avvistata" non esiste ancora un dossier (vedi gating in card). */
-    if (dc && dcRank >= KNOWLEDGE.contacted) { renderCivDetail(stage, dc); return; }
-    ORION._civDetailId = null; // non più valido (caduta / solo avvistata / sconosciuta)
+    /* Apri il dettaglio per qualunque civ visibile (avvistata+) o per le 4
+       Costanti. Il livello intel reale (ricavato da intelProgress) regola
+       quali campi si vedono dentro renderCivDetail — niente più "Completo"
+       fantasma né blocchi all'accesso. */
+    if (dc && (dcRank >= KNOWLEDGE.spotted || dc.faction)) { renderCivDetail(stage, dc); return; }
+    ORION._civDetailId = null; // non più valido (caduta / sconosciuta)
   }
   /* Breadcrumb striscia: lista = solo "Diplomazia" (corrente). */
   setViewCrumbs('<span class="crumb is-current">Diplomazia</span>');
-
-  const ALIGN_LABEL = { bene: 'Bene', male: 'Male', neutrale: 'Neutrale' };
-  const KNOWLEDGE = ORION.ai.KNOWLEDGE || { unknown:0, spotted:1, contacted:2, known:3, familiar:4 };
   /* M10 Fase B punto 2 (decisione #52 §13.10): scoperta progressiva a 5 gradi.
      `visibleCivs` ritorna tutte le civiltà ≥ avvistate (esclude le sconosciute).
      Le **4 Costanti** sono sempre visibili nella loro sezione fissa anche se
@@ -8293,10 +8294,10 @@ function renderCivView(stage) {
     /* Header sempre presente: nome, swatch colore, eventuale chip grado.
        4 Costanti: ruolo SEMPRE noto anche in unknown. */
     /* Nome cliccabile → schermata di dettaglio piena (richiesta utente
-       2026-06-20). Solo da CONTACTED in su: ad "Avvistata" non esiste ancora
-       un dossier da aprire (bugfix 2026-06-20: prima si apriva un dettaglio
-       che, per fallback, mostrava tutto come 'Completo'). */
-    const nameClickable = (rank >= KNOWLEDGE.contacted);
+       2026-06-20). Cliccabile da avvistata in su (e per le Costanti):
+       il dettaglio adatta i campi al vero livello intel (frammentario a
+       0 progresso → quasi tutto "?"), non blocca l'accesso. */
+    const nameClickable = (rank >= KNOWLEDGE.spotted) || !!factionDef;
     const nameEl = nameClickable
       ? '<button type="button" class="civ-card__name civ-card__name--link" data-civ-detail="' + escapeHtml(c.id) + '" title="Apri il dossier dettagliato">' + escapeHtml(c.name) + '</button>'
       : '<span class="civ-card__name">' + escapeHtml(c.name) + '</span>';
