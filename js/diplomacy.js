@@ -640,8 +640,15 @@
     }
 
     /* Reputazione: deriva lenta verso il target dato dalle piste morali
-       (light/dark), così i verbi M09 continuano a contare. Cadenzata. */
+       (light/dark), così i verbi M09 continuano a contare. Cadenzata.
+       M18 bridge: somma il contributo delle figure di colonia in servizio
+       (Prefetto civile / Logista, ×1.5 a Console) PRIMA del drift verso
+       target, così figure civiche compensano lentamente le piste dark. */
     if (now % CFG.DRIFT_EVERY_I === 0) {
+      const CF = root.ORION && root.ORION.colonyFigure;
+      if (CF && CF.reputationDriftFromFigures) {
+        game.reputation += CF.reputationDriftFromFigures(game);
+      }
       const tracks = game.victoryTracks || {};
       const light = tracks.reputationLight || 0;   // 0..1
       const dark = tracks.reputationDark || 0;     // 0..1

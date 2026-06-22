@@ -944,21 +944,32 @@
         'i bonus si attivano solo quando sono al comando. Servendo in battaglia salgono di <strong>rango</strong> ' +
         '(Tenente → Capitano → Commodoro → Ammiraglio) e i loro bonus crescono.</p>'
     },
-    /* M14 Fase B1 (#77) — figure di colonia. */
+    /* M14 Fase B1 (#77) — figure di colonia + riforma vocazione + bridge M18. */
     {
       id: 'colony-figure', tag: 'Colonia · ⬡', title: 'Una figura di colonia emerge',
       body:
-        '<p>Come le figure di flotta, anche quelle <strong>di colonia</strong> non si costruiscono: <strong>emergono</strong> ' +
-        'quando una colonia raggiunge la <strong>maturità amministrativa</strong> (gioca, la barra cresce nella tab Colonia).</p>' +
-        '<p>Il <strong>ruolo</strong> dipende dal carattere della colonia:</p>' +
+        '<p>Le figure <strong>di colonia</strong> non si costruiscono: <strong>emergono</strong> quando una colonia raggiunge ' +
+        'la <strong>maturità amministrativa</strong> (barra nella tab Colonia). Il <strong>ruolo</strong> riflette la ' +
+        '<strong>vocazione del mondo</strong> (badge sulla scheda pianeta):</p>' +
         '<ul>' +
-          '<li><strong>Governatore di sector</strong> — emerge se hai un <em>Governatore</em> attivo (#59): rende le deleghe più rapide, ' +
-          'sblocca le deleghe anche con poche colonie e mantiene autonomamente uno scafo esploratore di scorta.</li>' +
-          '<li><strong>Ingegnere capo</strong> — emerge altrimenti: <strong>riduce il tempo di assemblaggio</strong> di scafi ed equipaggi (oltre ai tecnici).</li>' +
+          '<li><strong>Vocazione estrattiva</strong> (vulcanico/desertico) → <strong>Capomastro estrattivo</strong> ⛏ — ' +
+            '+8/12/16% yield metalli ed energia.</li>' +
+          '<li><strong>Vocazione civica</strong> (terrestre/forestale/oceanico) → <strong>Prefetto civile</strong> ⌂ — ' +
+            '+morale e +crescita popolazione.</li>' +
+          '<li><strong>Vocazione frontiera</strong> (ghiacciato/luna/mondi misti) → <strong>Logista</strong> ⊞ — ' +
+            '+10/15/20% cargo rotte commerciali in uscita.</li>' +
+          '<li>Se hai un <strong>Governatore #59 attivo</strong>, emerge invece il <strong>Governatore di sector</strong> ⬡ ' +
+            '(amplifica deleghe + autonomia estesa) — prevale sulla vocazione.</li>' +
         '</ul>' +
+        '<p><strong>Velocità di emergenza</strong>: la pipeline accelera con popolazione, vocazione netta del mondo (×1.30), ' +
+        'status di capitale (×1.50) e <strong>reputazione galattica</strong> (fino a ±15%). Una capitale matura può far emergere ' +
+        'una figura ogni ~5-7 Φ; un piccolo outpost minerario ogni ~12-15 Φ.</p>' +
         '<p>Le figure vivono nel <strong>pool d\'Impero</strong> e si <strong>assegnano a una colonia</strong> (una per colonia) dalla sezione ' +
-        '"Figura di colonia". Servendo salgono di rango (Funzionario → Prefetto → Console) e i bonus crescono. ' +
-        'Puoi <strong>spostarle</strong> dove servono di più.</p>'
+        '"Figura di colonia". Servendo salgono di rango <em>Funzionario → Prefetto → Console</em> e i bonus crescono. ' +
+        'Puoi <strong>spostarle</strong> dove servono di più.</p>' +
+        '<p><strong>Loop reputazione</strong>: Prefetti civili e Logisti in servizio fanno lentamente salire la reputazione galattica ' +
+        '(×1.5 a rango Console). Una figura che si <strong>congeda a Console</strong> dopo carriera piena dà <strong>+2 reputazione</strong>; ' +
+        'una colonia <strong>persa con figura assegnata</strong> costa <strong>−3 reputazione</strong>: scegli con cura dove mandare i tuoi migliori.</p>'
     },
     /* M14 Fase B2 (#78) — Consiglio della Civiltà. */
     {

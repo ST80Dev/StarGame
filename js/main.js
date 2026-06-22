@@ -11777,6 +11777,9 @@ const DEFAULT_AUTOPAUSE = {
      congedo sono atmosferici (OFF). */
   'council-constituted': true, 'luminary-emerged': false,
   'council-succession': false, 'figure-retired': false,
+  /* M18 bridge: figura persa con colonia (notevole), congedo onorato
+     (atmosferico). Entrambi influenzano reputazione (−3/+2). */
+  'figure-lost': true, 'figure-retired-honored': false,
   /* M08 Fase A (decisione #42): arrivo flotta + rotta completata + scoperta
      fortuita auto-pausano (esiti notevoli). Il launch è azione utente,
      non sorpresa. Hop intermedi mai. */
@@ -12282,6 +12285,8 @@ function showEventOverlay(events) {
     'luminary-emerged': 'Nuovo Luminare',
     'council-succession': 'Consiglio: avvicendamento',
     'figure-retired': 'Figura in congedo',
+    'figure-retired-honored': 'Figura: congedo onorato',
+    'figure-lost': 'Figura persa in servizio',
     'fleet-arrived': 'Flotta arrivata',
     'fleet-route-complete': 'Flotta: rotta completata',
     'fleet-discovery': 'Flotta: sistema esplorato',
@@ -12750,6 +12755,10 @@ function _chronicleEventBody(ev) {
   } else if (ev.kind === 'figure-retired') {
     const where = ev.scope === 'colony' ? 'amministrativo' : 'di flotta';
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.name) + '</strong> (' + escapeHtml(ev.roleLabel || where) + ') si congeda dopo un lungo servizio.', 'figure');
+  } else if (ev.kind === 'figure-retired-honored') {
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.name) + '</strong> (' + escapeHtml(ev.roleLabel || '') + ') si congeda al culmine della carriera: <strong>+2 reputazione</strong>.', 'figure');
+  } else if (ev.kind === 'figure-lost') {
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.name) + '</strong> (' + escapeHtml(ev.roleLabel || '') + ') è <strong>perso/a in servizio</strong> con la caduta della colonia: <strong>−3 reputazione</strong>.', 'figure');
   } else if (ev.kind === 'expedition-arrived') {
     const sys = ORION.game.galaxy.systems[ev.systemId];
     const tag = ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
@@ -14752,6 +14761,20 @@ function renderContextActionBar(ctx) {
             chips.push('<span class="bodyinfo__chip" title="Popolazione massima sostenibile (unità)">' +
               '<span class="bodyinfo__chip-k">Pop max</span>' +
               '<span class="bodyinfo__chip-v">' + planet.popCap + '</span></span>');
+          }
+          /* Vocazione del mondo (M14 ext): dedotta dai potentials, determina
+             il ruolo della figura amministrativa che emergerà. */
+          if (ORION.colonyFigure && ORION.colonyFigure.vocationOf && planet.potentials) {
+            const VOC_INFO = {
+              estrattiva: { label: 'Estrattiva',  cls: 'is-warn',   role: 'Capomastro estrattivo',  tip: 'Vocazione dedotta dai potenziali del mondo: la figura amministrativa che emergerà sarà un Capomastro estrattivo (+yield met/en). Pipeline accelerata ×1.30.' },
+              civica:     { label: 'Civica',      cls: 'is-ok',     role: 'Prefetto civile',        tip: 'Vocazione dedotta dai potenziali del mondo: la figura amministrativa che emergerà sarà un Prefetto civile (+morale, +crescita pop). Pipeline accelerata ×1.30.' },
+              frontiera:  { label: 'Frontiera',   cls: 'is-mute',   role: 'Logista',                tip: 'Vocazione mista: la figura amministrativa che emergerà sarà un Logista (+cargo rotte). Pipeline a velocità base.' }
+            };
+            const voc = ORION.colonyFigure.vocationOf({ planet: planet });
+            const info = VOC_INFO[voc] || VOC_INFO.frontiera;
+            chips.push('<span class="bodyinfo__chip ' + info.cls + '" title="' + info.tip + '">' +
+              '<span class="bodyinfo__chip-k">Vocazione</span>' +
+              '<span class="bodyinfo__chip-v">' + info.label + '</span></span>');
           }
         } else {
           chips.push('<span class="bodyinfo__chip is-mute" title="' + (isBelt ? 'Cintura asteroidale: solo estrazione orbitale' : 'Gigante gassoso: solo estrazione orbitale') + '">' +
