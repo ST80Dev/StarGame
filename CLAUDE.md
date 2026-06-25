@@ -72,7 +72,7 @@ Prima di qualunque modifica a CSS, HTML strutturale o nuovi widget: leggi `UI_GU
 
 ## Stato moduli (sintesi)
 
-✅ M01-M17 mergiati in main (schema 31). ⬜ M18 Reputazione/ICG (oggi anteprime emergenti) · M19 Spionaggio · M20 Polish/bilanciamento/UI vittoria/calibrazione soglie. Per dettagli, fasi, decisioni numerate (#1..#91) e parametri: `docs/CLAUDE_FULL_ARCHIVE.md`.
+✅ M01-M17 mergiati in main (schema 32). 🔶 M18 Reputazione/ICG (in conclusione, consegna a fette: reputazione + ICG + bridge figure già in main) · 🔶 M19 Spionaggio (Fase A scaffold: modulo `js/espionage.js` — "Operazione coperta" legata alla presenza flotta, Infiltrazione + Sabotaggio, esito deterministico, costo M18 al fallimento) · ⬜ M20 Polish/bilanciamento/UI vittoria/calibrazione soglie. Per dettagli, fasi, decisioni numerate (#1..#91) e parametri: `docs/CLAUDE_FULL_ARCHIVE.md`.
 
 ---
 
