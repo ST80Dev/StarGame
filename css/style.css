@@ -9157,3 +9157,184 @@ select.main-menu__input { cursor: pointer; }
 .cinematic-overlay__skip:hover {
   color: var(--c-text); border-color: #2fe6e0;
 }
+
+/* =====================================================================
+   M18 — Vista Stabilità galattica (ICG + Reputazione)
+   ===================================================================== */
+.stab-view {
+  padding: 18px 22px 28px;
+  color: var(--c-text);
+  max-width: 1180px; margin: 0 auto;
+  display: flex; flex-direction: column; gap: 18px;
+}
+.stab-view__head { display: flex; flex-direction: column; gap: 6px; }
+.stab-view__title {
+  margin: 0; font-family: var(--font-display);
+  font-size: 1.4rem; letter-spacing: 0.03em; color: var(--c-text);
+}
+.stab-view__sub {
+  margin: 0; color: var(--c-text-soft); font-size: 0.92rem; line-height: 1.5;
+}
+.stab-view__sub strong { color: var(--c-text); }
+.stab-view__h3 {
+  margin: 0 0 10px; font-family: var(--font-display);
+  font-size: 0.96rem; letter-spacing: 0.05em;
+  color: var(--c-text-soft); text-transform: uppercase;
+}
+
+.stab-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+}
+@media (max-width: 760px) {
+  .stab-grid { grid-template-columns: 1fr; }
+  .stab-view { padding: 12px 12px 24px; }
+}
+
+.stab-panel {
+  background: rgb(var(--c-surface-rgb) / 0.65);
+  border: 1px solid rgb(var(--c-surface-rgb) / 0.95);
+  border-radius: var(--radius);
+  padding: 14px 16px 16px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.stab-panel__head { display: flex; flex-direction: column; gap: 4px; }
+.stab-panel__title {
+  margin: 0; font-family: var(--font-display);
+  font-size: 1.05rem; letter-spacing: 0.04em; color: var(--c-text);
+}
+.stab-panel__sub { margin: 0; font-size: 0.82rem; color: var(--c-text-faint); }
+.stab-panel__value { display: flex; align-items: baseline; gap: 12px; }
+.stab-panel__num {
+  font-family: var(--font-display); font-size: 2.4rem; font-weight: 700;
+  letter-spacing: 0.04em; line-height: 1;
+}
+.stab-panel__num--ok   { color: var(--c-good); }
+.stab-panel__num--warn { color: var(--c-warn); }
+.stab-panel__num--bad  { color: #ff9a6c; }
+.stab-panel__num--crit { color: var(--c-bad); }
+.stab-panel__band {
+  font-family: var(--font-display); font-size: 0.78rem; letter-spacing: 0.08em;
+  text-transform: uppercase; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid currentColor;
+}
+.stab-panel__band--ok   { color: var(--c-good); }
+.stab-panel__band--warn { color: var(--c-warn); }
+.stab-panel__band--bad  { color: #ff9a6c; }
+.stab-panel__band--crit { color: var(--c-bad); }
+.stab-panel__h4 {
+  margin: 4px 0 6px; font-size: 0.78rem; letter-spacing: 0.06em;
+  color: var(--c-text-faint); text-transform: uppercase;
+}
+.stab-panel__factors { display: flex; flex-direction: column; gap: 6px; }
+
+.stab-strip {
+  position: relative; height: 22px; border-radius: 6px;
+  background: rgb(var(--c-bg-deep-rgb) / 0.55);
+  border: 1px solid rgb(var(--c-surface-rgb) / 0.9);
+  margin-bottom: 18px;
+}
+.stab-strip__seg {
+  position: absolute; top: 0; bottom: 0; opacity: 0.55;
+}
+.stab-strip__seg:first-child { border-top-left-radius: 6px; border-bottom-left-radius: 6px; }
+.stab-strip__seg:last-child  { border-top-right-radius: 6px; border-bottom-right-radius: 6px; }
+.stab-strip__seg--ok   { background: rgba(79, 224, 138, 0.55); }
+.stab-strip__seg--warn { background: rgba(255, 202, 85, 0.50); }
+.stab-strip__seg--bad  { background: rgba(255, 154, 108, 0.50); }
+.stab-strip__seg--crit { background: rgba(255, 92, 108, 0.55); }
+.stab-strip__marker {
+  position: absolute; top: -4px; bottom: -4px; width: 3px;
+  background: var(--c-text); transform: translateX(-1.5px);
+  box-shadow: 0 0 4px rgb(238 242 255 / 0.8);
+  border-radius: 2px;
+}
+.stab-strip__scale {
+  position: absolute; left: 0; right: 0; top: 100%; height: 14px;
+  font-family: var(--font-data); font-size: 0.66rem; color: var(--c-text-faint);
+}
+.stab-strip__scale > span {
+  position: absolute; transform: translateX(-50%); top: 2px;
+}
+.stab-strip__scale > span:first-child { transform: translateX(0); }
+.stab-strip__scale > span:last-child  { transform: translateX(-100%); }
+
+.stab-factors { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.stab-factor {
+  display: grid; grid-template-columns: 16px 1fr auto; gap: 8px;
+  align-items: start;
+  padding: 6px 8px; border-radius: 6px;
+  background: rgb(var(--c-bg-deep-rgb) / 0.45);
+  border: 1px solid rgb(var(--c-surface-rgb) / 0.6);
+}
+.stab-factor__arrow { font-family: var(--font-data); font-size: 0.9rem; line-height: 1.2; }
+.stab-factor--ok  .stab-factor__arrow { color: var(--c-good); }
+.stab-factor--bad .stab-factor__arrow { color: var(--c-bad); }
+.stab-factor__body { display: flex; flex-direction: column; gap: 2px; }
+.stab-factor__body strong { color: var(--c-text); font-size: 0.88rem; }
+.stab-factor__detail { color: var(--c-text-faint); font-size: 0.76rem; }
+.stab-factor__weight {
+  font-family: var(--font-data); font-size: 0.82rem; color: var(--c-text-soft);
+  align-self: center; min-width: 28px; text-align: right;
+}
+
+.stab-history-wrap {
+  background: rgb(var(--c-surface-rgb) / 0.55);
+  border: 1px solid rgb(var(--c-surface-rgb) / 0.9);
+  border-radius: var(--radius);
+  padding: 14px 16px 16px;
+}
+.stab-history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.stab-history__item {
+  display: grid;
+  grid-template-columns: 86px 44px 52px 84px 1fr;
+  gap: 8px; align-items: center;
+  padding: 6px 10px; border-radius: 6px;
+  background: rgb(var(--c-bg-deep-rgb) / 0.45);
+  border-left: 3px solid transparent;
+  font-size: 0.84rem;
+}
+.stab-history__item--ok  { border-left-color: var(--c-good); }
+.stab-history__item--bad { border-left-color: var(--c-bad); }
+.stab-history__ds { font-family: var(--font-data); color: var(--c-text-faint); font-size: 0.78rem; }
+.stab-history__kind {
+  font-family: var(--font-display); font-size: 0.7rem; letter-spacing: 0.06em;
+  text-transform: uppercase; text-align: center; padding: 2px 6px; border-radius: 4px;
+  border: 1px solid currentColor;
+}
+.stab-history__kind--icg { color: var(--c-warn); }
+.stab-history__kind--rep { color: #6ec8ff; }
+.stab-history__delta { font-family: var(--font-data); font-weight: 700; text-align: right; }
+.stab-history__item--ok  .stab-history__delta { color: var(--c-good); }
+.stab-history__item--bad .stab-history__delta { color: var(--c-bad); }
+.stab-history__values { font-family: var(--font-data); color: var(--c-text-soft); font-size: 0.78rem; }
+.stab-history__label { color: var(--c-text); }
+
+@media (max-width: 760px) {
+  .stab-history__item {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "label kind"
+      "values delta"
+      "ds ds";
+    row-gap: 2px;
+  }
+  .stab-history__ds     { grid-area: ds; }
+  .stab-history__kind   { grid-area: kind; }
+  .stab-history__delta  { grid-area: delta; }
+  .stab-history__values { grid-area: values; }
+  .stab-history__label  { grid-area: label; }
+}
+
+/* HUD chip ICG/Reputazione: cliccabili (M18) — apre la vista Stabilità. */
+.index { cursor: pointer; }
+.index:focus-visible { outline: 2px solid var(--c-amber); outline-offset: 2px; }
+
+/* M18 — Tinta dei chip ICG/Reputazione nell'HUD per fascia. */
+.index--ok   .index__value { color: var(--c-good); }
+.index--warn .index__value { color: var(--c-warn); }
+.index--bad  .index__value { color: #ff9a6c; }
+.index--crit .index__value { color: var(--c-bad); animation: stab-pulse 1.8s ease-in-out infinite; }
+@keyframes stab-pulse {
+  0%, 100% { text-shadow: 0 0 0 currentColor; }
+  50%      { text-shadow: 0 0 8px currentColor; }
+}
