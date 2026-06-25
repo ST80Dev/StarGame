@@ -416,6 +416,23 @@
         '<p>L\'aiuto non è scontato: il banner ti indica chiaramente quanto costa prima di decidere.</p>'
     },
     {
+      id: 'espionage',
+      tag: 'Civiltà · Spionaggio',
+      title: 'Spionaggio: operazioni coperte',
+      body:
+        '<p>Una tua <strong>flotta da combattimento</strong> in un sistema di una civiltà <strong>contattata</strong> abilita ' +
+        'un\'<strong>Operazione coperta</strong> (sezione Spionaggio del dossier ⬡). L\'operazione si <strong>risolve restando ' +
+        'sul posto</strong> per alcuni Impulsi: se ritiri la flotta prima, si annulla <em>senza penalità</em>.</p>' +
+        '<p>Tre azioni: <strong>Infiltrazione</strong> porta il dossier a <em>completo</em> e svela i <strong>segreti</strong> ' +
+        '(potenza reale, e soprattutto il <strong>preavviso indiretto di tradimento</strong> di un alleato maligno, prima che ' +
+        'esploda) · <strong>Sabotaggio</strong> colpisce la loro potenza · <strong>Furto</strong> ti frutta crediti.</p>' +
+        '<p>È un atto d\'ombra: il <strong>successo</strong> alza un po\' l\'<strong>ICG</strong>; il <strong>fallimento</strong> ' +
+        '(vieni scoperto) costa <strong>reputazione</strong>, alza l\'ICG e raffredda la disposizione del bersaglio. Tutto pesa ' +
+        'sulla pista <strong>Tiranno</strong>.</p>' +
+        '<p>Alternativa senza flotta e senza rischio: l\'<strong>Intel grigia dei Mekhari</strong> — compri informazioni a ' +
+        'pagamento, ma è <em>meno completa</em> (arriva solo a dossier <strong>parziale</strong>) e costa crediti e un po\' di reputazione.</p>'
+    },
+    {
       id: 'ai-vocations',
       tag: 'Civiltà · Vocazioni',
       title: 'Le 8 vocazioni delle civiltà',
