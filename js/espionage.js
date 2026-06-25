@@ -177,13 +177,24 @@
   }
 
   /* --- effetti M18 ---------------------------------------------------- */
-  function addReputation(game, delta) {
-    if (ORION.diplomacy && ORION.diplomacy.adjustReputation) ORION.diplomacy.adjustReputation(game, delta);
-    else if (typeof game.reputation === 'number') game.reputation = clampN(game.reputation + delta, 0, 100);
+  function addReputation(game, delta, label) {
+    /* M18: la façade reputation.applyAndRecord applica + registra nello storico
+       e alimenta HUD/soglie. Fallback per i contesti senza il modulo (test). */
+    if (ORION.reputation && ORION.reputation.applyAndRecord) {
+      ORION.reputation.applyAndRecord(game, 'rep', delta, 'espionage', label || 'Spionaggio');
+    } else if (ORION.diplomacy && ORION.diplomacy.adjustReputation) {
+      ORION.diplomacy.adjustReputation(game, delta);
+    } else if (typeof game.reputation === 'number') {
+      game.reputation = clampN(game.reputation + delta, 0, 100);
+    }
   }
-  function addIcg(game, delta) {
-    /* ICG può non essere ancora un numero (M18 in corso): guardia come dispatch.js. */
-    if (typeof game.icg === 'number') game.icg = clampN(game.icg + delta, 0, 100);
+  function addIcg(game, delta, label) {
+    if (ORION.reputation && ORION.reputation.applyAndRecord) {
+      ORION.reputation.applyAndRecord(game, 'icg', delta, 'espionage', label || 'Spionaggio');
+    } else if (typeof game.icg === 'number') {
+      /* Fallback senza façade (test/save pre-M18): guardia come dispatch.js. */
+      game.icg = clampN(game.icg + delta, 0, 100);
+    }
   }
   function addDisposition(game, civ, delta) {
     if (ORION.diplomacy && ORION.diplomacy.adjustDisposition) ORION.diplomacy.adjustDisposition(game, civ, delta);
@@ -216,6 +227,7 @@
     /* L'atto coperto è di per sé un'ombra (alimenta la pista Tiranno). */
     addDark(game, success ? conf.alignWin : conf.alignFail);
 
+    const opLbl = (OP_LABEL[op.type] || 'Operazione coperta') + ' · ' + (civ.name || '—');
     let reveal = null;
     if (success) {
       if (isSab) {
@@ -227,11 +239,11 @@
         civ.deepIntel = buildDeepIntel(game, civ, I);
         reveal = civ.deepIntel;
       }
-      addIcg(game, conf.icgWin);
+      addIcg(game, conf.icgWin, opLbl);
     } else {
       /* Scoperto: paghi reputazione, alzi l'ICG, il bersaglio si insospettisce. */
-      addReputation(game, -conf.repFail);
-      addIcg(game, conf.icgFail);
+      addReputation(game, -conf.repFail, opLbl + ' (scoperta)');
+      addIcg(game, conf.icgFail, opLbl + ' (scoperta)');
       addDisposition(game, civ, -conf.dispFail);
     }
 
