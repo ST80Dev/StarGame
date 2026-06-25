@@ -1132,6 +1132,32 @@
     });
   }
 
+  /* M19 (GDD §11): valutazione del RISCHIO TRADIMENTO di una civiltà alleata.
+     Riusa le stesse precondizioni di tickBetrayals (civ Male, alleanza matura,
+     disposizione in declino, pressione alta) per dare il "preavviso indiretto"
+     che l'Infiltrazione svela PRIMA che il warning pubblico si apra.
+     Ritorna { level, label, reason } con level:
+       imminent (warning già aperto) · high (tutte le condizioni) ·
+       building (alleato Male, condizioni in maturazione) · low (resto). */
+  function betrayalOutlook(game, civ) {
+    if (!civ || !civ.alive) return { level: 'none', label: '—' };
+    if (civ.allianceWarning) return { level: 'imminent', label: 'imminente', reason: 'preavviso già in corso' };
+    const rel = effectiveRelation(game, civ);
+    if (rel !== 'alliance' || civ.alignment !== 'male') return { level: 'low', label: 'basso' };
+    const now = game.timeImpulsi || 0;
+    const allianceAt = (civ.allianceSince != null) ? civ.allianceSince : now;
+    const matureEnough = (now - allianceAt) >= CFG.BETRAY_AGE_MIN;
+    const dispLow = (civ.disposition || 0) < CFG.BETRAY_DISP_MAX;
+    const pressureHigh = ((game.warState && game.warState.pressure) || 0) >= CFG.BETRAY_PRESSURE_MIN;
+    if (matureEnough && dispLow && pressureHigh) {
+      return { level: 'high', label: 'alto', reason: 'alleato maligno pronto a voltarti le spalle' };
+    }
+    if (dispLow || pressureHigh) {
+      return { level: 'building', label: 'in aumento', reason: 'alleato maligno con condizioni in maturazione' };
+    }
+    return { level: 'low', label: 'basso' };
+  }
+
   ORION.diplomacy = {
     CFG: CFG,
     RELATIONS: RELATIONS,
@@ -1159,6 +1185,7 @@
     /* M11 Fase B (decisione #94) */
     canAppease: canAppease,
     appease: appease,
+    betrayalOutlook: betrayalOutlook,
     breakPassageTreaty: breakPassageTreaty,
     payTribute: payTribute,
     hasPassageTreaty: function (civ) { return !!(civ && civ.passageTreaty); },

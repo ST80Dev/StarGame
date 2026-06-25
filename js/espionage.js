@@ -233,13 +233,20 @@
     return { loot: loot, cluster: cluster };
   }
 
-  /* Segreti svelati dall'Infiltrazione: ciò che l'osservazione non vede. */
+  /* Segreti svelati dall'Infiltrazione: ciò che l'osservazione non vede.
+     Il rischio tradimento (GDD §11) è il vero "preavviso indiretto": deriva
+     dalle condizioni reali via diplomacy.betrayalOutlook, non dall'allineamento
+     nominale. Fallback prudente se la diplomazia non è disponibile (test). */
   function buildDeepIntel(game, civ, I) {
+    const bo = (ORION.diplomacy && ORION.diplomacy.betrayalOutlook)
+      ? ORION.diplomacy.betrayalOutlook(game, civ)
+      : { level: (civ.alignment === 'male') ? 'building' : 'low', label: (civ.alignment === 'male') ? 'in aumento' : 'basso' };
     return {
       sinceI: I,
       power: civ.power || 0,
       relation: civ.relation || 'peace',
-      betrayalRisk: civ.alignment === 'dark'
+      betrayal: bo,                                                  // { level, label, reason }
+      betrayalRisk: (bo.level === 'high' || bo.level === 'imminent') // bool per UI/cronaca retrocompat
     };
   }
 
