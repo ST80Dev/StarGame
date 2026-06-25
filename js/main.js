@@ -9224,6 +9224,21 @@ function renderCivDetail(stage, c) {
       });
     });
   }
+  /* M19 (GDD §6e): acquisto intel grigia dai Mekhari (remoto, a pagamento). */
+  if (ORION.mekhari && ORION.mekhari.buyIntel) {
+    stage.querySelectorAll('[data-esp-mekhari]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const civ = (g.civs || []).filter(function (x) { return x.id === btn.dataset.espMekhari; })[0];
+        if (!civ) return;
+        const r = ORION.mekhari.buyIntel(g, civ.id);
+        if (r.ok) {
+          persistGame(g);
+          showToast('Intel grigia acquistata · ' + civ.name + ' (dossier parziale)');
+        } else if (r.reason) { showToast(r.reason); }
+        renderCivDetail(stage, civ);
+      });
+    });
+  }
 }
 
 /* M12 Fase A2 (#56 §15.3): blocco "Commercio" nella card civiltà. */
@@ -9279,12 +9294,24 @@ function civEspionageHtml(g, c) {
     } else {
       const pInf = Math.round(ESP.successChance(g, c, 'infiltrate', chk.score) * 100);
       const pSab = Math.round(ESP.successChance(g, c, 'sabotage', chk.score) * 100);
+      const pSte = Math.round(ESP.successChance(g, c, 'steal', chk.score) * 100);
       inner = '<p class="panel__note">Flotta sul posto. L\'operazione si risolve restando <strong>' +
         ESP.CFG.DURATION_I + ' ' + iU() + '</strong> in presenza. Il <strong>fallimento</strong> (scoperti) costa reputazione e alza l\'ICG.</p>' +
         '<div class="dip-actions">' +
         '<button class="btn btn--mini" type="button" data-esp-op="infiltrate" data-esp-civ="' + escapeHtml(c.id) + '" title="Dossier a completo + segreti">Infiltrazione <span class="dip-btn__odds">' + pInf + '%</span></button>' +
         '<button class="btn btn--mini btn--danger" type="button" data-esp-op="sabotage" data-esp-civ="' + escapeHtml(c.id) + '" title="Colpo alla loro potenza">Sabotaggio <span class="dip-btn__odds">' + pSab + '%</span></button>' +
+        '<button class="btn btn--mini" type="button" data-esp-op="steal" data-esp-civ="' + escapeHtml(c.id) + '" title="Sottrai crediti al bersaglio">Furto <span class="dip-btn__odds">' + pSte + '%</span></button>' +
         '</div>';
+    }
+  }
+  /* Intel grigia Mekhari (GDD §6e): canale REMOTO a pagamento, indipendente
+     dalla presenza flotta. Meno completo dello spionaggio (cap "parziale"). */
+  if (ORION.mekhari && ORION.mekhari.quoteIntel) {
+    const qg = ORION.mekhari.quoteIntel(g, c.id);
+    if (qg.ok) {
+      inner += '<p class="panel__note" style="margin-top:.5rem">⚖ <strong>Intel grigia (Mekhari)</strong> — remota, porta il dossier a <strong>parziale</strong>: ≈' +
+        qg.costCredits + ' crediti · −' + qg.repCost + ' reputazione.</p>' +
+        '<button class="btn btn--mini" type="button" data-esp-mekhari="' + escapeHtml(c.id) + '">Compra intel grigia</button>';
     }
   }
   if (c.deepIntel) {
@@ -13260,6 +13287,9 @@ function _chronicleEventBody(ev) {
         (ev.reveal && ev.reveal.betrayalRisk ? ' · <span class="chronicle__hint">⚠ tradimento probabile</span>' : '') + '.', 'civ');
     } else if (ev.ok && ev.op === 'sabotage') {
       pushChronicle(ds + ' — 🕵 Sabotaggio riuscito su ' + civNm + ': la loro potenza ne esce colpita.', 'civ');
+    } else if (ev.ok && ev.op === 'steal') {
+      const loot = (ev.loot != null) ? (' · <strong>' + ev.loot + '</strong> crediti sottratti') : '';
+      pushChronicle(ds + ' — 🕵 Furto riuscito ai danni di ' + civNm + loot + '.', 'civ');
     } else {
       pushChronicle(ds + ' — 🕵 ' + escapeHtml(opLbl) + ' <strong>scoperta</strong> ai danni di ' + civNm +
         ': reputazione intaccata e diffidenza in aumento.', 'civ');
