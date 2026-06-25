@@ -53,11 +53,19 @@
       base: 0.40, hit: 0.15,  // colpo % alla potenza percepita del bersaglio
       icgWin: 2, alignWin: 2,
       repFail: 5, icgFail: 4, dispFail: 15, alignFail: 2
+    },
+    /* Furto — sottrai crediti al bersaglio (accreditati a te nel cluster del
+       loro sistema). Arricchisce TE, non ne intacca la potenza (≠ sabotaggio). */
+    STEAL: {
+      base: 0.45, rate: 0.40, minLoot: 15, maxLoot: 120,
+      icgWin: 2, alignWin: 2,
+      repFail: 4, icgFail: 3, dispFail: 12, alignFail: 2
     }
     /* COST: { credits: N } — gancio economia M20 (non applicato per ora). */
   };
 
-  const OP_LABEL = { infiltrate: 'Infiltrazione', sabotage: 'Sabotaggio' };
+  const OP_LABEL = { infiltrate: 'Infiltrazione', sabotage: 'Sabotaggio', steal: 'Furto' };
+  const OP_TYPES = ['infiltrate', 'sabotage', 'steal'];
 
   /* --- utility -------------------------------------------------------- */
   function clampN(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
@@ -143,8 +151,14 @@
     return { ok: true, sysId: pres.sysId, score: pres.score, fleetId: pres.fleetId };
   }
 
+  function confFor(type) {
+    if (type === 'sabotage') return CFG.SABOTAGE;
+    if (type === 'steal') return CFG.STEAL;
+    return CFG.INFILTRATE;
+  }
+
   function successChance(game, civ, type, score) {
-    const c = (type === 'sabotage') ? CFG.SABOTAGE : CFG.INFILTRATE;
+    const c = confFor(type);
     let p = c.base;
     const rank = (ORION.ai && ORION.ai.intelLevelRank)
       ? ORION.ai.intelLevelRank(civ.intelLevel || 'fragmentary') : 1;
@@ -157,7 +171,7 @@
   function arm(game, civ, type) {
     const chk = canOperate(game, civ);
     if (!chk.ok) return chk;
-    if (type !== 'infiltrate' && type !== 'sabotage') type = 'infiltrate';
+    if (OP_TYPES.indexOf(type) < 0) type = 'infiltrate';
     const op = {
       id: ++game.espionage.seq,
       civId: civ.id, sysId: chk.sysId, type: type,
@@ -204,6 +218,21 @@
     if (ORION.victory && ORION.victory.applyAlignment) ORION.victory.applyAlignment(game, 'dark', n);
   }
 
+  /* Furto: bottino in crediti, accreditato nel cluster del sistema bersaglio
+     (come dispatch). Importo deterministico (RNG dell'operazione) scalato sulla
+     potenza del bersaglio. Restituisce { loot, cluster } per l'evento cronaca. */
+  function applySteal(game, op, civ, rng) {
+    const c = CFG.STEAL;
+    let loot = Math.round((civ.power || 0) * c.rate * rng.range(0.8, 1.2));
+    loot = clampN(loot, c.minLoot, c.maxLoot);
+    let cluster = null;
+    if (ORION.treasury && ORION.treasury.addBalance && ORION.treasury.clusterOfSystem) {
+      cluster = ORION.treasury.clusterOfSystem(game, op.sysId);
+      if (cluster != null) ORION.treasury.addBalance(game, cluster, loot);
+    }
+    return { loot: loot, cluster: cluster };
+  }
+
   /* Segreti svelati dall'Infiltrazione: ciò che l'osservazione non vede. */
   function buildDeepIntel(game, civ, I) {
     return {
@@ -217,8 +246,7 @@
   /* --- risoluzione ---------------------------------------------------- */
   function resolve(game, op, civ, pres, events) {
     const I = game.timeImpulsi || 0;
-    const isSab = op.type === 'sabotage';
-    const conf = isSab ? CFG.SABOTAGE : CFG.INFILTRATE;
+    const conf = confFor(op.type);
     const p = successChance(game, civ, op.type, pres.score);
     /* Seed per-operazione: stesso seed + stesso armI → stesso esito (replay). */
     const rng = ORION.rng.makeRng(game.seed + ':espionage:' + civ.id + ':' + op.armI);
@@ -228,10 +256,12 @@
     addDark(game, success ? conf.alignWin : conf.alignFail);
 
     const opLbl = (OP_LABEL[op.type] || 'Operazione coperta') + ' · ' + (civ.name || '—');
-    let reveal = null;
+    let reveal = null, loot = null;
     if (success) {
-      if (isSab) {
+      if (op.type === 'sabotage') {
         civ.power = Math.max(0, Math.round((civ.power || 0) * (1 - CFG.SABOTAGE.hit)));
+      } else if (op.type === 'steal') {
+        loot = applySteal(game, op, civ, rng);
       } else {
         civ.intelLevel = 'complete';
         if ((civ.intelProgress || 0) < 6) civ.intelProgress = 6;
@@ -250,7 +280,7 @@
     if (events) events.push({
       kind: 'espionage-result', op: op.type, ok: success, chance: p,
       civId: civ.id, civName: civ.name, civColor: civ.color,
-      reveal: reveal, impulso: I
+      reveal: reveal, loot: loot ? loot.loot : null, impulso: I
     });
   }
 
