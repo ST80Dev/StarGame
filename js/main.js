@@ -19,7 +19,8 @@ ORION.version = '0.6.6';
 ORION.viewLabels = {
   research:  { caption: 'VISTA RICERCA',    hint: 'Pool d’impero + albero tecnologico (M13).' },
   diplomacy: { caption: 'VISTA DIPLOMAZIA', hint: 'La diplomazia arriverà più avanti nello sviluppo.' },
-  crews:     { caption: 'ROSTER EQUIPAGGI', hint: 'Riepilogo equipaggi e figure d\'impero.' }
+  crews:     { caption: 'ROSTER EQUIPAGGI', hint: 'Riepilogo equipaggi e figure d\'impero.' },
+  stability: { caption: 'STABILITÀ GALATTICA', hint: 'Indice di Corruzione + Reputazione: valori, fattori, storico (M18).' }
 };
 
 /* Stato sidebar/centrale del Roster Equipaggi (richiesta utente 2026-06-16).
@@ -197,7 +198,7 @@ function chronicleCategoryFromKind(kind) {
 /* Fallback per entry storiche senza `cat` (save pre-bump): deriva dalla
    classe semantica `mod` (UI_GUIDE §7 — stessi colori usati nel rendering). */
 function chronicleCategoryFromMod(mod) {
-  if (mod === 'civ' || mod === 'fleet' || mod === 'explore') return 'galaxy';
+  if (mod === 'civ' || mod === 'fleet' || mod === 'explore' || mod === 'reputation') return 'galaxy';
   return 'colony';
 }
 /* Stato non-letto per linguetta (aura pulsante quando arriva un evento
@@ -930,6 +931,10 @@ function newGame(seed, opts) {
     if (Array.isArray(saved.contracts)) ORION.game.contracts = saved.contracts.slice();
     if (Array.isArray(saved.crises)) ORION.game.crises = saved.crises.slice();
     if (saved.crisisMeta && typeof saved.crisisMeta === 'object') ORION.game.crisisMeta = Object.assign({ icgTier: 0 }, saved.crisisMeta);
+    /* M18: storico delle ultime 20 mutazioni discrete di ICG/Reputazione.
+       Additivo lazy (no bump schema): save vecchi → [] e il modulo lo
+       inizializza al primo accesso via ORION.reputation.ensure(). */
+    if (Array.isArray(saved.repHistory)) ORION.game.repHistory = saved.repHistory.slice(0, 20);
     if (saved.anomalies && typeof saved.anomalies === 'object') ORION.game.anomalies = Object.assign({}, saved.anomalies);
     /* FSP §17.7 (Fenomeni di Spazio Profondo): stato delta additivo (scoperta/
        proprietà). Save vecchi senza chiave → {}: gli FSP esistono comunque
@@ -1174,6 +1179,7 @@ function updateGlobalResourceHud() {
 function updateGlobalIndicesHud() {
   const g = ORION.game;
   if (!g) return;
+  const REP = ORION.reputation;
   const icgEl = document.querySelector('[data-bind="icg"]');
   if (icgEl && typeof g.icg === 'number') icgEl.textContent = Math.round(g.icg).toString();
   const repEl = document.querySelector('[data-bind="reputazione"]');
@@ -1186,6 +1192,42 @@ function updateGlobalIndicesHud() {
       repEl.textContent = ORION.ai.reputationPreview(g).toString();
     }
   }
+  /* M18: tinta del chip HUD per fascia (verde/giallo/arancio/rosso). */
+  if (REP) {
+    REP.ensure(g);
+    const icgChip = icgEl && icgEl.closest('.index');
+    if (icgChip) {
+      const band = REP.bandIndex(REP.getICG(g), REP.ICG_THRESHOLDS);
+      icgChip.classList.remove('index--ok','index--warn','index--bad','index--crit');
+      icgChip.classList.add('index--' + (REP.ICG_BAND_TONE[band] || 'warn'));
+    }
+    const repChip = repEl && repEl.closest('.index');
+    if (repChip) {
+      const band = REP.bandIndex(REP.getRep(g), REP.REP_THRESHOLDS);
+      repChip.classList.remove('index--ok','index--warn','index--bad','index--crit');
+      repChip.classList.add('index--' + (REP.REP_BAND_TONE[band] || 'warn'));
+    }
+  }
+}
+
+/* M18: chip HUD ICG/Reputazione cliccabili → apre vista Stabilità.
+   Chiamata una sola volta al boot (i chip vivono nell'HTML statico). */
+function initStabilityHudChips() {
+  document.querySelectorAll('.index--icg, .index--rep').forEach(function (chip) {
+    if (chip.dataset.stabilityBound === '1') return;
+    chip.dataset.stabilityBound = '1';
+    chip.setAttribute('role', 'button');
+    chip.setAttribute('tabindex', '0');
+    chip.setAttribute('aria-label', 'Apri Stabilità galattica');
+    function open() {
+      if (!ORION.game) return;
+      navigateView('stability');
+    }
+    chip.addEventListener('click', open);
+    chip.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    });
+  });
 }
 
 /* ---------------------------------------------------------------------
@@ -1218,6 +1260,7 @@ function renderView(stage, view) {
   const SIDEBAR_CRUMB = {
     civ: 'Diplomazia', stations: 'Stazioni', research: 'Ricerca',
     crews: 'Equipaggi', dispatch: 'Dispacci', destiny: 'Destino', fleet: 'Flotte',
+    stability: 'Stabilità galattica',
     'econ-anomalies': 'Economia · Anomalie', 'econ-market': 'Economia · Mercato',
     'econ-treasury': 'Economia · Tesoreria', 'econ-ai': 'Economia · Scambi AI'
   };
@@ -1343,6 +1386,17 @@ function renderView(stage, view) {
     if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
     if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
     if (ORION.crewRoster && ORION.crewRoster.renderCentral) ORION.crewRoster.renderCentral(stage);
+    return;
+  }
+
+  // M18: vista "Stabilità galattica" — ICG + Reputazione con valore,
+  // fascia, fattori istantanei e storico delle ultime 20 mutazioni.
+  if (view === 'stability') {
+    if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; } if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
+    if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
+    if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
+    if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
+    renderStabilityView(stage);
     return;
   }
 
@@ -6628,6 +6682,141 @@ function dispatchRewardStr(m) {
   return parts.join(' · ') || '—';
 }
 
+/* =====================================================================
+   M18 — Vista Stabilità galattica.
+   Layout: due colonne (ICG | Reputazione) con valore, fascia, top
+   fattori; sotto, sezione storico con le ultime 20 mutazioni discrete.
+   Nessuna interazione di gioco: è una pagina di lettura. La sorgente
+   dati è ORION.reputation.breakdown(game).
+   ===================================================================== */
+function stabilityLauncherSub() {
+  const g = ORION.game;
+  if (!g || !ORION.reputation) return '—';
+  const rp = ORION.reputation.getRep(g);
+  const ic = ORION.reputation.getICG(g);
+  return 'ICG ' + ic + ' · Rep ' + rp;
+}
+
+function renderStabilityView(stage) {
+  if (!stage) return;
+  const g = ORION.game;
+  if (!g || !ORION.reputation) {
+    stage.innerHTML = '<div class="viewport__placeholder"><p class="viewport__caption">STABILITÀ</p>' +
+      '<p class="viewport__hint">Modulo M18 non disponibile.</p></div>';
+    return;
+  }
+  if (ORION.tutorial) ORION.tutorial.fire('reputation-icg');
+  ORION.reputation.ensure(g);
+  const data = ORION.reputation.breakdown(g);
+
+  function bandStripHtml(d, thresholds, bandLabels, tones, polarity) {
+    /* Barra orizzontale 0..100 con le N+1 fasce colorate e marker
+       sul valore corrente. polarity='good-low' (ICG: 0 buono) o
+       'good-high' (Rep: 100 buono). */
+    const segs = [];
+    const pts = [0].concat(thresholds, [100]);
+    for (let i = 0; i < pts.length - 1; i++) {
+      const from = pts[i], to = pts[i + 1];
+      segs.push('<span class="stab-strip__seg stab-strip__seg--' + tones[i] +
+        '" style="left:' + from + '%; width:' + (to - from) + '%" title="' +
+        escapeHtml(bandLabels[i] || '') + ' (' + from + '–' + to + ')"></span>');
+    }
+    const pct = Math.max(0, Math.min(100, d.value));
+    return '<div class="stab-strip" role="img" aria-label="' + escapeHtml(d.bandLabel) +
+        ' (' + d.value + '/100)">' +
+      segs.join('') +
+      '<span class="stab-strip__marker" style="left:' + pct + '%"></span>' +
+      '<span class="stab-strip__scale"><span>0</span>' +
+      thresholds.map(function (t) { return '<span style="left:' + t + '%">' + t + '</span>'; }).join('') +
+      '<span style="left:100%">100</span></span>' +
+    '</div>';
+  }
+
+  function factorListHtml(factors) {
+    if (!factors.length) {
+      return '<p class="lp-empty">Nessun fattore rilevante al momento.</p>';
+    }
+    return '<ul class="stab-factors">' + factors.map(function (f) {
+      const arrow = f.sign > 0 ? '▲' : '▼';
+      const tone = f.sign > 0 ? 'bad' : 'ok';
+      return '<li class="stab-factor stab-factor--' + tone + '">' +
+        '<span class="stab-factor__arrow">' + arrow + '</span>' +
+        '<span class="stab-factor__body">' +
+          '<strong>' + escapeHtml(f.label) + '</strong>' +
+          '<span class="stab-factor__detail">' + escapeHtml(f.detail || '') + '</span>' +
+        '</span>' +
+        '<span class="stab-factor__weight">' + (f.weight || 0) + '</span>' +
+      '</li>';
+    }).join('') + '</ul>';
+  }
+
+  function panelHtml(kind, d, polarity) {
+    const thresholds = (kind === 'icg') ? ORION.reputation.ICG_THRESHOLDS : ORION.reputation.REP_THRESHOLDS;
+    const bandLabels = (kind === 'icg') ? ORION.reputation.ICG_BAND_LABEL : ORION.reputation.REP_BAND_LABEL;
+    const tones      = (kind === 'icg') ? ORION.reputation.ICG_BAND_TONE  : ORION.reputation.REP_BAND_TONE;
+    const title = (kind === 'icg') ? 'Indice di Corruzione Galattica' : 'Reputazione globale';
+    const sub   = (kind === 'icg')
+      ? 'Più alto è peggio. Misura la pressione di entropia/corruzione nella galassia.'
+      : 'Più alta è meglio. Riflette come le altre civiltà vedono il tuo impero.';
+    return '<section class="stab-panel stab-panel--' + kind + '">' +
+      '<header class="stab-panel__head">' +
+        '<h3 class="stab-panel__title">' + escapeHtml(title) + '</h3>' +
+        '<p class="stab-panel__sub">' + escapeHtml(sub) + '</p>' +
+      '</header>' +
+      '<div class="stab-panel__value">' +
+        '<span class="stab-panel__num stab-panel__num--' + d.tone + '">' + d.value + '</span>' +
+        '<span class="stab-panel__band stab-panel__band--' + d.tone + '">' + escapeHtml(d.bandLabel) + '</span>' +
+      '</div>' +
+      bandStripHtml(d, thresholds, bandLabels, tones, polarity) +
+      '<div class="stab-panel__factors">' +
+        '<h4 class="stab-panel__h4">Fattori attuali</h4>' +
+        factorListHtml(d.factors) +
+      '</div>' +
+    '</section>';
+  }
+
+  function historyHtml(recent) {
+    if (!recent.length) {
+      return '<p class="lp-empty">Nessuna mutazione registrata. Le scelte significative (dispacci, crisi, diplomazia) compariranno qui.</p>';
+    }
+    return '<ol class="stab-history">' + recent.map(function (e) {
+      const sign = e.delta > 0 ? '+' : '';
+      const tone = (e.kind === 'icg')
+        ? (e.delta > 0 ? 'bad' : 'ok')
+        : (e.delta > 0 ? 'ok' : 'bad');
+      const kindLbl = (e.kind === 'icg') ? 'ICG' : 'Rep';
+      const ds = 'Ι ' + (e.ds | 0);
+      return '<li class="stab-history__item stab-history__item--' + tone + '">' +
+        '<span class="stab-history__ds">' + escapeHtml(String(ds)) + '</span>' +
+        '<span class="stab-history__kind stab-history__kind--' + e.kind + '">' + kindLbl + '</span>' +
+        '<span class="stab-history__delta">' + sign + Math.round(e.delta) + '</span>' +
+        '<span class="stab-history__values">' + e.before + ' → ' + e.after + '</span>' +
+        '<span class="stab-history__label">' + escapeHtml(e.label || e.source || '—') + '</span>' +
+      '</li>';
+    }).join('') + '</ol>';
+  }
+
+  const html =
+    '<div class="stab-view">' +
+      '<header class="stab-view__head">' +
+        '<h2 class="stab-view__title">Stabilità galattica</h2>' +
+        '<p class="stab-view__sub">Due metriche misurano la salute strategica della galassia. ' +
+        'L\'<strong>ICG</strong> sale quando l\'entropia avanza (civiltà maligne in espansione, crisi non gestite, hazard ignorati) e diventa una sconfitta progressiva oltre 80. ' +
+        'La <strong>Reputazione</strong> riflette il giudizio delle altre civiltà sul tuo operato e modula prezzi commerciali (§15.3) e disposizione delle AI.</p>' +
+      '</header>' +
+      '<div class="stab-grid">' +
+        panelHtml('icg', data.icg, 'good-low') +
+        panelHtml('rep', data.rep, 'good-high') +
+      '</div>' +
+      '<section class="stab-history-wrap">' +
+        '<h3 class="stab-view__h3">Storico recente (ultimi ' + ORION.reputation.HISTORY_CAP + ' eventi)</h3>' +
+        historyHtml(data.recent) +
+      '</section>' +
+    '</div>';
+
+  stage.innerHTML = html;
+}
+
 function renderDispatchView(stage) {
   if (!stage) return;
   const g = ORION.game, DP = ORION.dispatch;
@@ -11814,6 +12003,10 @@ const DEFAULT_AUTOPAUSE = {
      (showAnomalyRecapModal in runAdvance), quindi OFF qui per non duplicare
      l'overlay generico. Giacimento esausto = atmosferico (OFF). */
   'crisis-raised': true, 'crisis-lapsed': true, 'anomaly-relic-found': false, 'anomaly-depleted': false,
+  /* M18: soglie di stabilità — attraversare un livello peggiore di ICG
+     (Crisi/Collasso) auto-pausa (decisione utente: l'utente deve sapere);
+     soglie di Reputazione no (è un'informazione, non un'emergenza). */
+  'icg-threshold': true, 'rep-threshold': false,
   /* FSP §17.7: contatto/scansione/controllo atmosferici (OFF); rivelazione
      dell'effetto è la commit significativa (ON). */
   'fsp-contact': false, 'fsp-scanned': false, 'fsp-revealed': true, 'fsp-claimed': false, 'fsp-lost': true,
@@ -12311,6 +12504,8 @@ function showEventOverlay(events) {
     'mekhari-contract-done': 'Cacciatori Mekhari: covo sgominato',
     'crisis-raised': 'Crisi galattica: decisione richiesta',
     'crisis-lapsed': 'Crisi ignorata',
+    'icg-threshold': 'Stabilità: ICG ha cambiato fascia',
+    'rep-threshold': 'Reputazione: nuova fascia raggiunta',
     'anomaly-relic-found': 'Reliquia antica esplorata',
     'anomaly-depleted': 'Giacimento quasi esausto',
     'fsp-contact': 'Fenomeno di Spazio Profondo rilevato',
@@ -14021,6 +14216,11 @@ function renderLeftPanel() {
       '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('dispatch') + '</span>' +
       '<span>Dispacci</span>' +
       '<span class="lp-launcher__sub">' + dispatchLauncherSub() + '</span>' +
+    '</button>' +
+    '<button class="lp-launcher__btn' + (currentView === 'stability' ? ' is-active' : '') + '" data-view="stability" type="button" title="Indice di Corruzione Galattica + Reputazione: valori, fattori, storico">' +
+      '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('warning') + '</span>' +
+      '<span>Stabilità</span>' +
+      '<span class="lp-launcher__sub">' + stabilityLauncherSub() + '</span>' +
     '</button>';
 
   /* ----- Cronaca (collassabile) -----
@@ -17514,6 +17714,7 @@ function boot() {
     openPlanet: function (sysId, bodyKey) { openPlanet(sysId, bodyKey); }
   });
   initMobileNav();
+  initStabilityHudChips();
   initMainMenu();
   showMainMenu('home');
   /* Cloud sync (decisione di sessione): reconciliation autosave al boot,

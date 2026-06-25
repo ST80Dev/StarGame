@@ -256,7 +256,13 @@
       /* M18.x (richiesta utente 2026-06-18): flotte ambientali AI in volo
          (schema 32, additivo). Save vecchi → lista vuota: si ripopola dal
          seed giocando. */
-      aiFleets: Array.isArray(game.aiFleets) ? game.aiFleets : []
+      aiFleets: Array.isArray(game.aiFleets) ? game.aiFleets : [],
+      /* M18 — Reputazione/ICG: storico delle ultime 20 mutazioni discrete
+         (dispacci, crisi, scelte di diplomazia). Additivo lazy, niente bump
+         di schema: save vecchi → [] e ORION.reputation.ensure() lo inizializza
+         al primo accesso. I drift passivi NON vengono registrati per non
+         saturare il buffer. */
+      repHistory: Array.isArray(game.repHistory) ? game.repHistory.slice(0, 20) : []
     };
   }
 

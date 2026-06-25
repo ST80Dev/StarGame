@@ -151,9 +151,18 @@
     return game ? game.reputation : CFG.REP_DEFAULT;
   }
   function reputation(game) { return Math.round(ensureReputation(game)); }
-  function adjustReputation(game, delta) {
+  function adjustReputation(game, delta, source, label) {
     ensureReputation(game);
+    const before = game.reputation;
     game.reputation = Math.max(CFG.REP_MIN, Math.min(CFG.REP_MAX, game.reputation + delta));
+    /* M18: registra nello storico SOLO se il chiamante fornisce un label
+       (mutazione discreta narrabile). I drift periodici dal tick.js usano
+       la forma senza label → invisibili allo storico, ma visibili nel
+       valore corrente. */
+    if (label && ORION.reputation && ORION.reputation.record) {
+      const actual = game.reputation - before;
+      if (actual !== 0) ORION.reputation.record(game, 'rep', actual, source || 'diplomacy', label);
+    }
     return game.reputation;
   }
 
@@ -429,7 +438,8 @@
         civ.allianceSince = null;
         civ.disposition = Math.min(civ.disposition || 0, -20);
         const innocent = civ.alignment !== 'male';
-        adjustReputation(game, innocent ? CFG.REP_ON_WAR_INNOCENT : CFG.REP_ON_WAR_EVIL);
+        adjustReputation(game, innocent ? CFG.REP_ON_WAR_INNOCENT : CFG.REP_ON_WAR_EVIL,
+          'diplomacy', 'Guerra dichiarata a ' + (civ.name || '—') + (innocent ? ' (innocente)' : ''));
         applyMoralVerb(game, innocent ? 'dark' : 'light');
         events.push({ kind: 'diplo-war', civId: civ.id, civName: civ.name,
           civColor: civ.color, impulso: now });
@@ -451,7 +461,7 @@
         civ.truceUntil = 0;
         civ.allianceSince = null;
         civ.disposition = Math.max(civ.disposition || 0, CFG.PEACE_DISP_FLOOR);
-        adjustReputation(game, CFG.REP_ON_PEACE);
+        adjustReputation(game, CFG.REP_ON_PEACE, 'diplomacy', 'Pace con ' + (civ.name || '—'));
         callOffAggression(game, civ);   // recovery: revoca incursioni/assedi pendenti
         events.push({ kind: 'diplo-peace', civId: civ.id, civName: civ.name,
           civColor: civ.color, impulso: now });
@@ -462,7 +472,7 @@
         civ.truceUntil = 0;
         civ.allianceSince = now;
         civ.disposition = Math.max(civ.disposition || 0, CFG.ALLY_DISP_FLOOR);
-        adjustReputation(game, CFG.REP_ON_ALLIANCE);
+        adjustReputation(game, CFG.REP_ON_ALLIANCE, 'diplomacy', 'Alleanza con ' + (civ.name || '—'));
         callOffAggression(game, civ);
         events.push({ kind: 'diplo-alliance', civId: civ.id, civName: civ.name,
           civColor: civ.color, impulso: now });
@@ -472,7 +482,7 @@
         civ.relation = 'peace';
         civ.allianceSince = null;
         civ.disposition = (civ.disposition || 0) - 15;
-        adjustReputation(game, CFG.REP_ON_BREAK_ALLIANCE);
+        adjustReputation(game, CFG.REP_ON_BREAK_ALLIANCE, 'diplomacy', 'Rottura alleanza con ' + (civ.name || '—'));
         events.push({ kind: 'diplo-alliance-broken', civId: civ.id, civName: civ.name,
           civColor: civ.color, impulso: now });
         /* Recovery: un'alleanza rotta cancella il trattato di passaggio. */
@@ -482,7 +492,7 @@
       case 'propose-passage': {
         civ.passageTreaty = { since: now };
         civ.disposition = Math.max(civ.disposition || 0, CFG.PASSAGE_DISP_MIN);
-        adjustReputation(game, CFG.PASSAGE_REP_BONUS);
+        adjustReputation(game, CFG.PASSAGE_REP_BONUS, 'diplomacy', 'Trattato di passaggio con ' + (civ.name || '—'));
         events.push({ kind: 'diplo-passage', civId: civ.id, civName: civ.name,
           civColor: civ.color, impulso: now });
         break;
@@ -499,7 +509,7 @@
         const repDelta = (civ.alignment === 'male') ? 1
                        : (civ.alignment === 'bene') ? CFG.VASSAL_REP_LIGHT_GOOD  // mai oggi (gate), gancio
                                                     : CFG.VASSAL_REP_DARK_NEUTRAL;
-        adjustReputation(game, repDelta);
+        adjustReputation(game, repDelta, 'diplomacy', 'Vassallaggio di ' + (civ.name || '—'));
         applyMoralVerb(game, civ.alignment === 'male' ? 'light' : 'dark');
         callOffAggression(game, civ);
         events.push({ kind: 'diplo-vassal', civId: civ.id, civName: civ.name,
@@ -512,7 +522,7 @@
         civ.vassal = null;
         civ.relation = 'peace';
         civ.disposition = Math.min(100, (civ.disposition || 0) + CFG.VASSAL_RELEASE_DISP_BONUS);
-        adjustReputation(game, CFG.VASSAL_RELEASE_REP_LIGHT);
+        adjustReputation(game, CFG.VASSAL_RELEASE_REP_LIGHT, 'diplomacy', 'Affrancamento vassallo ' + (civ.name || '—'));
         applyMoralVerb(game, 'light');
         events.push({ kind: 'diplo-vassal-released', civId: civ.id, civName: civ.name,
           civColor: civ.color, impulso: now });
@@ -623,7 +633,7 @@
          negativo (rep + disp), evento atmosferico. */
       if (off.kind === 'distress') {
         c.disposition = Math.max(-100, (c.disposition || 0) + CFG.DISTRESS_DISP_IGNORE);
-        adjustReputation(game, CFG.DISTRESS_REP_IGNORE);
+        adjustReputation(game, CFG.DISTRESS_REP_IGNORE, 'diplomacy', 'Distress ignorato (' + (c.name || '—') + ')');
         if (events) events.push({ kind: 'diplo-distress-ignored', civId: c.id,
           civName: c.name, civColor: c.color, impulso: now });
         return;
@@ -837,7 +847,7 @@
           c.allianceSince = null;
           c.allianceWarning = null;
           c.disposition = Math.min(c.disposition || 0, -30);
-          adjustReputation(game, CFG.REP_ON_BREAK_ALLIANCE);
+          adjustReputation(game, CFG.REP_ON_BREAK_ALLIANCE, 'diplomacy', 'Tradimento di ' + (civ && civ.name ? civ.name : 'un alleato'));
           breakPassageTreaty(game, c, events, 'betrayal');
           if (events) {
             events.push({ kind: 'diplo-betrayed', civId: c.id, civName: c.name,
@@ -1022,7 +1032,7 @@
       civ.power = (civ.power || 0) + CFG.DISTRESS_POWER_HELP;
       /* Aggiorna peak per evitare nuovi distress immediati. */
       if (civ.peakPower == null || civ.power > civ.peakPower) civ.peakPower = civ.power;
-      adjustReputation(game, CFG.DISTRESS_REP_HELP);
+      adjustReputation(game, CFG.DISTRESS_REP_HELP, 'diplomacy', 'Aiuto a ' + (civ.name || '—') + ' in distress');
       events.push({ kind: 'diplo-distress-aided', civId: civ.id, civName: civ.name,
         civColor: civ.color, payload: payload, impulso: now });
       return { ok: true, accepted: true };
@@ -1056,7 +1066,7 @@
       civ.truceUntil = 0;
       civ.allianceSince = null;
       civ.disposition = Math.max(civ.disposition || 0, CFG.PEACE_DISP_FLOOR);
-      adjustReputation(game, CFG.REP_ON_PEACE);
+      adjustReputation(game, CFG.REP_ON_PEACE, 'diplomacy', 'Pace accettata con ' + (civ.name || '—'));
       callOffAggression(game, civ);
       events.push({ kind: 'diplo-peace', civId: civ.id, civName: civ.name,
         civColor: civ.color, fromOffer: true, impulso: now });
@@ -1065,7 +1075,7 @@
       civ.truceUntil = 0;
       civ.allianceSince = now;
       civ.disposition = Math.max(civ.disposition || 0, CFG.ALLY_DISP_FLOOR);
-      adjustReputation(game, CFG.REP_ON_ALLIANCE);
+      adjustReputation(game, CFG.REP_ON_ALLIANCE, 'diplomacy', 'Alleanza accettata con ' + (civ.name || '—'));
       callOffAggression(game, civ);
       events.push({ kind: 'diplo-alliance', civId: civ.id, civName: civ.name,
         civColor: civ.color, fromOffer: true, impulso: now });

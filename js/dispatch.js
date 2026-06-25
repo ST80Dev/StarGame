@@ -200,7 +200,15 @@
     civ.disposition = Math.max(-100, Math.min(100, (civ.disposition || 0) + delta));
   }
 
-  function addReputation(game, delta) {
+  function addReputation(game, delta, source, label) {
+    if (!delta) return;
+    /* M18: passiamo dalla façade reputation.applyAndRecord che applica
+       il clamp 0..100 e registra nello storico se label/source danno
+       contesto. Manteniamo fallback diplomacy/inline per compat. */
+    if (ORION.reputation && ORION.reputation.applyAndRecord && (label || source)) {
+      ORION.reputation.applyAndRecord(game, 'rep', delta, source || 'dispatch', label || '');
+      return;
+    }
     if (ORION.diplomacy && ORION.diplomacy.adjustReputation) ORION.diplomacy.adjustReputation(game, delta);
     else if (typeof game.reputation === 'number') game.reputation = Math.max(0, Math.min(100, game.reputation + delta));
   }
@@ -402,13 +410,13 @@
     if (r.credits && ORION.treasury && ORION.treasury.addBalance) {
       ORION.treasury.addBalance(game, r.credits.cluster, r.credits.amount);
     }
-    if (typeof r.reputation === 'number') addReputation(game, r.reputation);
+    if (typeof r.reputation === 'number') addReputation(game, r.reputation, 'dispatch', 'Missione completata: ' + (m.title || m.type || '—'));
     if (typeof r.disposition === 'number' && m.sourceCivId) clampDisp(civById(game, m.sourceCivId), r.disposition);
   }
 
   function applyPenalty(game, m) {
     const p = m.penalty || {};
-    if (typeof p.reputation === 'number') addReputation(game, -p.reputation);
+    if (typeof p.reputation === 'number') addReputation(game, -p.reputation, 'dispatch', 'Missione fallita: ' + (m.title || m.type || '—'));
     if (typeof p.disposition === 'number' && m.sourceCivId) clampDisp(civById(game, m.sourceCivId), -p.disposition);
   }
 
@@ -698,9 +706,14 @@
         col.stock[r] = Math.max(0, (col.stock[r] || 0) + choice.res[r]);
       });
     }
-    if (typeof choice.reputation === 'number') addReputation(game, choice.reputation);
-    if (typeof choice.icg === 'number' && typeof game.icg === 'number') {
-      game.icg = Math.max(0, Math.min(100, game.icg + choice.icg));
+    const crisisLabel = 'Crisi: ' + (crisis && crisis.title ? crisis.title : '—') + ' → ' + (choice.label || choice.id || '');
+    if (typeof choice.reputation === 'number') addReputation(game, choice.reputation, 'crisis', crisisLabel);
+    if (typeof choice.icg === 'number') {
+      if (ORION.reputation && ORION.reputation.applyAndRecord) {
+        ORION.reputation.applyAndRecord(game, 'icg', choice.icg, 'crisis', crisisLabel);
+      } else if (typeof game.icg === 'number') {
+        game.icg = Math.max(0, Math.min(100, game.icg + choice.icg));
+      }
     }
     if (typeof choice.pressure === 'number' && game.warState) {
       game.warState.pressure = Math.max(0, Math.min(1, (game.warState.pressure || 0) + choice.pressure));

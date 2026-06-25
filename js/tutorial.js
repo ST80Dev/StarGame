@@ -1200,6 +1200,25 @@
         'se non scegli entro il tempo, prevale l\'inazione. Più a lungo sopravvivi, più dure si fanno le ondate.</p>'
     },
     {
+      id: 'reputation-icg',
+      tag: 'M18 · Stabilità',
+      title: 'Reputazione & ICG',
+      body:
+        '<p>Due metriche, sempre visibili nell\'HUD in alto, raccontano la salute strategica della galassia.</p>' +
+        '<p>L\'<strong>Indice di Corruzione Galattica (ICG)</strong> va da 0 a 100 — più alto è peggio. Sale quando le ' +
+        '<strong>civiltà maligne</strong> conquistano sistemi, le <strong>crisi</strong> non vengono gestite, gli <strong>hazard</strong> ' +
+        'biologici/temporali vengono ignorati. Sopra <strong>40</strong> aumentano le tensioni, sopra <strong>60</strong> scoppia la ' +
+        'crisi galattica, sopra <strong>80</strong> il collasso diventa imminente.</p>' +
+        '<p>La <strong>Reputazione</strong> riflette come ti vedono le altre civiltà: si muove con i tuoi <strong>verbi morali</strong> ' +
+        '(aiutare un alleato in distress, accettare la pace, tradire un\'alleanza, sottomettere un vicino). Modula i <strong>prezzi ' +
+        'commerciali</strong> (§15.3) e la <strong>disposizione</strong> di partenza delle AI verso di te.</p>' +
+        '<p><strong>Click sui chip ICG / Rep</strong> in HUD (o "<strong>Stabilità</strong>" nel launcher Sale e moduli) per la vista ' +
+        'completa: valore, fascia, fattori istantanei (cosa sta spingendo i numeri ora) e <strong>storico delle ultime 20 mutazioni</strong> ' +
+        'discrete con la sorgente.</p>' +
+        '<p class="tut-hint">I drift passivi (decay, drift verso target morale) non finiscono nello storico: lì compaiono solo le scelte ' +
+        'che il giocatore fa (dispacci, crisi, diplomazia).</p>'
+    },
+    {
       id: 'anomalies',
       tag: 'M17 · Anomalie',
       title: 'Anomalie spaziali',
