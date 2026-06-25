@@ -341,6 +341,7 @@ function computeChronicleTarget(ev) {
 
   /* --- civiltà (solo se conosciute almeno come spotted) --- */
   if (kind === 'civ-contact' || kind === 'civ-spotted' || kind === 'civ-intel-upgraded' ||
+      kind === 'espionage-result' ||
       kind === 'civ-expand' || kind === 'civ-emerged' || kind === 'civ-fallen' ||
       kind === 'civ-war' ||
       kind === 'diplo-war' || kind === 'diplo-peace' || kind === 'diplo-alliance' ||
@@ -936,6 +937,10 @@ function newGame(seed, opts) {
        inizializza al primo accesso via ORION.reputation.ensure(). */
     if (Array.isArray(saved.repHistory)) ORION.game.repHistory = saved.repHistory.slice(0, 20);
     if (saved.anomalies && typeof saved.anomalies === 'object') ORION.game.anomalies = Object.assign({}, saved.anomalies);
+    /* M19 Fase A (spionaggio): operazioni coperte in corso. Additivo lazy
+       (nessun bump di schema): save vecchi → ensure() sotto crea lo stato
+       vuoto. civ.deepIntel vive dentro saved.civs (ripristinato wholesale). */
+    if (saved.espionage && typeof saved.espionage === 'object') ORION.game.espionage = saved.espionage;
     /* FSP §17.7 (Fenomeni di Spazio Profondo): stato delta additivo (scoperta/
        proprietà). Save vecchi senza chiave → {}: gli FSP esistono comunque
        (rigenerati dal seed) e partono tutti a "Eco" come in partita nuova. */
@@ -1016,6 +1021,11 @@ function newGame(seed, opts) {
      della Memoria. Idempotente. */
   if (ORION.dispatch && ORION.dispatch.ensure) {
     ORION.dispatch.ensure(ORION.game);
+  }
+  /* M19 Fase A (spionaggio): inizializza lo stato operazioni coperte se
+     assente (partita nuova o save pre-M19). Idempotente. */
+  if (ORION.espionage && ORION.espionage.ensure) {
+    ORION.espionage.ensure(ORION.game);
   }
   if (ORION.anomaly && ORION.anomaly.ensure) {
     ORION.anomaly.ensure(ORION.game);
@@ -9129,6 +9139,10 @@ function renderCivDetail(stage, c) {
     }).join('') + '</div>';
   }
 
+  /* M19 Fase A (spionaggio): blocco "Operazione coperta" (vuoto se non
+     contattata o senza modulo). */
+  const espHtml = civEspionageHtml(g, c);
+
   /* Breadcrumb nella striscia unica in alto (decisione utente 2026-06-20):
      "Civiltà › <nome>", stile coerente con la mappa (.crumb). */
   const crumbEl = setViewCrumbs([
@@ -9166,6 +9180,7 @@ function renderCivDetail(stage, c) {
       '<section class="civ-detail__sec"><h3>Colonie note <span class="civ-detail__count">' + colKnown.length + '</span></h3>' + colHtml + '</section>' +
       '<section class="civ-detail__sec"><h3>Flotte identificate <span class="civ-detail__count">' + aifs.length + '</span></h3>' + fleetHtml + '</section>' +
       (dipHtml ? '<section class="civ-detail__sec"><h3>Diplomazia</h3>' + dipHtml + '</section>' : '') +
+      (espHtml ? '<section class="civ-detail__sec"><h3>Spionaggio</h3>' + espHtml + '</section>' : '') +
     '</div>';
 
   /* (Il "torna" della breadcrumb è agganciato sulla striscia, sopra.) */
@@ -9185,6 +9200,30 @@ function renderCivDetail(stage, c) {
       if (civ) runDiplomacyAction(civ, btn.dataset.dipAct);
     });
   });
+  /* M19 Fase A (spionaggio): arma/annulla operazione coperta, poi
+     ri-renderizza il dossier (lo stato vive in game.espionage). */
+  if (ORION.espionage) {
+    stage.querySelectorAll('[data-esp-op]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const civ = (g.civs || []).filter(function (x) { return x.id === btn.dataset.espCiv; })[0];
+        if (!civ) return;
+        const r = ORION.espionage.arm(g, civ, btn.dataset.espOp);
+        if (r.ok) {
+          persistGame(g);
+          showToast('Operazione coperta avviata · ' + civ.name + ' (mantieni la flotta sul posto)');
+        } else if (r.reason) { showToast(r.reason); }
+        renderCivDetail(stage, civ);
+      });
+    });
+    stage.querySelectorAll('[data-esp-abort]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const civ = (g.civs || []).filter(function (x) { return x.id === btn.dataset.espAbort; })[0];
+        ORION.espionage.abort(g, btn.dataset.espAbort);
+        persistGame(g);
+        if (civ) { showToast('Operazione richiamata · ' + civ.name); renderCivDetail(stage, civ); }
+      });
+    });
+  }
 }
 
 /* M12 Fase A2 (#56 §15.3): blocco "Commercio" nella card civiltà. */
@@ -9214,6 +9253,46 @@ function civTradeHtml(g, civ) {
     inner += '<p class="panel__note agr-note">Il commercio richiede <strong>pace o alleanza</strong>.</p>';
   }
   return '<div class="civ-trade"><span class="civ-card__k">Commercio</span>' + inner + '</div>';
+}
+
+/* M19 Fase A (spionaggio): blocco "Operazione coperta" nel dossier civ.
+   Precondizione: contatto formale + una tua flotta da combattimento in un
+   loro sistema. L'operazione si risolve mantenendo la presenza. */
+function civEspionageHtml(g, c) {
+  const ESP = ORION.espionage;
+  if (!ESP) return '';
+  const AI = ORION.ai;
+  const rank = (AI && AI.knowledgeRank) ? AI.knowledgeRank(c) : 0;
+  const KN = (AI && AI.KNOWLEDGE) || { contacted: 2 };
+  if (rank < KN.contacted) return '';
+  let inner = '';
+  const op = ESP.opFor(g, c.id);
+  if (op) {
+    const left = Math.max(0, (op.armI + ESP.CFG.DURATION_I) - (g.timeImpulsi || 0));
+    inner = '<p class="panel__note">🕵 <strong>' + escapeHtml(ESP.OP_LABEL[op.type] || op.type) +
+      '</strong> in corso · ~' + left + ' ' + iU() + ' all\'esito · <strong>mantieni la flotta sul posto</strong>.</p>' +
+      '<button class="btn btn--mini btn--danger" type="button" data-esp-abort="' + escapeHtml(c.id) + '">Richiama agenti</button>';
+  } else {
+    const chk = ESP.canOperate(g, c);
+    if (!chk.ok) {
+      inner = '<p class="panel__note">' + escapeHtml(chk.reason) + '</p>';
+    } else {
+      const pInf = Math.round(ESP.successChance(g, c, 'infiltrate', chk.score) * 100);
+      const pSab = Math.round(ESP.successChance(g, c, 'sabotage', chk.score) * 100);
+      inner = '<p class="panel__note">Flotta sul posto. L\'operazione si risolve restando <strong>' +
+        ESP.CFG.DURATION_I + ' ' + iU() + '</strong> in presenza. Il <strong>fallimento</strong> (scoperti) costa reputazione e alza l\'ICG.</p>' +
+        '<div class="dip-actions">' +
+        '<button class="btn btn--mini" type="button" data-esp-op="infiltrate" data-esp-civ="' + escapeHtml(c.id) + '" title="Dossier a completo + segreti">Infiltrazione <span class="dip-btn__odds">' + pInf + '%</span></button>' +
+        '<button class="btn btn--mini btn--danger" type="button" data-esp-op="sabotage" data-esp-civ="' + escapeHtml(c.id) + '" title="Colpo alla loro potenza">Sabotaggio <span class="dip-btn__odds">' + pSab + '%</span></button>' +
+        '</div>';
+    }
+  }
+  if (c.deepIntel) {
+    const di = c.deepIntel;
+    inner += '<div class="civ-card__row" style="margin-top:.4rem"><span class="civ-card__k">⚿ Segreti · potenza reale</span><span>≈ ' + Math.round(di.power || 0) + '</span>' +
+      '<span class="civ-card__k">Rischio tradimento</span><span>' + (di.betrayalRisk ? '⚠ alto' : 'basso') + '</span></div>';
+  }
+  return inner;
 }
 
 /* #48 Fase 2b: blocco "Rifiuti" nella card civiltà (export rifiuti). */
@@ -12033,6 +12112,7 @@ const DEFAULT_AUTOPAUSE = {
   'civ-spotted': true,
   'civ-contact': true,
   'civ-intel-upgraded': true,
+  'espionage-result': true,
   'pirate-nest-recon': false,
   'civ-fallen': true,
   'civ-emerged': true,
@@ -12527,6 +12607,7 @@ function showEventOverlay(events) {
     'civ-spotted': 'Civiltà avvistata',
     'civ-contact': 'Primo contatto con una civiltà',
     'civ-intel-upgraded': 'Dossier civiltà aggiornato',
+    'espionage-result': 'Operazione coperta',
     'pirate-nest-recon': 'Ricognizione covo pirata',
     'civ-expand': 'Civiltà AI: espansione',
     'civ-war': 'Guerra tra civiltà',
@@ -13170,6 +13251,19 @@ function _chronicleEventBody(ev) {
     pushChronicle(ds + ' — 🛰 Ricognizione su <strong>' + escapeHtml(ev.civName) + '</strong>: dossier <strong>' +
       escapeHtml(INTEL_LABEL[ev.to] || ev.to) + '</strong> (era ' + escapeHtml(INTEL_LABEL[ev.from] || ev.from || '—') + ')' +
       newFrag + '.', 'civ');
+  } else if (ev.kind === 'espionage-result') {
+    const opLbl = (ORION.espionage && ORION.espionage.OP_LABEL[ev.op]) || 'Operazione coperta';
+    const civNm = '<strong>' + escapeHtml(ev.civName || '—') + '</strong>';
+    if (ev.ok && ev.op === 'infiltrate') {
+      pushChronicle(ds + ' — 🕵 Infiltrazione riuscita su ' + civNm +
+        ': dossier <strong>completo</strong> e segreti svelati' +
+        (ev.reveal && ev.reveal.betrayalRisk ? ' · <span class="chronicle__hint">⚠ tradimento probabile</span>' : '') + '.', 'civ');
+    } else if (ev.ok && ev.op === 'sabotage') {
+      pushChronicle(ds + ' — 🕵 Sabotaggio riuscito su ' + civNm + ': la loro potenza ne esce colpita.', 'civ');
+    } else {
+      pushChronicle(ds + ' — 🕵 ' + escapeHtml(opLbl) + ' <strong>scoperta</strong> ai danni di ' + civNm +
+        ': reputazione intaccata e diffidenza in aumento.', 'civ');
+    }
   } else if (ev.kind === 'pirate-nest-recon') {
     const INTEL_LABEL = { fragmentary: 'parziale', partial: 'parziale', complete: 'completa' };
     pushChronicle(ds + ' — Ricognizione <strong>' + escapeHtml(INTEL_LABEL[ev.to] || ev.to) + '</strong> di un covo pirata nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">forza e livello stimati nella vista Civiltà ⬡</span>.', 'civ');

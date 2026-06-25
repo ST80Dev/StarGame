@@ -2412,6 +2412,12 @@
     if (root.ORION.ai && root.ORION.ai.processPresence) {
       root.ORION.ai.processPresence(game, events);
     }
+    /* M19 Fase A (spionaggio): risolve le operazioni coperte armate quando
+       la flotta-vettore ha mantenuto la presenza per CFG.DURATION_I Ι.
+       Gira subito dopo processPresence così la presenza è aggiornata. */
+    if (root.ORION.espionage && root.ORION.espionage.process) {
+      root.ORION.espionage.process(game, events);
+    }
     /* M10 Fase A (decisione #47): civiltà AI in background. Simulazione
        AGGREGATA a cadenza interna (ogni AI_EVERY_I Impulsi, dopo il warm-up):
        espansione, guerre AI-vs-AI, nascita/morte (roster vivo), ICG §5.4,

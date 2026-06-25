@@ -248,6 +248,13 @@
       crises: Array.isArray(game.crises) ? game.crises : [],
       crisisMeta: (game.crisisMeta && typeof game.crisisMeta === 'object') ? game.crisisMeta : { icgTier: 0 },
       anomalies: (game.anomalies && typeof game.anomalies === 'object') ? game.anomalies : {},
+      /* M19 Fase A (spionaggio): operazioni coperte in corso. Additivo lazy
+         (nessun bump di schema). I segreti svelati (civ.deepIntel) vivono
+         dentro game.civs (auto-serializzato). Save vecchi → ensure() ricrea
+         lo stato vuoto al load. */
+      espionage: (game.espionage && typeof game.espionage === 'object')
+        ? { ops: Array.isArray(game.espionage.ops) ? game.espionage.ops : [], seq: game.espionage.seq || 0 }
+        : { ops: [], seq: 0 },
       /* FSP §17.7: stato delta dei Fenomeni di Spazio Profondo (scoperta/
          proprietà/uso). Additivo lazy (nessun bump): la struttura immutabile
          degli FSP si rigenera dal seed (come i gruppi), nel save vive solo il
