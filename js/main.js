@@ -9279,11 +9279,13 @@ function civEspionageHtml(g, c) {
     } else {
       const pInf = Math.round(ESP.successChance(g, c, 'infiltrate', chk.score) * 100);
       const pSab = Math.round(ESP.successChance(g, c, 'sabotage', chk.score) * 100);
+      const pSte = Math.round(ESP.successChance(g, c, 'steal', chk.score) * 100);
       inner = '<p class="panel__note">Flotta sul posto. L\'operazione si risolve restando <strong>' +
         ESP.CFG.DURATION_I + ' ' + iU() + '</strong> in presenza. Il <strong>fallimento</strong> (scoperti) costa reputazione e alza l\'ICG.</p>' +
         '<div class="dip-actions">' +
         '<button class="btn btn--mini" type="button" data-esp-op="infiltrate" data-esp-civ="' + escapeHtml(c.id) + '" title="Dossier a completo + segreti">Infiltrazione <span class="dip-btn__odds">' + pInf + '%</span></button>' +
         '<button class="btn btn--mini btn--danger" type="button" data-esp-op="sabotage" data-esp-civ="' + escapeHtml(c.id) + '" title="Colpo alla loro potenza">Sabotaggio <span class="dip-btn__odds">' + pSab + '%</span></button>' +
+        '<button class="btn btn--mini" type="button" data-esp-op="steal" data-esp-civ="' + escapeHtml(c.id) + '" title="Sottrai crediti al bersaglio">Furto <span class="dip-btn__odds">' + pSte + '%</span></button>' +
         '</div>';
     }
   }
@@ -13260,6 +13262,9 @@ function _chronicleEventBody(ev) {
         (ev.reveal && ev.reveal.betrayalRisk ? ' · <span class="chronicle__hint">⚠ tradimento probabile</span>' : '') + '.', 'civ');
     } else if (ev.ok && ev.op === 'sabotage') {
       pushChronicle(ds + ' — 🕵 Sabotaggio riuscito su ' + civNm + ': la loro potenza ne esce colpita.', 'civ');
+    } else if (ev.ok && ev.op === 'steal') {
+      const loot = (ev.loot != null) ? (' · <strong>' + ev.loot + '</strong> crediti sottratti') : '';
+      pushChronicle(ds + ' — 🕵 Furto riuscito ai danni di ' + civNm + loot + '.', 'civ');
     } else {
       pushChronicle(ds + ' — 🕵 ' + escapeHtml(opLbl) + ' <strong>scoperta</strong> ai danni di ' + civNm +
         ': reputazione intaccata e diffidenza in aumento.', 'civ');
