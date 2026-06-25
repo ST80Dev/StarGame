@@ -72,7 +72,7 @@ Prima di qualunque modifica a CSS, HTML strutturale o nuovi widget: leggi `UI_GU
 
 ## Stato moduli (sintesi)
 
-✅ M01-M17 mergiati in main (schema 32). 🔶 M18 Reputazione/ICG (in conclusione, consegna a fette: reputazione + ICG + bridge figure già in main) · 🔶 M19 Spionaggio (Fase A+B: modulo `js/espionage.js` — "Operazione coperta" legata alla presenza flotta, Infiltrazione + Sabotaggio + Furto, esito deterministico, effetti via façade M18 `reputation.applyAndRecord`, bottino furto nel cluster via treasury · Intel grigia Mekhari §6e in `js/mekhari.js`: canale remoto a pagamento, dossier cap "parziale") · ⬜ M20 Polish/bilanciamento/UI vittoria/calibrazione soglie. Per dettagli, fasi, decisioni numerate (#1..#91) e parametri: `docs/CLAUDE_FULL_ARCHIVE.md`.
+✅ M01-M17 mergiati in main (schema 32). 🔶 M18 Reputazione/ICG (in conclusione, consegna a fette: reputazione + ICG + bridge figure già in main) · 🔶 M19 Spionaggio (Fase A+B: modulo `js/espionage.js` — "Operazione coperta" legata alla presenza flotta, Infiltrazione + Sabotaggio + Furto, esito deterministico, effetti via façade M18 `reputation.applyAndRecord`, bottino furto nel cluster via treasury · Intel grigia Mekhari §6e in `js/mekhari.js`: canale remoto a pagamento, dossier cap "parziale" · Infiltrazione svela il preavviso reale di tradimento via `diplomacy.betrayalOutlook` §11 + lezione tutorial `espionage`. Manca: controspionaggio/bidirezionalità) · ⬜ M20 Polish/bilanciamento/UI vittoria/calibrazione soglie. Per dettagli, fasi, decisioni numerate (#1..#91) e parametri: `docs/CLAUDE_FULL_ARCHIVE.md`.
 
 ---
 

@@ -9142,6 +9142,12 @@ function renderCivDetail(stage, c) {
   /* M19 Fase A (spionaggio): blocco "Operazione coperta" (vuoto se non
      contattata o senza modulo). */
   const espHtml = civEspionageHtml(g, c);
+  /* Tutorial (#29): la lezione scatta quando un'operazione è davvero
+     disponibile (flotta sul posto) — il momento in cui serve capirla. */
+  if (espHtml && ORION.tutorial && ORION.tutorial.fire && ORION.espionage &&
+      ORION.espionage.canOperate && ORION.espionage.canOperate(g, c).ok) {
+    ORION.tutorial.fire('espionage');
+  }
 
   /* Breadcrumb nella striscia unica in alto (decisione utente 2026-06-20):
      "Civiltà › <nome>", stile coerente con la mappa (.crumb). */
@@ -9316,8 +9322,11 @@ function civEspionageHtml(g, c) {
   }
   if (c.deepIntel) {
     const di = c.deepIntel;
+    const btLbl = (di.betrayal && di.betrayal.label) ? di.betrayal.label : (di.betrayalRisk ? 'alto' : 'basso');
+    const btWarn = (di.betrayal && (di.betrayal.level === 'high' || di.betrayal.level === 'imminent')) ? '⚠ ' : '';
+    const btTitle = (di.betrayal && di.betrayal.reason) ? ' title="' + escapeHtml(di.betrayal.reason) + '"' : '';
     inner += '<div class="civ-card__row" style="margin-top:.4rem"><span class="civ-card__k">⚿ Segreti · potenza reale</span><span>≈ ' + Math.round(di.power || 0) + '</span>' +
-      '<span class="civ-card__k">Rischio tradimento</span><span>' + (di.betrayalRisk ? '⚠ alto' : 'basso') + '</span></div>';
+      '<span class="civ-card__k">Rischio tradimento</span><span' + btTitle + '>' + btWarn + escapeHtml(btLbl) + '</span></div>';
   }
   return inner;
 }
@@ -13282,9 +13291,11 @@ function _chronicleEventBody(ev) {
     const opLbl = (ORION.espionage && ORION.espionage.OP_LABEL[ev.op]) || 'Operazione coperta';
     const civNm = '<strong>' + escapeHtml(ev.civName || '—') + '</strong>';
     if (ev.ok && ev.op === 'infiltrate') {
+      const betrayHint = (ev.reveal && ev.reveal.betrayalRisk)
+        ? ' · <span class="chronicle__hint">⚠ tradimento ' + escapeHtml((ev.reveal.betrayal && ev.reveal.betrayal.level === 'imminent') ? 'imminente' : 'probabile') + '</span>'
+        : '';
       pushChronicle(ds + ' — 🕵 Infiltrazione riuscita su ' + civNm +
-        ': dossier <strong>completo</strong> e segreti svelati' +
-        (ev.reveal && ev.reveal.betrayalRisk ? ' · <span class="chronicle__hint">⚠ tradimento probabile</span>' : '') + '.', 'civ');
+        ': dossier <strong>completo</strong> e segreti svelati' + betrayHint + '.', 'civ');
     } else if (ev.ok && ev.op === 'sabotage') {
       pushChronicle(ds + ' — 🕵 Sabotaggio riuscito su ' + civNm + ': la loro potenza ne esce colpita.', 'civ');
     } else if (ev.ok && ev.op === 'steal') {
