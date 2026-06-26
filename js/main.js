@@ -2731,7 +2731,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
         : '';
       wasteRow =
         '<p class="sysinfo__sub">Rifiuti ♻</p>' +
-        '<dl class="sysinfo__list">' +
+        '<dl class="sysinfo__list sysinfo__list--tight">' +
           row('Accumulo', Math.round(W.stock) + ' / ' + Math.round(W.capacity)) +
           row('Saturazione', '<span class="waste-tag waste--' + cls + '">' + stateLbl + ' · ' + pct + '%</span>') +
           row('Netto', impHtml(netTxt, '/') + (W.net > 0 ? ' (in accumulo)' : W.net < 0 ? ' (in calo)' : ' (stabile)')) +
@@ -2795,7 +2795,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
         settlingBanner +
         stateLine +
         diasporaLine +
-        '<dl class="sysinfo__list">' +
+        '<dl class="sysinfo__list sysinfo__list--tight">' +
           row('Colonizzato dal', colony.colonizedDS || '—') +
           row('Popolazione', popRangePeople(colony, planet)) +
           row('Slot utilizzati', out.used + ' / ' + ORION.planet.effectiveSlots(planet, colony, g)) +
@@ -2803,6 +2803,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
         '</dl>' +
         scarRow +
         wasteRow +
+        renderColonyDefenseSection(colony, planet) +
         renderCapitalSection(colony, planet) +
         renderGovernorSection(colony, planet) +
         renderColonyFigureSection(colony, planet) +
@@ -3192,6 +3193,67 @@ function renderColonyFigureSection(colony, planet) {
       '<span class="gov-section__glyph ui-icon ui-icon--amber" aria-hidden="true">' + glyph + '</span> Figura di colonia</p></div>' +
     body +
   '</div>';
+}
+/* Sezione DIFESA della scheda Colonia (richiesta utente): colpo d'occhio su
+   quanto regge la colonia = strutture difensive (Batteria/Scudo) + flotte in
+   orbita/in porto, con corazza/fuoco/potenza aggregati e un verdetto rispetto
+   alla razzia pirata peggiore NOTA. Solo display (combat.colonyDefenseSummary). */
+function renderColonyDefenseSection(colony, planet) {
+  if (!colony || !colony.colonized) return '';
+  const C = ORION.combat;
+  if (!C || !C.colonyDefenseSummary) return '';
+  const colonyKey = planet ? (planet.systemId + ':' + planet.bodyKey) : null;
+  const d = C.colonyDefenseSummary(ORION.game, colony, colonyKey);
+  if (ORION.tutorial) ORION.tutorial.fire('colony-defense');
+
+  const glyph = (ORION.icon && ORION.icon('forces')) || '⛨';
+  const head = '<p class="sysinfo__sub def-section__title">' +
+    '<span class="ui-icon ui-icon--pink" aria-hidden="true">' + glyph + '</span> Difesa</p>';
+
+  const totals =
+    '<dl class="sysinfo__list sysinfo__list--tight def-totals">' +
+      row('Corazza', d.totalHp) +
+      row('Fuoco', d.totalFp) +
+      row('Potenza', '<span class="def-power">' + d.totalPower + '</span>') +
+    '</dl>';
+
+  const s = d.struct, f = d.fleets;
+  const breakdown =
+    '<div class="def-breakdown">' +
+      '<div class="def-src" title="Batteria di difesa, Scudo planetario costruiti">' +
+        '<span class="def-src__lbl">Strutture</span>' +
+        '<span class="def-src__val">' + (s.count ? (s.count + ' · P ' + s.power) : '—') + '</span>' +
+      '</div>' +
+      '<div class="def-src" title="Tue flotte in orbita o in porto in questo sistema">' +
+        '<span class="def-src__lbl">In orbita / porto</span>' +
+        '<span class="def-src__val">' + (f.count ? (f.ships + (f.ships === 1 ? ' nave · P ' : ' navi · P ') + f.power) : '—') + '</span>' +
+      '</div>' +
+    '</div>';
+
+  /* Verdetto rispetto alla minaccia nota. */
+  let verdict = '';
+  if (d.totalPower <= 0) {
+    verdict = '<p class="def-verdict def-verdict--crit">' +
+      'Nessuna difesa: costruisci una <strong>Batteria di difesa</strong> o lascia una flotta in orbita.</p>';
+  } else if (d.threat) {
+    const t = d.threat;
+    const ratio = t.power > 0 ? d.totalPower / t.power : 99;
+    let cls, msg;
+    if (ratio >= 1.5)      { cls = 'ok';   msg = 'Regge una razzia'; }
+    else if (ratio >= 0.9) { cls = 'warn'; msg = 'Battaglia incerta'; }
+    else                   { cls = 'crit'; msg = 'Difesa insufficiente'; }
+    const nestTxt = (t.boss && t.name ? escapeHtml(t.name) : ('covo liv. ' + t.level)) +
+      (t.local ? ' (nel sistema)' : '');
+    verdict =
+      '<p class="def-verdict def-verdict--' + cls + '">' +
+        '<span class="def-verdict__tag">' + msg + '</span> · ' +
+        'razzia max nota: <strong>P ' + t.power + '</strong> <span class="def-verdict__nest">' + nestTxt + '</span>' +
+      '</p>';
+  } else {
+    verdict = '<p class="def-verdict def-verdict--soft">Nessun covo pirata noto nei dintorni. La potenza è il riferimento per ogni incursione.</p>';
+  }
+
+  return '<div class="gov-section def-section">' + head + totals + breakdown + verdict + '</div>';
 }
 function bindColonyFigureHandlers(host, planet, colony) {
   if (!host || !ORION.colonyFigure) return;

@@ -572,6 +572,22 @@
         'alza la <strong>pressione</strong> nemica: reagisci con scelte oculate o rischi una spirale.</p>'
     },
     {
+      id: 'colony-defense',
+      tag: 'Guerra · Difesa colonia',
+      title: 'Difesa della colonia',
+      body:
+        '<p>La scheda <strong>Colonia</strong> riassume quanto regge il mondo sotto la voce <strong>Difesa</strong>. ' +
+        'Due numeri contano: <strong>Corazza</strong> (gli scafi/le strutture che il nemico deve abbattere) e ' +
+        '<strong>Fuoco</strong> (il danno che infliggi per round). La <strong>Potenza</strong> ' +
+        '(<span class="ds-unit">P</span> = corazza + fuoco×8) li riassume in un colpo d\'occhio.</p>' +
+        '<p>Concorrono due fonti: le <strong>Strutture</strong> difensive (<em>Batteria di difesa ⊕</em>, <em>Scudo ◈</em>) ' +
+        'e le tue <strong>flotte in orbita o in porto</strong> nel sistema. Lasciare una flotta armata sopra una colonia ' +
+        'ne alza la difesa all\'istante; toglierla la espone.</p>' +
+        '<p>Il <strong>verdetto</strong> confronta la tua Potenza con la <strong>razzia pirata peggiore che conosci</strong> ' +
+        '(serve aver scoperto il covo): <em>Regge una razzia</em>, <em>Battaglia incerta</em> o <em>Difesa insufficiente</em>. ' +
+        'Usalo per decidere se costruire un\'altra Batteria o spostare una flotta prima di un\'incursione.</p>'
+    },
+    {
       id: 'decline',
       tag: 'Guerra · Declino',
       title: 'La spirale e come spezzarla',
