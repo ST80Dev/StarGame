@@ -715,6 +715,57 @@
     }
   }
 
+  /* ------------------------------------------------------------------
+     Riserva scafi della colonia (richiesta utente 2026-06-26: simmetria
+     con colony.crews). Uno scafo che ATTRACCA conserva la propria identità
+     (id/hp/wear/xp/nome) invece di collassare in un counter fungibile.
+     `colony.shipReserve[kind]` = array di entità che "decora" il counter
+     colony.ships[kind] — invariante: shipReserve[kind].length ≤ ships[kind].
+     Gli scafi NUOVI da cantiere entrano solo nel counter (scafo vergine,
+     wear 0). Additivo/lazy: i save vecchi non hanno shipReserve → gli scafi
+     già a terra restano fungibili finché non riattraccano (non distruttivo,
+     niente bump di schema). Determinismo (#5): nessun RNG. */
+  function ensureColonyShipReserve(colony) {
+    if (!colony.shipReserve || typeof colony.shipReserve !== 'object') colony.shipReserve = {};
+    return colony.shipReserve;
+  }
+  /* Estrae UNA entità-scafo della classe dal porto, scalando il counter.
+     Preferisce un veterano dalla riserva (identità preservata); se vuota
+     materializza uno scafo vergine. Trim difensivo al counter (robusto a
+     decrementi esterni). Presuppone disponibilità già verificata. */
+  function takeColonyHull(game, colony, kind) {
+    const cls = CLASSES[kind];
+    if (!cls || (colony.ships[kind] || 0) <= 0) return null;
+    colony.ships[kind] -= 1;
+    const pool = ensureColonyShipReserve(colony)[kind];
+    if (Array.isArray(pool) && pool.length) {
+      /* mai più entità in riserva delle navi a terra (la +1 è quella presa). */
+      while (pool.length > colony.ships[kind] + 1) pool.shift();
+      if (pool.length) {
+        const e = pool.pop();
+        const out = { id: e.id || nextShipId(game), kind: kind,
+                      hp: (e.hp != null ? e.hp : cls.hp), wear: e.wear || 0 };
+        if (e.xp) out.xp = e.xp;
+        if (e.name) out.name = e.name;
+        return out;
+      }
+    }
+    return { id: nextShipId(game), kind: kind, hp: cls.hp, wear: 0 };
+  }
+  /* Deposita un'entità-scafo nel porto conservandone l'identità (incrementa
+     il counter + accoda alla riserva). Simmetrico a takeColonyHull. */
+  function putColonyHull(colony, ship) {
+    if (!ship || !ship.kind || !CLASSES[ship.kind]) return;
+    ensureColonyShipKinds(colony);
+    colony.ships[ship.kind] = (colony.ships[ship.kind] || 0) + 1;
+    const reserve = ensureColonyShipReserve(colony);
+    if (!Array.isArray(reserve[ship.kind])) reserve[ship.kind] = [];
+    const e = { id: ship.id, kind: ship.kind, hp: ship.hp, wear: ship.wear || 0 };
+    if (ship.xp) e.xp = ship.xp;
+    if (ship.name) e.name = ship.name;
+    reserve[ship.kind].push(e);
+  }
+
   /* assignShips — sposta `count` navi di una classe dal counter colonia
      all'array della flotta come entità individuali. La colonia deve
      essere nel sistema della flotta e la flotta `docked`. */
@@ -736,14 +787,12 @@
     if ((colony.ships[kind] || 0) < count) {
       return { ok: false, reason: 'Navi disponibili insufficienti' };
     }
-    colony.ships[kind] -= count;
     for (let i = 0; i < count; i++) {
-      fleet.ships.push({
-        id: nextShipId(game),
-        kind: kind,
-        hp: cls.hp,
-        wear: 0
-      });
+      /* preferisce un veterano dalla riserva (id/hp/wear/xp/nome) → identità
+         persistente anche dopo un attracco; altrimenti scafo vergine. */
+      const hull = takeColonyHull(game, colony, kind);
+      if (!hull) break;   // sicurezza: disponibilità già verificata sopra
+      fleet.ships.push(hull);
     }
     return { ok: true };
   }
@@ -762,10 +811,11 @@
     return ship;
   }
 
-  /* unassignShips — riporta `count` navi della classe dalla flotta al
-     counter colonia. La flotta deve essere `docked` nel sistema della
-     colonia. Le entità rimosse perdono la propria identità (intercambiabili
-     a terra) — coerente col misto counter/entità. */
+  /* unassignShips — riporta `count` navi della classe dalla flotta al porto
+     colonia. La flotta deve essere `docked` nel sistema della colonia. Le
+     entità rimosse CONSERVANO la propria identità (id/hp/wear/xp/nome) nella
+     riserva del porto (simmetria con gli equipaggi) — riemergono identiche
+     al prossimo assignShips. */
   function unassignShips(game, fleet, colonyKey, kind, count) {
     if (!fleet) return { ok: false, reason: 'Flotta inesistente' };
     if (!CLASSES[kind]) return { ok: false, reason: 'Classe nave sconosciuta' };
@@ -779,13 +829,11 @@
     let removed = 0;
     for (let i = fleet.ships.length - 1; i >= 0 && removed < count; i--) {
       if (fleet.ships[i].kind === kind) {
-        fleet.ships.splice(i, 1);
+        putColonyHull(colony, fleet.ships.splice(i, 1)[0]);
         removed++;
       }
     }
     if (removed === 0) return { ok: false, reason: 'Nessuna nave di quella classe in flotta' };
-    ensureColonyShipKinds(colony);
-    colony.ships[kind] = (colony.ships[kind] || 0) + removed;
     return { ok: true, returned: removed };
   }
 
@@ -943,11 +991,10 @@
     if (!colony) {
       return { ok: false, reason: 'La flotta deve essere ormeggiata a una tua colonia per essere sciolta.' };
     }
-    /* Restituisci navi al counter colonia per classe. */
+    /* Restituisci navi al porto colonia conservandone l'identità (riserva). */
     ensureColonyShipKinds(colony);
     for (let i = 0; i < fleet.ships.length; i++) {
-      const s = fleet.ships[i];
-      colony.ships[s.kind] = (colony.ships[s.kind] || 0) + 1;
+      putColonyHull(colony, fleet.ships[i]);
     }
     /* Restituisci equipaggi. */
     if (!colony.crews) colony.crews = { explorer: [] };
@@ -2674,10 +2721,9 @@
         if (!colony.crews) colony.crews = { explorer: [] };
         if (!Array.isArray(colony.crews.explorer)) colony.crews.explorer = [];
         colony.crews.explorer.push(newCrew);
-        /* Restituisci scafo solo se non perso. */
+        /* Restituisci scafo solo se non perso, conservandone l'identità. */
         if (!shipLost) {
-          if (!colony.ships) colony.ships = {};
-          colony.ships.explorer = (colony.ships.explorer || 0) + 1;
+          putColonyHull(colony, ship);
         } else {
           events.push({
             kind: 'fleet-ship-lost',
