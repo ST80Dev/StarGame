@@ -9230,7 +9230,13 @@ function renderCivDetail(stage, c) {
   const defPct = intelRank >= 4 ? 0 : (intelRank >= 3 ? 0.20 : (intelRank >= 2 ? 0.45 : 0.70));
   const defLo = Math.max(0, Math.round(defTot.total * (1 - defPct)));
   const defHi = Math.max(0, Math.round(defTot.total * (1 + defPct)));
-  const defTxt = fpDeepReveal ? ('= ' + defTot.total + ' P difese') : ('≈ ' + defLo + '–' + defHi + ' P difese');
+  /* Presentazione: combiniamo le difese statiche (sintetiche) con la
+     presenza REALE di flotte AI ferme sui loro sistemi. La presenza reale è
+     un dato concreto (game.aiFleets), NON una stima: la mostriamo da L3 in
+     su come "+ N P in orbita". A L4 anche il breakdown per-colonia (sotto). */
+  const defTxt = fpDeepReveal
+    ? ('= ' + defTot.total + ' P difese statiche · + ' + realFleetTotal + ' P in orbita = ' + (defTot.total + realFleetTotal) + ' P totali')
+    : ('≈ ' + defLo + '–' + defHi + ' P difese statiche' + (intelRank >= 3 && realFleetTotal > 0 ? (' · + ' + realFleetTotal + ' P in orbita') : ''));
   /* Per-colonia (solo L4): map planetKey → defense P, da iniettare nella lista colonie. */
   const defByPlanet = (intelRank >= 4 && AI.civDefensePerColony)
     ? (function () {
@@ -9240,6 +9246,27 @@ function renderCivDetail(stage, c) {
         return m;
       })()
     : null;
+  /* Presenza REALE di flotte AI ferme nel sistema di ogni colonia: somma
+     garrison.powerOf delle game.aiFleets della civ con systemId=sid e
+     status in {orbiting,docked} (in-transit non difende). A L3 ci serve il
+     TOTALE per impero (range), a L4 il dettaglio per-sistema. */
+  const fleetBySys = (function () {
+    const m = {};
+    const list = (g.aiFleets || []);
+    const GAR = ORION.garrison;
+    if (!GAR || !GAR.powerOf) return m;
+    for (let i = 0; i < list.length; i++) {
+      const af = list[i];
+      if (!af || af.civId !== c.id) continue;
+      if (af.status === 'in-transit') continue;
+      const p = GAR.powerOf(g, af);
+      if (p <= 0) continue;
+      const sid = af.systemId;
+      m[sid] = (m[sid] || 0) + Math.round(p);
+    }
+    return m;
+  })();
+  const realFleetTotal = Object.keys(fleetBySys).reduce(function (s, k) { return s + fleetBySys[k]; }, 0);
   const vocLabel = (AI.VOCATIONS && c.vocation && AI.VOCATIONS[c.vocation]) ? AI.VOCATIONS[c.vocation].label : '—';
   const affLabel = (AI.AFFINITIES && c.affinity && AI.AFFINITIES[c.affinity]) ? AI.AFFINITIES[c.affinity].label : '—';
   const disp = Math.round(c.disposition || 0);
@@ -9273,12 +9300,20 @@ function renderCivDetail(stage, c) {
          bersaglio piu' scoperto. Il valore e' deterministico (seed di gioco
          + civ + planetKey), non cambia tra render dello stesso save. */
       const planetKey = x.sid + ':' + x.bk;
+      /* Difese statiche stimate (solo L4 mostra il numero per-colonia). */
       const defP = (defByPlanet && defByPlanet[planetKey] != null) ? defByPlanet[planetKey] : null;
       const defTag = (defP != null)
-        ? ' <span class="civ-detail__col-tag" title="Difese stimate sulla colonia · valore P (HP + FP×8)">P ' + defP + '</span>'
+        ? ' <span class="civ-detail__col-tag" title="Difese statiche stimate · sintetiche (le AI non hanno strutture difensive modellate come te)">stimate P ' + defP + '</span>'
+        : '';
+      /* Presenza REALE: flotte AI ferme su questo sistema. Dato concreto,
+         visibile da L3 in su (informazione che varrebbe la pena raccogliere
+         con sensori se ti spingessi nel sistema). */
+      const fleetP = fleetBySys[x.sid] || 0;
+      const fleetTag = (intelRank >= 3 && fleetP > 0)
+        ? ' <span class="civ-detail__col-tag" style="color:#ffaa66;border-color:rgba(255,170,102,0.30);background:rgba(255,170,102,0.10)" title="Presenza reale: flotte AI ferme in orbita o al porto in questo sistema. NON è una stima.">⚡ in orbita P ' + fleetP + '</span>'
         : '';
       return '<li class="civ-detail__col" data-sys="' + x.sid + '"><span class="civ-detail__col-name">' +
-        escapeHtml(sysNm) + (bodyNm ? ' · ' + escapeHtml(bodyNm) : '') + '</span>' + systemTagHtml(x.sid) + dossTag + defTag + '</li>';
+        escapeHtml(sysNm) + (bodyNm ? ' · ' + escapeHtml(bodyNm) : '') + '</span>' + systemTagHtml(x.sid) + dossTag + defTag + fleetTag + '</li>';
     }).join('');
     const hiddenN = planets.length - colKnown.length;
     /* Conteggio colonie non localizzate = informazione di fog-of-war: rivelarlo
