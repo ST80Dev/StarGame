@@ -7696,7 +7696,10 @@ function buildWarSection(g) {
     incursions.forEach(function (inc) {
       const sysId = inc.targetSysId;
       const hasSys = sysId != null && sysId >= 0;
-      const tag = hasSys ? systemTagHtml(sysId) : '';
+      /* bodyTagHtml = [REGIONE·Sistema]: rende esplicito SIA il corpo bersaglio
+         (nome colonia/stazione) SIA il sistema in cui si trova, così il
+         giocatore sa subito dove e cosa difende senza aprire la mappa. */
+      const tag = hasSys ? bodyTagHtml(sysId) : '';
       const body = uiIcon('warning', 'gold') + ' <span class="war-incursion-link__txt">Predoni verso ' +
         incursionTargetLabel(inc) + tag + ' · arrivo fra <strong>' + (inc.eta | 0) + ' ' + iU() + '</strong></span>';
       if (hasSys) {
