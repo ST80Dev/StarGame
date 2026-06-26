@@ -122,11 +122,30 @@
     }
   }
 
+  /* ==================================================================
+     M20 — CALIBRAZIONE DELLE SOGLIE (decisione #23 / GDD §19)
+     ==================================================================
+     Le piste non sono più placeholder: i target qui sotto sono tarati
+     per essere SFIDANTI ma RAGGIUNGIBILI in una partita dedicata, usando
+     i dati reali ora disponibili (M07 esplorazione, M12 tesoreria, M13
+     ricerca, M09/M11/M19 atti morali, M17 ondate del Sopravvissuto).
+     Valori delegati a Claude (l'utente ha delegato i numeri); ritoccabili
+     col playtest senza toccare schema né logica. Zero RNG → replay-safe. */
+  const CFG = {
+    exploreFrac:    0.90,   // Esploratore: frazione della galassia esplorata
+    colonizeFrac:   0.22,   // Colonizzatore: colonie / sistemi totali
+    colonizeMin:    12,     // pavimento assoluto di colonie (galassie piccole)
+    econTarget:     50000,  // Egemone: tesoreria (valute §15) + stock met+en aggregato
+    techFrac:       0.85,   // Ascensione: frazione dell'albero tech di partita sbloccata
+    techAccumTarget: 10000, // fallback se il modulo research non è caricato (test headless)
+    alignmentTarget: 40,    // Pacifista/Tiranno: atti morali accumulati
+    survWaves:      6        // Sopravvissuto: ondate superate (fallback se dispatch assente)
+  };
+
   /* M09 Fase B (decisione #49): accumulatore delle azioni morali del
      giocatore. I verbi di M09 (liberare/aggredire un sistema) lo alimentano;
      M11/M19 aggiungeranno i propri. `check()` lo mappa sulle piste
-     reputationLight/reputationDark. Soglia placeholder (M20 calibrerà). */
-  const ALIGNMENT_TRACK_THRESHOLD = 50;
+     reputationLight/reputationDark. Soglia tarata in CFG.alignmentTarget. */
   function applyAlignment(game, impact, amount) {
     if (!game) return;
     if (!game.alignmentDeeds) game.alignmentDeeds = { light: 0, dark: 0 };
@@ -144,75 +163,101 @@
   }
 
   /* ==================================================================
-     CHECK — chiamato dal game loop ogni N Impulsi (M05 stub, M20 reale)
+     RAW METRICS — unica fonte di verità (corrente/soglia) per pista.
      ==================================================================
-     Ritorna [{ track, score, won }] per tutte le piste; aggiorna
-     game.victoryTracks. In M05 le formule sono placeholder (score
-     calcolato in modo molto blando dai dati già disponibili in M04/M05),
-     ma "won" non scatta mai (soglia 1.0 irraggiungibile finché M20 non
-     definisce condizioni vere). Così il loop ha già la spina dorsale. */
-  function check(game) {
-    if (!game) return [];
-    if (!game.victoryTracks) game.victoryTracks = defaultTracks();
-    const out = [];
+     check() (loop) e progress() (UI) leggono entrambi da qui, così non
+     possono divergere. Tutto deterministico (#5): nessun RNG, solo letture
+     dallo stato di gioco. Resiliente ai moduli assenti (test headless). */
+  function rawMetrics(game) {
+    const O = root.ORION || {};
 
-    /* --- exploration: % sistemi esplorati (M07 popolerà davvero) --- */
-    let explored = 0, total = 1;
-    if (game.galaxy && game.state && game.state.discovery) {
-      total = Math.max(1, game.galaxy.count || game.galaxy.systems.length);
-      const DISCOVERY = root.ORION.galaxy && root.ORION.galaxy.DISCOVERY;
+    /* sistemi totali + esplorati (M07) */
+    let total = 1, explored = 0;
+    if (game.galaxy) {
+      total = Math.max(1, game.galaxy.count ||
+        (game.galaxy.systems && game.galaxy.systems.length) || 1);
+    }
+    if (game.state && game.state.discovery) {
+      const DISCOVERY = O.galaxy && O.galaxy.DISCOVERY;
       const EXPLORED = DISCOVERY ? DISCOVERY.EXPLORED : 2;
       for (let i = 0; i < game.state.discovery.length; i++) {
         if (game.state.discovery[i] >= EXPLORED) explored++;
       }
     }
-    game.victoryTracks.exploration = Math.min(1, explored / total);
 
-    /* --- colonization: % corpi colonizzati / popolazione totale --- */
-    let colonized = 0, popTotal = 0;
-    if (game.colonies) {
-      Object.keys(game.colonies).forEach(function (k) {
-        const c = game.colonies[k];
-        if (c && c.colonized) { colonized++; popTotal += (c.pop && c.pop.total) || 0; }
-      });
-    }
-    // Soglia placeholder: 60% delle colonie possibili (alta, irraggiungibile
-    // in M05). M20 calibrerà con i dati di galassia esplorata.
-    game.victoryTracks.colonization = Math.min(1, colonized / Math.max(1, total * 0.6));
-
-    /* --- economy: stock di metalli/energia aggregato (gancio M12) --- */
-    let stockSum = 0;
-    if (game.colonies) {
-      Object.keys(game.colonies).forEach(function (k) {
-        const c = game.colonies[k]; if (!c || !c.stock) return;
-        stockSum += (c.stock.met || 0) + (c.stock.en || 0);
-      });
-    }
-    // Placeholder: 100000 (irraggiungibile in M05). M20: usare valute regionali §15.
-    game.victoryTracks.economy = Math.min(1, stockSum / 100000);
-
-    /* --- tech: researchAccum sommato (gancio M13) --- */
-    let researchSum = 0;
+    /* colonie + stock aggregato + ricerca lifetime (fallback) */
+    let colonized = 0, stockSum = 0, researchSum = 0;
     if (game.colonies) {
       Object.keys(game.colonies).forEach(function (k) {
         const c = game.colonies[k]; if (!c) return;
+        if (c.colonized) colonized++;
+        if (c.stock) stockSum += (c.stock.met || 0) + (c.stock.en || 0);
         researchSum += c.researchAccum || 0;
       });
     }
-    game.victoryTracks.tech = Math.min(1, researchSum / 10000);
 
-    /* --- reputation light/dark: alimentate dalle azioni morali (M09 Fase B:
-       liberare/aggredire sistemi; M11/M19 aggiungeranno altri verbi). --- */
+    /* tesoreria — valute regionali §15 (M12): somma di tutte le balances */
+    let treasurySum = 0;
+    const bal = game.treasury && game.treasury.balances;
+    if (bal) Object.keys(bal).forEach(function (k) { treasurySum += bal[k] || 0; });
+    const econPower = stockSum + treasurySum;
+
+    /* tech — frazione dell'albero di partita sbloccato (M13). Se il modulo
+       research non è caricato (test headless) → fallback su researchAccum. */
+    let techCur, techGoal;
+    const RS = O.research;
+    const techCatalog = (RS && RS.catalogFor) ? RS.catalogFor(game).length : 0;
+    if (techCatalog > 0) {
+      techCur  = (game.research && Array.isArray(game.research.unlocked)) ? game.research.unlocked.length : 0;
+      techGoal = Math.max(1, Math.ceil(techCatalog * CFG.techFrac));
+    } else {
+      techCur  = Math.round(researchSum);
+      techGoal = CFG.techAccumTarget;
+    }
+
+    /* atti morali (M09/M11/M19) */
     const deeds = game.alignmentDeeds || { light: 0, dark: 0 };
-    game.victoryTracks.reputationLight = Math.min(1, (deeds.light || 0) / ALIGNMENT_TRACK_THRESHOLD);
-    game.victoryTracks.reputationDark  = Math.min(1, (deeds.dark || 0) / ALIGNMENT_TRACK_THRESHOLD);
 
-    /* --- survival: pop+stock alla soglia critica → cresce solo se in crisi.
-       In M05 placeholder: zero finché M17 non inietta la crisi alla DS 0. */
-    if (game.victoryTracks.survival == null) game.victoryTracks.survival = 0;
+    /* Sopravvissuto — ondate §17 effettivamente affrontate (M17). Una pista
+       a 1.0 = hai retto tutte le ondate programmate ed sei ancora in gioco. */
+    const DP = O.dispatch;
+    const survWaves = (DP && DP.CFG && DP.CFG.SURV_WAVES) || CFG.survWaves;
+    let survFired = 0;
+    if (Array.isArray(game.eventSchedule)) {
+      game.eventSchedule.forEach(function (e) {
+        if (e && e.kind === 'survivor' && e.fired) survFired++;
+      });
+    }
 
+    const colGoal = Math.max(CFG.colonizeMin, Math.ceil(total * CFG.colonizeFrac));
+    const expGoal = Math.max(1, Math.ceil(total * CFG.exploreFrac));
+
+    return {
+      exploration:     { cur: explored,             goal: expGoal },
+      colonization:    { cur: colonized,            goal: colGoal },
+      economy:         { cur: Math.round(econPower), goal: CFG.econTarget },
+      tech:            { cur: techCur,               goal: techGoal },
+      reputationLight: { cur: deeds.light || 0,      goal: CFG.alignmentTarget },
+      reputationDark:  { cur: deeds.dark || 0,       goal: CFG.alignmentTarget },
+      survival:        { cur: survFired,             goal: survWaves }
+    };
+  }
+
+  /* ==================================================================
+     CHECK — chiamato dal game loop ogni N Impulsi (M20: condizioni reali)
+     ==================================================================
+     Ritorna [{ track, score, won }] per tutte le piste e aggiorna
+     game.victoryTracks. Le soglie sono reali e calibrate (CFG): `won`
+     scatta davvero quando una pista raggiunge il suo target. */
+  function check(game) {
+    if (!game) return [];
+    if (!game.victoryTracks) game.victoryTracks = defaultTracks();
+    const m = rawMetrics(game);
+    const out = [];
     TRACKS.forEach(function (track) {
-      const s = game.victoryTracks[track] || 0;
+      const r = m[track] || { cur: 0, goal: 1 };
+      const s = Math.min(1, r.cur / Math.max(1, r.goal));
+      game.victoryTracks[track] = s;
       out.push({ track: track, score: s, won: s >= 1 });
     });
     return out;
@@ -229,59 +274,29 @@
      le calibreranno con dati reali). Qui sono centralizzate così UI e loop
      non divergono. */
   const TARGET = {
-    economy: 100000,   // riserve met+en aggregate
-    tech: 10000,       // researchAccum d'impero
-    alignment: ALIGNMENT_TRACK_THRESHOLD,
-    colonizationFrac: 0.6 // frazione dei sistemi da colonizzare
+    economy: CFG.econTarget,
+    tech: CFG.techAccumTarget,
+    alignment: CFG.alignmentTarget,
+    colonizationFrac: CFG.colonizeFrac
   };
 
   const TRACK_META = {
     exploration:     { icon: 'galaxy',     metric: 'Sistemi esplorati',  hint: 'Invia flotte esploratrici verso i sistemi rilevati per diradare la nebbia di guerra.' },
     colonization:    { icon: 'planet',     metric: 'Mondi colonizzati',  hint: 'Vara navi coloniali e fonda nuove colonie sui mondi liberi.' },
-    economy:         { icon: 'market',     metric: 'Riserve metalli+energia', hint: 'Specializza i mondi-fabbrica e apri rotte commerciali per accumulare scorte.' },
-    tech:            { icon: 'research',   metric: 'Ricerca d’impero', hint: 'Costruisci laboratori e osservatori per accumulare ricerca (M13).' },
+    economy:         { icon: 'market',     metric: 'Ricchezza+tesoreria', hint: 'Specializza i mondi-fabbrica, apri rotte commerciali e accumula valute: somma scorte e tesoreria regionale.' },
+    tech:            { icon: 'research',   metric: 'Albero tech sbloccato', hint: 'Costruisci laboratori e osservatori e completa quasi tutto l’albero tecnologico di questa partita.' },
     reputationLight: { icon: 'diplomacy',  metric: 'Atti di luce',       hint: 'Libera sistemi dai tiranni, onora i trattati, aiuta gli alleati.' },
     reputationDark:  { icon: 'fleet',      metric: 'Atti d’ombra',  hint: 'Aggredisci, saccheggia, sottometti: la galassia ti temerà.' },
-    survival:        { icon: 'settings',   metric: 'Crisi superata',     hint: 'Resisti alla grande crisi (M17): la pista si attiva quando arriva.' }
+    survival:        { icon: 'settings',   metric: 'Ondate superate',     hint: 'Resisti a tutte le ondate della grande crisi: la pista cresce a ogni ondata che sopravvivi.' }
   };
 
-  /* Calcola i valori grezzi (corrente/soglia) di ogni pista per la UI. */
+  /* Calcola i valori grezzi (corrente/soglia) di ogni pista per la UI.
+     Riusa rawMetrics() — stessa fonte del loop, niente divergenza. */
   function progress(game) {
     if (!game) return [];
     check(game); // aggiorna game.victoryTracks (cheap; nessun RNG)
     const t = game.victoryTracks || defaultTracks();
-
-    // ri-deriva i numeri grezzi (gli stessi di check) per il display
-    let total = 1, explored = 0;
-    if (game.galaxy && game.state && game.state.discovery) {
-      total = Math.max(1, game.galaxy.count || game.galaxy.systems.length);
-      const DISCOVERY = root.ORION.galaxy && root.ORION.galaxy.DISCOVERY;
-      const EXPLORED = DISCOVERY ? DISCOVERY.EXPLORED : 2;
-      for (let i = 0; i < game.state.discovery.length; i++) {
-        if (game.state.discovery[i] >= EXPLORED) explored++;
-      }
-    }
-    let colonized = 0, stockSum = 0, researchSum = 0;
-    if (game.colonies) {
-      Object.keys(game.colonies).forEach(function (k) {
-        const c = game.colonies[k]; if (!c) return;
-        if (c.colonized) colonized++;
-        if (c.stock) stockSum += (c.stock.met || 0) + (c.stock.en || 0);
-        researchSum += c.researchAccum || 0;
-      });
-    }
-    const deeds = game.alignmentDeeds || { light: 0, dark: 0 };
-    const colTarget = Math.max(1, Math.ceil(total * TARGET.colonizationFrac));
-
-    const cur = {
-      exploration:     { cur: explored,                goal: total },
-      colonization:    { cur: colonized,               goal: colTarget },
-      economy:         { cur: Math.round(stockSum),    goal: TARGET.economy },
-      tech:            { cur: Math.round(researchSum), goal: TARGET.tech },
-      reputationLight: { cur: deeds.light || 0,        goal: TARGET.alignment },
-      reputationDark:  { cur: deeds.dark || 0,         goal: TARGET.alignment },
-      survival:        { cur: 0,                        goal: 1 }
-    };
+    const cur = rawMetrics(game);
 
     return TRACKS.map(function (track) {
       const m = TRACK_META[track] || {};
@@ -315,6 +330,20 @@
     return track;
   }
 
+  /* M20 — "Claim" di una pista vinta. La filosofia recovery-friendly/§19
+     è sandbox infinito: chiudere una pista mostra la schermata di vittoria
+     ma non blocca la partita. Per non ri-aprire il modale ogni 5 Impulsi
+     (lo score resta ≥1), il loop marca la pista come "rivendicata".
+     Vive lazy in game.victoryClaimed; additivo, nessun bump di schema. */
+  function isClaimed(game, track) {
+    return !!(game && game.victoryClaimed && game.victoryClaimed[track]);
+  }
+  function claim(game, track) {
+    if (!game || !track) return;
+    if (!game.victoryClaimed) game.victoryClaimed = {};
+    game.victoryClaimed[track] = true;
+  }
+
   /* Migra un payload salvato v1 → v2 aggiungendo i campi mancanti. */
   function migrate(saved) {
     if (!saved) return saved;
@@ -333,14 +362,18 @@
     TRACK_LABELS: TRACK_LABELS,
     MODES: MODES,
     PRESETS: PRESETS,
+    CFG: CFG,
     ALIGNMENT_IMPACT: ALIGNMENT_IMPACT,
     defaultMode: defaultMode,
     defaultTracks: defaultTracks,
     registerAction: registerAction,
     applyAlignment: applyAlignment,
     ensureEventSchedule: ensureEventSchedule,
+    rawMetrics: rawMetrics,
     check: check,
     progress: progress,
+    isClaimed: isClaimed,
+    claim: claim,
     getFocus: getFocus,
     setFocus: setFocus,
     TRACK_META: TRACK_META,

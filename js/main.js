@@ -718,6 +718,8 @@ function newGame(seed, opts) {
     mode: (opts.mode && cloneMode(opts.mode)) ||
           (ORION.victory ? ORION.victory.defaultMode() : { startedAs: 'sandbox', preset: 'classic', modifiers: {} }),
     victoryTracks: ORION.victory ? ORION.victory.defaultTracks() : {},
+    /* M20: piste di vittoria già rivendicate (sandbox infinito §19). */
+    victoryClaimed: {},
     /* Scheduler eventi (gancio M17). In M05 vuoto; il Sopravvissuto
        (decisione #23) inietterà una crisi ancorata a DS 0. */
     eventSchedule: [],
@@ -847,6 +849,7 @@ function newGame(seed, opts) {
     if (saved.mode) ORION.game.mode = saved.mode;
     if (saved.victoryTracks) ORION.game.victoryTracks = saved.victoryTracks;
     if (typeof saved.victoryFocus === 'string') ORION.game.victoryFocus = saved.victoryFocus;
+    if (saved.victoryClaimed && typeof saved.victoryClaimed === 'object') ORION.game.victoryClaimed = saved.victoryClaimed;
     if (saved.eventSchedule) ORION.game.eventSchedule = saved.eventSchedule;
     if (Array.isArray(saved.expeditions)) ORION.game.expeditions = saved.expeditions.slice();
     if (Array.isArray(saved.fleets)) ORION.game.fleets = saved.fleets.slice();
@@ -5668,9 +5671,9 @@ function doCreateRoute(srcKey, dstKey, resource, mercId, rate) {
    M12 Fase A1 — Vista MERCATO (riepilogo d'impero, decisione #53 §15.2)
    ===================================================================== */
 /* Dashboard "Destino" — visuale riepilogativa delle 7 piste di vittoria
-   (decisione #23 esteso). Soglie PROVVISORIE da victory.js (M20/GDD §16 le
-   calibreranno). Le piste girano tutte in parallelo: vince chi chiude per
-   prima. Il "focus" è solo enfasi narrativa, mutabile e senza lock. */
+   (decisione #23 esteso). Soglie reali e calibrate in victory.js (M20). Le
+   piste girano tutte in parallelo: vince chi chiude per prima. Il "focus" è
+   solo enfasi narrativa, mutabile e senza lock. */
 function renderDestinyView(stage) {
   if (!stage) return;
   const g = ORION.game;
@@ -5721,7 +5724,7 @@ function renderDestinyView(stage) {
       bannerHtml +
       '<p class="panel__note">Tutte le vie corrono in parallelo: vince chi chiude per prima una qualsiasi soglia. ' +
         'Dichiarare un <em>focus</em> non blocca nulla — è solo l’ambizione del tuo popolo, e puoi cambiarla quando vuoi. ' +
-        '<em>Soglie provvisorie</em> (in calibrazione).</p>' +
+        'Chiudere una via apre la <strong>schermata di vittoria</strong>; la galassia resta tua e puoi continuare a giocare.</p>' +
       '<ul class="destiny-grid">' + cardsHtml + '</ul>' +
     '</div>';
 
@@ -8278,6 +8281,59 @@ function showDefeatModal() {
   const btn = node.querySelector('[data-defeat-menu]');
   if (btn) btn.addEventListener('click', function () {
     if (node.parentNode) node.parentNode.removeChild(node);
+    if (typeof stopTimerIfRunning === 'function') stopTimerIfRunning();
+    if (typeof showMainMenu === 'function') showMainMenu('home');
+  });
+}
+
+/* M20: schermata di vittoria. Una pista chiusa è una meta raggiunta —
+   ma la filosofia §19 è sandbox infinito: celebriamo e diamo la scelta tra
+   "Continua a giocare" (la galassia resta tua) e "Torna al menu". La pista
+   è già marcata come rivendicata (victory.claim in time.js) → non ri-scatta. */
+const VICTORY_FLAVOR = {
+  exploration:     'Le tue flotte hanno diradato la nebbia su quasi ogni stella conosciuta. Nessun confine ti è più ignoto: sei l\'Esploratore della galassia.',
+  colonization:    'Mondo dopo mondo, il tuo popolo ha messo radici tra le stelle. La galassia porta ovunque la tua bandiera: sei il Colonizzatore supremo.',
+  economy:         'I tuoi forzieri e le tue rotte dettano legge ai mercati. Nessuna civiltà prospera senza passare per te: sei l\'Egemone economico.',
+  tech:            'I tuoi laboratori hanno svelato i segreti più profondi del cosmo. La tua scienza non ha rivali: hai raggiunto l\'Ascensione tecnologica.',
+  reputationLight: 'Hai liberato gli oppressi e onorato ogni patto. La galassia pronuncia il tuo nome con gratitudine: sei il Pacifista che porta la luce.',
+  reputationDark:  'Hai piegato la galassia con la paura e l\'acciaio. Ogni stella trema al tuo passaggio: sei il Tiranno che nessuno osa sfidare.',
+  survival:        'Hai retto a ogni ondata della grande crisi mentre altri crollavano. Contro ogni previsione, il tuo popolo è ancora qui: sei il Sopravvissuto.'
+};
+function showVictoryModal(track, score) {
+  if (document.querySelector('[data-victory-modal]')) return; // evita doppioni
+  const V = ORION.victory;
+  const label = (V && V.TRACK_LABELS && V.TRACK_LABELS[track]) || track || 'Vittoria';
+  const flavor = VICTORY_FLAVOR[track] || 'Hai chiuso una via verso la vittoria.';
+  const html =
+    '<div class="battle-modal" data-victory-modal>' +
+      '<div class="battle-modal__panel">' +
+        '<header class="battle-modal__head"><h3>' +
+          uiIcon('star', 'gold') + ' Vittoria' +
+        '</h3></header>' +
+        '<p class="battle-modal__verdict battle-modal__verdict--win">' +
+          uiIcon('crown', 'gold') + ' ' + escapeHtml(label) +
+        '</p>' +
+        '<p>' + escapeHtml(flavor) + '</p>' +
+        '<p class="panel__note">Tutte le altre vie restano aperte: la galassia è ancora tua da plasmare. ' +
+          'Questa pista non si ripresenterà — puoi continuare a giocare o chiudere qui la partita.</p>' +
+        '<div class="battle-modal__sides">' +
+          '<button class="btn btn--primary" data-victory-continue type="button">Continua a giocare</button>' +
+          '<button class="btn" data-victory-menu type="button">Torna al menu</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  const node = wrap.firstChild;
+  document.body.appendChild(node);
+  function close() { if (node.parentNode) node.parentNode.removeChild(node); document.removeEventListener('keydown', onKey); }
+  function onKey(e) { if (e.key === 'Escape') close(); }
+  document.addEventListener('keydown', onKey);
+  const cont = node.querySelector('[data-victory-continue]');
+  if (cont) cont.addEventListener('click', close);
+  const menu = node.querySelector('[data-victory-menu]');
+  if (menu) menu.addEventListener('click', function () {
+    close();
     if (typeof stopTimerIfRunning === 'function') stopTimerIfRunning();
     if (typeof showMainMenu === 'function') showMainMenu('home');
   });
@@ -12571,7 +12627,7 @@ function showEventOverlay(events) {
     'pop-loss': 'Calo popolazione',
     'pop-crowd': 'Sovraffollamento',
     'pop-crowd-recover': 'Sovraffollamento rientrato',
-    'victory': 'Pista chiusa',
+    'victory': 'Vittoria',
     'settle-stage': 'Fase Insediamento',
     'settle-done': 'Insediamento completato',
     'expedition-arrived': 'Spedizione: sistema esplorato',
@@ -12930,8 +12986,12 @@ function _chronicleEventBody(ev) {
   } else if (ev.kind === 'pop-crowd-recover') {
     pushChronicle(ds + ' — ' + pname + ptag + ': sovraffollamento <strong>rientrato</strong>.', 'system');
   } else if (ev.kind === 'victory') {
-    const label = (ORION.victory && ORION.victory.TRACK_LABELS[ev.track]) || ev.track;
-    pushChronicle(ds + ' — <strong>Pista chiusa</strong>: ' + label + '.', 'explore');
+    const label = (ORION.victory && ORION.victory.TRACK_LABELS[ev.track]) || ev.trackLabel || ev.track;
+    pushChronicle(ds + ' — <strong>Vittoria</strong> — pista <strong>' + escapeHtml(label) + '</strong> chiusa! La galassia ricorderà questo giorno.', 'explore');
+    /* M20: ferma il tempo e mostra la schermata di vittoria (sandbox infinito
+       §19: il giocatore sceglie se continuare o tornare al menu). */
+    if (typeof stopTimerIfRunning === 'function') stopTimerIfRunning();
+    if (typeof showVictoryModal === 'function') showVictoryModal(ev.track, ev.score);
   } else if (ev.kind === 'settle-stage') {
     /* M06.5 (decisione #27): voci scriptate della fase Insediamento. */
     const stage = ev.stage;

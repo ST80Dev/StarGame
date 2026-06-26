@@ -113,6 +113,10 @@
          Stringa lazy (id pista) o null = sandbox puro. Additivo, nessun
          bump di schema: i save vecchi caricano con focus = null. */
       victoryFocus: (typeof game.victoryFocus === 'string') ? game.victoryFocus : null,
+      /* M20: piste di vittoria già rivendicate (sandbox infinito §19 — non
+         ri-aprono il modale). Additivo, nessun bump di schema: i save vecchi
+         caricano con {} (nessuna pista rivendicata). */
+      victoryClaimed: (game.victoryClaimed && typeof game.victoryClaimed === 'object') ? game.victoryClaimed : {},
       eventSchedule: game.eventSchedule || [],
       chronicle: capChronicle(game.chronicle),
       /* M06.5 (decisione #27): scelta colonia originaria, salvata

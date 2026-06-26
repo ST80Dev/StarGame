@@ -2510,15 +2510,22 @@
   function maybeCheckVictory(game, events) {
     if (!root.ORION.victory) return false;
     if ((game.timeImpulsi % CFG.VICTORY_CHECK_EVERY_I) !== 0) return false;
-    const results = root.ORION.victory.check(game);
+    const V = root.ORION.victory;
+    const results = V.check(game);
     let won = null;
     for (let i = 0; i < results.length; i++) {
-      if (results[i].won) { won = results[i]; break; }
+      /* Sandbox infinito (§19): una pista già rivendicata non ri-scatta. */
+      if (results[i].won && !(V.isClaimed && V.isClaimed(game, results[i].track))) {
+        won = results[i]; break;
+      }
     }
     if (won) {
+      if (V.claim) V.claim(game, won.track);
+      const labels = V.TRACK_LABELS || {};
       events.push({
         kind: 'victory',
         track: won.track,
+        trackLabel: labels[won.track] || won.track,
         score: won.score,
         impulso: game.timeImpulsi
       });
