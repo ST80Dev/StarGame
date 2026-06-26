@@ -84,14 +84,19 @@
      `id` stabile per il save (persistito su civ.vocation).
      ------------------------------------------------------------------ */
   const VOCATIONS = {
-    sedentari:     { weight: 0.25, expandMul: 0.20, warMul: 0.40, diplomatMul: 1.4, label: 'Sedentari',     desc: 'Si tengono 2-4 pianeti. Reattivi solo se attaccati.' },
-    mercantili:    { weight: 0.15, expandMul: 0.60, warMul: 0.50, diplomatMul: 1.6, label: 'Mercantili',    desc: 'Espansione lenta + alleanze + rotte.' },
-    espansionisti: { weight: 0.15, expandMul: 1.50, warMul: 1.30, diplomatMul: 0.8, label: 'Espansionisti', desc: 'Crescita territoriale attiva. Guerre offensive.' },
-    isolazionisti: { weight: 0.12, expandMul: 0.10, warMul: 0.90, diplomatMul: 0.4, label: 'Isolazionisti', desc: 'Chiudono confini, attaccano gli intrusi.' },
-    predoni:       { weight: 0.10, expandMul: 0.30, warMul: 1.40, diplomatMul: 0.3, label: 'Predoni',       desc: 'Razzie sui vicini, taglie e bottino.' },
-    mistici:       { weight: 0.10, expandMul: 0.40, warMul: 0.20, diplomatMul: 1.8, label: 'Mistici',       desc: 'Convertono i vicini con dispacci. Non militari.' },
-    tecnocratici:  { weight: 0.08, expandMul: 0.50, warMul: 0.30, diplomatMul: 1.2, label: 'Tecnocratici',  desc: 'Focus tech, alleati di chi ha alta Reputazione.' },
-    imperialisti:  { weight: 0.05, expandMul: 1.80, warMul: 1.60, diplomatMul: 0.6, label: 'Imperialisti',  desc: 'Variante aggressiva. Rari ma pericolosi.' }
+    /* hpMul/fpMul/massMul (2026-06-26, opzione A): varianza delle statistiche
+       di combattimento per CARATTERE. Spezzano il "tutto multiplo di 182":
+       una civ militarista schiera unità più toste e numerose, una pacifica
+       più fragili e poche. Composti con i moltiplicatori tech (techCombatMul)
+       in materialize() e in aiCombatPowerAt. Centrati su 1.0 = unità "media" (182 P). */
+    sedentari:     { weight: 0.25, expandMul: 0.20, warMul: 0.40, diplomatMul: 1.4, hpMul: 1.05, fpMul: 0.85, massMul: 0.85, label: 'Sedentari',     desc: 'Si tengono 2-4 pianeti. Reattivi solo se attaccati.' },
+    mercantili:    { weight: 0.15, expandMul: 0.60, warMul: 0.50, diplomatMul: 1.6, hpMul: 0.90, fpMul: 0.80, massMul: 0.90, label: 'Mercantili',    desc: 'Espansione lenta + alleanze + rotte.' },
+    espansionisti: { weight: 0.15, expandMul: 1.50, warMul: 1.30, diplomatMul: 0.8, hpMul: 1.05, fpMul: 1.10, massMul: 1.15, label: 'Espansionisti', desc: 'Crescita territoriale attiva. Guerre offensive.' },
+    isolazionisti: { weight: 0.12, expandMul: 0.10, warMul: 0.90, diplomatMul: 0.4, hpMul: 1.25, fpMul: 0.95, massMul: 0.90, label: 'Isolazionisti', desc: 'Chiudono confini, attaccano gli intrusi.' },
+    predoni:       { weight: 0.10, expandMul: 0.30, warMul: 1.40, diplomatMul: 0.3, hpMul: 0.85, fpMul: 1.25, massMul: 1.10, label: 'Predoni',       desc: 'Razzie sui vicini, taglie e bottino.' },
+    mistici:       { weight: 0.10, expandMul: 0.40, warMul: 0.20, diplomatMul: 1.8, hpMul: 0.80, fpMul: 0.70, massMul: 0.80, label: 'Mistici',       desc: 'Convertono i vicini con dispacci. Non militari.' },
+    tecnocratici:  { weight: 0.08, expandMul: 0.50, warMul: 0.30, diplomatMul: 1.2, hpMul: 1.15, fpMul: 1.15, massMul: 0.80, label: 'Tecnocratici',  desc: 'Focus tech, alleati di chi ha alta Reputazione.' },
+    imperialisti:  { weight: 0.05, expandMul: 1.80, warMul: 1.60, diplomatMul: 0.6, hpMul: 1.20, fpMul: 1.20, massMul: 1.15, label: 'Imperialisti',  desc: 'Variante aggressiva. Rari ma pericolosi.' }
   };
   const VOCATION_IDS = Object.keys(VOCATIONS);
 
@@ -1773,15 +1778,22 @@
   function materialize(game, civ, sysId) {
     if (!civ) return null;
     /* M10 Fase B-2: il tech-tier ridistribuisce la forza (qualità ≠
-       quantità) — unità più toste ma in numero ridotto. */
+       quantità) — unità più toste ma in numero ridotto.
+       Decisione 2026-06-26 (opzione A): compongo con la VOCAZIONE
+       (voc.hpMul/fpMul/massMul). Spezza la rigida uniformità "tutte le
+       unità AI hanno P=182": Mistici fragili, Imperialisti pesanti. */
     const tech = techCombatMul(game, civ);
+    const voc = VOCATIONS[civ.vocation] || VOCATIONS.sedentari;
+    const vHp = voc.hpMul != null ? voc.hpMul : 1;
+    const vFp = voc.fpMul != null ? voc.fpMul : 1;
+    const vMass = voc.massMul != null ? voc.massMul : 1;
     const rawUnits = (civ.power || 0) / 25;
-    const units = Math.max(1, Math.round(rawUnits * tech.massMul));
+    const units = Math.max(1, Math.round(rawUnits * tech.massMul * vMass));
     return {
       civId: civ.id, civName: civ.name, alignment: civ.alignment,
       color: civ.color, atSystem: sysId,
       units: units, power: civ.power || 0, ships: [],
-      fpMul: tech.fpMul, hpMul: tech.hpMul,
+      fpMul: tech.fpMul * vFp, hpMul: tech.hpMul * vHp,
       techTier: techTierIndex(game, civ)
     };
   }
@@ -1884,6 +1896,194 @@
       return { planetKey: pk, defense: Math.max(0, Math.round(share)) };
     });
   }
+
+  /* ------------------------------------------------------------------
+     STIMA CONTESTUALE DI FORZA DI COMBATTIMENTO (decisione 2026-06-26).
+
+     Risponde alla domanda: "se attacco QUESTO oggetto adesso, cosa
+     affronto?". Stessa scala P = HP + FP*8 usata per la tua flotta
+     (garrison.powerOf) e per le tue difese (combat.forceFromDefenses).
+
+       aiCombatPowerAt(game, civ, targetKind, targetRef) →
+         { real, mobilizable, total, components, range }
+
+       - targetKind: 'fleet' | 'colony' | 'station' | 'system'
+       - targetRef:
+           fleet  → aifleet object o af.id
+           colony → planetKey 'sid:bk'
+           station→ station object o station.id
+           system → sysId numerico
+
+     Tutto deriva da costanti già nel modello:
+       - combat.CFG.AI_UNIT_HP / AI_UNIT_FP  (statistiche unità)
+       - garrison.CFG.FP_WEIGHT              (peso FP nella P)
+       - techCombatMul(civ)                  (mod tecnologia)
+       - VOCATIONS[voc].hpMul/fpMul/massMul  (mod carattere)
+       - VOCATIONS[voc].warMul × PHASES[ph].warMul × MOB.REL[rel]
+         × CAPITAL_WEIGHT / colony-weight    (mod mobilitazione)
+     Niente magic number.
+     ------------------------------------------------------------------ */
+
+  /* P di una "unità AI" tipica per quella civ, con composizione tech+voc. */
+  function aiPowerPerUnit(game, civ) {
+    const tech = techCombatMul(game, civ);
+    const voc = VOCATIONS[civ.vocation] || VOCATIONS.sedentari;
+    const vHp = voc.hpMul != null ? voc.hpMul : 1;
+    const vFp = voc.fpMul != null ? voc.fpMul : 1;
+    const C = (root.ORION && root.ORION.combat && root.ORION.combat.CFG) || { AI_UNIT_HP: 70, AI_UNIT_FP: 14 };
+    const GAR = (root.ORION && root.ORION.garrison && root.ORION.garrison.CFG) || { FP_WEIGHT: 8 };
+    const uHp = Math.round(C.AI_UNIT_HP * tech.hpMul * vHp);
+    const uFp = Math.round(C.AI_UNIT_FP * tech.fpMul * vFp);
+    return uHp + uFp * GAR.FP_WEIGHT;
+  }
+
+  /* Unità "totali" che la civ potrebbe materializzare ovunque. */
+  function aiTotalMobUnits(game, civ) {
+    const tech = techCombatMul(game, civ);
+    const voc = VOCATIONS[civ.vocation] || VOCATIONS.sedentari;
+    const vMass = voc.massMul != null ? voc.massMul : 1;
+    return Math.max(1, Math.round((civ.power || 0) / 25 * tech.massMul * vMass));
+  }
+
+  /* Moltiplicatore di mobilitazione (0..N) per UN PUNTO PRECISO, modulato da
+     vocazione (warMul), fase (warMul), relazione vs giocatore, penalità per
+     sconfitta recente. */
+  function aiMobMul(game, civ) {
+    const voc = VOCATIONS[civ.vocation] || VOCATIONS.sedentari;
+    const phase = PHASES[civ.phase] || PHASES.growth;
+    let rel = (root.ORION.diplomacy && root.ORION.diplomacy.effectiveRelation)
+      ? root.ORION.diplomacy.effectiveRelation(game, civ)
+      : (civ.relation || 'peace');
+    /* effectiveRelation può tornare anche 'hostile'/'cordial'/'friendly'; per
+       la mobilitazione li mappo su disposizione: ostile≈war-like, gli altri
+       come pace. */
+    if (rel === 'cordial' || rel === 'friendly') rel = 'peace';
+    const relMul = (CFG.MOB.REL[rel] != null) ? CFG.MOB.REL[rel] : CFG.MOB.REL.peace;
+    let mul = (voc.warMul || 1) * (phase.warMul || 1) * relMul;
+    if (civ.lastBattle && civ.lastBattle.result === 'loss') {
+      const dt = (game.timeImpulsi || 0) - (civ.lastBattle.impulso || 0);
+      if (dt >= 0 && dt < CFG.MOB.LAST_BATTLE_RECENCY_I) mul *= CFG.MOB.LAST_BATTLE_LOSS_PENALTY;
+    }
+    return Math.max(0, mul);
+  }
+
+  /* Penalità "truppe già impegnate altrove": ogni incursione AI inbound già
+     in corso da QUESTA civ sottrae N unità (default 1 per incursione). */
+  function aiEngagementCost(game, civ) {
+    if (!game || !Array.isArray(game.incursions)) return 0;
+    let n = 0;
+    for (let i = 0; i < game.incursions.length; i++) {
+      const inc = game.incursions[i];
+      if (inc && inc.kind === 'ai' && inc.civId === civ.id) n++;
+    }
+    return n * (CFG.MOB.INCURSION_UNIT_COST || 0);
+  }
+
+  /* Pesi delle colonie per la distribuzione mobilitazione: capitale boost
+     fisso (CFG.MOB.CAPITAL_WEIGHT), altre seed-deterministiche in [0.7, 1.2]. */
+  function aiColonyWeights(game, civ) {
+    const planets = civ.planets || [];
+    if (!planets.length) return { weights: [], sum: 0 };
+    const seed = (game && game.seed) || 0;
+    const rng = root.ORION.rng && root.ORION.rng.makeRng
+      ? root.ORION.rng.makeRng(seed + ':aimob:' + civ.id)
+      : null;
+    const weights = planets.map(function (pk, idx) {
+      if (idx === 0) return CFG.MOB.CAPITAL_WEIGHT || 1.5;
+      const r = rng ? rng.float() : 0.5;
+      return 0.7 + r * 0.5;
+    });
+    const sum = weights.reduce(function (a, b) { return a + b; }, 0) || 1;
+    return { weights: weights, sum: sum };
+  }
+
+  /* Presenza reale di flotte AI ferme in un sistema (orbiting/docked) per
+     quella civ. Dato concreto (NON una stima). */
+  function realFleetPowerAtSystem(game, civId, sysId) {
+    const GAR = root.ORION && root.ORION.garrison;
+    if (!GAR || !GAR.powerOf) return 0;
+    let p = 0;
+    const list = (game && game.aiFleets) || [];
+    for (let i = 0; i < list.length; i++) {
+      const af = list[i];
+      if (!af || af.civId !== civId || af.systemId !== sysId) continue;
+      if (af.status === 'in-transit') continue;
+      p += GAR.powerOf(game, af);
+    }
+    return Math.round(p);
+  }
+
+  function aiCombatPowerAt(game, civ, targetKind, targetRef) {
+    if (!civ) return null;
+
+    if (targetKind === 'fleet') {
+      const GAR = root.ORION && root.ORION.garrison;
+      let af = targetRef;
+      if (typeof targetRef === 'string') {
+        af = ((game && game.aiFleets) || []).filter(function (x) { return x && x.id === targetRef; })[0];
+      }
+      const p = (af && GAR && GAR.powerOf) ? Math.round(GAR.powerOf(game, af)) : 0;
+      return { real: p, mobilizable: 0, total: p, components: { fleet: p } };
+    }
+
+    if (targetKind === 'station') {
+      let st = targetRef;
+      const stMod = root.ORION && root.ORION.station;
+      if (typeof targetRef === 'string' && stMod && stMod.stationById) {
+        st = stMod.stationById(game, targetRef);
+      }
+      const sid = st && st.systemId;
+      const fleetP = (sid != null) ? realFleetPowerAtSystem(game, civ.id, sid) : 0;
+      /* Le strutture stazione hanno difese modellate ma il calcolo è
+         specifico di station.js; espongo solo il presidio reale qui. */
+      return { real: fleetP, mobilizable: 0, total: fleetP, components: { presidio: fleetP } };
+    }
+
+    const pPerUnit = aiPowerPerUnit(game, civ);
+    const totalUnits = aiTotalMobUnits(game, civ);
+    const mobMul = aiMobMul(game, civ);
+    const engagement = aiEngagementCost(game, civ);
+    const availableUnits = Math.max(0, totalUnits * mobMul - engagement);
+
+    if (targetKind === 'colony') {
+      const planetKey = String(targetRef);
+      const parts = planetKey.split(':');
+      const sid = Number(parts[0]);
+      const planets = civ.planets || [];
+      const idx = planets.indexOf(planetKey);
+      const ws = aiColonyWeights(game, civ);
+      let colonyShare = 0;
+      if (idx >= 0 && ws.sum > 0) colonyShare = ws.weights[idx] / ws.sum;
+      const colonyUnits = Math.max(0, Math.round(availableUnits * colonyShare));
+      const mobilizable = colonyUnits * pPerUnit;
+      const real = realFleetPowerAtSystem(game, civ.id, sid);
+      return {
+        real: real, mobilizable: mobilizable, total: real + mobilizable,
+        components: { fleetInOrbit: real, mobilizable: mobilizable, units: colonyUnits, pPerUnit: pPerUnit }
+      };
+    }
+
+    if (targetKind === 'system') {
+      const sid = Number(targetRef);
+      const planets = civ.planets || [];
+      const ws = aiColonyWeights(game, civ);
+      let sumShare = 0;
+      for (let i = 0; i < planets.length; i++) {
+        const parts = planets[i].split(':');
+        if (Number(parts[0]) === sid && ws.sum > 0) sumShare += ws.weights[i] / ws.sum;
+      }
+      const sysUnits = Math.max(0, Math.round(availableUnits * sumShare));
+      const mobilizable = sysUnits * pPerUnit;
+      const real = realFleetPowerAtSystem(game, civ.id, sid);
+      return {
+        real: real, mobilizable: mobilizable, total: real + mobilizable,
+        components: { fleetInOrbit: real, mobilizable: mobilizable, units: sysUnits, pPerUnit: pPerUnit }
+      };
+    }
+
+    return null;
+  }
+
   function playerEmpireForce(game) {
     if (!game) return 0;
     let n = 0;
@@ -1983,6 +2183,8 @@
     civFleetTotals: civFleetTotals,
     civDefensesTotal: civDefensesTotal,
     civDefensePerColony: civDefensePerColony,
+    aiCombatPowerAt: aiCombatPowerAt,
+    aiPowerPerUnit: aiPowerPerUnit,
     INTEL_LEVEL_INV: INTEL_LEVEL_INV,
     dispositionReason: dispositionReason,
     knownNests: knownNests,

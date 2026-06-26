@@ -9314,8 +9314,29 @@ function renderCivDetail(stage, c) {
       const fleetTag = (intelRank >= 3 && fleetP > 0)
         ? ' <span class="civ-detail__col-tag" style="color:#ffaa66;border-color:rgba(255,170,102,0.30);background:rgba(255,170,102,0.10)" title="Presenza reale: flotte AI ferme in orbita o al porto in questo sistema. NON è una stima.">⚡ in orbita P ' + fleetP + '</span>'
         : '';
+      /* Stima CONTESTUALE "se attacchi questa colonia, cosa affronti?".
+         Combina la presenza reale (flotte in orbita) con la quota di unità
+         che la civ può materializzare LÌ, modulata da vocazione, fase,
+         relazione vs te, peso della colonia (capitale boost). A L3 range
+         ±20%, a L4 esatto. Vedi ORION.ai.aiCombatPowerAt. */
+      let attackTag = '';
+      if (intelRank >= 3 && AI.aiCombatPowerAt) {
+        const est = AI.aiCombatPowerAt(g, c, 'colony', planetKey);
+        if (est && est.total > 0) {
+          const exact = intelRank >= 4;
+          const lo = exact ? est.total : Math.max(1, Math.round(est.total * 0.80));
+          const hi = exact ? est.total : Math.round(est.total * 1.20);
+          const label = exact ? ('= ' + est.total) : ('≈ ' + lo + '–' + hi);
+          const tip = 'Forza che difenderebbe questa colonia se la attaccassi adesso: ' +
+            (est.real || 0) + ' P reali (flotte in orbita) + ' + est.mobilizable + ' P mobilizzabili (' +
+            (est.components && est.components.units ? est.components.units : 0) + ' unità × ' +
+            (est.components && est.components.pPerUnit ? est.components.pPerUnit : 0) + ' P/unità). ' +
+            (exact ? 'Valore esatto a Approfondito.' : 'Range a Completo, esatto a Approfondito.');
+          attackTag = ' <span class="civ-detail__col-tag" style="color:#ff7676;border-color:rgba(255,118,118,0.35);background:rgba(255,118,118,0.10)" title="' + escapeHtml(tip) + '">⚔ se attacchi P ' + label + '</span>';
+        }
+      }
       return '<li class="civ-detail__col" data-sys="' + x.sid + '"><span class="civ-detail__col-name">' +
-        escapeHtml(sysNm) + (bodyNm ? ' · ' + escapeHtml(bodyNm) : '') + '</span>' + systemTagHtml(x.sid) + dossTag + defTag + fleetTag + '</li>';
+        escapeHtml(sysNm) + (bodyNm ? ' · ' + escapeHtml(bodyNm) : '') + '</span>' + systemTagHtml(x.sid) + dossTag + defTag + fleetTag + attackTag + '</li>';
     }).join('');
     const hiddenN = planets.length - colKnown.length;
     /* Conteggio colonie non localizzate = informazione di fog-of-war: rivelarlo
@@ -9375,8 +9396,19 @@ function renderCivDetail(stage, c) {
       if (intelRank >= 4 || c.deepIntel) fpStr = afFp + ' FP';
       else if (intelRank >= 3) fpStr = '≈ ' + Math.max(0, Math.round(afFp * 0.85)) + '–' + Math.round(afFp * 1.15) + ' FP';
       else if (intelRank >= 2) fpStr = '≈ ' + Math.max(0, Math.round(afFp * 0.6)) + '–' + Math.round(afFp * 1.4) + ' FP';
+      /* P di scontro (HP+FP·8) per la flotta — stessa scala di garrison.powerOf
+         e di forceFromMaterialized. Esatto a L4, range a L3. */
+      let pStr = '';
+      if ((intelRank >= 3 || c.deepIntel) && AI.aiCombatPowerAt) {
+        const est = AI.aiCombatPowerAt(g, c, 'fleet', af);
+        const p = est && est.total ? est.total : 0;
+        if (p > 0) {
+          const exact = (intelRank >= 4) || !!c.deepIntel;
+          pStr = exact ? ('P ' + p) : ('P ≈ ' + Math.max(0, Math.round(p * 0.85)) + '–' + Math.round(p * 1.15));
+        }
+      }
       return '<li class="civ-detail__fleet"><span class="civ-detail__fleet-mission">' + escapeHtml(mission) + dossTag + '</span>' +
-        '<span class="civ-detail__fleet-comp">' + escapeHtml(compTxt) + (fpStr ? ' · ' + escapeHtml(fpStr) : '') + '</span>' +
+        '<span class="civ-detail__fleet-comp">' + escapeHtml(compTxt) + (fpStr ? ' · ' + escapeHtml(fpStr) : '') + (pStr ? ' · ' + escapeHtml(pStr) : '') + '</span>' +
         '<span class="civ-detail__fleet-where">' + escapeHtml(where) + ' · ' + escapeHtml(seen) + '</span></li>';
     }).join('') + '</ul>';
   }
