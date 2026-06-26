@@ -10056,10 +10056,11 @@ function fleetShipIcon(kind) {
         estrattore a bordo → Estrattore · coloniale a bordo → Pioniere.
         "Prevale lo scopo": una flotta con un estrattore È un estrattore,
         anche se scortata da caccia.
-     2. Overlay di scopo per ordine caratterizzante: attacco → Lama ·
-        pattuglia/presidio → Sentinella · esplora → Segugio. Si applica
-        AL VOLO a ogni cambio ordine (non solo alla nascita): così "Lama"
-        nasce davvero anche se prima la flotta era in `move`.
+     2. Overlay di scopo per ordine caratterizzante: pattuglia/presidio →
+        Sentinella · esplora → Segugio. Si applica AL VOLO a ogni cambio
+        ordine (non solo alla nascita). L'attacco NON ribattezza (decisione
+        utente 2026-06-26): l'identità di composizione prevale — una flotta
+        di linea resta tale anche mentre attacca.
      3. Identità per nave di punta (la più forte, fleet.leadKind): caccia
         → Pattuglia, intercettore → Squadriglia, … Copre il caso neutro
         `move`/`idle` (basta col "Convoglio" che non diceva nulla).
@@ -10078,13 +10079,13 @@ const FLEET_COMP_NAMES = {
   'fregata': 'Squadra',
   'incrociatore': 'Falange',   // formazione da battaglia pesante
   'dreadnought': 'Armata',
-  'ammiraglia': 'Leviatano',   // la grande flotta attorno all'ammiraglia
+  'ammiraglia': 'Aquila',      // lo stormo attorno all'ammiraglia (apice)
   'coloniale': 'Pioniere'      // (anche via override #1)
 };
 /* Overlay di scopo: ordini che caratterizzano la missione e prevalgono
-   sull'identità di composizione (ma NON sugli override funzionali §1). */
+   sull'identità di composizione (ma NON sugli override funzionali §1).
+   L'attacco è volutamente assente: non ribattezza (decisione 2026-06-26). */
 const FLEET_ORDER_NAMES = {
-  'attack': 'Lama',
   'patrol': 'Sentinella',
   'patrol-loop': 'Sentinella',
   'garrison': 'Sentinella',
@@ -10096,8 +10097,8 @@ const FLEET_ORDER_NAMES = {
 const FLEET_NAME_ALT = {
   'Segugio': 'Pellegrino', 'Estrattore': 'Minatrice', 'Pattuglia': 'Ronda',
   'Squadriglia': 'Stormo', 'Flottiglia': 'Naviglio', 'Squadra': 'Schiera',
-  'Falange': 'Coorte', 'Armata': 'Legione', 'Leviatano': 'Colosso',
-  'Pioniere': 'Avanguardia', 'Lama': 'Lupo', 'Sentinella': 'Bastione'
+  'Falange': 'Coorte', 'Armata': 'Legione', 'Aquila': 'Astore',
+  'Pioniere': 'Avanguardia', 'Sentinella': 'Bastione'
 };
 /* Tutte le basi che generiamo noi (correnti + legacy): un nome che combacia
    con "<base> <numero>" è considerato auto-derivato → rinominabile al volo.
@@ -10106,10 +10107,11 @@ const FLEET_NAME_ALT = {
 const FLEET_AUTO_BASES = [
   'Squadrone',
   'Segugio', 'Estrattore', 'Pattuglia', 'Squadriglia', 'Flottiglia',
-  'Squadra', 'Falange', 'Armata', 'Leviatano', 'Pioniere', 'Lama', 'Sentinella',
-  /* legacy callsign per-ordine + pool ALT storico */
-  'Convoglio', 'Vedetta', 'Carovana', 'Pellegrino', 'Lupo', 'Bastione',
-  'Bussola', 'Minatrice', 'Avanguardia'
+  'Squadra', 'Falange', 'Armata', 'Aquila', 'Pioniere', 'Sentinella',
+  /* legacy basi nostre dismesse + callsign per-ordine + pool ALT storico:
+     restano qui così i nomi auto già assegnati migrano al cambio ordine. */
+  'Leviatano', 'Lama', 'Convoglio', 'Vedetta', 'Carovana', 'Pellegrino',
+  'Lupo', 'Bastione', 'Bussola', 'Minatrice', 'Avanguardia'
 ];
 /* Numero progressivo per quella base: max suffisso numerico tra le flotte
    esistenti col prefisso "<Base> ", +1. Robusto a rinomine manuali (chi
