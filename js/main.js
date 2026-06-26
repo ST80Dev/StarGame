@@ -12025,6 +12025,17 @@ function rateGrid(rates, upkeep, colony) {
   const F = ORION.fleet;
   const shipMet = (F && F.portMaintenance) ? F.portMaintenance(ORION.game, colony) : 0;
   const shipEn  = (F && F.portMaintenanceEn) ? F.portMaintenanceEn(ORION.game, colony) : 0;
+  /* Surplus estrattivo da anomalie/cinture/nebulose (richiesta utente
+     2026-06-20): le flotte in raccolta versano il bottino sulla colonia
+     attiva più vicina al sito (anomaly.depositColonyKey). Lo aggiungiamo
+     al saldo del riepilogo dx come fattore esplicito ("anomalia"), come
+     facciamo già nella Plancia di Colonia (colony-deck). Senza, l'utente
+     mandava estrattori e il saldo non sembrava cambiare. */
+  const anomFlow = (ORION.anomaly && ORION.anomaly.harvestByColony)
+    ? (ORION.anomaly.harvestByColony(ORION.game)[colony.systemId + ':' + colony.bodyKey] || null)
+    : null;
+  const anomMet = anomFlow ? anomFlow.met : 0;
+  const anomEn  = anomFlow ? anomFlow.en  : 0;
   const items = [];
   ['met', 'en', 'food', 'water'].forEach(function (k) {
     const r = (rates[k] || 0) * pf.prodMul; const u = upkeep[k] || 0;
@@ -12036,14 +12047,16 @@ function rateGrid(rates, upkeep, colony) {
     const crewDrain = k === 'food' ? (pf.crewFood || 0) : k === 'water' ? (pf.crewWater || 0) : 0;
     const shipDrain = k === 'met' ? shipMet : k === 'en' ? shipEn : 0;
     const trade = tradeNet[k] || 0;   // + entrata, − uscita
-    const net = r - u - popDrain - crewDrain - shipDrain + trade;
-    if (!(r || u || popDrain || crewDrain || shipDrain || trade)) return;
+    const anom = k === 'met' ? anomMet : k === 'en' ? anomEn : 0;   // + entrata
+    const net = r - u - popDrain - crewDrain - shipDrain + trade + anom;
+    if (!(r || u || popDrain || crewDrain || shipDrain || trade || anom)) return;
     let aux = '+' + fmtAbs(r) + ' prod / −' + fmtAbs(u) + ' uso';
     if (popDrain > 0) aux += ' / −' + fmtAbs(popDrain) + ' pop';
     if (crewDrain > 0) aux += ' / −' + fmtAbs(crewDrain) + ' razioni';
     if (shipDrain > 0) aux += ' / −' + fmtAbs(shipDrain) + ' flotta';
     if (trade > 0) aux += ' / +' + fmtAbs(trade) + ' commercio';
     else if (trade < 0) aux += ' / −' + fmtAbs(trade) + ' commercio';
+    if (anom > 0) aux += ' / +' + fmtAbs(anom) + ' anomalia';
     items.push(row(resLabel(k), '<span class="rate ' + (net >= 0 ? 'rate--pos' : 'rate--neg') + '">' + fmtNet(net) + '</span> / ' + iU() + ' <span class="rate-aux">(' + aux + ')</span>'));
   });
   if (rates.research) items.push(row('Ricerca', '<span class="rate rate--pos">+' + (Math.round(rates.research * 100) / 100) + '</span> / ' + iU()));
@@ -14340,6 +14353,13 @@ function buildEmpireState() {
     const Fdash = ORION.fleet;
     const shipMet = (Fdash && Fdash.portMaintenance) ? Fdash.portMaintenance(g, c) : 0;
     const shipEn  = (Fdash && Fdash.portMaintenanceEn) ? Fdash.portMaintenanceEn(g, c) : 0;
+    /* Surplus anomalie: come per rateGrid e colony-deck, conteggia il
+       deposito previsto dal sito più vicino (decisione utente 2026-06-20). */
+    const anomFlowCard = (ORION.anomaly && ORION.anomaly.harvestByColony)
+      ? (ORION.anomaly.harvestByColony(g)[k] || null)
+      : null;
+    const anomCardMet = anomFlowCard ? anomFlowCard.met : 0;
+    const anomCardEn  = anomFlowCard ? anomFlowCard.en  : 0;
     let stockTotal = 0, stockNet = 0;
     ['met', 'en', 'food', 'water'].forEach(function (rk) {
       stockTotal += (c.stock[rk] || 0);
@@ -14350,7 +14370,8 @@ function buildEmpireState() {
         rk === 'en'    ? (pf.popEn   || 0) : 0;
       const crewDrain = rk === 'food' ? (pf.crewFood || 0) : rk === 'water' ? (pf.crewWater || 0) : 0;
       const shipDrain = rk === 'met' ? shipMet : rk === 'en' ? shipEn : 0;
-      stockNet += (out.rates[rk] || 0) * pf.prodMul - (out.upkeep[rk] || 0) - popDrain - crewDrain - shipDrain;
+      const anomBonus = rk === 'met' ? anomCardMet : rk === 'en' ? anomCardEn : 0;
+      stockNet += (out.rates[rk] || 0) * pf.prodMul - (out.upkeep[rk] || 0) - popDrain - crewDrain - shipDrain + anomBonus;
     });
 
     const tel = (ORION._empireTel && ORION._empireTel[k]) || { pop: [], morale: [], stock: [] };
