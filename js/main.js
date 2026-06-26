@@ -7602,9 +7602,13 @@ function renderFleetView(stage) {
     b.addEventListener('click', function () {
       const sid = Number(b.dataset.sys);
       if (!Number.isFinite(sid) || sid < 0) return;
+      const fid = b.dataset.fleet || null;
       if (ORION.game && ORION.game.state) ORION.game.state.selectedId = sid;
       navigateView('group');
-      if (ORION.map && ORION.map.focusSystemCentered) ORION.map.focusSystemCentered(sid);
+      /* Raider mirato a una flotta → centra sulla flotta stessa (è il
+         bersaglio reale); altrimenti centra sul sistema del corpo assediato. */
+      if (fid && ORION.map && ORION.map.focusFleet) ORION.map.focusFleet(fid);
+      else if (ORION.map && ORION.map.focusSystemCentered) ORION.map.focusSystemCentered(sid);
     });
   });
 }
@@ -7696,15 +7700,23 @@ function buildWarSection(g) {
     incursions.forEach(function (inc) {
       const sysId = inc.targetSysId;
       const hasSys = sysId != null && sysId >= 0;
-      /* bodyTagHtml = [REGIONE·Sistema]: rende esplicito SIA il corpo bersaglio
-         (nome colonia/stazione) SIA il sistema in cui si trova, così il
-         giocatore sa subito dove e cosa difende senza aprire la mappa. */
+      /* Un raider può mirare a una FLOTTA precisa (kind 'pirate-raider'): in
+         tal caso quella flotta È il bersaglio reale e, se resta in orbita lì,
+         combatte all'arrivo (recovery-friendly #22: spostandola, svanisce). */
+      const fleetId = inc.targetFleetId || null;
+      /* bodyTagHtml = [REGIONE·Sistema]: rende esplicito SIA il bersaglio
+         (colonia/stazione/flotta) SIA il sistema in cui si trova, così il
+         giocatore sa subito cosa e dove senza aprire la mappa. */
       const tag = hasSys ? bodyTagHtml(sysId) : '';
       const body = uiIcon('warning', 'gold') + ' <span class="war-incursion-link__txt">Predoni verso ' +
         incursionTargetLabel(inc) + tag + ' · arrivo fra <strong>' + (inc.eta | 0) + ' ' + iU() + '</strong></span>';
       if (hasSys) {
-        html += '<li><button class="war-incursion-link" data-action="incursion-focus" data-sys="' + sysId +
-          '" type="button" title="Mostra sulla mappa del gruppo stellare, sistema al centro">' +
+        const fAttr = fleetId ? ' data-fleet="' + escapeHtml(fleetId) + '"' : '';
+        const ttl = fleetId
+          ? 'La tua flotta È il bersaglio: mostrala sulla mappa (spostala se non vuoi ingaggiare)'
+          : 'Mostra sulla mappa del gruppo stellare, sistema al centro';
+        html += '<li><button class="war-incursion-link" data-action="incursion-focus" data-sys="' + sysId + '"' + fAttr +
+          ' type="button" title="' + ttl + '">' +
           body + uiIcon('chevronRight', 'soft') + '</button></li>';
       } else {
         html += '<li>' + body + '</li>';
@@ -14168,12 +14180,21 @@ function siegeTargetName(ev) {
   return colonyNameFromKey(ev.colonyKey);
 }
 
-/* Nome esplicito del bersaglio di un'incursione in arrivo (colonia o stazione).
-   Garantisce sempre una destinazione leggibile — mai "—" — anche quando il
-   bersaglio è una stazione (targetColonyKey null): in tal caso il nome stazione
-   o, in fallback, il nome del sistema. */
+/* Nome esplicito del bersaglio di un'incursione in arrivo (flotta, colonia o
+   stazione). Garantisce sempre una destinazione leggibile — mai "—":
+   - raider mirato (kind 'pirate-raider') → "la flotta <nome>" (la flotta È il
+     bersaglio reale: se resta lì combatte, se la sposti il raider svanisce);
+   - colonia/stazione → nome del corpo;
+   - fallback → nome del sistema. */
 function incursionTargetLabel(inc) {
   if (!inc) return '—';
+  if (inc.targetFleetId) {
+    const g = ORION.game;
+    const f = g && (g.fleets || []).filter(function (x) { return x && x.id === inc.targetFleetId; })[0];
+    return f && f.name
+      ? ('la flotta <strong>' + escapeHtml(f.name) + '</strong>')
+      : '<strong>una tua flotta</strong>';
+  }
   const name = siegeTargetName({
     stationId: inc.targetStationId,
     systemId: inc.targetSysId,
