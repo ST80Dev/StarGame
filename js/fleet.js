@@ -3310,9 +3310,71 @@
   }
   function clearQueue(fleet) { if (fleet) fleet.queue = []; }
 
+  /* =====================================================================
+     Visual per classe nave su CANVAS (mappa/sistema, richiesta utente
+     2026-06-26). Specchio di SHIP_VIS in main.js ma con colore esadecimale
+     (il canvas non eredita dalle classi CSS .ui-icon--<tone>). Le tinte
+     seguono UI_GUIDE §1 per ruolo. L'estrattore non ha icona dedicata →
+     fallback al glyph della classe. */
+  const CLASS_ICON = {
+    explorer:     { icon: 'shipExplorer',     hex: '#2fe6e0' },
+    caccia:       { icon: 'shipCaccia',       hex: '#f0d670' },
+    intercettore: { icon: 'shipIntercettore', hex: '#f0a868' },
+    corvetta:     { icon: 'shipCorvetta',     hex: '#f08296' },
+    fregata:      { icon: 'shipFregata',      hex: '#b89cff' },
+    coloniale:    { icon: 'shipColoniale',    hex: '#6fe0b8' },
+    incrociatore: { icon: 'shipIncrociatore', hex: '#f08296' },
+    dreadnought:  { icon: 'shipDreadnought',  hex: '#f08296' },
+    ammiraglia:   { icon: 'shipAmmiraglia',   hex: '#f0d670' }
+  };
+  function classVisual(kind) {
+    const v = CLASS_ICON[kind];
+    const c = CLASSES[kind] || {};
+    return {
+      icon: v ? v.icon : null,
+      hex:  v ? v.hex : '#98a3c8',
+      glyph: c.glyph || '◈',
+      name: c.name || kind
+    };
+  }
+  /* Composizione di una flotta: conteggio per classe, ordinata per "forza"
+     (potenza di fuoco poi corazza) decrescente. Deterministica (tie-break
+     per kind). Usata per la scomposizione in icone+numero su mappa/sistema
+     e per l'icona singola della nave di punta a basso zoom. */
+  function composition(fleet) {
+    if (!fleet || !Array.isArray(fleet.ships)) return [];
+    const by = {};
+    for (let i = 0; i < fleet.ships.length; i++) {
+      const k = fleet.ships[i].kind; if (!k) continue;
+      by[k] = (by[k] || 0) + 1;
+    }
+    const arr = Object.keys(by).map(function (k) {
+      const c = CLASSES[k] || {};
+      return { kind: k, n: by[k], fp: c.fp || 0, hp: c.hp || 0 };
+    });
+    arr.sort(function (a, b) {
+      if (b.fp !== a.fp) return b.fp - a.fp;
+      if (b.hp !== a.hp) return b.hp - a.hp;
+      return a.kind < b.kind ? -1 : (a.kind > b.kind ? 1 : 0);
+    });
+    return arr;
+  }
+  /* Classe "di punta" (più forte) della flotta — per l'icona singola
+     a basso zoom sulla mappa. */
+  function leadKind(fleet) {
+    const c = composition(fleet);
+    return c.length ? c[0].kind : null;
+  }
+
   ORION.fleet = {
     CLASSES: CLASSES,
     CLASS_ORDER: CLASS_ORDER,
+    CLASS_ICON: CLASS_ICON,
+    classVisual: classVisual,
+    composition: composition,
+    leadKind: leadKind,
+    classList: classList,
+    getClass: getClass,
     classList: classList,
     getClass: getClass,
     computePath: computePath,
