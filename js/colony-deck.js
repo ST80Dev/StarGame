@@ -307,17 +307,24 @@
          malus temporanei del tick (Insediamento ×0.5, scarsità, rifiuti, guerra). */
       const pf = (ORION.time && ORION.time.productionFactors)
         ? ORION.time.productionFactors(ORION.game, colony)
-        : { prodMul: 1, popFood: 0, popWater: 0, crewFood: 0, crewWater: 0 };
+        : { prodMul: 1, popFood: 0, popWater: 0, popMet: 0, popEn: 0, crewFood: 0, crewWater: 0 };
       /* Flusso rotte commerciali nel saldo (decisione utente 2026-06-15):
          + in entrata, − in uscita. */
       const colKey = colony.systemId + ':' + colony.bodyKey;
       const tradeNet = (ORION.trade && ORION.trade.colonyTradeFlow)
         ? ORION.trade.colonyTradeFlow(ORION.game, colKey)
         : { met: 0, en: 0, food: 0, water: 0 };
-      /* Surplus estrattivo da anomalie/cinture/nebulose (richiesta utente
-         2026-06-20): le flotte in raccolta versano il bottino sulla colonia
-         d'origine, non sulla più vicina. Lo includiamo nel saldo e lo
-         mostriamo come chip esplicito così è chiaro DA DOVE viene. */
+      /* Manutenzione flotta (richiesta utente 2026-06-20: il saldo del
+         centro non coincideva col riepilogo dx perché qui mancavano i
+         drenaggi pop-met/en e la manutenzione delle navi al porto).
+         Specchio coerente di processProduction in time.js. */
+      const F = ORION.fleet;
+      const shipMet = (F && F.portMaintenance)   ? F.portMaintenance(ORION.game, colony)   : 0;
+      const shipEn  = (F && F.portMaintenanceEn) ? F.portMaintenanceEn(ORION.game, colony) : 0;
+      /* Surplus estrattivo da anomalie/cinture/nebulose: le flotte in
+         raccolta versano il bottino sulla colonia attiva più vicina al
+         sito (anomaly.depositColonyKey). Lo includiamo nel saldo e lo
+         mostriamo come chip esplicito. */
       const anomFlow = (ORION.anomaly && ORION.anomaly.harvestByColony)
         ? (ORION.anomaly.harvestByColony(ORION.game)[colKey] || null)
         : null;
@@ -327,10 +334,15 @@
       let html = '<aside class="deck-resources" aria-label="Risorse della colonia">';
       keys.forEach(function (k) {
         const stock = colony.stock[k] || 0;
-        const popDrain = k === 'food' ? pf.popFood : k === 'water' ? pf.popWater : 0;
+        const popDrain =
+          k === 'food'  ? pf.popFood  :
+          k === 'water' ? pf.popWater :
+          k === 'met'   ? (pf.popMet  || 0) :
+          k === 'en'    ? (pf.popEn   || 0) : 0;
         const crewDrain = k === 'food' ? (pf.crewFood || 0) : k === 'water' ? (pf.crewWater || 0) : 0;
+        const shipDrain = k === 'met' ? shipMet : k === 'en' ? shipEn : 0;
         const anomBonus = k === 'met' ? anomMet : k === 'en' ? anomEn : 0;
-        const net = (out.rates[k] || 0) * pf.prodMul - (out.upkeep[k] || 0) - popDrain - crewDrain + (tradeNet[k] || 0) + anomBonus;
+        const net = (out.rates[k] || 0) * pf.prodMul - (out.upkeep[k] || 0) - popDrain - crewDrain - shipDrain + (tradeNet[k] || 0) + anomBonus;
         const state = scar && scar[k] ? scar[k].state : 'ok';
         const stateCls = state === 'crit' ? ' is-crit' : state === 'low' ? ' is-low' : '';
         const stateLabel = state === 'crit' ? 'critica' : state === 'low' ? 'allerta' : 'ok';
