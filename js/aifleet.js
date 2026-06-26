@@ -66,8 +66,18 @@
     COLONY_RANGE2_FALLOFF: 0.30, // copertura sul 2° anello (2 hop, più debole)
     CAPITAL_RANGE: 2,       // hop coperti dalla CAPITALE (rete estesa)
     COLONY_RANGE: 1,        // hop coperti da una colonia normale operativa
-    STATION_SENSOR: 0.50,   // potenza di una stazione (avamposto < colonia)
-    STATION_RANGE: 1,       // hop coperti da una stazione operativa
+    /* Stazione come AVAMPOSTO-RADAR a livelli (richiesta utente 2026-06-26):
+       portata e potenza crescono col livello → investi su un avamposto lontano
+       per la visuale, invece di colonizzare ogni 2 hop. Indice = livello (1..4).
+       L1-2 = 1 hop · L3-4 = 2 hop · potenza che sale fino alla pari di una
+       colonia. */
+    STATION_SENSOR_BY_LEVEL: [
+      null,                       // 0: non operativa
+      { power: 0.50, range: 1 },  // L1
+      { power: 0.52, range: 1 },  // L2
+      { power: 0.56, range: 2 },  // L3
+      { power: 0.62, range: 2 }   // L4
+    ],
     /* Sensori di FLOTTA (mobili): raggio < colonia e tarato sul tipo di navi
        (richiesta utente 2026-06-19). Una flotta vede SEMPRE il proprio
        sistema (incrocio/co-locazione); solo gli scafi da ricognizione
@@ -452,10 +462,30 @@
   function isCapitalKey(game, colonyKey) {
     return !!(ORION.capital && ORION.capital.isCapital && ORION.capital.isCapital(game, colonyKey));
   }
+  function stationSensorOf(level) {
+    const tbl = CFG.STATION_SENSOR_BY_LEVEL;
+    const lvl = Math.max(1, Math.min(tbl.length - 1, level || 1));
+    return tbl[lvl] || tbl[1];
+  }
+  /* Bonus globali dalla ricerca (richiesta utente 2026-06-26): potenza +X% e
+     +N hop a TUTTE le fonti infrastrutturali. Il +hop estende solo le fonti
+     che già rilevano (range ≥ 1): una colonia in insediamento resta sul
+     proprio sistema. */
+  function researchSensorBonus(game) {
+    const m = (ORION.research && ORION.research.mods) ? ORION.research.mods(game) : null;
+    return {
+      powerMul: m ? (m.sensorPowerMul || 1) : 1,
+      rangeBonus: m ? (m.sensorRangeBonus || 0) : 0
+    };
+  }
+  function extendRange(baseRange, rangeBonus) {
+    return baseRange > 0 ? baseRange + rangeBonus : 0;
+  }
   /* Mappa di copertura sensori del giocatore: sysId → potenza [0..1.2]. */
   function buildCoverage(game) {
     const cov = {};
     function bump(sysId, p) { if (sysId != null && (cov[sysId] == null || cov[sysId] < p)) cov[sysId] = p; }
+    const rb = researchSensorBonus(game);
     /* Colonie: portata differenziata (richiesta utente 2026-06-26).
        Capitale → 2 hop; colonia operativa → 1 hop; colonia ancora in
        insediamento (colonizing o phase 'settling') → solo il proprio sistema. */
@@ -469,10 +499,10 @@
       if (!operational) range = 0;
       else if (isCapitalKey(game, k)) range = CFG.CAPITAL_RANGE;
       else range = CFG.COLONY_RANGE;
-      spreadCoverage(game, bump, c.systemId, CFG.COLONY_SENSOR, range);
+      spreadCoverage(game, bump, c.systemId, CFG.COLONY_SENSOR * rb.powerMul, extendRange(range, rb.rangeBonus));
     });
-    /* Stazioni operative del giocatore: avamposto-radar leggero (1 hop,
-       potenza < colonia). Le catturate (owner != null) e quelle in
+    /* Stazioni operative del giocatore: avamposto-radar a livelli (portata e
+       potenza crescono col livello). Le catturate (owner != null) e quelle in
        costruzione non contano. */
     const stations = game.stations || [];
     for (let i = 0; i < stations.length; i++) {
@@ -480,7 +510,8 @@
       if (!st || st.systemId == null) continue;
       if (st.owner != null) continue;
       if (st.phase === 'building' || (st.level || 0) < 1) continue;
-      spreadCoverage(game, bump, st.systemId, CFG.STATION_SENSOR, CFG.STATION_RANGE);
+      const ss = stationSensorOf(st.level);
+      spreadCoverage(game, bump, st.systemId, ss.power * rb.powerMul, extendRange(ss.range, rb.rangeBonus));
     }
     /* Flotte del giocatore: copertura nel/i nodo/i correnti (entrambi gli
        estremi della leg se in volo interstellare) + 1° anello; gli scafi da
