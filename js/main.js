@@ -8733,12 +8733,21 @@ function renderCivView(stage) {
       const frX = ORION.ai.forceEstimateRange ? ORION.ai.forceEstimateRange(g, c, intelRankForExtras) : null;
       const force = frX ? (frX.exact ? ('= ' + frX.lo + ' Forza') : ('≈ ' + frX.lo + '–' + frX.hi + ' Forza')) : '—';
       /* M10 Fase B-2: livello tecnologico + nota sul contrappeso
-         (qualità ≠ quantità). */
+         (qualità ≠ quantità). Rev 2026-06-26: a Completo (rank 3) il tier
+         è dato a fascia (es. "Avanzata / Superiore"), a Approfondito
+         (rank 4) o Infiltrato → tier esatto + nota. */
       const techTier = ORION.ai.techTierIndex ? ORION.ai.techTierIndex(g, c) : 1;
-      const techLbl = ORION.ai.techTierLabel ? ORION.ai.techTierLabel(g, c) : '—';
-      const techNote = techTier >= 3
-        ? ' <span class="civ-tech__note">(unità più toste, ma in numero contenuto)</span>'
-        : (techTier === 0 ? ' <span class="civ-tech__note">(armamenti datati)</span>' : '');
+      const techExact = ORION.ai.techTierLabel ? ORION.ai.techTierLabel(g, c) : '—';
+      const techLabels = ORION.ai.TECH_TIER_LABEL || ['Arretrata', 'Standard', 'Avanzata', 'Superiore', "All'avanguardia"];
+      const techDeep = (intelRankForExtras >= 4) || !!c.deepIntel;
+      const techLbl = techDeep
+        ? techExact
+        : (techLabels[Math.max(0, techTier - 1)] || '?') + ' / ' + (techLabels[Math.min(techLabels.length - 1, techTier + 1)] || '?');
+      const techNote = techDeep
+        ? (techTier >= 3
+            ? ' <span class="civ-tech__note">(unità più toste, ma in numero contenuto)</span>'
+            : (techTier === 0 ? ' <span class="civ-tech__note">(armamenti datati)</span>' : ''))
+        : ' <span class="civ-tech__note">(stima ±1 tier — porta il dossier ad Approfondito)</span>';
       /* Potenza/Sistemi noti vivono già nella Stima impero (estBlock): qui
          solo i dettagli più profondi (vocazione/affinità/tratto/forza). */
       const extras =
@@ -9185,18 +9194,33 @@ function renderCivDetail(stage, c) {
       (hiddenHtml || (!colKnown.length ? '<p class="panel__note">Esplora i loro sistemi per localizzarne le colonie.</p>' : ''));
   }
 
-  /* FLOTTE identificate di recente (dallo strato flotte ambientali AI). */
-  const aifs = (g.aiFleets || []).filter(function (af) { return af && af.civId === c.id && (af.detected || af.everDetected || af.lastSeenI != null); });
+  /* FLOTTE identificate (dallo strato flotte ambientali AI).
+     - <L4: solo quelle viste dai tuoi sensori (detected/everDetected/lastSeenI).
+     - L4 Approfondito o Infiltrato: rivela TUTTE le flotte vive della civ
+       con composizione+missione (anche quelle mai avvistate) — taggate
+       "via dossier" per distinguerle dalle osservazioni dirette. */
+  const fleetDeepReveal = (intelRank >= 4) || !!c.deepIntel;
+  const aifsSeen = (g.aiFleets || []).filter(function (af) { return af && af.civId === c.id && (af.detected || af.everDetected || af.lastSeenI != null); });
+  const aifsAll = (g.aiFleets || []).filter(function (af) { return af && af.civId === c.id; });
+  const aifs = fleetDeepReveal ? aifsAll : aifsSeen;
   let fleetHtml;
   if (!aifs.length) fleetHtml = '<p class="panel__note">Nessuna flotta identificata di recente.</p>';
   else {
     fleetHtml = '<ul class="civ-detail__fleets">' + aifs.map(function (af) {
-      const comp = (ORION.aifleet && ORION.aifleet.composition) ? ORION.aifleet.composition(af) : { text: '—' };
+      const wasSeen = !!(af.detected || af.everDetected || af.lastSeenI != null);
+      /* A L4 forziamo composizione "piena" anche per flotte mai viste:
+         il dossier ti dice cosa hanno costruito, non i tuoi sensori. */
+      const ships = Array.isArray(af.ships) ? af.ships : [];
+      const compTxt = (fleetDeepReveal && !wasSeen)
+        ? (ships.length ? ships.map(function (s) { return s.kind; }).join(', ') : '—')
+        : ((ORION.aifleet && ORION.aifleet.composition) ? ORION.aifleet.composition(af).text : '—');
       const mission = (ORION.aifleet && ORION.aifleet.MISSIONS && ORION.aifleet.MISSIONS[af.mission]) ? ORION.aifleet.MISSIONS[af.mission].label : af.mission;
       const where = af.status === 'in-transit' ? 'in viaggio' : ('in ' + _flSysNm(g, af.systemId));
-      const seen = af.detected ? 'rilevata ora' : (af.lastSeenI != null ? ('vista ' + Math.max(0, (g.timeImpulsi || 0) - af.lastSeenI) + ' Ι fa') : '—');
-      return '<li class="civ-detail__fleet"><span class="civ-detail__fleet-mission">' + escapeHtml(mission) + '</span>' +
-        '<span class="civ-detail__fleet-comp">' + escapeHtml(comp.text) + '</span>' +
+      const seen = af.detected ? 'rilevata ora'
+                  : (af.lastSeenI != null ? ('vista ' + Math.max(0, (g.timeImpulsi || 0) - af.lastSeenI) + ' Ι fa') : 'mai avvistata');
+      const dossTag = (fleetDeepReveal && !wasSeen) ? ' <span class="civ-detail__col-tag" title="Conoscenza dal dossier Approfondito, non da avvistamento diretto">via dossier</span>' : '';
+      return '<li class="civ-detail__fleet"><span class="civ-detail__fleet-mission">' + escapeHtml(mission) + dossTag + '</span>' +
+        '<span class="civ-detail__fleet-comp">' + escapeHtml(compTxt) + '</span>' +
         '<span class="civ-detail__fleet-where">' + escapeHtml(where) + ' · ' + escapeHtml(seen) + '</span></li>';
     }).join('') + '</ul>';
   }
@@ -9215,6 +9239,44 @@ function renderCivDetail(stage, c) {
   /* M19 Fase A (spionaggio): blocco "Operazione coperta" (vuoto se non
      contattata o senza modulo). */
   const espHtml = civEspionageHtml(g, c);
+
+  /* Profilo commerciale derivato (decisione 2026-06-26): a L4 (o Infiltrato)
+     mostra una sintesi su come la civ si rapporta al commercio. Niente rotte
+     AI-AI persistite nello stato (non modellate in trade.js): qui derivo dal
+     CARATTERE (vocazione + affinità + relazione) cosa cerca / cosa rifiuta.
+     È intel di profondità, non un dato grezzo: serve per la diplomazia. */
+  const tradeProfileDeep = (intelRank >= 4) || !!c.deepIntel;
+  let tradeProfileHtml = '';
+  if (tradeProfileDeep) {
+    const voc = c.vocation || '';
+    const aff = c.affinity || '';
+    const TRADE_VOC = {
+      mercantili:    { lean: 'Aperto', note: 'Mercanti naturali: cercano accordi stabili e rotte multiple.' },
+      sedentari:     { lean: 'Aperto', note: 'Accettano accordi se la disposizione è almeno cordiale.' },
+      tecnocratici:  { lean: 'Selettivo', note: 'Preferiscono partner con alta reputazione e tech avanzata.' },
+      mistici:       { lean: 'Aperto', note: 'Trattano col baratto cerimoniale: ottime offerte se sei amichevole.' },
+      espansionisti: { lean: 'Tattico', note: 'Commercio come strumento: rompono accordi quando l\'espansione paga.' },
+      imperialisti:  { lean: 'Diffidente', note: 'Vedono il commercio come segno di debolezza. Tributo, non accordo.' },
+      predoni:       { lean: 'Chiuso', note: 'Preferiscono saccheggio o estorsione al commercio onesto.' },
+      isolazionisti: { lean: 'Chiuso', note: 'Confini chiusi: niente accordi con stranieri.' }
+    };
+    const TRADE_AFF = {
+      ferrigna:   'cerca metalli, offre energia',
+      biotica:    'cerca cibo/acqua, offre componenti biotici',
+      glaciale:   'cerca energia, offre materiali criogenici',
+      orbitale:   'cerca metalli per costruzioni, offre componenti orbitali',
+      ancestrale: 'cerca artefatti e crediti, offre energia stabile',
+      mixta:      'profilo bilanciato, nessuna preferenza marcata'
+    };
+    const tv = TRADE_VOC[voc] || { lean: '—', note: 'Profilo commerciale non definito.' };
+    const ta = TRADE_AFF[aff] || '—';
+    tradeProfileHtml =
+      '<section class="civ-detail__sec"><h3>Profilo commerciale <span class="civ-detail__col-tag">via dossier</span></h3>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Tendenza</span><span>' + escapeHtml(tv.lean) + '</span>' +
+          '<span class="civ-card__k">Domanda/offerta</span><span>' + escapeHtml(ta) + '</span></div>' +
+        '<p class="panel__note">' + escapeHtml(tv.note) + '</p>' +
+      '</section>';
+  }
   /* Tutorial (#29): la lezione scatta quando un'operazione è davvero
      disponibile (flotta sul posto) — il momento in cui serve capirla. */
   if (espHtml && ORION.tutorial && ORION.tutorial.fire && ORION.espionage &&
@@ -9257,6 +9319,7 @@ function renderCivDetail(stage, c) {
       '</section>' +
       '<section class="civ-detail__sec"><h3>Colonie note <span class="civ-detail__count">' + colKnown.length + '</span></h3>' + colHtml + '</section>' +
       '<section class="civ-detail__sec"><h3>Flotte identificate <span class="civ-detail__count">' + aifs.length + '</span></h3>' + fleetHtml + '</section>' +
+      tradeProfileHtml +
       (dipHtml ? '<section class="civ-detail__sec"><h3>Diplomazia</h3>' + dipHtml + '</section>' : '') +
       (espHtml ? '<section class="civ-detail__sec"><h3>Spionaggio</h3>' + espHtml + '</section>' : '') +
     '</div>';
