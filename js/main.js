@@ -8609,6 +8609,8 @@ function renderCivView(stage) {
        prima era 'complete' come backward-compat e rivelava tutto a civ
        contattate per battaglia, dove intelLevel non viene scritto). */
     if (rank >= KNOWLEDGE.contacted) {
+      /* Auto-promote (2026-06-26) — vedi renderCivDetail. */
+      if (ORION.ai.reconcileIntelLevel) ORION.ai.reconcileIntelLevel(c);
       const intelLvl = c.intelLevel ||
         (ORION.ai.intelLevelFromProgress ? ORION.ai.intelLevelFromProgress(c.intelProgress || 0) : 'fragmentary');
       const intelRank = ORION.ai.intelLevelRank ? ORION.ai.intelLevelRank(intelLvl) : 3;
@@ -8743,11 +8745,12 @@ function renderCivView(stage) {
          metà strada. Lo dichiariamo esplicito, evita il dubbio "sto guadagnando?". */
       const intelMax = c.intelMaxScore || 0;
       const capStuck = (inextAt === 6 && intelMax < 3) || (inextAt === 10 && intelMax < 5);
+      const reqShip = (inextAt === 6) ? 'fregata (score ≥ 3)' : (inextAt === 10 ? 'incrociatore (score ≥ 5) o Infiltrazione M19' : '');
       let intelProgTxt;
-      if (inextAt == null) intelProgTxt = 'dossier approfondito';
-      else if (capStuck) intelProgTxt = iprog.toFixed(1) + '/' + inextAt + ' al livello ' + inextLbl + ' · serve una flotta più potente per superare la soglia';
-      else if (iio && !iio.complete && iio.id === c.id) intelProgTxt = '🛰 raccolta in corso · ~' + iio.etaToNext + ' Ι al livello ' + inextLbl;
-      else intelProgTxt = iprog.toFixed(1) + '/' + inextAt + ' al livello ' + inextLbl + ' · avvicina una flotta per raccogliere';
+      if (inextAt == null) intelProgTxt = 'massimo (approfondito) raggiunto';
+      else if (capStuck) intelProgTxt = iprog.toFixed(1) + '/' + inextAt + ' al livello ' + inextLbl + ' · serve ' + reqShip;
+      else if (iio && !iio.complete && iio.id === c.id) intelProgTxt = '🛰 raccolta in corso · ~' + iio.etaToNext + ' Ι al livello ' + inextLbl + (reqShip ? ' · servirà ' + reqShip : '');
+      else intelProgTxt = iprog.toFixed(1) + '/' + inextAt + ' al livello ' + inextLbl + ' · avvicina ' + reqShip;
       /* Forza Impero (decisione 2026-06-26): range stimato che si stringe coi
          livelli. A frammentario "≈ 8–32"; a deep "≈ 18–20"; con deepIntel
          "= 19" (esatto) eventualmente con marker "vecchio di N Ι". */
@@ -8795,12 +8798,21 @@ function renderCivView(stage) {
       const frX = ORION.ai.forceEstimateRange ? ORION.ai.forceEstimateRange(g, c, intelRankForExtras) : null;
       const force = frX ? (frX.exact ? ('= ' + frX.lo + ' Forza') : ('≈ ' + frX.lo + '–' + frX.hi + ' Forza')) : '—';
       /* M10 Fase B-2: livello tecnologico + nota sul contrappeso
-         (qualità ≠ quantità). */
+         (qualità ≠ quantità). Rev 2026-06-26: a Completo (rank 3) il tier
+         è dato a fascia (es. "Avanzata / Superiore"), a Approfondito
+         (rank 4) o Infiltrato → tier esatto + nota. */
       const techTier = ORION.ai.techTierIndex ? ORION.ai.techTierIndex(g, c) : 1;
-      const techLbl = ORION.ai.techTierLabel ? ORION.ai.techTierLabel(g, c) : '—';
-      const techNote = techTier >= 3
-        ? ' <span class="civ-tech__note">(unità più toste, ma in numero contenuto)</span>'
-        : (techTier === 0 ? ' <span class="civ-tech__note">(armamenti datati)</span>' : '');
+      const techExact = ORION.ai.techTierLabel ? ORION.ai.techTierLabel(g, c) : '—';
+      const techLabels = ORION.ai.TECH_TIER_LABEL || ['Arretrata', 'Standard', 'Avanzata', 'Superiore', "All'avanguardia"];
+      const techDeep = (intelRankForExtras >= 4) || !!c.deepIntel;
+      const techLbl = techDeep
+        ? techExact
+        : (techLabels[Math.max(0, techTier - 1)] || '?') + ' / ' + (techLabels[Math.min(techLabels.length - 1, techTier + 1)] || '?');
+      const techNote = techDeep
+        ? (techTier >= 3
+            ? ' <span class="civ-tech__note">(unità più toste, ma in numero contenuto)</span>'
+            : (techTier === 0 ? ' <span class="civ-tech__note">(armamenti datati)</span>' : ''))
+        : ' <span class="civ-tech__note">(stima ±1 tier — porta il dossier ad Approfondito)</span>';
       /* Potenza/Sistemi noti vivono già nella Stima impero (estBlock): qui
          solo i dettagli più profondi (vocazione/affinità/tratto/forza). */
       const extras =
@@ -9150,6 +9162,10 @@ function renderCivDetail(stage, c) {
   const DIP = ORION.diplomacy;
   const KN = AI.KNOWLEDGE || { unknown: 0, spotted: 1, contacted: 2, known: 3, familiar: 4 };
   const rank = AI.knowledgeRank ? AI.knowledgeRank(c) : 0;
+  /* Auto-promote (2026-06-26): se intelProgress ha superato la soglia del
+     livello successivo ma intelLevel non lo riflette (save vecchi infiltrati
+     prima delle nuove soglie), allinea. Idempotente. */
+  if (AI.reconcileIntelLevel) AI.reconcileIntelLevel(c);
   /* Bugfix 2026-06-20: fallback da intelProgress, non 'complete'. Vedi
      renderCivCard per il razionale. */
   const intelLvl = c.intelLevel ||
@@ -9174,11 +9190,12 @@ function renderCivDetail(stage, c) {
   const iio = (reconF && AI.intelOutlook) ? AI.intelOutlook(g, reconF, reconF.location.systemId) : null;
   const intelMax = c.intelMaxScore || 0;
   const capStuck = (inextAt === 6 && intelMax < 3) || (inextAt === 10 && intelMax < 5);
+  const reqShip = (inextAt === 6) ? 'fregata (score ≥ 3)' : (inextAt === 10 ? 'incrociatore (score ≥ 5) o Infiltrazione M19' : '');
   let progTxt;
-  if (inextAt == null) progTxt = 'dossier approfondito';
-  else if (capStuck) progTxt = iprog.toFixed(1) + '/' + inextAt + ' al livello ' + inextLbl + ' · serve una flotta più potente per superare la soglia';
-  else if (iio && !iio.complete && iio.id === c.id) progTxt = '🛰 raccolta in corso · ~' + iio.etaToNext + ' Ι al livello ' + inextLbl;
-  else progTxt = iprog.toFixed(1) + '/' + inextAt + ' al livello ' + inextLbl + ' · avvicina una flotta per raccogliere';
+  if (inextAt == null) progTxt = 'massimo (approfondito) raggiunto';
+  else if (capStuck) progTxt = iprog.toFixed(1) + '/' + inextAt + ' al livello ' + inextLbl + ' · serve ' + reqShip;
+  else if (iio && !iio.complete && iio.id === c.id) progTxt = '🛰 raccolta in corso · ~' + iio.etaToNext + ' Ι al livello ' + inextLbl + (reqShip ? ' · servirà ' + reqShip : '');
+  else progTxt = iprog.toFixed(1) + '/' + inextAt + ' al livello ' + inextLbl + ' · avvicina ' + reqShip;
 
   const estPower = AI.powerTier ? AI.powerTier(c.power || 0) : '—';
   const estKnown = AI.knownSystemsCount ? AI.knownSystemsCount(g, c) : ((c.systems || []).length);
@@ -9189,6 +9206,40 @@ function renderCivDetail(stage, c) {
   const forceTxt = fr
     ? (fr.exact ? ('= ' + fr.lo) : ('≈ ' + fr.lo + '–' + fr.hi))
     : '—';
+  /* Capacità militare stimata in "unità" (squadre/flotte) — leggibile per
+     paragone con la tua roster: Forza Impero / 25 (= POWER_PER_PLANET * ~3).
+     Stesso range/precision di forceTxt. */
+  const unitsTxt = fr
+    ? (fr.exact ? ('≈ ' + Math.max(1, Math.round(fr.lo / 25)) + ' unità') : ('≈ ' + Math.max(1, Math.round(fr.lo / 25)) + '–' + Math.max(2, Math.round(fr.hi / 25)) + ' unità'))
+    : '—';
+
+  /* Potenza di fuoco aggregata delle aifleet (somma fp di tutte le loro flotte
+     vive) — a livelli bassi a fascia, a L4 esatto. */
+  const fleetTot = AI.civFleetTotals ? AI.civFleetTotals(g, c) : { fp: 0, count: 0, ships: 0 };
+  const fpPct = intelRank >= 4 ? 0 : (intelRank >= 3 ? 0.20 : (intelRank >= 2 ? 0.45 : 0.70));
+  const fpDeepReveal = (intelRank >= 4) || !!c.deepIntel;
+  const fpLo = Math.max(0, Math.round(fleetTot.fp * (1 - fpPct)));
+  const fpHi = Math.max(0, Math.round(fleetTot.fp * (1 + fpPct)));
+  const fpTxt = fpDeepReveal ? ('= ' + fleetTot.fp + ' FP · ' + fleetTot.count + ' flotte · ' + fleetTot.ships + ' scafi')
+                              : ('≈ ' + fpLo + '–' + fpHi + ' FP');
+
+  /* Difese statiche AI: il giocatore vuole capire quali colonie siano scoperte.
+     A L1-L2: solo totale impero a fascia larga; a L3: totale piu' stretto;
+     a L4: breakdown PER COLONIA (visibile sotto, nella sezione Colonie). */
+  const defTot = AI.civDefensesTotal ? AI.civDefensesTotal(c) : { total: 0 };
+  const defPct = intelRank >= 4 ? 0 : (intelRank >= 3 ? 0.20 : (intelRank >= 2 ? 0.45 : 0.70));
+  const defLo = Math.max(0, Math.round(defTot.total * (1 - defPct)));
+  const defHi = Math.max(0, Math.round(defTot.total * (1 + defPct)));
+  const defTxt = fpDeepReveal ? ('= ' + defTot.total + ' P difese') : ('≈ ' + defLo + '–' + defHi + ' P difese');
+  /* Per-colonia (solo L4): map planetKey → defense P, da iniettare nella lista colonie. */
+  const defByPlanet = (intelRank >= 4 && AI.civDefensePerColony)
+    ? (function () {
+        const arr = AI.civDefensePerColony(g, c);
+        const m = {};
+        arr.forEach(function (x) { m[x.planetKey] = x.defense; });
+        return m;
+      })()
+    : null;
   const vocLabel = (AI.VOCATIONS && c.vocation && AI.VOCATIONS[c.vocation]) ? AI.VOCATIONS[c.vocation].label : '—';
   const affLabel = (AI.AFFINITIES && c.affinity && AI.AFFINITIES[c.affinity]) ? AI.AFFINITIES[c.affinity].label : '—';
   const disp = Math.round(c.disposition || 0);
@@ -9218,8 +9269,16 @@ function renderCivDetail(stage, c) {
     const rows = colKnown.map(function (x) {
       const sysNm = _flSysNm(g, x.sid); const bodyNm = _flBodyNm(g, x.sid, x.bk);
       const dossTag = x.viaDossier ? ' <span class="civ-detail__col-tag" title="Localizzata dal dossier Approfondito — non hai mai esplorato di persona">via dossier</span>' : '';
+      /* Difese per-colonia visibili solo a L4: utile per scegliere il
+         bersaglio piu' scoperto. Il valore e' deterministico (seed di gioco
+         + civ + planetKey), non cambia tra render dello stesso save. */
+      const planetKey = x.sid + ':' + x.bk;
+      const defP = (defByPlanet && defByPlanet[planetKey] != null) ? defByPlanet[planetKey] : null;
+      const defTag = (defP != null)
+        ? ' <span class="civ-detail__col-tag" title="Difese stimate sulla colonia · valore P (HP + FP×8)">P ' + defP + '</span>'
+        : '';
       return '<li class="civ-detail__col" data-sys="' + x.sid + '"><span class="civ-detail__col-name">' +
-        escapeHtml(sysNm) + (bodyNm ? ' · ' + escapeHtml(bodyNm) : '') + '</span>' + systemTagHtml(x.sid) + dossTag + '</li>';
+        escapeHtml(sysNm) + (bodyNm ? ' · ' + escapeHtml(bodyNm) : '') + '</span>' + systemTagHtml(x.sid) + dossTag + defTag + '</li>';
     }).join('');
     const hiddenN = planets.length - colKnown.length;
     /* Conteggio colonie non localizzate = informazione di fog-of-war: rivelarlo
@@ -9247,18 +9306,40 @@ function renderCivDetail(stage, c) {
       (hiddenHtml || (!colKnown.length ? '<p class="panel__note">Esplora i loro sistemi per localizzarne le colonie.</p>' : ''));
   }
 
-  /* FLOTTE identificate di recente (dallo strato flotte ambientali AI). */
-  const aifs = (g.aiFleets || []).filter(function (af) { return af && af.civId === c.id && (af.detected || af.everDetected || af.lastSeenI != null); });
+  /* FLOTTE identificate (dallo strato flotte ambientali AI).
+     - <L4: solo quelle viste dai tuoi sensori (detected/everDetected/lastSeenI).
+     - L4 Approfondito o Infiltrato: rivela TUTTE le flotte vive della civ
+       con composizione+missione (anche quelle mai avvistate) — taggate
+       "via dossier" per distinguerle dalle osservazioni dirette. */
+  const fleetDeepReveal = (intelRank >= 4) || !!c.deepIntel;
+  const aifsSeen = (g.aiFleets || []).filter(function (af) { return af && af.civId === c.id && (af.detected || af.everDetected || af.lastSeenI != null); });
+  const aifsAll = (g.aiFleets || []).filter(function (af) { return af && af.civId === c.id; });
+  const aifs = fleetDeepReveal ? aifsAll : aifsSeen;
   let fleetHtml;
   if (!aifs.length) fleetHtml = '<p class="panel__note">Nessuna flotta identificata di recente.</p>';
   else {
     fleetHtml = '<ul class="civ-detail__fleets">' + aifs.map(function (af) {
-      const comp = (ORION.aifleet && ORION.aifleet.composition) ? ORION.aifleet.composition(af) : { text: '—' };
+      const wasSeen = !!(af.detected || af.everDetected || af.lastSeenI != null);
+      /* A L4 forziamo composizione "piena" anche per flotte mai viste:
+         il dossier ti dice cosa hanno costruito, non i tuoi sensori. */
+      const ships = Array.isArray(af.ships) ? af.ships : [];
+      const compTxt = (fleetDeepReveal && !wasSeen)
+        ? (ships.length ? ships.map(function (s) { return s.kind; }).join(', ') : '—')
+        : ((ORION.aifleet && ORION.aifleet.composition) ? ORION.aifleet.composition(af).text : '—');
       const mission = (ORION.aifleet && ORION.aifleet.MISSIONS && ORION.aifleet.MISSIONS[af.mission]) ? ORION.aifleet.MISSIONS[af.mission].label : af.mission;
       const where = af.status === 'in-transit' ? 'in viaggio' : ('in ' + _flSysNm(g, af.systemId));
-      const seen = af.detected ? 'rilevata ora' : (af.lastSeenI != null ? ('vista ' + Math.max(0, (g.timeImpulsi || 0) - af.lastSeenI) + ' Ι fa') : '—');
-      return '<li class="civ-detail__fleet"><span class="civ-detail__fleet-mission">' + escapeHtml(mission) + '</span>' +
-        '<span class="civ-detail__fleet-comp">' + escapeHtml(comp.text) + '</span>' +
+      const seen = af.detected ? 'rilevata ora'
+                  : (af.lastSeenI != null ? ('vista ' + Math.max(0, (g.timeImpulsi || 0) - af.lastSeenI) + ' Ι fa') : 'mai avvistata');
+      const dossTag = (fleetDeepReveal && !wasSeen) ? ' <span class="civ-detail__col-tag" title="Conoscenza dal dossier Approfondito, non da avvistamento diretto">via dossier</span>' : '';
+      /* FP per-flotta: visibile da L3 (Completo) in su con range stretto;
+         a L4 / Infiltrato e' esatto. */
+      const afFp = af.fp || 0;
+      let fpStr = '';
+      if (intelRank >= 4 || c.deepIntel) fpStr = afFp + ' FP';
+      else if (intelRank >= 3) fpStr = '≈ ' + Math.max(0, Math.round(afFp * 0.85)) + '–' + Math.round(afFp * 1.15) + ' FP';
+      else if (intelRank >= 2) fpStr = '≈ ' + Math.max(0, Math.round(afFp * 0.6)) + '–' + Math.round(afFp * 1.4) + ' FP';
+      return '<li class="civ-detail__fleet"><span class="civ-detail__fleet-mission">' + escapeHtml(mission) + dossTag + '</span>' +
+        '<span class="civ-detail__fleet-comp">' + escapeHtml(compTxt) + (fpStr ? ' · ' + escapeHtml(fpStr) : '') + '</span>' +
         '<span class="civ-detail__fleet-where">' + escapeHtml(where) + ' · ' + escapeHtml(seen) + '</span></li>';
     }).join('') + '</ul>';
   }
@@ -9277,6 +9358,44 @@ function renderCivDetail(stage, c) {
   /* M19 Fase A (spionaggio): blocco "Operazione coperta" (vuoto se non
      contattata o senza modulo). */
   const espHtml = civEspionageHtml(g, c);
+
+  /* Profilo commerciale derivato (decisione 2026-06-26): a L4 (o Infiltrato)
+     mostra una sintesi su come la civ si rapporta al commercio. Niente rotte
+     AI-AI persistite nello stato (non modellate in trade.js): qui derivo dal
+     CARATTERE (vocazione + affinità + relazione) cosa cerca / cosa rifiuta.
+     È intel di profondità, non un dato grezzo: serve per la diplomazia. */
+  const tradeProfileDeep = (intelRank >= 4) || !!c.deepIntel;
+  let tradeProfileHtml = '';
+  if (tradeProfileDeep) {
+    const voc = c.vocation || '';
+    const aff = c.affinity || '';
+    const TRADE_VOC = {
+      mercantili:    { lean: 'Aperto', note: 'Mercanti naturali: cercano accordi stabili e rotte multiple.' },
+      sedentari:     { lean: 'Aperto', note: 'Accettano accordi se la disposizione è almeno cordiale.' },
+      tecnocratici:  { lean: 'Selettivo', note: 'Preferiscono partner con alta reputazione e tech avanzata.' },
+      mistici:       { lean: 'Aperto', note: 'Trattano col baratto cerimoniale: ottime offerte se sei amichevole.' },
+      espansionisti: { lean: 'Tattico', note: 'Commercio come strumento: rompono accordi quando l\'espansione paga.' },
+      imperialisti:  { lean: 'Diffidente', note: 'Vedono il commercio come segno di debolezza. Tributo, non accordo.' },
+      predoni:       { lean: 'Chiuso', note: 'Preferiscono saccheggio o estorsione al commercio onesto.' },
+      isolazionisti: { lean: 'Chiuso', note: 'Confini chiusi: niente accordi con stranieri.' }
+    };
+    const TRADE_AFF = {
+      ferrigna:   'cerca metalli, offre energia',
+      biotica:    'cerca cibo/acqua, offre componenti biotici',
+      glaciale:   'cerca energia, offre materiali criogenici',
+      orbitale:   'cerca metalli per costruzioni, offre componenti orbitali',
+      ancestrale: 'cerca artefatti e crediti, offre energia stabile',
+      mixta:      'profilo bilanciato, nessuna preferenza marcata'
+    };
+    const tv = TRADE_VOC[voc] || { lean: '—', note: 'Profilo commerciale non definito.' };
+    const ta = TRADE_AFF[aff] || '—';
+    tradeProfileHtml =
+      '<section class="civ-detail__sec"><h3>Profilo commerciale <span class="civ-detail__col-tag">via dossier</span></h3>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Tendenza</span><span>' + escapeHtml(tv.lean) + '</span>' +
+          '<span class="civ-card__k">Domanda/offerta</span><span>' + escapeHtml(ta) + '</span></div>' +
+        '<p class="panel__note">' + escapeHtml(tv.note) + '</p>' +
+      '</section>';
+  }
   /* Tutorial (#29): la lezione scatta quando un'operazione è davvero
      disponibile (flotta sul posto) — il momento in cui serve capirla. */
   if (espHtml && ORION.tutorial && ORION.tutorial.fire && ORION.espionage &&
@@ -9314,11 +9433,15 @@ function renderCivDetail(stage, c) {
       '<section class="civ-detail__sec"><h3>Stima impero</h3>' +
         '<div class="civ-card__row"><span class="civ-card__k">Forza Impero</span><span class="civ-power civ-power--' + estPower + '" title="Tier qualitativo · valore stimato a finestra che si stringe coi livelli intel">' + escapeHtml(estPower) + ' · ' + escapeHtml(forceTxt) + '</span>' +
           '<span class="civ-card__k">Sistemi noti</span><span>' + estKnown + '</span></div>' +
-        '<div class="civ-card__row"><span class="civ-card__k">Struttura stimata</span><span>tra ' + estLo + ' e ' + estHi + ' insediamenti</span></div>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Capacità militare</span><span title="Conversione Forza Impero → squadre/flotte equivalenti (≈ Forza / 25)">' + escapeHtml(unitsTxt) + '</span>' +
+          '<span class="civ-card__k">Struttura stimata</span><span>tra ' + estLo + ' e ' + estHi + ' insediamenti</span></div>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Potenza di fuoco flotte</span><span title="Somma fp di tutte le loro aifleet vive (somma classi navi)">' + escapeHtml(fpTxt) + '</span>' +
+          '<span class="civ-card__k">Difese planetarie</span><span title="Totale stimato delle difese statiche sulle loro colonie. A Approfondito vedi anche la ripartizione per colonia, per individuare quelle scoperte.">' + escapeHtml(defTxt) + '</span></div>' +
         (descGated ? '<div class="civ-disp"><div class="civ-disp__top"><span class="civ-card__k">Disposizione verso di te</span><span class="civ-disp__label civ-disp__label--' + dispCls + '">' + dispLabel + '</span></div><div class="civ-disp__bar"><span class="civ-disp__mid" aria-hidden="true"></span><span class="civ-disp__fill civ-disp__fill--' + dispCls + '" style="width:' + pct.toFixed(0) + '%"></span></div></div>' : '') +
       '</section>' +
       '<section class="civ-detail__sec"><h3>Colonie note <span class="civ-detail__count">' + colKnown.length + '</span></h3>' + colHtml + '</section>' +
       '<section class="civ-detail__sec"><h3>Flotte identificate <span class="civ-detail__count">' + aifs.length + '</span></h3>' + fleetHtml + '</section>' +
+      tradeProfileHtml +
       (dipHtml ? '<section class="civ-detail__sec"><h3>Diplomazia</h3>' + dipHtml + '</section>' : '') +
       (espHtml ? '<section class="civ-detail__sec"><h3>Spionaggio</h3>' + espHtml + '</section>' : '') +
     '</div>';
@@ -9460,13 +9583,16 @@ function civEspionageHtml(g, c) {
     const btWarn = (di.betrayal && (di.betrayal.level === 'high' || di.betrayal.level === 'imminent')) ? '⚠ ' : '';
     const btTitle = (di.betrayal && di.betrayal.reason) ? ' title="' + escapeHtml(di.betrayal.reason) + '"' : '';
     /* Freshness: i dati infiltrati invecchiano. Sopra ~150 Ι li marciamo come
-       "vecchi" (opacità ridotta) per spingere a una nuova Infiltrazione. */
+       "vecchi" (opacità ridotta) per spingere a una nuova Infiltrazione.
+       Niente piu' "Forza Impero reale" qui (gia' nella Stima impero in alto:
+       evita doppia riga col valore identico). Resta solo il Rischio tradimento
+       che non e' visibile altrove. */
     const ageI = Math.max(0, (g.timeImpulsi || 0) - (di.sinceI || 0));
     const STALE_I = 150;
     const staleCls = (ageI >= STALE_I) ? ' civ-deepintel-stale' : '';
-    const ageTxt = ' <span class="panel__note">(' + (ageI >= STALE_I ? 'vecchio · ' : 'rilevato ') + ageI + ' Ι fa' + (ageI >= STALE_I ? ' — rinnova l\'Infiltrazione' : '') + ')</span>';
-    inner += '<div class="civ-card__row' + staleCls + '" style="margin-top:.4rem"><span class="civ-card__k">⚿ Segreti · Forza Impero reale</span><span>= ' + Math.round(di.power || 0) + ageTxt + '</span>' +
-      '<span class="civ-card__k">Rischio tradimento</span><span' + btTitle + '>' + btWarn + escapeHtml(btLbl) + '</span></div>';
+    const ageTxt = '<span class="panel__note">' + (ageI >= STALE_I ? 'vecchio · ' : 'rilevato ') + ageI + ' Ι fa' + (ageI >= STALE_I ? ' — rinnova l\'Infiltrazione' : '') + '</span>';
+    inner += '<div class="civ-card__row' + staleCls + '" style="margin-top:.4rem"><span class="civ-card__k">⚿ Rischio tradimento</span><span' + btTitle + '>' + btWarn + escapeHtml(btLbl) + '</span>' +
+      '<span class="civ-card__k">Aggiornamento</span><span>' + ageTxt + '</span></div>';
   }
   return inner;
 }

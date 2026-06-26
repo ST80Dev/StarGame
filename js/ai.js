@@ -295,6 +295,18 @@
   const INTEL_SCORE_GATE = { partial: 0, complete: 3, deep: 5 };
   const INTEL_PROGRESS_CAP = { fragmentary: 2.9, partial: 5.9, complete: 9.9 };
   function intelLevelRank(level) { return INTEL_LEVEL[level] || 0; }
+  /* Auto-promote: se intelProgress ha superato la soglia del livello successivo
+     ma intelLevel non lo riflette (es. infiltrazione vecchia che metteva 6 e
+     ora vale per "deep"), allinea senza generare evento. Idempotente. */
+  function reconcileIntelLevel(civ) {
+    if (!civ) return false;
+    const derived = intelLevelFromProgress(civ.intelProgress || 0);
+    if (intelLevelRank(derived) > intelLevelRank(civ.intelLevel)) {
+      civ.intelLevel = derived;
+      return true;
+    }
+    return false;
+  }
 
   /* Tracciamento permanenza flotte player in sistemi rilevanti. Vive su
      game._presence (lazy, non serializzato — campo derivato).
@@ -1797,7 +1809,8 @@
   function forceEstimateRange(game, civ, intelRank) {
     const exact = Math.max(1, Math.round((civ.power || 0)));
     if (civ.deepIntel && civ.deepIntel.power != null) {
-      return { lo: civ.deepIntel.power, hi: civ.deepIntel.power, mid: civ.deepIntel.power, exact: true };
+      const di = Math.round(civ.deepIntel.power);
+      return { lo: di, hi: di, mid: di, exact: true };
     }
     let pct = 0.60;
     if (intelRank >= 4) pct = 0.05;
@@ -1810,6 +1823,51 @@
      un confronto onesto nella vista Civiltà. Punteggio narrativo: 8 per
      colonia (POWER_PER_PLANET) + ramp da battaglie vinte/perse (lazy, vive
      su game.playerForce additivo). */
+  /* Aggrega la potenza di fuoco (fp) e l'integrità (hp) delle aifleet vive
+     di una civ. Niente gating: l'helper torna i numeri grezzi, sta al
+     chiamante decidere se mostrarli esatti o a range coi livelli intel. */
+  function civFleetTotals(game, civ) {
+    let count = 0, fp = 0, hp = 0, ships = 0;
+    const list = (game && game.aiFleets) || [];
+    for (let i = 0; i < list.length; i++) {
+      const af = list[i];
+      if (!af || af.civId !== civ.id) continue;
+      count++;
+      fp += (af.fp || 0);
+      hp += (af.hp || 0);
+      ships += Array.isArray(af.ships) ? af.ships.length : 0;
+    }
+    return { count: count, fp: Math.round(fp), hp: Math.round(hp), ships: ships };
+  }
+  /* Difese statiche delle colonie AI: non sono modellate (le AI non hanno
+     `colony.structures` come il giocatore). Sintetizziamo una stima ONESTA
+     a partire da civ.power: ~40% della Forza Impero è "infrastruttura" sul
+     terreno, ripartito tra le colonie con peso deterministico per-pianeta.
+     Esposto come totale + per-colonia (a L4 vedi quali sono scoperte). */
+  function civDefensesTotal(civ) {
+    const total = Math.max(0, Math.round((civ.power || 0) * 0.40));
+    const n = Math.max(1, (civ.planets || []).length);
+    return { total: total, perColonyAvg: Math.round(total / n) };
+  }
+  function civDefensePerColony(game, civ) {
+    const planets = (civ.planets || []);
+    const n = planets.length;
+    if (!n) return [];
+    const total = Math.max(0, Math.round((civ.power || 0) * 0.40));
+    /* Pesi deterministici da seed di gioco + civId + planetKey, in [0.5, 1.5].
+       Capitale (planets[0]) ha boost x1.5 fisso (sede meglio difesa). */
+    const seed = (game && game.seed) || 0;
+    const rng = ORION.rng && ORION.rng.makeRng ? ORION.rng.makeRng(seed + ':civdef:' + civ.id) : null;
+    const weights = planets.map(function (pk, idx) {
+      const base = rng ? (0.5 + rng.float()) : 1.0;
+      return idx === 0 ? base * 1.5 : base;
+    });
+    const wsum = weights.reduce(function (a, b) { return a + b; }, 0) || 1;
+    return planets.map(function (pk, idx) {
+      const share = total * weights[idx] / wsum;
+      return { planetKey: pk, defense: Math.max(0, Math.round(share)) };
+    });
+  }
   function playerEmpireForce(game) {
     if (!game) return 0;
     let n = 0;
@@ -1898,6 +1956,7 @@
     intelLevelFromProgress: intelLevelFromProgress,
     intelOutlook: intelOutlook,
     intelLevelRank: intelLevelRank,
+    reconcileIntelLevel: reconcileIntelLevel,
     visibleCivs: visibleCivs,
     materialize: materialize,
     demobilize: demobilize,
@@ -1905,6 +1964,9 @@
     forceEstimate: forceEstimate,
     forceEstimateRange: forceEstimateRange,
     playerEmpireForce: playerEmpireForce,
+    civFleetTotals: civFleetTotals,
+    civDefensesTotal: civDefensesTotal,
+    civDefensePerColony: civDefensePerColony,
     INTEL_LEVEL_INV: INTEL_LEVEL_INV,
     dispositionReason: dispositionReason,
     knownNests: knownNests,
