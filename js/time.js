@@ -2455,6 +2455,10 @@
     if (root.ORION.dispatch && root.ORION.dispatch.tick) {
       root.ORION.dispatch.tick(game, events);
     }
+    /* M12 §15.5(c) (#96): refresh ciclico dell'offerta mercenari Mekhari. */
+    if (root.ORION.mekhari && root.ORION.mekhari.tickMercenary) {
+      root.ORION.mekhari.tickMercenary(game, events);
+    }
     /* M17 Fase C (#83): anomalie esplorabili §17.3 — raccolta ricorrente
        (detriti/nebulosa) + reliquie one-time, mentre una flotta orbita. */
     if (root.ORION.anomaly && root.ORION.anomaly.tick) {

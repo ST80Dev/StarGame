@@ -816,8 +816,53 @@
         '<p><strong>Il prezzo:</strong> un <strong>sovrapprezzo</strong> da mercato grigio (più basso con buona reputazione) ' +
         '+ un <strong>costo di reputazione</strong> §14 a ogni acquisto — è la pista <em>Tiranno</em>: scorciatoie comode ' +
         'che ti rendono meno raccomandabile.</p>' +
-        '<p><strong>In arrivo:</strong> mercato secondario delle risorse avanzate (M13), contratti mercenari (M14), ' +
-        'taglie e mercato nero pieno (M17), intel grigia (M19).</p>'
+        '<p><strong>Espansioni:</strong> oltre al contrabbando, i Mekhari offrono <em>mercato secondario degli esotici</em> ' +
+        '(vendi i tuoi lotti per crediti), <em>mercenari freelance</em> (Comandanti/Ingegneri/Strateghi pre-formati per le tue ' +
+        'flotte), <em>cacciatori di taglie auto-risolutivi</em>, e <em>intel grigia</em> (dossier civ fino a "parziale").</p>'
+    },
+    {
+      id: 'mekhari-exotic', tag: 'Commercio · ✦', title: 'Mercato secondario esotici',
+      body:
+        '<p>L\'<strong>Impianto esotico</strong> (richiede tech "Esotici") produce metalli esotici §7.2 che si accumulano ' +
+        'in colonia. I <strong>Mekhari</strong> li comprano in <strong>lotti da 5 unità</strong>, accreditando crediti nella ' +
+        '<em>valuta della regione</em> della colonia di origine.</p>' +
+        '<p><strong>Prezzo:</strong> 25 crediti base per unità, modulato dalla tua <strong>reputazione</strong> §14 — alta = clienti ' +
+        'migliori (+15%), bassa = spread del fixer (-20%). <strong>Nessun costo reputazione</strong>: vendere esotici è commercio ordinario, non contrabbando.</p>' +
+        '<p>Trovi la sezione "Mercato secondario esotici" nel <strong>pannello Mekhari</strong> (vista Mercato), solo per le colonie ' +
+        'che hanno esotici in stock.</p>'
+    },
+    {
+      id: 'mekhari-mercenary', tag: 'Commercio · ⚔', title: 'Mercenari Mekhari (figure freelance)',
+      body:
+        '<p>I <strong>Mekhari</strong> ti propongono periodicamente una figura freelance <em>pre-formata</em> — un ' +
+        '<strong>Comandante</strong>, un <strong>Ingegnere</strong> o uno <strong>Stratega</strong>, di rango Tenente o Capitano, ' +
+        'con un tratto già definito.</p>' +
+        '<p><strong>Costo:</strong> 200 crediti per Tenente, 350 per Capitano + sovrapprezzo Mekhari. Lo paghi dalla Tesoreria ' +
+        '(qualunque valuta). <strong>Effetto collaterale:</strong> −1 punto di reputazione (pista Tiranno: hai preferito un freelance ' +
+        'al lavoro lento di crescere una crew M07).</p>' +
+        '<p><strong>Cadenza:</strong> una nuova offerta ogni 200 Ι. Una sola attiva alla volta — accettala o aspetta la successiva.</p>' +
+        '<p>L\'ufficiale finisce sulla flotta che scegli (deve essere ferma e avere posti officer liberi). Combatte, viaggia e ' +
+        'cresce di rango come una figura normale.</p>'
+    },
+    {
+      id: 'diplo-vehryn-dossier', tag: 'Civiltà · ⬡', title: 'Dossier di Vehryn (intel premium)',
+      body:
+        '<p>Il <strong>Conclave di Vehryn</strong> (una delle 4 Costanti) commercia in <em>informazioni</em>. Una volta contattati, ' +
+        'tra i dispacci può comparire un\'offerta: il <strong>dossier completo</strong> di una civiltà contattata di cui hai intel ' +
+        'incompleta.</p>' +
+        '<p><strong>Effetto:</strong> porta quella civ a "Familiare" (max rank) — oltre il cap "parziale" del mercato grigio Mekhari. ' +
+        'È un\'acquisizione <em>istantanea</em>: paghi all\'accettazione, niente fase attiva da seguire.</p>' +
+        '<p><strong>Costo:</strong> 140 crediti dalla Tesoreria. Niente penalità di reputazione (Vehryn vende, non contrabbanda).</p>'
+    },
+    {
+      id: 'diplo-phaerion-sanctuary', tag: 'Civiltà · ⬡', title: 'Confine sacro di Phaerion',
+      body:
+        '<p>I <strong>Guardiani di Phaerion</strong> (intransigenti sui confini) ti propongono periodicamente un ' +
+        '<strong>"confine sacro"</strong>: un loro sistema dichiarato <em>off-limits</em> per 200 Ι.</p>' +
+        '<p><strong>Rispetti il vincolo</strong> (niente presidio del giocatore in quel sistema durante il periodo) → al termine ' +
+        'ottieni +3 reputazione e +10 disposizione con Phaerion. <strong>Violi</strong> (dichiari un presidio lì) → fail immediato, ' +
+        '−5 reputazione e −15 disposizione.</p>' +
+        '<p>Niente trappola: il sistema è loro, non tuo. È un impegno di astensione — il tipo di patto che i Phaerion onorano.</p>'
     },
     {
       id: 'trade-raids', tag: 'Commercio · ☠', title: 'Razzie sulle rotte',

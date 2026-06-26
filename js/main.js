@@ -5994,6 +5994,13 @@ function bindMarketBodyEvents(stage, refresh) {
   stage.querySelectorAll('[data-action="mek-buy"]').forEach(function (b) {
     b.addEventListener('click', function () { doSmuggle(b.dataset.res, stage); });
   });
+  /* M12 §15.5(a) (#96): vendita esotici ai Mekhari. */
+  stage.querySelectorAll('[data-action="mek-sell-exotic"]').forEach(function (b) {
+    b.addEventListener('click', function () { doSellExotic(parseInt(b.dataset.lots, 10) || 1, stage); });
+  });
+  /* M12 §15.5(c) (#96): ingaggia mercenario freelance. */
+  const hireBtn = stage.querySelector('[data-action="mek-hire"]');
+  if (hireBtn) hireBtn.addEventListener('click', function () { doHireMercenary(stage); });
 }
 
 /* Ridisegna la sotto-vista Economia attiva al centro, usata dalle azioni che
@@ -6964,9 +6971,13 @@ function renderDispatchView(stage) {
 
   stage.querySelectorAll('[data-dispatch-accept]').forEach(function (b) {
     b.addEventListener('click', function () {
-      const r = DP.accept(g, b.dataset.dispatchAccept);
+      const evts = [];
+      const r = DP.accept(g, b.dataset.dispatchAccept, evts);
       if (!r.ok) { showToast(r.reason || 'Non riuscito'); return; }
-      showToast('Incarico accettato');
+      /* M17 #55 (#96): le missioni "instant" (Vehryn dossier) emettono
+         evento al volo nell'accept — facciamoli passare per la cronaca. */
+      evts.forEach(function (e) { chronicleEvent(e); });
+      showToast(r.instant ? 'Dossier acquisito' : 'Incarico accettato');
       persistGame(g); renderDispatchView(stage); renderLeftPanel();
     });
   });
@@ -7130,10 +7141,65 @@ function buildMekhariPanel(g) {
       '</button>' +
     '</div>';
   }).join('');
+  /* M12 §15.5(a) (decisione #96): mercato secondario esotici per la
+     colonia selezionata. Sezione visibile solo se la colonia ha esotico
+     accumulato (Impianto esotico produce esotici → colony.exoticAccum). */
+  const colSel = g.colonies[colKey];
+  const exoticStock = Math.floor((colSel && colSel.exoticAccum) || 0);
+  const factor = MK.exoticPriceFactor(g);
+  const exoticLot = MK.EXOTIC_LOT_SIZE || 5;
+  const lotsAvail = Math.floor(exoticStock / exoticLot);
+  const exoticRow = exoticStock > 0
+    ? (function () {
+        const q = MK.quoteExoticSale(g, colKey, 1);
+        const perLotCr = q.ok ? q.credits : Math.round(exoticLot * 25 * factor);
+        const perLotLocal = localPrice(perLotCr);
+        return '<div class="bank-row">' +
+          '<span class="bank-row__res"><span class="res-icon res-icon--exotic" aria-hidden="true">✦</span> Esotici · ' + exoticStock + ' u (' + lotsAvail + ' lotti)</span>' +
+          '<button class="btn btn--mini" data-action="mek-sell-exotic" data-lots="1" type="button"' +
+            (lotsAvail >= 1 ? '' : ' disabled') +
+            ' title="Vendi 1 lotto (' + exoticLot + ' u) → +' + perLotLocal.toFixed(0) + ' ' + localSym + '">' +
+            'Vendi 1 lotto <span class="mek-cost">+' + perLotLocal.toFixed(0) + ' ' + localSym + '</span>' +
+          '</button>' +
+          (lotsAvail >= 5 ? (
+            '<button class="btn btn--mini" data-action="mek-sell-exotic" data-lots="5" type="button" title="Vendi 5 lotti">Vendi 5</button>'
+          ) : '') +
+        '</div>';
+      })()
+    : '<p class="panel__note">Nessun esotico in stock su questa colonia. Costruisci un <em>Impianto esotico</em> (richiede tech Esotici).</p>';
+
+  /* M12 §15.5(c) (decisione #96): card mercenario corrente. */
+  const merc = MK.currentMercenary(g);
+  const mercHtml = merc
+    ? '<div class="mek-merc">' +
+        '<div class="mek-merc__head">' +
+          '<strong>' + escapeHtml(merc.name) + '</strong> · <em>' + escapeHtml(merc.rank) + ' ' + escapeHtml(merc.role) + '</em>' +
+          ' · <span class="mek-cost">' + merc.costCredits + ' crediti</span>' +
+        '</div>' +
+        '<div class="mek-merc__actions">' +
+          (function () {
+            const myFleets = (g.fleets || []).filter(function (f) {
+              return f && f.location && f.location.status !== 'in-transit';
+            });
+            if (!myFleets.length) return '<span class="panel__note">Serve una flotta ferma per accogliere il mercenario.</span>';
+            const opts = myFleets.map(function (f) {
+              return '<option value="' + escapeHtml(String(f.id)) + '">' + escapeHtml(f.name || ('Flotta ' + f.id)) + '</option>';
+            }).join('');
+            return '<select data-bind="mek-merc-fleet">' + opts + '</select>' +
+              '<button class="btn btn--mini" data-action="mek-hire" type="button">Ingaggia</button>';
+          })() +
+        '</div>' +
+      '</div>'
+    : '<p class="panel__note">Nessuna offerta freelance al momento. I Mekhari pescano un nuovo profilo ogni ' + (MK.MERC_REFRESH_EVERY_I || 200) + ' Ι.</p>';
+
   return '<p class="sysinfo__sub">Mercato grigio Mekhari <span class="cantieri-section__hint">(sovrapprezzo ' + Math.round(sc * 100) + '% · costa reputazione)</span></p>' +
     '<label class="route-picker__field">Colonia <select data-bind="mek-colony">' + colOpts + '</select></label>' +
     '<div class="bank-grid">' + rows + '</div>' +
-    '<p class="panel__note">Il Sindacato Mekhari rifornisce qualunque colonia accettando <em>qualunque valuta</em> del tuo portfolio — utile dove non hai la valuta locale o sei bloccato. Paghi un sovrapprezzo da <strong>mercato grigio</strong> e un <strong>costo di reputazione</strong> §14 (pista Tiranno). Mercato secondario delle risorse avanzate e contratti mercenari arrivano con M13/M14.</p>';
+    '<p class="sysinfo__sub">Mercato secondario esotici <span class="cantieri-section__hint">(prezzo ×' + factor.toFixed(2) + ' fattore reputazione)</span></p>' +
+    '<div class="bank-grid">' + exoticRow + '</div>' +
+    '<p class="sysinfo__sub">Mercenari freelance <span class="cantieri-section__hint">(figura pre-formata per una flotta, costa 1 punto reputazione)</span></p>' +
+    mercHtml +
+    '<p class="panel__note">Il Sindacato Mekhari rifornisce qualunque colonia accettando <em>qualunque valuta</em> del tuo portfolio — utile dove non hai la valuta locale o sei bloccato. Paghi un sovrapprezzo da <strong>mercato grigio</strong> e un <strong>costo di reputazione</strong> §14 (pista Tiranno).</p>';
 }
 
 function doSmuggle(resource, stage) {
@@ -7153,6 +7219,41 @@ function doSmuggle(resource, stage) {
     ' a ' + colonyNameFromKey(colKey) + ' (≈ ' + priceLabel + ' · −' + r.repCost.toFixed(1) + ' reputazione).', 'system');
   if (ORION.tutorial) ORION.tutorial.fire('mekhari');
   showToast('Contrabbando: +' + MEKHARI_LOT + ' ' + tradeResLabel(resource));
+  persistGame(g);
+  refreshActiveTradeView(stage);
+}
+
+/* M12 §15.5(a) (#96): vendita lotti di esotico ai Mekhari. */
+function doSellExotic(lots, stage) {
+  const g = ORION.game;
+  const MK = ORION.mekhari;
+  if (!MK || !MK.sellExotic) return;
+  const colKey = ORION.mekhariColonyKey;
+  const evts = [];
+  const r = MK.sellExotic(g, colKey, lots, evts);
+  if (!r.ok) { showToast(r.reason || 'Vendita rifiutata'); return; }
+  evts.forEach(function (e) { chronicleEvent(e); });
+  if (ORION.tutorial) ORION.tutorial.fire('mekhari-exotic');
+  const curSym = (r.currency && r.currency.symbol) || '';
+  showToast('Venduti ' + r.units + ' esotici · +' + r.credits + ' ' + curSym);
+  persistGame(g);
+  refreshActiveTradeView(stage);
+}
+
+/* M12 §15.5(c) (#96): ingaggia il mercenario corrente. */
+function doHireMercenary(stage) {
+  const g = ORION.game;
+  const MK = ORION.mekhari;
+  if (!MK || !MK.hireMercenary) return;
+  const sel = stage.querySelector('[data-bind="mek-merc-fleet"]');
+  if (!sel || !sel.value) { showToast('Seleziona una flotta'); return; }
+  const fleetId = isNaN(parseInt(sel.value, 10)) ? sel.value : parseInt(sel.value, 10);
+  const evts = [];
+  const r = MK.hireMercenary(g, fleetId, evts);
+  if (!r.ok) { showToast(r.reason || 'Ingaggio rifiutato'); return; }
+  evts.forEach(function (e) { chronicleEvent(e); });
+  if (ORION.tutorial) ORION.tutorial.fire('mekhari-mercenary');
+  showToast('Ingaggiato: ' + (r.officer && r.officer.name));
   persistGame(g);
   refreshActiveTradeView(stage);
 }
@@ -12113,6 +12214,14 @@ const DEFAULT_AUTOPAUSE = {
   'dispatch-expired': false, 'dispatch-void': false,
   /* M17 Fase B (#83): contractor Mekhari risolto — notevole (covo sgominato). */
   'mekhari-contract-done': true,
+  /* M12 §15.5(a) + (c) (decisione #96): mercato secondario esotici + mercenari Mekhari.
+     Vendite/refresh sono atmosferiche (OFF); ingaggio mercenario è notevole (ON). */
+  'mekhari-exotic-sold': false,
+  'mekhari-mercenary': false,
+  'mekhari-mercenary-hired': true,
+  /* M17 #55 (decisione #96): eventi Vehryn/Phaerion. Il completamento istantaneo
+     del dossier è notevole (ON), così come fail del santuario. */
+  'dispatch-instant-done': true,
   /* M17 Fase C (#83): crisi a scelte → ferma il tempo (serve decidere).
      Reliquia trovata: la pausa + il resoconto li gestisce il popup dedicato
      (showAnomalyRecapModal in runAdvance), quindi OFF qui per non duplicare
@@ -12617,7 +12726,11 @@ function showEventOverlay(events) {
     'dispatch-offered': 'Nuovo incarico disponibile',
     'dispatch-done': 'Incarico completato',
     'dispatch-failed': 'Incarico fallito',
+    'dispatch-instant-done': 'Dossier acquisito',
     'mekhari-contract-done': 'Cacciatori Mekhari: covo sgominato',
+    'mekhari-exotic-sold': 'Esotici venduti ai Mekhari',
+    'mekhari-mercenary': 'Mercenario Mekhari disponibile',
+    'mekhari-mercenary-hired': 'Mercenario ingaggiato',
     'crisis-raised': 'Crisi galattica: decisione richiesta',
     'crisis-lapsed': 'Crisi ignorata',
     'icg-threshold': 'Stabilità: ICG ha cambiato fascia',
@@ -13649,6 +13762,9 @@ function _chronicleEventBody(ev) {
       : ' <span class="chronicle__hint">(pannello Dispacci ✉)</span>';
     pushChronicle(ds + ' — Nuovo incarico da <strong>' + escapeHtml(ev.sourceName || '—') + '</strong>: ' +
       escapeHtml(ev.title || '') + courtshipHint + '.', 'civ');
+    /* M17 #55 (#96): trigger tutorial Vehryn/Phaerion alla prima offerta. */
+    if (ev.mtype === 'phaerion-sanctuary' && ORION.tutorial) ORION.tutorial.fire('diplo-phaerion-sanctuary');
+    if (ev.mtype === 'vehryn-dossier' && ORION.tutorial) ORION.tutorial.fire('diplo-vehryn-dossier');
   } else if (ev.kind === 'dispatch-done') {
     pushChronicle(ds + ' — Incarico completato: <strong>' + escapeHtml(ev.title || '') + '</strong> · ricompensa riscossa.', 'civ');
   } else if (ev.kind === 'dispatch-failed') {
@@ -13657,6 +13773,28 @@ function _chronicleEventBody(ev) {
     pushChronicle(ds + ' — Incarico scaduto senza risposta: ' + escapeHtml(ev.title || '') + '.', 'system');
   } else if (ev.kind === 'dispatch-void') {
     pushChronicle(ds + ' — Incarico annullato: ' + escapeHtml(ev.title || '') + (ev.reason ? ' (' + escapeHtml(ev.reason) + ')' : '') + '.', 'system');
+  } else if (ev.kind === 'dispatch-instant-done') {
+    /* M17 #55 (#96): dossier Vehryn acquisito istantaneamente. */
+    pushChronicle(ds + ' — <strong>Dossier completo</strong> di <strong>' + escapeHtml(ev.targetCivName || '—') +
+      '</strong> acquisito da <strong>' + escapeHtml(ev.sourceName || 'Vehryn') + '</strong> · ' +
+      (ev.cost || 0) + ' crediti spesi.', 'civ');
+    if (ORION.tutorial) ORION.tutorial.fire('diplo-vehryn-dossier');
+  } else if (ev.kind === 'mekhari-exotic-sold') {
+    /* M12 §15.5(a): mercato secondario esotici. */
+    const curName = ev.currency && ev.currency.name ? ev.currency.name : 'crediti';
+    pushChronicle(ds + ' — Vendute <strong>' + (ev.units || 0) + '</strong> unità di esotico ai Mekhari · +' +
+      (ev.credits || 0) + ' ' + escapeHtml(curName) + '.', 'system');
+  } else if (ev.kind === 'mekhari-mercenary') {
+    /* M12 §15.5(c): nuova offerta freelance Mekhari. */
+    const merc = ev.merc || {};
+    pushChronicle(ds + ' — I Mekhari offrono un <strong>' + escapeHtml(merc.rank || '—') +
+      ' ' + escapeHtml(merc.role || '') + '</strong> freelance (' + escapeHtml(merc.name || '—') +
+      ') per <strong>' + (merc.costCredits || 0) + ' crediti</strong>. Vista <strong>Mercato</strong>.', 'civ');
+  } else if (ev.kind === 'mekhari-mercenary-hired') {
+    const off = ev.officer || {};
+    pushChronicle(ds + ' — <strong>' + escapeHtml(off.name || 'Freelance') + '</strong> (' +
+      escapeHtml(off.roleLabel || off.role || '—') + ') ingaggiato su <strong>' +
+      escapeHtml(ev.fleetName || ('Flotta ' + ev.fleetId)) + '</strong> · ' + (ev.costCredits || 0) + ' crediti.', 'civ');
   } else if (ev.kind === 'mekhari-contract-done') {
     const sys = ORION.game.galaxy.systems[ev.sysId];
     const who = ev.boss && ev.name ? ('il covo-boss <strong>' + escapeHtml(ev.name) + '</strong>') : 'il covo pirata';

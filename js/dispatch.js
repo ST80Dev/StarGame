@@ -46,6 +46,7 @@
     DEADLINE: 650,        // tempo per completare dopo l'accettazione
     ESCORT_HOLD: 60,      // Ι di presenza richiesti (scorta)
     RESUPPLY_HOLD: 50,    // Ι di presenza richiesti (rifornimento)
+    SANCTUARY_HOLD: 200,  // Ι di durata dell'impegno Phaerion (#96)
     /* M17 Fase B (#83) — covi-boss + contractor Mekhari. */
     BOSS_CAP: 2,          // max covi-boss nominati per partita
     BOSS_DANGER_MIN: 0.55,// solo nei sistemi profondi/pericolosi
@@ -226,7 +227,83 @@
     if (contacted.length) out.push('escort');
     const allies = (DIP && DIP.alliesOf) ? DIP.alliesOf(game) : [];
     if (allies.length) out.push('resupply');
+    /* M17 #55 (decisione #96): eventi speciali Vehryn/Phaerion. Le 2
+       Costanti hanno offerte tematiche uniche, gated dal contatto formale
+       con loro + condizioni a tipo. */
+    if (vehrynBroker(game) && vehrynDossierTarget(game)) out.push('vehryn-dossier');
+    if (phaerionBroker(game) && phaerionSanctuaryTarget(game)) out.push('phaerion-sanctuary');
     return out;
+  }
+
+  /* ------------------------------------------------------------------
+     M17 #55 — helpers Vehryn/Phaerion (decisione #96).
+     Le 4 Costanti (§13.7) hanno faction id stabile. La "disponibilità"
+     dell'offerta speciale coincide con il contatto formale (krank ≥ 2).
+     ------------------------------------------------------------------ */
+  function findCivByFaction(game, factionId) {
+    const civs = (game && game.civs) || [];
+    for (let i = 0; i < civs.length; i++) {
+      if (civs[i] && civs[i].alive && civs[i].faction === factionId) return civs[i];
+    }
+    return null;
+  }
+  function isCivContacted(civ) {
+    const AI = ORION.ai;
+    const rank = (AI && AI.knowledgeRank) ? AI.knowledgeRank(civ) : (civ && civ.contacted ? 2 : 0);
+    return rank >= 2;
+  }
+  function vehrynBroker(game) {
+    const c = findCivByFaction(game, 'vehryn');
+    return (c && isCivContacted(c)) ? c : null;
+  }
+  function phaerionBroker(game) {
+    const c = findCivByFaction(game, 'phaerion');
+    return (c && isCivContacted(c)) ? c : null;
+  }
+
+  /* Bersaglio Vehryn-dossier: la prima civ contattata di cui non si ha
+     intel `complete` (escludendo Vehryn/Phaerion/Mekhari stesse). Ordine
+     stabile per civ.id → deterministico. */
+  function vehrynDossierTarget(game) {
+    const AI = ORION.ai;
+    if (!AI || !AI.contactedCivs) return null;
+    const list = AI.contactedCivs(game).slice().sort(function (a, b) {
+      return String(a.id || '').localeCompare(String(b.id || ''));
+    });
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
+      if (!c || c.faction === 'vehryn' || c.faction === 'phaerion' || c.faction === 'mekhari') continue;
+      const lvl = c.intelLevel || (AI.intelLevelFromProgress
+        ? AI.intelLevelFromProgress(c.intelProgress || 0) : 'fragmentary');
+      const rank = (AI.intelLevelRank) ? AI.intelLevelRank(lvl) : ({fragmentary:1,partial:2,complete:3})[lvl] || 1;
+      if (rank < 3) return c;
+    }
+    return null;
+  }
+
+  /* Bersaglio Phaerion-santuario: un sistema esplorato (visibile sulla
+     mappa) della loro frontiera, dove NON c'è già un tuo presidio o una
+     loro colonia "tua per occupazione". Ordine stabile per sysId. */
+  function phaerionSanctuaryTarget(game) {
+    const ph = findCivByFaction(game, 'phaerion');
+    if (!ph) return null;
+    const sysIds = (ph.systems || []).slice().sort(function (a, b) { return a - b; });
+    const garrisoned = (game && game.garrisons) || {};
+    for (let i = 0; i < sysIds.length; i++) {
+      const sid = sysIds[i];
+      const sys = game.galaxy && game.galaxy.systems && game.galaxy.systems[sid];
+      if (!sys) continue;
+      /* Esplorato/Rilevato dal giocatore (M02 nebbia di guerra). */
+      /* Lo stato di scoperta è un array `state.discovery[sid]` numerico
+         (vedi frontierSystems sopra): 1=detected, 2=explored. Accettiamo
+         entrambi (giocatore lo vede sulla mappa). */
+      const disc = (game.state && game.state.discovery) || [];
+      const rank = disc[sid];
+      if (rank == null || rank < 1) continue;
+      if (garrisoned[sid]) continue;
+      return { sysId: sid, civ: ph };
+    }
+    return null;
   }
 
   function mekhariBroker(game) {
@@ -348,6 +425,52 @@
       base.penalty = { reputation: 3, disposition: 10 };
       return base;
     }
+    if (type === 'vehryn-dossier') {
+      /* M17 #55 (decisione #96): il Conclave Vehryn offre il dossier
+         COMPLETO su una civ contattata, oltre il cap "parziale" del
+         mercato grigio Mekhari. Effetto istantaneo all'accettazione,
+         paga in crediti Tesoreria. Nessuna penalità (è un'offerta, non
+         un'obbligazione). */
+      const target = vehrynDossierTarget(game);
+      if (!target) return null;
+      const broker = vehrynBroker(game);
+      base.sourceKind = 'civ'; base.sourceCivId = broker.id; base.sourceName = broker.name;
+      base.targetCivId = target.id; base.targetCivName = target.name;
+      base.targetSysId = (broker.systems && broker.systems[0]) != null ? broker.systems[0] : -1;
+      base.holdI = 0;
+      base.instant = true;            // accept paga + completa istantaneo (no fase active)
+      base.title = 'Dossier di Vehryn: ' + target.name;
+      base.desc = 'Il Conclave di Vehryn ti propone il dossier completo su ' + target.name +
+        ' — oltre il cap "parziale" del mercato grigio Mekhari. Effetto immediato all\'accettazione, ' +
+        'paghi dalla Tesoreria.';
+      const cost = 140;
+      base.costCredits = cost;
+      base.reward = { reputation: 1, disposition: 5 };  // disposition verso Vehryn al pagamento
+      base.penalty = { disposition: 2 };                // disposition Vehryn al rifiuto
+      return base;
+    }
+    if (type === 'phaerion-sanctuary') {
+      /* M17 #55: i Guardiani di Phaerion ti chiedono di RISPETTARE un
+         "confine sacro" — niente presidio nel sistema per N Ι. Accetti =
+         impegno, a scadenza senza violazioni = reward (rep + disp).
+         Violare durante (presidiare quel sistema) = fail con penalità.
+         Conserva la logica del "confine intransigente" #94. */
+      const t = phaerionSanctuaryTarget(game);
+      if (!t) return null;
+      const broker = t.civ;
+      const sid = t.sysId;
+      base.sourceKind = 'civ'; base.sourceCivId = broker.id; base.sourceName = broker.name;
+      base.targetSysId = sid;
+      base.holdI = CFG.SANCTUARY_HOLD || 200;          // 200 Ι default
+      base.sanctuary = true;
+      base.title = 'Confine sacro di Phaerion a ' + sys(sid);
+      base.desc = 'I Guardiani di Phaerion dichiarano ' + sys(sid) + ' "confine sacro" per ' +
+        (base.holdI) + ' Ι. Rispetta il vincolo (niente presidio, niente combattimenti là) e ti onoreranno. ' +
+        'Violare costerà reputazione e fiducia.';
+      base.reward = { reputation: 3, disposition: 10 };
+      base.penalty = { reputation: 5, disposition: 15 };
+      return base;
+    }
     return null;
   }
 
@@ -459,6 +582,19 @@
       if (!exists) done = true;
     } else if (m.type === 'reach') {
       if (playerFleetAt(game, m.targetSysId)) done = true;
+    } else if (m.type === 'phaerion-sanctuary') {
+      /* M17 #55 (#96): violazione del confine sacro = presidio del
+         giocatore nel sistema bersaglio durante il periodo. Falli
+         immediato (penalità Phaerion + reputazione). Altrimenti, a
+         scadenza, completata. */
+      const garr = (game.garrisons || {})[m.targetSysId];
+      if (garr && garr.ownerId === 'player') {
+        failMission(game, m, events);
+        return;
+      }
+      if (now >= (m.progress.sanctuaryUntil || (m.acceptedAt + (m.holdI || 0)))) {
+        done = true;
+      }
     } else { /* escort / resupply: presenza cumulata */
       if (playerFleetAt(game, m.targetSysId)) {
         m.progress.holdLeft = Math.max(0, (m.progress.holdLeft == null ? m.holdI : m.progress.holdLeft) - 1);
@@ -797,14 +933,46 @@
     return (game.missions || []).filter(function (m) { return m.id === id; })[0] || null;
   }
 
-  function accept(game, id) {
+  function accept(game, id, events) {
     const m = find(game, id);
     if (!m || m.status !== 'offered') return { ok: false, reason: 'Incarico non disponibile' };
     const now = game.timeImpulsi || 0;
+    /* M17 #55 (decisione #96): "instant" mission (Vehryn dossier) — paga
+       crediti immediatamente, applica effetto, completa al volo. Niente
+       fase `active`/tracking. Recovery (#22): se i crediti mancano, ok:
+       false con motivo, l'offerta resta in mano al giocatore. */
+    if (m.instant && m.type === 'vehryn-dossier') {
+      if (!ORION.treasury || !ORION.treasury.spendCredits) {
+        return { ok: false, reason: 'Tesoreria non disponibile' };
+      }
+      const cost = m.costCredits || 0;
+      if (ORION.treasury.totalCredits(game) + 1e-6 < cost) {
+        return { ok: false, reason: 'Tesoreria insufficiente (servono ≈' + cost + ' crediti)' };
+      }
+      const spent = ORION.treasury.spendCredits(game, cost);
+      if (!spent.ok) return spent;
+      const target = (game.civs || []).filter(function (c) { return c && c.id === m.targetCivId; })[0];
+      if (target) {
+        const AI = ORION.ai;
+        target.intelLevel = 'complete';
+        if ((target.intelProgress || 0) < 6) target.intelProgress = 6;
+        if (AI && AI.bumpKnowledge) AI.bumpKnowledge(target, 'familiar');
+      }
+      m.status = 'done';
+      m.acceptedAt = now;
+      grantReward(game, m);
+      game.dispatchMeta.accepted = (game.dispatchMeta.accepted || 0) + 1;
+      game.dispatchMeta.completed = (game.dispatchMeta.completed || 0) + 1;
+      if (events) events.push({ kind: 'dispatch-instant-done', missionId: m.id, title: m.title,
+        mtype: m.type, sourceName: m.sourceName,
+        targetCivId: m.targetCivId, targetCivName: m.targetCivName,
+        cost: cost, impulso: now });
+      return { ok: true, instant: true };
+    }
     m.status = 'active';
     m.acceptedAt = now;
     m.deadline = now + CFG.DEADLINE;
-    m.progress = { holdLeft: m.holdI || 0 };
+    m.progress = { holdLeft: m.holdI || 0, sanctuaryUntil: m.sanctuary ? (now + (m.holdI || 0)) : null };
     /* Courtship tracking: il primo accept conferma che l'utente sa giocare
        il sistema → niente più "modalità premurosa" anche se in futuro
        restasse senza offerte in finestra. */

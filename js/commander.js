@@ -211,6 +211,61 @@
     };
   }
 
+  /* M12 §15.5(c) — figura FREELANCE da hub Mekhari. Stessa forma di una
+     figura nostra (in modo che fleet.officers/combat/etc. la trattino come
+     qualsiasi altra), ma con flag `origin:'mekhari'` e XP iniziale
+     coerente col rango di ingaggio (Tenente 0 / Capitano 20). Il rolo
+     viene dal descriptor dei Mekhari, il trait pure (id) — qui mappiamo
+     solo le label. Non vive nel pool d'Impero `game.commanders[]`:
+     appartiene direttamente alla flotta (`fleet.officers`).
+     Decisione di design (#94 estensione): freelance NON guadagnano XP
+     extra per il rango — partono al floor del loro tier, e crescono
+     normalmente in servizio. */
+  function makeFreelance(game, descriptor) {
+    if (!descriptor) return null;
+    var role = ROLES[descriptor.role] ? descriptor.role : 'comandante';
+    /* Mappa rank id → xp iniziale (al floor del tier). */
+    var startXp = 0;
+    if (descriptor.rank === 'capitano') startXp = 20;
+    /* Trait: cerco label nel pool, fallback su id. */
+    var traitLabel = descriptor.traitId;
+    for (var i = 0; i < TRAIT_POOL.length; i++) {
+      if (TRAIT_POOL[i].id === descriptor.traitId) { traitLabel = TRAIT_POOL[i].label; break; }
+    }
+    /* Razza: deterministica dal seed del descriptor (Mekhari spesso
+       pescano fuori dalla loro razza — fixer multietnico). */
+    var seed = (game && game.seed) || '';
+    var rng = ORION.rng.makeRng(seed + ':merc-race:' + (descriptor.id || ''));
+    var race = pickWeighted(rng, RACE_POOL);
+    return {
+      id: descriptor.id || ('cmd-merc-' + (game.timeImpulsi || 0)),
+      name: descriptor.name || 'Freelance',
+      role: role,
+      roleLabel: ROLES[role].label,
+      rank: rankFor(startXp).label,
+      xp: startXp,
+      trait: descriptor.traitId,
+      traitLabel: traitLabel,
+      race: race.id,
+      raceLabel: race.label,
+      originColonyKey: null,
+      originCrewId: null,
+      origin: 'mekhari',
+      status: 'idle',
+      bornAt: game && game.timeImpulsi || 0
+    };
+  }
+
+  /* Helper esposto per Mekhari: pesca un trait deterministico dato un RNG
+     (i Mekhari hanno già il loro seed). Niente bias per ruolo per ora —
+     i tratti sono universali. */
+  function pickTrait(rng /*, role */) {
+    return pickFromPool(rng, TRAIT_POOL);
+  }
+  function pickName(rng) {
+    return pickFromPool(rng, NAME_POOL);
+  }
+
   /* Promozione: figura A LIVELLO IMPERO (game.commanders[]). Il ruolo viene
      dall'attività dominante del crew, salvo `roleHint` esplicito (es. le
      spedizioni passano 'ingegnere' = viaggio). Emerge SEMPRE (anche in
@@ -478,6 +533,9 @@
     TRAIT_POOL: TRAIT_POOL,
     RACE_POOL: RACE_POOL,
     make: make,
+    makeFreelance: makeFreelance,
+    pickTrait: pickTrait,
+    pickName: pickName,
     promote: promote,
     isPromotable: isPromotable,
     grantXp: grantXp,

@@ -295,6 +295,21 @@
     return { ok: true, spent: credits };
   }
 
+  /* M12 §15.5(a) — Acrediti su valuta regionale di una colonia + helper
+     "qual è la valuta locale di X". Wrapper thin su `addBalance` per i
+     consumatori (mekhari mercato secondario, futuri canali regionali). */
+  function currencyOfColony(game, colonyKey) {
+    const cluster = clusterOfColony(game, colonyKey);
+    if (cluster == null) return null;
+    return currencyFor(game, cluster);
+  }
+  function creditRegional(game, colonyKey, credits) {
+    const cur = currencyOfColony(game, colonyKey);
+    if (!cur) return { ok: false, reason: 'Regione non identificabile' };
+    addBalance(game, cur.clusterId, credits);
+    return { ok: true, currency: cur, credited: credits };
+  }
+
   ORION.treasury = {
     REF_PRICE: REF_PRICE,
     SPREAD_BASE: SPREAD_BASE,
@@ -318,6 +333,8 @@
     buyResource: buyResource,
     heldCurrencies: heldCurrencies,
     totalCredits: totalCredits,
+    currencyOfColony: currencyOfColony,
+    creditRegional: creditRegional,
     spendCredits: spendCredits
   };
 })(typeof window !== 'undefined' ? window : this);
