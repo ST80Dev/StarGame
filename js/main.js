@@ -9230,26 +9230,12 @@ function renderCivDetail(stage, c) {
   const defPct = intelRank >= 4 ? 0 : (intelRank >= 3 ? 0.20 : (intelRank >= 2 ? 0.45 : 0.70));
   const defLo = Math.max(0, Math.round(defTot.total * (1 - defPct)));
   const defHi = Math.max(0, Math.round(defTot.total * (1 + defPct)));
-  /* Presentazione: combiniamo le difese statiche (sintetiche) con la
-     presenza REALE di flotte AI ferme sui loro sistemi. La presenza reale è
-     un dato concreto (game.aiFleets), NON una stima: la mostriamo da L3 in
-     su come "+ N P in orbita". A L4 anche il breakdown per-colonia (sotto). */
-  const defTxt = fpDeepReveal
-    ? ('= ' + defTot.total + ' P difese statiche · + ' + realFleetTotal + ' P in orbita = ' + (defTot.total + realFleetTotal) + ' P totali')
-    : ('≈ ' + defLo + '–' + defHi + ' P difese statiche' + (intelRank >= 3 && realFleetTotal > 0 ? (' · + ' + realFleetTotal + ' P in orbita') : ''));
-  /* Per-colonia (solo L4): map planetKey → defense P, da iniettare nella lista colonie. */
-  const defByPlanet = (intelRank >= 4 && AI.civDefensePerColony)
-    ? (function () {
-        const arr = AI.civDefensePerColony(g, c);
-        const m = {};
-        arr.forEach(function (x) { m[x.planetKey] = x.defense; });
-        return m;
-      })()
-    : null;
   /* Presenza REALE di flotte AI ferme nel sistema di ogni colonia: somma
      garrison.powerOf delle game.aiFleets della civ con systemId=sid e
      status in {orbiting,docked} (in-transit non difende). A L3 ci serve il
-     TOTALE per impero (range), a L4 il dettaglio per-sistema. */
+     TOTALE per impero (range), a L4 il dettaglio per-sistema.
+     NB: dichiarato PRIMA di defTxt perché questo lo usa (bugfix TDZ
+     2026-06-26: realFleetTotal era usato prima dell'inizializzazione). */
   const fleetBySys = (function () {
     const m = {};
     const list = (g.aiFleets || []);
@@ -9267,6 +9253,22 @@ function renderCivDetail(stage, c) {
     return m;
   })();
   const realFleetTotal = Object.keys(fleetBySys).reduce(function (s, k) { return s + fleetBySys[k]; }, 0);
+  /* Presentazione: combiniamo le difese statiche (sintetiche) con la
+     presenza REALE di flotte AI ferme sui loro sistemi. La presenza reale è
+     un dato concreto (game.aiFleets), NON una stima: la mostriamo da L3 in
+     su come "+ N P in orbita". A L4 anche il breakdown per-colonia (sotto). */
+  const defTxt = fpDeepReveal
+    ? ('= ' + defTot.total + ' P difese statiche · + ' + realFleetTotal + ' P in orbita = ' + (defTot.total + realFleetTotal) + ' P totali')
+    : ('≈ ' + defLo + '–' + defHi + ' P difese statiche' + (intelRank >= 3 && realFleetTotal > 0 ? (' · + ' + realFleetTotal + ' P in orbita') : ''));
+  /* Per-colonia (solo L4): map planetKey → defense P, da iniettare nella lista colonie. */
+  const defByPlanet = (intelRank >= 4 && AI.civDefensePerColony)
+    ? (function () {
+        const arr = AI.civDefensePerColony(g, c);
+        const m = {};
+        arr.forEach(function (x) { m[x.planetKey] = x.defense; });
+        return m;
+      })()
+    : null;
   const vocLabel = (AI.VOCATIONS && c.vocation && AI.VOCATIONS[c.vocation]) ? AI.VOCATIONS[c.vocation].label : '—';
   const affLabel = (AI.AFFINITIES && c.affinity && AI.AFFINITIES[c.affinity]) ? AI.AFFINITIES[c.affinity].label : '—';
   const disp = Math.round(c.disposition || 0);
