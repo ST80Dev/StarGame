@@ -270,8 +270,12 @@
       } else if (op.type === 'steal') {
         loot = applySteal(game, op, civ, rng);
       } else {
-        civ.intelLevel = 'complete';
-        if ((civ.intelProgress || 0) < 6) civ.intelProgress = 6;
+        /* Infiltrazione (decisione 2026-06-26): porta direttamente al livello
+           "Approfondito" (rank 4), non solo "Completo". Il colpo aggiuntivo
+           sta nei dati riservati (civ.deepIntel: potenza esatta, preavviso
+           tradimento) — campo separato che fa staleness UI per Ι. */
+        civ.intelLevel = 'deep';
+        if ((civ.intelProgress || 0) < 10) civ.intelProgress = 10;
         if (ORION.ai && ORION.ai.bumpKnowledge) ORION.ai.bumpKnowledge(civ, 'known');
         civ.deepIntel = buildDeepIntel(game, civ, I);
         reveal = civ.deepIntel;

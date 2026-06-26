@@ -263,8 +263,8 @@
     incrociatore: 5, dreadnought: 6, ammiraglia: 7,
     coloniale: 0, estrattore: 0
   };
-  const INTEL_LEVEL = { fragmentary: 1, partial: 2, complete: 3 };
-  const INTEL_LEVEL_INV = [null, 'fragmentary', 'partial', 'complete'];
+  const INTEL_LEVEL = { fragmentary: 1, partial: 2, complete: 3, deep: 4 };
+  const INTEL_LEVEL_INV = [null, 'fragmentary', 'partial', 'complete', 'deep'];
   function fleetIntelScore(fleet) {
     if (!fleet || !Array.isArray(fleet.ships)) return 0;
     let s = 0;
@@ -275,16 +275,25 @@
     return s;
   }
   function intelLevelFromScore(score) {
+    if (score >= 10) return 'deep';
     if (score >= 6) return 'complete';
     if (score >= 3) return 'partial';
     return 'fragmentary';
   }
-  /* Stadio 1 — livello dal progresso cumulativo (vedi CFG.INTEL_RATE/FLOOR). */
+  /* Stadio 1 — livello dal progresso cumulativo (vedi CFG.INTEL_RATE/FLOOR).
+     Quattro livelli (2026-06-26): aggiunto 'deep' (Approfondito) raggiungibile
+     per ricognizione prolungata oppure via Infiltrazione M19. */
   function intelLevelFromProgress(p) {
+    if (p >= 10) return 'deep';
     if (p >= 6) return 'complete';
     if (p >= 3) return 'partial';
     return 'fragmentary';
   }
+  /* Soglia di score sostenuto richiesta per superare un livello. Sotto la
+     soglia, intelProgress viene cappato al limite inferiore del livello
+     successivo (un esploratore da solo non chiude "Completo"). */
+  const INTEL_SCORE_GATE = { partial: 0, complete: 3, deep: 5 };
+  const INTEL_PROGRESS_CAP = { fragmentary: 2.9, partial: 5.9, complete: 9.9 };
   function intelLevelRank(level) { return INTEL_LEVEL[level] || 0; }
 
   /* Tracciamento permanenza flotte player in sistemi rilevanti. Vive su
@@ -338,9 +347,22 @@
       }
       /* Accumulo cumulativo (Stadio 1): ogni Ι di presenza aggiunge intel,
          con rate = velocità per composizione, FLOOR = guadagno minimo per
-         persistenza. Persiste su civ.intelProgress (additivo, lazy). */
+         persistenza. Persiste su civ.intelProgress (additivo, lazy).
+         Permanenza cumulata (per L4): civ.intelPresenceI conta gli Ι totali
+         in cui hai stazionato in un loro sistema. intelMaxScore = miglior
+         score di flotta che hai portato lì (gate composizione per L3/L4). */
       civ.intelProgress = (civ.intelProgress || 0) +
         Math.max(CFG.INTEL_FLOOR, bestScore * CFG.INTEL_RATE);
+      civ.intelPresenceI = (civ.intelPresenceI || 0) + 1;
+      civ.intelMaxScore = Math.max(civ.intelMaxScore || 0, bestScore);
+      /* Cap di progresso per composizione: per superare ogni soglia serve
+         almeno una volta una flotta con score adeguato. Esempio: con un solo
+         esploratore (score 0.5) il progresso si ferma a 5.9 → resta a Parziale. */
+      if (civ.intelMaxScore < INTEL_SCORE_GATE.complete && civ.intelProgress > INTEL_PROGRESS_CAP.partial) {
+        civ.intelProgress = INTEL_PROGRESS_CAP.partial;
+      } else if (civ.intelMaxScore < INTEL_SCORE_GATE.deep && civ.intelProgress > INTEL_PROGRESS_CAP.complete) {
+        civ.intelProgress = INTEL_PROGRESS_CAP.complete;
+      }
       const newLevel = intelLevelFromProgress(civ.intelProgress);
       const newRank = intelLevelRank(newLevel);
       const curRank = intelLevelRank(civ.intelLevel);
@@ -426,8 +448,12 @@
     const level = intelLevelFromProgress(progress);
     const score = fleetIntelScore(fleet);
     const rate = Math.max(CFG.INTEL_FLOOR, score * CFG.INTEL_RATE);
+    /* Quattro livelli (2026-06-26): 3 / 6 / 10. Il "complete" del payload
+       resta vero solo a livello 'deep' raggiunto (non più solo dopo i 6). */
     let nextAt = null;
-    if (progress < 3) nextAt = 3; else if (progress < 6) nextAt = 6;
+    if (progress < 3) nextAt = 3;
+    else if (progress < 6) nextAt = 6;
+    else if (progress < 10) nextAt = 10;
     const etaToNext = (nextAt != null && rate > 0) ? Math.ceil((nextAt - progress) / rate) : 0;
     return {
       kind: kind, name: name, id: id, sysId: sysId,
@@ -1759,6 +1785,43 @@
   function forceEstimate(game, civ) {
     return Math.max(1, Math.round((civ.power || 0) / 25));
   }
+  /* Range di forza stimata in funzione del livello di dossier (decisione
+     2026-06-26): a livelli bassi la stima è larga, a livelli alti si stringe;
+     con deepIntel diventa il numero esatto.
+       L1 frammentario : ± 60% → fascia molto larga
+       L2 parziale     : ± 35%
+       L3 completo     : ± 15%
+       L4 approfondito : ±  5%
+       L5 infiltrato   : esatto (deepIntel.power)
+     Restituisce { lo, hi, mid, exact } in unità Forza Impero (≈ power). */
+  function forceEstimateRange(game, civ, intelRank) {
+    const exact = Math.max(1, Math.round((civ.power || 0)));
+    if (civ.deepIntel && civ.deepIntel.power != null) {
+      return { lo: civ.deepIntel.power, hi: civ.deepIntel.power, mid: civ.deepIntel.power, exact: true };
+    }
+    let pct = 0.60;
+    if (intelRank >= 4) pct = 0.05;
+    else if (intelRank >= 3) pct = 0.15;
+    else if (intelRank >= 2) pct = 0.35;
+    const span = Math.max(2, Math.round(exact * pct));
+    return { lo: Math.max(1, exact - span), hi: exact + span, mid: exact, exact: false };
+  }
+  /* Forza Impero del giocatore, sulla stessa scala di civ.power per consentire
+     un confronto onesto nella vista Civiltà. Punteggio narrativo: 8 per
+     colonia (POWER_PER_PLANET) + ramp da battaglie vinte/perse (lazy, vive
+     su game.playerForce additivo). */
+  function playerEmpireForce(game) {
+    if (!game) return 0;
+    let n = 0;
+    const cols = game.colonies || {};
+    Object.keys(cols).forEach(function (k) {
+      const c = cols[k];
+      if (c && c.colonized) n++;
+    });
+    const base = n * CFG.POWER_PER_PLANET;
+    const bonus = (game.playerForceBonus || 0);
+    return Math.max(0, Math.round(base + bonus));
+  }
   function dispositionReason(game, civ) {
     const deeds = game.alignmentDeeds || { light: 0, dark: 0 };
     const near = civBordersPlayer(game, civ);
@@ -1840,6 +1903,9 @@
     demobilize: demobilize,
     recordBattle: recordBattle,
     forceEstimate: forceEstimate,
+    forceEstimateRange: forceEstimateRange,
+    playerEmpireForce: playerEmpireForce,
+    INTEL_LEVEL_INV: INTEL_LEVEL_INV,
     dispositionReason: dispositionReason,
     knownNests: knownNests,
     /* esposto per factions.js */
