@@ -7043,6 +7043,18 @@ select.main-menu__input { cursor: pointer; }
 .war-h { margin: 12px 0 6px; font-size: 0.82rem; color: var(--c-accent-warm); text-transform: uppercase; letter-spacing: 0.04em; }
 .war-incursions ul { list-style: none; margin: 0; padding: 0; }
 .war-incursions li { font-size: 0.84rem; color: #f0c08a; margin: 3px 0; }
+.war-incursion-link {
+  display: flex; align-items: center; gap: 4px; width: 100%;
+  background: none; border: 0; padding: 3px 6px; margin: 0;
+  font: inherit; font-size: 0.84rem; color: #f0c08a; text-align: left;
+  border-radius: 6px; cursor: pointer; transition: var(--transition);
+}
+.war-incursion-link:hover,
+.war-incursion-link:focus-visible {
+  background: rgba(240, 192, 138, 0.12); color: #ffd9a8; outline: none;
+}
+.war-incursion-link__txt { flex: 1 1 auto; }
+.war-incursion-link .ui-icon--soft { margin-left: auto; flex: 0 0 auto; }
 
 .war-siege {
   margin: 6px 0; padding: 9px 10px;

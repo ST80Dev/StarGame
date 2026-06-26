@@ -7595,6 +7595,18 @@ function renderFleetView(stage) {
   stage.querySelectorAll('[data-action="war-recall"]').forEach(function (b) {
     b.addEventListener('click', function () { openRecallOverlay(stage); });
   });
+  /* Click su un'incursione in arrivo → mappa gruppo stellare col sistema
+     bersaglio al centro e zoom di gruppo (richiesta utente: rendere esplicita
+     la destinazione e raggiungerla senza navigare la mappa a mano). */
+  stage.querySelectorAll('[data-action="incursion-focus"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const sid = Number(b.dataset.sys);
+      if (!Number.isFinite(sid) || sid < 0) return;
+      if (ORION.game && ORION.game.state) ORION.game.state.selectedId = sid;
+      navigateView('group');
+      if (ORION.map && ORION.map.focusSystemCentered) ORION.map.focusSystemCentered(sid);
+    });
+  });
 }
 
 /* Roster "Comandanti dell'Impero" (decisione utente 2026-06-11): i
@@ -7682,8 +7694,18 @@ function buildWarSection(g) {
   if (incursions.length) {
     html += '<div class="war-incursions"><h4 class="war-h">Incursioni in arrivo</h4><ul>';
     incursions.forEach(function (inc) {
-      html += '<li>' + uiIcon('warning', 'gold') + ' Predoni verso ' + colonyNameFromKey(inc.targetColonyKey) +
-        ' · arrivo fra <strong>' + (inc.eta | 0) + ' ' + iU() + '</strong></li>';
+      const sysId = inc.targetSysId;
+      const hasSys = sysId != null && sysId >= 0;
+      const tag = hasSys ? systemTagHtml(sysId) : '';
+      const body = uiIcon('warning', 'gold') + ' <span class="war-incursion-link__txt">Predoni verso ' +
+        incursionTargetLabel(inc) + tag + ' · arrivo fra <strong>' + (inc.eta | 0) + ' ' + iU() + '</strong></span>';
+      if (hasSys) {
+        html += '<li><button class="war-incursion-link" data-action="incursion-focus" data-sys="' + sysId +
+          '" type="button" title="Mostra sulla mappa del gruppo stellare, sistema al centro">' +
+          body + uiIcon('chevronRight', 'soft') + '</button></li>';
+      } else {
+        html += '<li>' + body + '</li>';
+      }
     });
     html += '</ul></div>';
   }
@@ -14141,6 +14163,23 @@ function siegeTargetName(ev) {
     return sn ? ('<strong>la stazione in ' + escapeHtml(sn) + '</strong>') : '<strong>una stazione</strong>';
   }
   return colonyNameFromKey(ev.colonyKey);
+}
+
+/* Nome esplicito del bersaglio di un'incursione in arrivo (colonia o stazione).
+   Garantisce sempre una destinazione leggibile — mai "—" — anche quando il
+   bersaglio è una stazione (targetColonyKey null): in tal caso il nome stazione
+   o, in fallback, il nome del sistema. */
+function incursionTargetLabel(inc) {
+  if (!inc) return '—';
+  const name = siegeTargetName({
+    stationId: inc.targetStationId,
+    systemId: inc.targetSysId,
+    colonyKey: inc.targetColonyKey
+  });
+  if (name && name !== '—') return name;
+  const g = ORION.game;
+  const sys = (g && inc.targetSysId != null && g.galaxy.systems[inc.targetSysId]) ? g.galaxy.systems[inc.targetSysId] : null;
+  return sys ? ('<strong>' + escapeHtml(sys.name) + '</strong>') : 'Sistema ' + inc.targetSysId;
 }
 
 /* Aggiorna solo il chip delta accanto a "⏭ Evento": il resto del bottone
