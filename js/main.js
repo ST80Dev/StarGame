@@ -13460,13 +13460,13 @@ function _chronicleEventBody(ev) {
   } else if (ev.kind === 'fleet-colonize-failed') {
     const fname = ev.fleetName || '—';
     const sys = ORION.game.galaxy.systems[ev.systemId];
-    /* Decisione #66 estensione (P0): mostra coloni salvati in scialuppa. */
-    const saved = ev.popSaved || 0;
-    const savedTxt = saved > 0
-      ? ' · <strong>' + saved + ' livell' + (saved === 1 ? 'o' : 'i') + '</strong> di pionieri tornati in scialuppa'
+    /* Decisione utente 2026-06-26: i coloni a bordo cadono con la nave. */
+    const lost = ev.popLost || 0;
+    const lostTxt = lost > 0
+      ? ' · <strong>' + lost + ' livell' + (lost === 1 ? 'o' : 'i') + '</strong> di pionieri perduti con la nave'
       : '';
     pushChronicle(ds + ' — <strong>' + escapeHtml(fname) + '</strong>: fondazione annullata presso <strong>' +
-      (sys ? sys.name : '—') + '</strong> · motivo: ' + escapeHtml(ev.reason || '—') + savedTxt + '.', 'planet');
+      (sys ? sys.name : '—') + '</strong> · motivo: ' + escapeHtml(ev.reason || '—') + lostTxt + '.', 'planet');
   } else if (ev.kind === 'fleet-waypoint-reached') {
     /* Fase B (decisione #46): cronaca breve per ogni tappa. La voce è
        silenziata dal log se si chiude la prima tappa di un singolo move
@@ -13838,7 +13838,8 @@ function _chronicleEventBody(ev) {
     const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
     const verb = ev.playerWon ? 'respinge i predoni' : 'subisce l\'attacco predone';
     const losses = ev.lost > 0 ? ' · ' + ev.lost + ' nave/i perdute' : ' · nessuna perdita';
-    pushChronicle(ds + ' — Flotta <strong>' + escapeHtml(ev.fleetName || '—') + '</strong> ' + verb + stag + losses + '.', 'system');
+    const crewLoss = ev.crewLost > 0 ? ' · <strong>' + ev.crewLost + ' equipaggi persi</strong>' : '';
+    pushChronicle(ds + ' — Flotta <strong>' + escapeHtml(ev.fleetName || '—') + '</strong> ' + verb + stag + losses + crewLoss + '.', 'system');
     if (ORION.tutorial) ORION.tutorial.fire('pirates');
   } else if (ev.kind === 'raider-fizzle') {
     /* preda fuggita: voce leggera, niente spam */
@@ -13849,6 +13850,7 @@ function _chronicleEventBody(ev) {
     const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
     const verb = ev.playerWon ? 'respinge il nemico' : 'è costretta alla ritirata';
     const losses = ev.lost > 0 ? ' · ' + ev.lost + ' nave/i perdute' : ' · nessuna perdita';
+    const crewLoss = ev.crewLost > 0 ? ' · <strong>' + ev.crewLost + ' equipaggi persi</strong>' : '';
     /* Fase B: se lo scontro ha arretrato il confine di una civiltà AI. */
     let rollback = '';
     if (ev.report && ev.report.rolledBackSystem != null) {
@@ -13857,7 +13859,7 @@ function _chronicleEventBody(ev) {
         : ' · <strong>sistema strappato</strong> (reputazione oscura)';
     }
     pushChronicle(ds + ' — Scontro presso <strong>' + (sys ? sys.name : '—') + '</strong>' + stag + ': <strong>' +
-      escapeHtml(ev.fleetName) + '</strong> ' + verb + losses + rollback + '.', ev.playerWon ? 'explore' : 'system');
+      escapeHtml(ev.fleetName) + '</strong> ' + verb + losses + crewLoss + rollback + '.', ev.playerWon ? 'explore' : 'system');
     ORION.lastBattle = ev.report || null;
     if (ORION.tutorial) ORION.tutorial.fire('combat');
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
@@ -13892,8 +13894,10 @@ function _chronicleEventBody(ev) {
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
   } else if (ev.kind === 'siege-round') {
     const cn = siegeTargetName(ev);
+    const crewLoss = ev.crewLost > 0 ? ' · <strong>' + ev.crewLost + ' equipaggi persi</strong>' : '';
+    const popLoss = ev.colonistsLost > 0 ? ' · <strong>' + ev.colonistsLost + ' coloni persi</strong>' : '';
     pushChronicle(ds + ' — Assedio di ' + cn + ' · round ' + ev.round + ' — difese ' + Math.round(ev.def) +
-      ' / attaccante ' + Math.round(ev.atk) + '.', 'system');
+      ' / attaccante ' + Math.round(ev.atk) + crewLoss + popLoss + '.', 'system');
   } else if (ev.kind === 'siege-end') {
     const cn = siegeTargetName(ev);
     const tag = ev.systemId >= 0 ? bodyTagHtml(ev.systemId) : '';
