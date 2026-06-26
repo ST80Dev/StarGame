@@ -13644,7 +13644,8 @@ function _chronicleEventBody(ev) {
     const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
     const verb = ev.playerWon ? 'respinge i predoni' : 'subisce l\'attacco predone';
     const losses = ev.lost > 0 ? ' · ' + ev.lost + ' nave/i perdute' : ' · nessuna perdita';
-    pushChronicle(ds + ' — Flotta <strong>' + escapeHtml(ev.fleetName || '—') + '</strong> ' + verb + stag + losses + '.', 'system');
+    const crewLoss = ev.crewLost > 0 ? ' · <strong>' + ev.crewLost + ' equipaggi persi</strong>' : '';
+    pushChronicle(ds + ' — Flotta <strong>' + escapeHtml(ev.fleetName || '—') + '</strong> ' + verb + stag + losses + crewLoss + '.', 'system');
     if (ORION.tutorial) ORION.tutorial.fire('pirates');
   } else if (ev.kind === 'raider-fizzle') {
     /* preda fuggita: voce leggera, niente spam */
@@ -13655,6 +13656,7 @@ function _chronicleEventBody(ev) {
     const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
     const verb = ev.playerWon ? 'respinge il nemico' : 'è costretta alla ritirata';
     const losses = ev.lost > 0 ? ' · ' + ev.lost + ' nave/i perdute' : ' · nessuna perdita';
+    const crewLoss = ev.crewLost > 0 ? ' · <strong>' + ev.crewLost + ' equipaggi persi</strong>' : '';
     /* Fase B: se lo scontro ha arretrato il confine di una civiltà AI. */
     let rollback = '';
     if (ev.report && ev.report.rolledBackSystem != null) {
@@ -13663,7 +13665,7 @@ function _chronicleEventBody(ev) {
         : ' · <strong>sistema strappato</strong> (reputazione oscura)';
     }
     pushChronicle(ds + ' — Scontro presso <strong>' + (sys ? sys.name : '—') + '</strong>' + stag + ': <strong>' +
-      escapeHtml(ev.fleetName) + '</strong> ' + verb + losses + rollback + '.', ev.playerWon ? 'explore' : 'system');
+      escapeHtml(ev.fleetName) + '</strong> ' + verb + losses + crewLoss + rollback + '.', ev.playerWon ? 'explore' : 'system');
     ORION.lastBattle = ev.report || null;
     if (ORION.tutorial) ORION.tutorial.fire('combat');
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
@@ -13698,8 +13700,9 @@ function _chronicleEventBody(ev) {
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
   } else if (ev.kind === 'siege-round') {
     const cn = siegeTargetName(ev);
+    const crewLoss = ev.crewLost > 0 ? ' · <strong>' + ev.crewLost + ' equipaggi persi</strong>' : '';
     pushChronicle(ds + ' — Assedio di ' + cn + ' · round ' + ev.round + ' — difese ' + Math.round(ev.def) +
-      ' / attaccante ' + Math.round(ev.atk) + '.', 'system');
+      ' / attaccante ' + Math.round(ev.atk) + crewLoss + '.', 'system');
   } else if (ev.kind === 'siege-end') {
     const cn = siegeTargetName(ev);
     const tag = ev.systemId >= 0 ? bodyTagHtml(ev.systemId) : '';

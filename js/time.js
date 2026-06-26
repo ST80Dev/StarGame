@@ -1572,6 +1572,7 @@
         kind: 'battle-skirmish', report: report,
         fleetId: fleet.id, fleetName: fleet.name,
         playerWon: playerWon, lost: fleetOutcome.lost, promoted: fleetOutcome.promoted,
+        crewLost: fleetOutcome.crewLost,
         systemId: sysId, impulso: game.timeImpulsi
       });
     }
@@ -1717,7 +1718,7 @@
       const r = C.resolveRound(rng, atk, def);
       // scrivi gli esiti del difensore sullo stato vivo
       const survivorsDef = def.combatants;     // post-purge
-      const wb = C.applyDefenderWriteback(colony, survivorsDef, r.destroyedB);
+      const wb = C.applyDefenderWriteback(game, colony, survivorsDef, r.destroyedB);
       if (wb.shipsLost > 0) warRegisterLoss(game, wb.shipsLost * CFG.WAR_MORALE_PER_SHIP, wb.shipsLost * CFG.WAR_PRESSURE_PER_LOSS);
       // l'attaccante hp residuo è già persistito (stesso array di oggetti)
 
@@ -1728,6 +1729,7 @@
         colonyKey: colonyKey, systemId: battle.systemId,
         atk: C.totalHp(atk), def: C.totalHp(def),
         lostDef: r.destroyedB.length, lostAtk: r.destroyedA.length,
+        crewLost: wb.crewLost,
         impulso: game.timeImpulsi });
 
       // fine assedio?
@@ -1893,6 +1895,7 @@
       kind: 'raider-hit', report: report,
       fleetId: fleet.id, fleetName: fleet.name,
       playerWon: playerWon, lost: outcome.lost, promoted: outcome.promoted,
+      crewLost: outcome.crewLost,
       systemId: inc.targetSysId, impulso: game.timeImpulsi
     });
   }
@@ -1989,7 +1992,7 @@
       const c = def.combatants[i];
       if (c.src && c.src.type === 'station') { stationAlive = true; st.hp = Math.max(1, Math.round(c.hp)); }
     }
-    const wb = C.applyDefenderWriteback(null,
+    const wb = C.applyDefenderWriteback(game, null,
       def.combatants.filter(function (c) { return c.src && c.src.type === 'ship'; }),
       r.destroyedB.filter(function (c) { return c.src && c.src.type === 'ship'; }));
     if (wb.shipsLost > 0) warRegisterLoss(game, wb.shipsLost * CFG.WAR_MORALE_PER_SHIP, wb.shipsLost * CFG.WAR_PRESSURE_PER_LOSS);
@@ -1998,7 +2001,8 @@
       atkHp: Math.round(C.totalHp(atk)), defHp: Math.round(C.totalHp(def)) });
     events.push({ kind: 'siege-round', battleId: battle.id, round: battle.round,
       stationId: st.id, systemId: battle.systemId, atk: C.totalHp(atk), def: C.totalHp(def),
-      lostDef: r.destroyedB.length, lostAtk: r.destroyedA.length, impulso: game.timeImpulsi });
+      lostDef: r.destroyedB.length, lostAtk: r.destroyedA.length, crewLost: wb.crewLost,
+      impulso: game.timeImpulsi });
 
     // la PIATTAFORMA è caduta → la stazione cade (le flotte presenti restano)
     if (!stationAlive) {
