@@ -852,25 +852,46 @@
         this._fleetPos[f.id] = { x: mx, y: my };
         const st = f.location.status;
         const col = (st === 'in-transit') ? '#7fd0f0' : (st === 'docked') ? '#9fd0a8' : '#f0d670';
-        /* Decisione utente 2026-06-20: marker FLOTTA come icona "glow"
-           (non più rombo geometrico semplice), auto-dimensionato in base
-           al livello di zoom (con cap min/max) — stessa convenzione delle
-           altre viste (galaxy-map.nodeRadius). */
-        const r = clamp(this.scale * 0.022, 7, 16);
+        /* Vista sistema (richiesta utente 2026-06-26): la flotta è SEMPRE
+           scomposta in icone per tipo + numero (le navi della classe del
+           catalogo, rasterizzate da icons.js). Le icone crescono con lo
+           zoom come gli altri elementi (this.scale). Alone nel colore di
+           stato dietro, etichetta nome sotto. */
+        const cell = clamp(this.scale * 0.03, 14, 30);
         const fontPx = Math.round(clamp(this.scale * 0.016, 10, 16));
-        /* aggiorna hit-test con la dimensione corrente (vedi pickFleet). */
-        this._fleetHit[this._fleetHit.length - 1].r = r;
-        this._drawFleetGlow(ctx, mx, my, r, col);
-        /* etichetta con stroke per leggibilità su nebulose/polvere */
+        const FM = root.ORION && root.ORION.fleetMarker;
+        /* alone di stato (movimento) dietro la composizione */
+        ctx.save();
+        const haloR = cell * 0.95;
+        const glow = ctx.createRadialGradient(mx, my, 0, mx, my, haloR);
+        glow.addColorStop(0, hexA(col, 0.50));
+        glow.addColorStop(0.5, hexA(col, 0.16));
+        glow.addColorStop(1, hexA(col, 0));
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(mx, my, haloR, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        let box = { w: cell, h: cell };
+        if (FM) {
+          box = FM.composition(ctx, mx, my, cell, f,
+            this._fmReady || (this._fmReady = this.requestRender.bind(this)),
+            { max: 5 }) || box;
+        } else {
+          this._drawFleetGlow(ctx, mx, my, cell * 0.5, col);
+        }
+        /* hit-test: raggio che copre l'ingombro della composizione. */
+        this._fleetHit[this._fleetHit.length - 1].r = Math.max(cell, (box.w || cell) / 2);
+        /* etichetta nome, centrata SOTTO la composizione (con stroke per
+           leggibilità su nebulose/polvere). */
         ctx.save();
         ctx.font = '600 ' + fontPx + 'px "JetBrains Mono", ui-monospace, monospace';
-        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
         ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2, fontPx / 4);
         ctx.strokeStyle = 'rgba(0,0,0,0.85)';
         const lbl = (f.name || '').slice(0, 18);
-        ctx.strokeText(lbl, mx + r + 5, my);
+        const ly = my + cell * 0.62 + 2;
+        ctx.strokeText(lbl, mx, ly);
         ctx.fillStyle = 'rgba(222,236,255,0.96)';
-        ctx.fillText(lbl, mx + r + 5, my);
+        ctx.fillText(lbl, mx, ly);
         ctx.restore();
       }
     }

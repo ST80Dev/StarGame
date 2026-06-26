@@ -146,6 +146,16 @@
   /* Distanza camera-centro: regola l'intensità della prospettiva. */
   const VIEWER_D = 1.55;
 
+  /* Zoom: moltiplicatori di fitScale per il range di scala. Il tetto è
+     stato allungato 9→12 (richiesta utente 2026-06-26) per creare una
+     fascia di zoom extra a livello gruppo, PRIMA del dive-in nel sistema:
+     in quella fascia le flotte si scompongono in icone per tipo + numero. */
+  const MIN_ZOOM_MUL = 0.6;
+  const MAX_ZOOM_MUL = 12;
+  /* Sopra questo zoom (scale/fitScale) la flotta passa da icona singola
+     (nave di punta) a scomposizione in icone per tipo + numero. */
+  const FLEET_DECOMP_ZOOM = 6;
+
   class GalaxyMap {
     constructor() {
       this.canvas = null;
@@ -891,8 +901,8 @@
     }
 
     _zoomAt(sx, sy, factor) {
-      const minScale = this.fitScale * 0.6;
-      const maxScale = this.fitScale * 9;
+      const minScale = this.fitScale * MIN_ZOOM_MUL;
+      const maxScale = this.fitScale * MAX_ZOOM_MUL;
       /* decisione #80 — navigazione a zoom: sei contro il muro dello zoom IN,
          a livello gruppo, e continui a spingere → scendi nel sistema centrato
          (sostituisce il click in sidebar / doppio-click, senza toglierli). */
@@ -965,7 +975,7 @@
       }
       const w = Math.max(maxX - minX, 0.06), h = Math.max(maxY - minY, 0.06);
       let s = Math.min(this.cssW / w, this.cssH / h) * (fill || 0.62);
-      s = clamp(s, minS || this.fitScale * 0.6, this.fitScale * 9);
+      s = clamp(s, minS || this.fitScale * MIN_ZOOM_MUL, this.fitScale * MAX_ZOOM_MUL);
       const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
       const ox = this.cssW / 2 - cx * s - s * 0.5;
       const oy = this.cssH / 2 - cy * s - s * 0.5;
@@ -1127,7 +1137,7 @@
       if (!w) return;
       const sysC = this.galaxy.systems[f.location.systemId];
       if (sysC) { this.activeGroupId = sysC.cluster; this.state.selectedId = f.location.systemId; }
-      const scale = clamp(this.fitScale * (scaleMul || 4.0), this.fitScale * 0.6, this.fitScale * 9);
+      const scale = clamp(this.fitScale * (scaleMul || 4.0), this.fitScale * MIN_ZOOM_MUL, this.fitScale * MAX_ZOOM_MUL);
       const r = this.orient.rotate(w.x - 0.5, w.y - 0.5, w.z || 0);
       const persp = VIEWER_D / Math.max(0.4, VIEWER_D - r.z);
       const ox = this.cssW / 2 - r.x * persp * scale - scale * 0.5;
@@ -2659,47 +2669,57 @@
 
     _drawFleetMarker(ctx, pos, fleet, isSelected, someoneSelected) {
       const inTransit = fleet.location.status === 'in-transit';
-      const baseColor = inTransit ? '#5cd0ff'
-                      : fleet.location.status === 'docked' ? '#7fe6a0'
-                      : '#ffae5c';   /* orbiting */
-      /* Quando una flotta è selezionata, le altre vengono attenuate. */
+      /* Colore di STATO (movimento) → alone dietro l'icona. L'icona stessa
+         porta il colore della CLASSE (riconoscibilità del tipo nave). */
+      const statusColor = inTransit ? '#5cd0ff'
+                        : fleet.location.status === 'docked' ? '#7fe6a0'
+                        : '#ffae5c';   /* orbiting */
       const dim = (someoneSelected && !isSelected);
-      const color = baseColor;
-      const r = isSelected ? 6 : 4.5;
+      const FM = root.ORION && root.ORION.fleetMarker;
+      const zoom = this.fitScale ? this.scale / this.fitScale : 1;
+      /* requestRender memoizzato: lo passiamo come onReady alle icone
+         rasterizzate (ridisegno quando un'immagine SVG finisce di caricare). */
+      const onReady = this._fleetIconReady ||
+        (this._fleetIconReady = this.requestRender.bind(this));
 
-      /* Anello di selezione (dietro al marker, giallo brillante pulsante). */
-      if (isSelected) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, r + 6, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(255, 220, 60, 0.85)';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, r + 10, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(255, 220, 60, 0.35)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.restore();
-      }
+      /* Soglia di scomposizione (richiesta utente 2026-06-26): sotto =
+         una sola icona (nave di punta) che cresce col zoom; sopra (fascia
+         di zoom allungata prima del dive-in al sistema) = flotta scomposta
+         in icone per tipo + numero. */
+      const decompose = zoom >= FLEET_DECOMP_ZOOM;
+      const baseR = decompose
+        ? clamp(11 + (zoom - FLEET_DECOMP_ZOOM) * 1.4, 11, 20)
+        : clamp(13 + (zoom - 2) * 3.2, 13, 30);
 
       ctx.save();
-      if (dim) ctx.globalAlpha = ctx.globalAlpha * 0.35;
-      /* corpo */
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
-      /* contorno */
-      ctx.lineWidth = isSelected ? 1.6 : 1.2;
-      ctx.strokeStyle = 'rgba(8,12,22,0.85)';
-      ctx.stroke();
-      /* alone tenue */
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, r + 3, 0, Math.PI * 2);
-      ctx.strokeStyle = hexA(color, isSelected ? 0.60 : 0.35);
-      ctx.lineWidth = 1;
-      ctx.stroke();
+      if (dim) ctx.globalAlpha = ctx.globalAlpha * 0.4;
+
+      /* Alone tenue nel colore di stato dietro l'icona. */
+      const haloR = baseR * (isSelected ? 1.6 : 1.25);
+      const glow = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, haloR);
+      glow.addColorStop(0, hexA(statusColor, 0.50));
+      glow.addColorStop(0.5, hexA(statusColor, 0.18));
+      glow.addColorStop(1, hexA(statusColor, 0));
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(pos.x, pos.y, haloR, 0, Math.PI * 2); ctx.fill();
+
+      /* Anello di selezione (giallo brillante). */
+      if (isSelected) {
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, baseR + 6, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255, 220, 60, 0.85)';
+        ctx.lineWidth = 2; ctx.stroke();
+      }
+
+      if (FM) {
+        if (decompose) FM.composition(ctx, pos.x, pos.y, baseR, fleet, onReady, { max: 4 });
+        else FM.lead(ctx, pos.x, pos.y, baseR, fleet, onReady);
+      } else {
+        /* Fallback estremo se il modulo non è caricato: vecchio pallino. */
+        ctx.beginPath(); ctx.arc(pos.x, pos.y, 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = statusColor; ctx.fill();
+        ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(8,12,22,0.85)'; ctx.stroke();
+      }
       ctx.restore();
     }
 

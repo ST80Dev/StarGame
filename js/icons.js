@@ -476,4 +476,31 @@
   ORION.icon = function (name) {
     return ICONS[name] || '';
   };
+
+  /* =====================================================================
+     Raster cache (canvas) — rasterizza un'icona SVG tintata in un <img>
+     da disegnare via drawImage su mappa/sistema (stesso pattern blit di
+     planet-view). Async: la prima richiesta avvia il caricamento e ritorna
+     null; quando l'immagine è pronta chiama onReady() (il chiamante fa un
+     requestRender). Cache per chiave name|hex|px → non si rigenera ad ogni
+     frame. Niente CDN: data URI inline dalla stringa SVG del catalogo.
+     ===================================================================== */
+  const _rasterCache = {};
+  ORION.rasterIcon = function (name, hex, px, onReady) {
+    const svgStr = ICONS[name];
+    if (!svgStr) return null;
+    const size = px || 64;
+    const color = hex || '#cfe6ff';
+    const key = name + '|' + color + '|' + size;
+    const cached = _rasterCache[key];
+    if (cached) return (cached.complete && cached.naturalWidth) ? cached : null;
+    const tinted = svgStr
+      .replace(/currentColor/g, color)
+      .replace('width="1em" height="1em"', 'width="' + size + '" height="' + size + '"');
+    const img = new Image();
+    _rasterCache[key] = img;
+    img.onload = function () { if (typeof onReady === 'function') onReady(); };
+    img.src = 'data:image/svg+xml,' + encodeURIComponent(tinted);
+    return (img.complete && img.naturalWidth) ? img : null;
+  };
 })(typeof window !== 'undefined' ? window : this);

@@ -4370,12 +4370,13 @@ function renderPlanetForzeTab(host, planet, colony) {
   host.querySelectorAll('[data-cancel-crew]').forEach(function (btn) {
     btn.addEventListener('click', function () { tryCancelCrew(Number(btn.dataset.cancelCrew)); });
   });
-  /* M08 Fase A: dropdown classe nave. La scelta è ricordata per-colonia
+  /* M08 Fase A: picker classe nave. La scelta è ricordata per-colonia
      in ORION.cantieriPickedKind (vive in memoria, non nel save). */
-  host.querySelectorAll('[data-ship-kind]').forEach(function (sel) {
-    sel.addEventListener('change', function () {
+  host.querySelectorAll('[data-ship-pick]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (btn.disabled) return;
       if (!ORION.cantieriPickedKind) ORION.cantieriPickedKind = {};
-      ORION.cantieriPickedKind[ORION.openPlanetKey || ''] = sel.value;
+      ORION.cantieriPickedKind[ORION.openPlanetKey || ''] = btn.dataset.shipPick;
       updatePlanetUI();
     });
   });
@@ -4526,21 +4527,37 @@ function shipVisIcon(cls) {
   return '<span class="hangar-ship__ico ui-icon ui-icon--' + v.tone + '" aria-hidden="true">' + inner + '</span>';
 }
 
+/* Caratteristiche compatte di una classe nave come chip tintate (richiesta
+   utente 2026-06-26): corazza/difesa · potenza di fuoco · velocità ·
+   equipaggio · sensori · capienza coloni. Riusato sia dalla card della
+   riserva Hangar sia dal picker di costruzione, così "stessa nave = stesse
+   caratteristiche, ovunque". Tinte per concetto (UI_GUIDE §1): difesa rosa,
+   fuoco oro, flotta ciano, equipaggio viola, intel azzurro, coloni verde. */
+function shipStatChips(cls) {
+  if (!cls) return '';
+  const F = ORION.fleet || {};
+  const chips = [];
+  if (cls.hp) chips.push('<span class="ship-stat ship-stat--hp" title="Corazza / difesa (punti scafo)">♥ ' + cls.hp + '</span>');
+  chips.push('<span class="ship-stat ship-stat--fp" title="Potenza di fuoco">⚔ ' + (cls.fp || 0) + '</span>');
+  if (cls.speed) chips.push('<span class="ship-stat ship-stat--sp" title="Velocità di crociera">» ' + cls.speed + '</span>');
+  if (cls.crew) chips.push('<span class="ship-stat ship-stat--cr" title="Equipaggio richiesto">☗ ' + cls.crew + '</span>');
+  const sens = F.shipSensor ? F.shipSensor(cls.id) : null;
+  if (sens != null) chips.push('<span class="ship-stat ship-stat--se" title="Qualità sensori (ricognizione)">◎ ' + sens.toFixed(1) + '</span>');
+  if (cls.popCargo) chips.push('<span class="ship-stat ship-stat--pc" title="Capienza coloni trasportabili">◉ ' + cls.popCargo + '</span>');
+  return chips.join('');
+}
+
 /* Riquadro di riepilogo della riserva navi a terra (#42): una card per
    classe presente, con icona estesa + conteggio + stazza (hp/fuoco/eq). */
 function shipReserveBox(colony, classes) {
   const cards = classes.map(function (cls) {
     const n = (colony.ships && colony.ships[cls.id]) || 0;
     if (!n) return null;
-    const stats = [];
-    if (cls.hp) stats.push('<span title="Corazza">♥ ' + cls.hp + '</span>');
-    if (cls.fp) stats.push('<span title="Potenza di fuoco">⚔ ' + cls.fp + '</span>');
-    if (cls.crew) stats.push('<span title="Equipaggio richiesto">☗ ' + cls.crew + '</span>');
     return '<div class="hangar-ship" title="' + escapeHtml(cls.name) + '">' +
         shipVisIcon(cls) +
         '<div class="hangar-ship__main">' +
           '<div class="hangar-ship__top"><b>×' + n + '</b> ' + escapeHtml(cls.name) + '</div>' +
-          '<div class="hangar-ship__stats">' + stats.join('<i>·</i>') + '</div>' +
+          '<div class="hangar-ship__stats">' + shipStatChips(cls) + '</div>' +
         '</div>' +
       '</div>';
   }).filter(Boolean);
@@ -4683,25 +4700,48 @@ function renderCantieriSection(colony, planet) {
       '</div>';
     });
 
-    /* Dropdown classi: opzioni disabilitate se l'Hangar non è di livello
-       adeguato (M08 Fase A, decisione #42) o se manca il Bacino orbitale /
-       la Nave Ammiraglia esiste già (M15). */
-    const options = classes.map(function (cls) {
+    /* Picker classe nave in stile gioco (sostituisce il <select> nativo,
+       richiesta utente 2026-06-26): trigger con icona SVG + menu di card
+       classe con icona, caratteristiche (difesa/forza/velocità/equipaggio)
+       e costo. Opzioni disabilitate se l'Hangar non è di livello adeguato
+       (M08 Fase A, decisione #42) o se manca il Bacino orbitale / la Nave
+       Ammiraglia esiste già (M15). */
+    const pickOpts = classes.map(function (cls) {
       const lockedByHangar = (cls.hangarLvl || 1) > hangarLvl;
       const capReason = capitalBuildBlock(colony, cls);
-      let label = cls.glyph + ' ' + cls.name;
-      if (lockedByHangar) label += ' — Hangar lvl ' + cls.hangarLvl;
-      else if (capReason) label += ' — ' + capReason;
-      const sel = (cls.id === pickedKind) ? ' selected' : '';
-      const dis = (lockedByHangar || capReason) ? ' disabled' : '';
-      return '<option value="' + cls.id + '"' + sel + dis + '>' + escapeHtml(label) + '</option>';
+      const locked = lockedByHangar || capReason;
+      const reason = lockedByHangar ? ('Hangar lvl ' + cls.hangarLvl) : (capReason || '');
+      const costS = Object.keys(cls.cost || {}).map(function (k) { return resIcon(k) + cls.cost[k]; }).join(' ');
+      return '<button type="button" role="option" aria-selected="' + (cls.id === pickedKind ? 'true' : 'false') + '"' +
+          ' class="ship-opt' + (cls.id === pickedKind ? ' is-active' : '') + (locked ? ' is-locked' : '') + '"' +
+          (locked ? ' disabled title="' + escapeHtml(reason) + '"' : '') +
+          ' data-ship-pick="' + cls.id + '">' +
+          shipVisIcon(cls) +
+          '<span class="ship-opt__main">' +
+            '<span class="ship-opt__name">' + escapeHtml(cls.name) +
+              (locked ? ' <span class="ship-opt__lock">' + escapeHtml(reason) + '</span>' : '') +
+            '</span>' +
+            '<span class="ship-opt__stats hangar-ship__stats">' + shipStatChips(cls) + '</span>' +
+          '</span>' +
+          '<span class="ship-opt__cost">' + costS + '</span>' +
+        '</button>';
     }).join('');
 
     const buildAttrs = buildEnabled ? '' : (' disabled title="' + escapeHtml(blockReason) + '"');
     html += '<div class="cantieri-row__build">' +
-      '<select class="cantieri-row__select" data-ship-kind aria-label="Classe nave">' + options + '</select>' +
-      '<span class="cantieri-row__cost">' + costStr(pickedCls.cost) + ' · ' + effShipTime + ' ' + iU() + (techBonus > 0 ? ' <span class="cantieri-row__base">(' + pickedCls.time + ' base)</span>' : '') + '</span>' +
-      '<button class="btn btn--mini" data-build-ship type="button"' + buildAttrs + '>+ Costruisci</button>' +
+      '<details class="ship-picker">' +
+        '<summary class="ship-picker__trigger" aria-label="Scegli classe nave da costruire">' +
+          shipVisIcon(pickedCls) +
+          '<span class="ship-picker__label">' + escapeHtml(pickedCls.name) + '</span>' +
+          '<span class="ship-picker__stats hangar-ship__stats">' + shipStatChips(pickedCls) + '</span>' +
+          '<span class="ship-picker__caret ui-icon ui-icon--soft" aria-hidden="true">' + (ORION.icon ? ORION.icon('chevronRight') : '▸') + '</span>' +
+        '</summary>' +
+        '<div class="ship-picker__menu" role="listbox" aria-label="Classi nave costruibili">' + pickOpts + '</div>' +
+      '</details>' +
+      '<div class="cantieri-row__buildbar">' +
+        '<span class="cantieri-row__cost">' + costStr(pickedCls.cost) + ' · ' + effShipTime + ' ' + iU() + (techBonus > 0 ? ' <span class="cantieri-row__base">(' + pickedCls.time + ' base)</span>' : '') + '</span>' +
+        '<button class="btn btn--mini" data-build-ship type="button"' + buildAttrs + '>+ Costruisci</button>' +
+      '</div>' +
     '</div></div>';
   }
 
@@ -15394,14 +15434,15 @@ function renderDxPanel() {
      (currentPlanet null a livello galassia → crash, o colonia sbagliata). */
   rebind('[data-build-ship]', function () { tryBuildShip(); });
   rebind('[data-build-crew]', function () { tryBuildCrew(); });
-  /* Dropdown classe nave: la scelta va scritta sulla colonia dx, non su
+  /* Picker classe nave: la scelta va scritta sulla colonia dx, non su
      quella navigata al centro. */
-  content.querySelectorAll('[data-ship-kind]').forEach(function (sel) {
-    const nb = sel.cloneNode(true);
-    sel.parentNode.replaceChild(nb, sel);
-    nb.addEventListener('change', withDxScope(function () {
+  content.querySelectorAll('[data-ship-pick]').forEach(function (btn) {
+    const nb = btn.cloneNode(true);
+    btn.parentNode.replaceChild(nb, btn);
+    nb.addEventListener('click', withDxScope(function () {
+      if (nb.disabled) return;
       if (!ORION.cantieriPickedKind) ORION.cantieriPickedKind = {};
-      ORION.cantieriPickedKind[dxKey] = nb.value;
+      ORION.cantieriPickedKind[dxKey] = nb.dataset.shipPick;
       renderDxPanel();
     }));
   });
