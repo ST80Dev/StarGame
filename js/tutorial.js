@@ -426,9 +426,15 @@
         '<p>Tre azioni: <strong>Infiltrazione</strong> porta il dossier a <em>completo</em> e svela i <strong>segreti</strong> ' +
         '(potenza reale, e soprattutto il <strong>preavviso indiretto di tradimento</strong> di un alleato maligno, prima che ' +
         'esploda) · <strong>Sabotaggio</strong> colpisce la loro potenza · <strong>Furto</strong> ti frutta crediti.</p>' +
-        '<p>È un atto d\'ombra: il <strong>successo</strong> alza un po\' l\'<strong>ICG</strong>; il <strong>fallimento</strong> ' +
-        '(vieni scoperto) costa <strong>reputazione</strong>, alza l\'ICG e raffredda la disposizione del bersaglio. Tutto pesa ' +
-        'sulla pista <strong>Tiranno</strong>.</p>' +
+        '<p>Il <strong>peso morale</strong> dipende da <em>cosa</em> fai e <em>a chi</em>, non dal verbo in sé. ' +
+        'L\'<strong>Infiltrazione</strong> è <strong>neutra</strong>: conoscere un rivale ostile è autodifesa, non un\'ombra — ' +
+        'lo diventa solo se spii un <strong>amico o un alleato</strong> (tradisci la fiducia). <strong>Sabotaggio</strong> e ' +
+        '<strong>Furto</strong> sono invece atti d\'<strong>ombra</strong> sempre: pesano di più contro gli <strong>innocenti</strong>, ' +
+        'meno (ma mai zero) contro un maligno o chi ti aggredisce. Così la pista <strong>Tiranno</strong> resta percorribile in ' +
+        'ogni caso. Solo gli atti <strong>riusciti</strong> spostano il tuo karma.</p>' +
+        '<p>Indipendentemente dall\'esito morale, il <strong>successo</strong> alza un po\' l\'<strong>ICG</strong>; ' +
+        'il <strong>fallimento</strong> (vieni scoperto) costa <strong>reputazione</strong>, alza l\'ICG e raffredda la ' +
+        'disposizione del bersaglio — ma <em>non</em> il karma: essere beccato non rende l\'atto più malvagio.</p>' +
         '<p>Alternativa senza flotta e senza rischio: l\'<strong>Intel grigia dei Mekhari</strong> — compri informazioni a ' +
         'pagamento, ma è <em>meno completa</em> (arriva solo a dossier <strong>parziale</strong>) e costa crediti e un po\' di reputazione.</p>'
     },

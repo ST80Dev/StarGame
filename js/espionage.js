@@ -20,9 +20,20 @@
      · sabotage   (attiva)  → colpo una-tantum alla potenza del bersaglio
 
    Esito SEMPRE deterministico dal seed (#5): zero Math.random.
-   Aggancio M18: successo = atto d'ombra lieve + ICG ↑; fallimento (scoperto)
-   = reputazione ↓ + ICG ↑↑ + disposizione del bersaglio ↓. Alimenta la
-   pista Tiranno via ORION.victory.applyAlignment('dark').
+
+   Segno morale (decisione 2026-06-26 — "atti di luce e ombra"): NON è una
+   costante fissa del verbo, ma il prodotto di natura dell'atto × allineamento
+   del bersaglio, come già fanno combat.js/diplomacy.js. Tre regole:
+     · Infiltrazione = atto NEUTRO (raccogliere informazioni non è dominio):
+       ombra SOLO se spii un amico/benevolo (tradimento della fiducia);
+       contro un rivale ostile/maligno è autodifesa → niente karma.
+     · Sabotaggio/Furto = atti LESIVI e coperti: ombra SEMPRE (il metodo è
+       tirannico), con magnitudo crescente verso bersagli innocenti/benevoli
+       e un PAVIMENTO minimo anche contro un maligno/aggressore — così la via
+       al Tiranno non si chiude mai. Alimenta via victory.applyAlignment('dark').
+     · Solo gli atti RIUSCITI toccano il karma. Farsi scoprire colpisce la
+       reputazione pubblica (rep ↓ + ICG ↑↑ + disposizione ↓), non
+       l'inclinazione morale: essere beccati non rende l'atto più malvagio.
 
    NB taratura: soglie/percentuali sono placeholder, M20 calibrerà.
    Costo economico upfront NON ancora cablato (gancio CFG.COST per M20):
@@ -42,24 +53,27 @@
     FLEET_BONUS_MAX: 0.20,  // bonus pieno con flotta "grossa"
     FLEET_SCORE_FULL: 8,    // score flotta che dà il bonus pieno
     MIN: 0.15, MAX: 0.90,   // clamp probabilità
+    /* `alignBase` = ombra base (bersaglio NEUTRALE) dell'atto riuscito; il
+       segno reale lo decide moralImpact() in base alla classe del bersaglio.
+       Per l'infiltrazione è l'ombra "lieve" applicata SOLO spiando un amico. */
     /* Infiltrazione — facile osservare, basso danno se scoperti. */
     INFILTRATE: {
       base: 0.55,
-      icgWin: 1, alignWin: 1,
-      repFail: 3, icgFail: 2, dispFail: 8, alignFail: 1
+      icgWin: 1, alignBase: 1,
+      repFail: 3, icgFail: 2, dispFail: 8
     },
     /* Sabotaggio — più difficile, più costoso se scoperti. */
     SABOTAGE: {
       base: 0.40, hit: 0.15,  // colpo % alla potenza percepita del bersaglio
-      icgWin: 2, alignWin: 2,
-      repFail: 5, icgFail: 4, dispFail: 15, alignFail: 2
+      icgWin: 2, alignBase: 2,
+      repFail: 5, icgFail: 4, dispFail: 15
     },
     /* Furto — sottrai crediti al bersaglio (accreditati a te nel cluster del
        loro sistema). Arricchisce TE, non ne intacca la potenza (≠ sabotaggio). */
     STEAL: {
       base: 0.45, rate: 0.40, minLoot: 15, maxLoot: 120,
-      icgWin: 2, alignWin: 2,
-      repFail: 4, icgFail: 3, dispFail: 12, alignFail: 2
+      icgWin: 2, alignBase: 2,
+      repFail: 4, icgFail: 3, dispFail: 12
     }
     /* COST: { credits: N } — gancio economia M20 (non applicato per ora). */
   };
@@ -77,10 +91,12 @@
     }
     if (!Array.isArray(game.espionage.ops)) game.espionage.ops = [];
     if (typeof game.espionage.seq !== 'number') game.espionage.seq = 0;
-    /* Registra gli atti d'ombra nel registry vittoria (idempotente). */
+    /* Registry vittoria (idempotente): SOLO gli atti lesivi sono d'ombra a
+       prescindere. L'infiltrazione è neutra (ombra contestuale, vedi
+       moralImpact) → non va registrata come 'dark' fissa. */
     if (ORION.victory && ORION.victory.registerAction) {
-      ORION.victory.registerAction('espionage-infiltrate', 'dark');
       ORION.victory.registerAction('espionage-sabotage', 'dark');
+      ORION.victory.registerAction('espionage-steal', 'dark');
     }
   }
 
@@ -218,6 +234,43 @@
     if (ORION.victory && ORION.victory.applyAlignment) ORION.victory.applyAlignment(game, 'dark', n);
   }
 
+  /* --- segno morale (decisione 2026-06-26) --------------------------- */
+  /* Classifica il bersaglio per il peso morale dell'atto:
+       · 'benign'  → fazione benevola O tua alleata: colpirla/spiarla tradisce
+                     la fiducia (l'alleanza vale anche se la civ è maligna).
+       · 'evil'    → fazione maligna OPPURE aggressore (in guerra con te o
+                     prossima al tradimento): l'autodifesa attenua il peso.
+       · 'neutral' → tutto il resto.
+     Usa solo dati già esistenti (civ.alignment + civ.relation + betrayalOutlook):
+     nessun nuovo stato nel save. */
+  function targetMoralClass(game, civ) {
+    if (!civ) return 'neutral';
+    if (civ.alignment === 'bene' || civ.relation === 'alliance') return 'benign';
+    let betraying = false;
+    if (ORION.diplomacy && ORION.diplomacy.betrayalOutlook) {
+      const lvl = (ORION.diplomacy.betrayalOutlook(game, civ) || {}).level;
+      betraying = (lvl === 'high' || lvl === 'imminent');
+    }
+    if (civ.alignment === 'male' || civ.relation === 'war' || betraying) return 'evil';
+    return 'neutral';
+  }
+
+  /* Ombra dell'atto RIUSCITO secondo natura×bersaglio. Ritorna l'ammontare di
+     karma d'ombra (0 = atto moralmente neutro). Il fallimento non passa di qui. */
+  function darkAmountFor(game, civ, type) {
+    const conf = confFor(type);
+    const cls = targetMoralClass(game, civ);
+    if (type === 'infiltrate') {
+      /* Atto neutro: ombra SOLO spiando un amico/benevolo. */
+      return cls === 'benign' ? conf.alignBase : 0;
+    }
+    /* Atti lesivi (sabotaggio, furto): ombra ≥ pavimento, mai zero. */
+    const base = conf.alignBase;
+    if (cls === 'benign') return base + 1;            // crudeltà gratuita: piena
+    if (cls === 'evil') return Math.max(1, base - 1); // autodifesa: attenuata, pavimento 1
+    return base;                                       // neutrale: base
+  }
+
   /* Furto: bottino in crediti, accreditato nel cluster del sistema bersaglio
      (come dispatch). Importo deterministico (RNG dell'operazione) scalato sulla
      potenza del bersaglio. Restituisce { loot, cluster } per l'evento cronaca. */
@@ -259,12 +312,14 @@
     const rng = ORION.rng.makeRng(game.seed + ':espionage:' + civ.id + ':' + op.armI);
     const success = rng.chance(p);
 
-    /* L'atto coperto è di per sé un'ombra (alimenta la pista Tiranno). */
-    addDark(game, success ? conf.alignWin : conf.alignFail);
-
     const opLbl = (OP_LABEL[op.type] || 'Operazione coperta') + ' · ' + (civ.name || '—');
     let reveal = null, loot = null;
     if (success) {
+      /* Karma SOLO sugli atti riusciti, con segno contestuale al bersaglio
+         (decisione 2026-06-26). darkAmountFor() ritorna 0 per gli atti neutri
+         (es. infiltrare un rivale ostile): in quel caso niente ombra. */
+      const dark = darkAmountFor(game, civ, op.type);
+      if (dark > 0) addDark(game, dark);
       if (op.type === 'sabotage') {
         civ.power = Math.max(0, Math.round((civ.power || 0) * (1 - CFG.SABOTAGE.hit)));
       } else if (op.type === 'steal') {
@@ -341,6 +396,8 @@
     /* interni esposti SOLO per i test headless */
     _presenceAt: presenceAt,
     _resolve: resolve,
-    _buildDeepIntel: buildDeepIntel
+    _buildDeepIntel: buildDeepIntel,
+    _darkAmountFor: darkAmountFor,
+    _targetMoralClass: targetMoralClass
   };
 })(typeof window !== 'undefined' ? window : this);
