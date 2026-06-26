@@ -8034,7 +8034,10 @@ function fleetLocText(g, f) {
   if (!g || !f || !f.location) return '—';
   const loc = f.location;
   const eta = (f.etaImpulsi | 0);
-  const etaFrag = eta > 0 ? ' (' + eta + ' ' + iU() + ')' : '';
+  /* Plain-text helper: i chiamanti (sidebar/dettaglio) passano l'output
+     attraverso escapeHtml, quindi qui niente HTML (no iU() → SVG span,
+     che verrebbe escapato a "<span…" visibile). Glifo unicode diretto. */
+  const etaFrag = eta > 0 ? ' (' + eta + ' Ι)' : '';
   if (loc.status === 'in-transit' && loc.intra) {
     const sId = loc.intra.systemId;
     const bn = _flBodyNm(g, sId, loc.intra.toBodyKey);
