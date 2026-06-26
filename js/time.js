@@ -1480,35 +1480,24 @@
            (ALIGNMENT_IMPACT #23): liberare un sistema da una civiltà MALIGNA
            è "light"; aggredire una buona/neutrale è "dark". */
         if (playerWon && civ.systems.indexOf(sysId) >= 0) {
-          /* M13 B-2 (decisione #93): rimossa la "occupazione di sistema" di
-             M11 Fase A — incoerente col modello multi-proprietà per body
-             (#52). La perdita è MIRATA al body attaccato (`attackBodyKey`,
-             se noto) o al primo pianeta della civ nel sistema. La presenza
-             militare sul sistema si dichiara col PRESIDIO (ORION.garrison),
-             non si subisce automaticamente.
+          /* M13 B-2 (decisione #93): la perdita è MIRATA al body attaccato.
+             Decisione 2026-06-26 (feedback utente): la perdita di un pianeta
+             scatta SOLO se il giocatore ha ESPLICITAMENTE attaccato un BODY
+             preciso — ossia esiste un ordine d'attacco su QUESTO sistema
+             (`civAttacked`) CON `attackBodyKey`. Una scaramuccia incidentale
+             con una flotta ostile nel sistema NON deve più radere un pianeta
+             "a caso" (rimosso il fallback al primo pianeta). La presenza
+             militare sul sistema si dichiara col PRESIDIO (ORION.garrison).
              Verbo morale (#23): liberare un body da una civ maligna è
              "light"; aggredire una buona/neutrale è "dark". */
-          const targetBodyKey = fleet.attackBodyKey || null;
+          const deliberate = !!(civAttacked && fleet.attackBodyKey);
+          const targetBodyKey = deliberate ? fleet.attackBodyKey : null;
           let removedAny = false;
-          if (root.ORION.ai && root.ORION.ai.removePlanet && targetBodyKey) {
+          if (deliberate && root.ORION.ai && root.ORION.ai.removePlanet) {
             const planetKey = sysId + ':' + targetBodyKey;
             if ((civ.planets || []).indexOf(planetKey) >= 0) {
               root.ORION.ai.removePlanet(civ, planetKey);
               removedAny = true;
-            }
-          }
-          /* Fallback: nessun body specifico → rimuovi il primo pianeta che
-             la civ possiede in questo sistema. */
-          if (!removedAny && Array.isArray(civ.planets)) {
-            for (let pp = 0; pp < civ.planets.length; pp++) {
-              const pk = civ.planets[pp];
-              if (pk && pk.indexOf(sysId + ':') === 0) {
-                if (root.ORION.ai && root.ORION.ai.removePlanet) {
-                  root.ORION.ai.removePlanet(civ, pk);
-                }
-                removedAny = true;
-                break;
-              }
             }
           }
           if (removedAny) {
@@ -1519,7 +1508,10 @@
             }
             if (impact === 'light') bumpIcg(game, -1); else bumpIcg(game, 2);
             report.alignmentImpact = impact;
-            report.bodyLost = targetBodyKey || null;
+            report.bodyLost = targetBodyKey;
+            /* La colonia nemica viene RAZZIATA, non occupata: il corpo torna
+               libero (vergine). Il flag alimenta la cronaca esplicativa. */
+            report.bodyRazed = true;
           }
           if ((civ.planets || []).length === 0) {
             civ.alive = false;
@@ -1529,7 +1521,7 @@
              maggiore se il vittorioso ha raidato un body specifico (più
              vicino ai laboratori); altrimenti scaramuccia spaziale. */
           if (root.ORION.research && root.ORION.research.tryCaptureTech) {
-            const captureKind = (removedAny && targetBodyKey) ? 'raid' : 'skirmish';
+            const captureKind = removedAny ? 'raid' : 'skirmish';
             root.ORION.research.tryCaptureTech(game, civ, captureKind, events);
           }
         }
