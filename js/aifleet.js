@@ -55,10 +55,19 @@
     SCOUT_CHANCE: 0.40,     // prob. che una missione punti verso il giocatore
     SCOUT_MAX_HOPS: 11,     // budget rotta più ampio per raggiungerti
 
-    /* Sensori. */
+    /* Sensori. Portata (in hop) differenziata per fonte (richiesta utente
+       2026-06-26): la CAPITALE ha la rete più estesa, una colonia normale è
+       più corta, una colonia ancora in insediamento copre solo il proprio
+       sistema, e una stazione operativa fa da avamposto-radar leggero. Così
+       per avere visuale lontana non si è più costretti a "una colonia ogni 2
+       hop". */
     COLONY_SENSOR: 0.62,    // potenza rilevamento passiva di una colonia
     COLONY_RANGE_FALLOFF: 0.55, // copertura sui sistemi adiacenti (1° anello)
     COLONY_RANGE2_FALLOFF: 0.30, // copertura sul 2° anello (2 hop, più debole)
+    CAPITAL_RANGE: 2,       // hop coperti dalla CAPITALE (rete estesa)
+    COLONY_RANGE: 1,        // hop coperti da una colonia normale operativa
+    STATION_SENSOR: 0.50,   // potenza di una stazione (avamposto < colonia)
+    STATION_RANGE: 1,       // hop coperti da una stazione operativa
     /* Sensori di FLOTTA (mobili): raggio < colonia e tarato sul tipo di navi
        (richiesta utente 2026-06-19). Una flotta vede SEMPRE il proprio
        sistema (incrocio/co-locazione); solo gli scafi da ricognizione
@@ -426,22 +435,53 @@
   /* ------------------------------------------------------------------
      SENSORI / RILEVAMENTO
      ------------------------------------------------------------------ */
+  /* Diffonde la copertura di UNA fonte (colonia/stazione) dal suo sistema
+     fino a `range` hop, con attenuazione per anello (1°/2°). range 0 = solo
+     il proprio sistema. */
+  function spreadCoverage(game, bump, sysId, power, range) {
+    bump(sysId, power);
+    if (range < 1) return;
+    const nb1 = neighborsOf(game, sysId);
+    for (let i = 0; i < nb1.length; i++) {
+      bump(nb1[i], power * CFG.COLONY_RANGE_FALLOFF);
+      if (range < 2) continue;
+      const nb2 = neighborsOf(game, nb1[i]);
+      for (let j = 0; j < nb2.length; j++) bump(nb2[j], power * CFG.COLONY_RANGE2_FALLOFF);
+    }
+  }
+  function isCapitalKey(game, colonyKey) {
+    return !!(ORION.capital && ORION.capital.isCapital && ORION.capital.isCapital(game, colonyKey));
+  }
   /* Mappa di copertura sensori del giocatore: sysId → potenza [0..1.2]. */
   function buildCoverage(game) {
     const cov = {};
     function bump(sysId, p) { if (sysId != null && (cov[sysId] == null || cov[sysId] < p)) cov[sysId] = p; }
-    /* Colonie: copertura passiva sul sistema + 1° anello + 2° anello (più
-       debole). Allarga la rete così cogli chi passa fino a 2 hop. */
-    const colSys = playerColonySystems(game);
-    colSys.forEach(function (s) {
-      bump(s, CFG.COLONY_SENSOR);
-      const nb1 = neighborsOf(game, s);
-      for (let i = 0; i < nb1.length; i++) {
-        bump(nb1[i], CFG.COLONY_SENSOR * CFG.COLONY_RANGE_FALLOFF);
-        const nb2 = neighborsOf(game, nb1[i]);
-        for (let j = 0; j < nb2.length; j++) bump(nb2[j], CFG.COLONY_SENSOR * CFG.COLONY_RANGE2_FALLOFF);
-      }
+    /* Colonie: portata differenziata (richiesta utente 2026-06-26).
+       Capitale → 2 hop; colonia operativa → 1 hop; colonia ancora in
+       insediamento (colonizing o phase 'settling') → solo il proprio sistema. */
+    const cols = game.colonies || {};
+    Object.keys(cols).forEach(function (k) {
+      const c = cols[k];
+      if (!c || c.systemId == null) return;
+      if (!(c.colonized || c.colonizing)) return;
+      const operational = c.colonized && c.phase !== 'settling';
+      let range;
+      if (!operational) range = 0;
+      else if (isCapitalKey(game, k)) range = CFG.CAPITAL_RANGE;
+      else range = CFG.COLONY_RANGE;
+      spreadCoverage(game, bump, c.systemId, CFG.COLONY_SENSOR, range);
     });
+    /* Stazioni operative del giocatore: avamposto-radar leggero (1 hop,
+       potenza < colonia). Le catturate (owner != null) e quelle in
+       costruzione non contano. */
+    const stations = game.stations || [];
+    for (let i = 0; i < stations.length; i++) {
+      const st = stations[i];
+      if (!st || st.systemId == null) continue;
+      if (st.owner != null) continue;
+      if (st.phase === 'building' || (st.level || 0) < 1) continue;
+      spreadCoverage(game, bump, st.systemId, CFG.STATION_SENSOR, CFG.STATION_RANGE);
+    }
     /* Flotte del giocatore: copertura nel/i nodo/i correnti (entrambi gli
        estremi della leg se in volo interstellare) + 1° anello; gli scafi da
        ricognizione estendono al 2° anello. Le tue flotte in giro fanno da
@@ -539,10 +579,21 @@
 
   function detect(game, af, cov, colSys, events) {
     const nodes = presenceNodes(af);
-    let best = 0, bestNode = nodes[0];
-    for (let i = 0; i < nodes.length; i++) {
-      const c = cov[nodes[i]] || 0;
-      if (c > best) { best = c; bestNode = nodes[i]; }
+    /* Copertura PESATA sulla posizione (richiesta utente 2026-06-26): per una
+       flotta in volo non si prende più il MIGLIORE dei due estremi del tratto
+       (che faceva "vedere" fino a 2+1 hop), ma si interpola la copertura tra
+       partenza e arrivo in base a quanto è avanzata. Così una flotta oltre
+       metà tratto verso un sistema scoperto non viene più rilevata. */
+    let best, bestNode;
+    if (af.status === 'in-transit' && Array.isArray(af.route) && af.routeIdx + 1 < af.route.length) {
+      const from = af.route[af.routeIdx], to = af.route[af.routeIdx + 1];
+      const cFrom = cov[from] || 0, cTo = cov[to] || 0;
+      const t = Math.max(0, Math.min(1, 1 - (af.etaImpulsi || 0) / Math.max(1, af.legTotal || 1)));
+      best = cFrom + (cTo - cFrom) * t;
+      bestNode = t < 0.5 ? from : to;
+    } else {
+      best = cov[af.systemId] || 0;
+      bestNode = af.systemId;
     }
     if (best <= 0) { af.detected = false; return; }
 
@@ -552,7 +603,8 @@
     if (!drng.chance(p)) { af.detected = false; return; }
 
     af.detected = true;
-    af.lastSeenI = I;   // persistenza "ultimo avvistamento" per il render
+    af.lastSeenI = I;          // quando l'hai vista l'ultima volta
+    af.lastSeenSysId = bestNode; // DOVE l'hai vista (posizione congelata per la nebbia di guerra)
     af.intel = Math.min(1, af.intel + CFG.INTEL_GAIN * (0.5 + 0.5 * best));
 
     /* Vicino a una colonia? (nodo presenza è un tuo sistema colonia o adiacente). */
@@ -693,6 +745,8 @@
         if (af.crossedBy.indexOf(pf.id) >= 0) continue;
         af.crossedBy.push(pf.id);
         af.detected = true;
+        af.lastSeenI = I;
+        af.lastSeenSysId = pf.location.systemId; // visto incrociando: ultima posizione nota
         af.intel = Math.min(1, (af.intel || 0) + CFG.CROSS_INTEL_BUMP);
         /* Incrocio con una flotta OSTILE che NON è stata ingaggiata (la tua
            non è aggressiva): è il "momento per decidere" — evento con
@@ -857,6 +911,8 @@
 
       /* Co-locato: osserva (intel rapido) e applica il comportamento per modo. */
       af.detected = true;
+      af.lastSeenI = I;
+      af.lastSeenSysId = playerSys; // pedinata da co-locato: ultima posizione nota
       af.intel = Math.min(1, (af.intel || 0) + CFG.FOLLOW_INTEL_GAIN);
       af.shadowedBy = pf.id;
       /* Sosta col bersaglio: ferma la flotta (non vagare). */
