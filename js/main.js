@@ -10048,48 +10048,70 @@ function fleetShipIcon(kind) {
 }
 
 /* =====================================================================
-   NOMI FLOTTA AUTO-DERIVATI DALL'ORDINE (#88)
-   Il nome non si sceglie alla creazione: si adatta all'ordine impartito
-   (Esplorazione/Trasferimento/Attacco/…). Sovrascrive SOLO il default
-   neutro "Squadrone N" → un nome scelto a mano dall'utente non viene mai
-   toccato. Sempre rinominabile dal dettaglio flotta.
+   NOMI FLOTTA AUTO-DERIVATI (#88 → composition-first, richiesta utente
+   2026-06-26)
+   Il nome non si sceglie alla creazione: descrive *cosa è* la flotta.
+   Priorità (alto→basso):
+     1. Override funzionale per composizione (qualsiasi ordine):
+        estrattore a bordo → Estrattore · coloniale a bordo → Pioniere.
+        "Prevale lo scopo": una flotta con un estrattore È un estrattore,
+        anche se scortata da caccia.
+     2. Overlay di scopo per ordine caratterizzante: attacco → Lama ·
+        pattuglia/presidio → Sentinella · esplora → Segugio. Si applica
+        AL VOLO a ogni cambio ordine (non solo alla nascita): così "Lama"
+        nasce davvero anche se prima la flotta era in `move`.
+     3. Identità per nave di punta (la più forte, fleet.leadKind): caccia
+        → Pattuglia, intercettore → Squadriglia, … Copre il caso neutro
+        `move`/`idle` (basta col "Convoglio" che non diceva nulla).
+   Ribattezza SOLO nomi auto-derivati (default "Squadrone N", callsign
+   correnti e legacy) → un nome scelto a mano (es. "Pattuglia Alfa",
+   "Mia Flotta") non viene mai toccato. Sempre rinominabile dal dettaglio.
    ===================================================================== */
-/* Callsign per scopo (decisione utente 2026-06-15, sostituisce i nomi
-   descrittivi "Esplorazione → X"): un sostantivo militare/scenografico per
-   tipo di ordine + numero progressivo. L'identità resta stabile anche se la
-   flotta cambia ordine successivamente (callsign d'esordio). Sempre
-   rinominabile a mano dal dettaglio (✎). */
-const FLEET_CALLSIGNS = {
-  'explore': 'Segugio',
-  'move': 'Convoglio',
+/* Identità per nave di punta (fleet.leadKind): un sostantivo di formazione
+   che scala con la classe più forte a bordo, per il suo uso tipico. */
+const FLEET_COMP_NAMES = {
+  'explorer': 'Segugio',       // ricognizione
+  'estrattore': 'Estrattore',  // (anche via override #1)
+  'caccia': 'Pattuglia',       // soli caccia → pattuglia leggera
+  'intercettore': 'Squadriglia',
+  'corvetta': 'Flottiglia',
+  'fregata': 'Squadra',
+  'incrociatore': 'Falange',   // formazione da battaglia pesante
+  'dreadnought': 'Armata',
+  'ammiraglia': 'Leviatano',   // la grande flotta attorno all'ammiraglia
+  'coloniale': 'Pioniere'      // (anche via override #1)
+};
+/* Overlay di scopo: ordini che caratterizzano la missione e prevalgono
+   sull'identità di composizione (ma NON sugli override funzionali §1). */
+const FLEET_ORDER_NAMES = {
   'attack': 'Lama',
-  'colonize': 'Pioniere',
   'patrol': 'Sentinella',
   'patrol-loop': 'Sentinella',
   'garrison': 'Sentinella',
-  'survey': 'Vedetta',
-  /* Decisione utente 2026-06-16: una flotta con scafo Estrattore in survey
-     d'anomalia è di funzione "estrazione", non ricognizione → callsign
-     dedicato. orderDerivedFleetName/suggestedRenameFor selezionano questa
-     chiave quando la flotta porta almeno un estrattore. */
-  'extract': 'Estrattore'
+  'explore': 'Segugio'
 };
-/* Pool secondario (decisione utente 2026-06-15): un secondo nome per scopo,
-   proposto come DEFAULT quando l'utente rinomina manualmente. Così è "guidato
-   a creare un nuovo nome+numero libero per quell'ordine" (ridefinizione
-   manuale tipica dopo un cambio missione). */
-const FLEET_CALLSIGNS_ALT = {
-  'explore': 'Pellegrino',
-  'move': 'Carovana',
-  'attack': 'Lupo',
-  'colonize': 'Avanguardia',
-  'patrol': 'Bastione',
-  'patrol-loop': 'Bastione',
-  'garrison': 'Bastione',
-  'survey': 'Bussola',
-  'extract': 'Minatrice'
+/* Pool secondario (sinonimi): proposto come DEFAULT quando l'utente rinomina
+   manualmente — un nome+numero alternativo libero. Stesse chiavi dei due
+   cataloghi sopra. */
+const FLEET_NAME_ALT = {
+  'Segugio': 'Pellegrino', 'Estrattore': 'Minatrice', 'Pattuglia': 'Ronda',
+  'Squadriglia': 'Stormo', 'Flottiglia': 'Naviglio', 'Squadra': 'Schiera',
+  'Falange': 'Coorte', 'Armata': 'Legione', 'Leviatano': 'Colosso',
+  'Pioniere': 'Avanguardia', 'Lama': 'Lupo', 'Sentinella': 'Bastione'
 };
-/* Numero progressivo per quel callsign: max suffisso numerico tra le flotte
+/* Tutte le basi che generiamo noi (correnti + legacy): un nome che combacia
+   con "<base> <numero>" è considerato auto-derivato → rinominabile al volo.
+   Le basi legacy ("Convoglio", "Vedetta", "Carovana", …) restano qui così i
+   save vecchi migrano al primo cambio ordine, senza bump di schema. */
+const FLEET_AUTO_BASES = [
+  'Squadrone',
+  'Segugio', 'Estrattore', 'Pattuglia', 'Squadriglia', 'Flottiglia',
+  'Squadra', 'Falange', 'Armata', 'Leviatano', 'Pioniere', 'Lama', 'Sentinella',
+  /* legacy callsign per-ordine + pool ALT storico */
+  'Convoglio', 'Vedetta', 'Carovana', 'Pellegrino', 'Lupo', 'Bastione',
+  'Bussola', 'Minatrice', 'Avanguardia'
+];
+/* Numero progressivo per quella base: max suffisso numerico tra le flotte
    esistenti col prefisso "<Base> ", +1. Robusto a rinomine manuali (chi
    ribattezza "Segugio 1" → "Mia Flotta" lascia un buco, la successiva sarà
    "Segugio N+1"). */
@@ -10102,53 +10124,68 @@ function nextProgressiveFor(g, base) {
   });
   return max + 1;
 }
-/* Decisione utente 2026-06-16: una flotta in `survey` con almeno uno scafo
-   Estrattore a bordo è funzionalmente in estrazione, non in ricognizione →
-   chiave callsign 'extract' anziché 'survey'. Restituisce la chiave effettiva
-   da usare per il pool di nomi. */
-function effectiveCallsignKey(fleet, order) {
-  if (!order || !order.type) return null;
-  if (order.type === 'survey' && fleet && Array.isArray(fleet.ships)) {
-    for (let i = 0; i < fleet.ships.length; i++) {
-      if (fleet.ships[i] && fleet.ships[i].kind === 'estrattore') return 'extract';
-    }
+/* Una flotta porta almeno una nave di questa classe? */
+function fleetCarries(fleet, kind) {
+  if (!fleet || !Array.isArray(fleet.ships)) return false;
+  for (let i = 0; i < fleet.ships.length; i++) {
+    if (fleet.ships[i] && fleet.ships[i].kind === kind) return true;
   }
-  return order.type;
+  return false;
 }
-function orderDerivedFleetName(g, order, fleet) {
-  if (!order || !order.type) return null;
-  let base = null;
-  if (order.type === 'move-route') {
-    /* esplora-ogni-tappa → Segugio; rotta cargo/movimento → Convoglio */
-    base = order.exploreEach ? 'Segugio' : 'Convoglio';
-  } else {
-    base = FLEET_CALLSIGNS[effectiveCallsignKey(fleet, order)] || null;
+/* Base auto-derivata per (composizione, ordine), senza numero. Implementa le
+   tre priorità descritte sopra. null = nessuna base sensata (flotta vuota o
+   ordine/composizione sconosciuti) → non ribattezzare. */
+function autoFleetBase(fleet, order) {
+  /* §1 — override funzionali per composizione (prevalgono su tutto). */
+  if (fleetCarries(fleet, 'estrattore')) return 'Estrattore';
+  if (fleetCarries(fleet, 'coloniale')) return 'Pioniere';
+  /* §2 — overlay di scopo dall'ordine caratterizzante. */
+  if (order && order.type) {
+    if (order.type === 'colonize') return 'Pioniere';
+    if (order.type === 'move-route' && order.exploreEach) return 'Segugio';
+    const ov = FLEET_ORDER_NAMES[order.type];
+    if (ov) return ov;
   }
-  if (!base) return null;   // 'return' e tipi sconosciuti → nessun ribattesimo
-  return base + ' ' + nextProgressiveFor(g, base);
+  /* §3 — identità per nave di punta (caso neutro: move/idle/move-route cargo). */
+  const lead = (ORION.fleet && ORION.fleet.leadKind) ? ORION.fleet.leadKind(fleet) : null;
+  return (lead && FLEET_COMP_NAMES[lead]) || null;
 }
-function isDefaultFleetName(name) { return /^Squadrone\s+\d+$/.test(name || ''); }
-function maybeAutoRenameFleet(g, fleet, order) {
-  if (!fleet || !isDefaultFleetName(fleet.name)) return;
-  const nm = orderDerivedFleetName(g, order, fleet);
-  if (nm) fleet.name = nm.slice(0, 40);
-}
-/* Suggerimento di rinomina manuale (decisione utente 2026-06-15): propone il
-   pool ALT del tipo di ordine corrente + primo numero libero. È solo un
-   default pre-popolato nell'input ✎ — l'utente è libero di modificare. Per
-   ordini idle/return o sconosciuti restituisce null (l'input resta sul nome
-   corrente). */
-function suggestedRenameFor(g, fleet) {
-  const order = fleet && fleet.orders;
-  if (!order || !order.type || order.type === 'idle' || order.type === 'return') return null;
-  let base = null;
-  if (order.type === 'move-route') {
-    base = order.exploreEach ? FLEET_CALLSIGNS_ALT['explore'] : FLEET_CALLSIGNS_ALT['move'];
-  } else {
-    base = FLEET_CALLSIGNS_ALT[effectiveCallsignKey(fleet, order)] || null;
-  }
+/* Compone base + numero. Se la flotta porta GIÀ un nome auto con la stessa
+   base, ne conserva il numero (niente renumber-churn a ogni cambio ordine). */
+function autoFleetName(g, fleet, order) {
+  const base = autoFleetBase(fleet, order);
   if (!base) return null;
+  const keep = new RegExp('^' + base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+\\d+$');
+  if (fleet && keep.test(fleet.name || '')) return fleet.name;
   return base + ' ' + nextProgressiveFor(g, base);
+}
+/* Un nome è auto-derivato (quindi ribattezzabile al volo) se combacia con
+   "<base nota> <numero>". Tutto il resto è considerato scelto a mano e
+   intoccabile. */
+function isAutoFleetName(name) {
+  name = name || '';
+  for (let i = 0; i < FLEET_AUTO_BASES.length; i++) {
+    const re = new RegExp('^' + FLEET_AUTO_BASES[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+\\d+$');
+    if (re.test(name)) return true;
+  }
+  return false;
+}
+function maybeAutoRenameFleet(g, fleet, order) {
+  /* Ribattezza al volo a ogni ordine, purché il nome sia ancora auto-derivato
+     (default o callsign): così "Lama"/"Sentinella" compaiono al cambio ordine
+     e i "Convoglio" legacy migrano alla nuova identità di composizione. */
+  if (!fleet || !isAutoFleetName(fleet.name)) return;
+  const nm = autoFleetName(g, fleet, order);
+  if (nm && nm !== fleet.name) fleet.name = nm.slice(0, 40);
+}
+/* Suggerimento di rinomina manuale: propone il sinonimo della base auto-derivata
+   corrente + primo numero libero. È solo un default pre-popolato nell'input ✎ —
+   l'utente è libero di modificare. null per flotte senza base sensata. */
+function suggestedRenameFor(g, fleet) {
+  const base = autoFleetBase(fleet, fleet && fleet.orders);
+  if (!base) return null;
+  const alt = FLEET_NAME_ALT[base] || base;
+  return alt + ' ' + nextProgressiveFor(g, alt);
 }
 
 /* =====================================================================
@@ -10988,7 +11025,7 @@ function openFleetDetail(fleetId, opts) {
     const suggest = suggestedRenameFor(g, fleet);
     const initial = suggest || fleet.name;
     const hint = suggest
-      ? '<p class="fdetail__hint fdetail__rename-hint">Suggerito per l’ordine corrente — modifica liberamente.</p>'
+      ? '<p class="fdetail__hint fdetail__rename-hint">Suggerito per questa flotta — modifica liberamente.</p>'
       : '';
     return '<div class="fdetail__sec fdetail__rename">' +
       '<input class="fdetail__input" type="text" data-bind="rename-input" value="' + escapeHtml(initial) + '" maxlength="40" aria-label="Nome flotta">' +
