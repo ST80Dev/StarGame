@@ -13858,8 +13858,20 @@ function _chronicleEventBody(ev) {
         ? ' · <strong>sistema liberato</strong> (reputazione luminosa)'
         : ' · <strong>sistema strappato</strong> (reputazione oscura)';
     }
+    /* Decisione 2026-06-26: se l'attacco MIRATO a un loro pianeta lo ha
+       razziato, chiariamo che il corpo NON è occupato — torna libero e va
+       colonizzato ex-novo se lo vuoi tenere (niente passaggio automatico di
+       popolazione/strutture). */
+    let razed = '';
+    if (ev.report && ev.report.bodyRazed) {
+      const bodyNm = (ev.systemId != null && ev.report.bodyLost)
+        ? _flBodyNm(ORION.game, ev.systemId, ev.report.bodyLost) : null;
+      const where = bodyNm ? ('<strong>' + escapeHtml(bodyNm) + '</strong>') : 'la colonia nemica colpita';
+      razed = ' · ' + where + ' <strong>razziata</strong>: il corpo torna <strong>libero</strong> (non occupato) — ' +
+        '<span class="chronicle__hint">coloniza ex-novo per insediartici</span>';
+    }
     pushChronicle(ds + ' — Scontro presso <strong>' + (sys ? sys.name : '—') + '</strong>' + stag + ': <strong>' +
-      escapeHtml(ev.fleetName) + '</strong> ' + verb + losses + crewLoss + rollback + '.', ev.playerWon ? 'explore' : 'system');
+      escapeHtml(ev.fleetName) + '</strong> ' + verb + losses + crewLoss + rollback + razed + '.', ev.playerWon ? 'explore' : 'system');
     ORION.lastBattle = ev.report || null;
     if (ORION.tutorial) ORION.tutorial.fire('combat');
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
