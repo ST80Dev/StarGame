@@ -612,6 +612,116 @@
     return null;
   }
 
+  /* Peso fuoco→potenza, allineato a garrison.CFG.FP_WEIGHT (#93): la
+     "potenza" sintetica P = corazza + fuoco×8 dà un singolo numero per il
+     colpo d'occhio coerente con la soglia di presidio. */
+  const POWER_FP_WEIGHT = 8;
+  function powerOfForce(force) {
+    if (!force) return 0;
+    return Math.round(totalHp(force) + totalFp(force) * POWER_FP_WEIGHT);
+  }
+
+  /* Riepilogo difensivo di una colonia (richiesta utente: scheda Colonia →
+     colpo d'occhio su quanto regge la colonia). Aggrega:
+       - le STRUTTURE difensive (Batteria, Scudo) via forceFromDefenses;
+       - le FLOTTE del giocatore presenti nel sistema (in orbita/in porto,
+         non in transito) via forceFromFleet — gli stessi difensori che il
+         motore d'assedio schiera (time.js processIncursions).
+     Espone corazza (hp), fuoco (fp) e potenza (P) per ciascun gruppo + i
+     totali, e — se ci sono covi pirata NOTI — la razzia peggiore conosciuta
+     come riferimento di minaccia. Puro display: nessuna mutazione. */
+  function colonyDefenseSummary(game, colony, colonyKey) {
+    const empty = {
+      struct: { count: 0, hp: 0, fp: 0, power: 0 },
+      fleets: { count: 0, ships: 0, hp: 0, fp: 0, power: 0 },
+      totalHp: 0, totalFp: 0, totalPower: 0, threat: null
+    };
+    if (!game || !colony) return empty;
+
+    /* Strutture difensive. */
+    const defForce = forceFromDefenses(game, colony, colonyKey, 'B');
+    const struct = {
+      count: defForce.combatants.length,
+      hp: Math.round(totalHp(defForce)),
+      fp: Math.round(totalFp(defForce)),
+      power: powerOfForce(defForce)
+    };
+
+    /* Flotte che DIFENDEREBBERO la colonia: stesso criterio del motore
+       d'assedio (time.js processIncursions) — presenti nel sistema (non in
+       transito) E al CORPO della colonia (in porto o in orbita a quel corpo).
+       Le flotte che lavorano su un altro corpo del sistema restano al loro
+       posto e non contano. Se fleetCurrentBodyKey non è disponibile (test/
+       chiamanti minimi), si ripiega sul livello-sistema. */
+    const sysId = colony.systemId;
+    const F = ORION.fleet;
+    const colonyBodyKey = (function () {
+      const parts = String(colonyKey || '').split(':');
+      return parts.length === 2 ? parts[1] : null;
+    })();
+    const fleets = (game.fleets || []);
+    let fCount = 0, fShips = 0, fHp = 0, fFp = 0, fPower = 0;
+    for (let i = 0; i < fleets.length; i++) {
+      const f = fleets[i];
+      if (!f || !f.location) continue;
+      if (f.location.systemId !== sysId) continue;
+      if (f.location.status === 'in-transit') continue;
+      if (colonyBodyKey != null && F && F.fleetCurrentBodyKey) {
+        const bk = F.fleetCurrentBodyKey(game, f);
+        if (bk == null || bk !== colonyBodyKey) continue;
+      }
+      const ff = forceFromFleet(game, f, 'B');
+      if (!ff.combatants.length) continue;
+      fCount++;
+      fShips += ff.combatants.length;
+      fHp += totalHp(ff);
+      fFp += totalFp(ff);
+      fPower += powerOfForce(ff);
+    }
+    const fleetsAgg = {
+      count: fCount, ships: fShips,
+      hp: Math.round(fHp), fp: Math.round(fFp), power: Math.round(fPower)
+    };
+
+    /* Minaccia di riferimento: la razzia più dura tra i covi pirata NOTI
+       (intel #49) + l'eventuale covo nel sistema stesso. Worst-case che il
+       giocatore sa di poter affrontare. */
+    let threat = null;
+    const seen = {};
+    const candidates = [];
+    const local = (game.piracy && game.piracy.nests)
+      ? game.piracy.nests.filter(function (n) { return n.sysId === sysId; })[0] : null;
+    if (local) { candidates.push(local); seen[local.sysId] = true; }
+    const known = (ORION.ai && ORION.ai.knownNests) ? ORION.ai.knownNests(game) : [];
+    for (let i = 0; i < known.length; i++) {
+      if (seen[known[i].sysId]) continue;
+      seen[known[i].sysId] = true;
+      candidates.push(known[i]);
+    }
+    for (let i = 0; i < candidates.length; i++) {
+      const n = candidates[i];
+      const rf = forceFromPirateNest({ level: n.level || 1, boss: n.boss, bossTier: n.bossTier, name: n.name });
+      const p = powerOfForce(rf);
+      if (!threat || p > threat.power) {
+        threat = {
+          power: p, level: n.level || 1,
+          name: n.name || null,
+          boss: !!n.boss,
+          local: !!(local && n.sysId === sysId)
+        };
+      }
+    }
+
+    return {
+      struct: struct,
+      fleets: fleetsAgg,
+      totalHp: struct.hp + fleetsAgg.hp,
+      totalFp: struct.fp + fleetsAgg.fp,
+      totalPower: struct.power + fleetsAgg.power,
+      threat: threat
+    };
+  }
+
   ORION.combat = {
     CFG: CFG,
     SHIP_NAMES: SHIP_NAMES,
@@ -638,6 +748,8 @@
     applyDefenderWriteback: applyDefenderWriteback,
     grantVeterancy: grantVeterancy,
     isDefenseStruct: isDefenseStruct,
-    hostilePresenceAt: hostilePresenceAt
+    hostilePresenceAt: hostilePresenceAt,
+    powerOfForce: powerOfForce,
+    colonyDefenseSummary: colonyDefenseSummary
   };
 })(typeof window !== 'undefined' ? window : this);
