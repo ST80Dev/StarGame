@@ -10203,6 +10203,19 @@ function suggestedRenameFor(g, fleet) {
   const alt = FLEET_NAME_ALT[base] || base;
   return alt + ' ' + nextProgressiveFor(g, alt);
 }
+/* Risistemazione una-tantum-per-boot (richiesta utente 2026-06-26): riallinea
+   i nomi auto-derivati delle flotte allo schema corrente (composizione × taglia
+   + override/overlay), così i salvataggi vecchi non restano coi nomi datati
+   "in attesa del primo cambio ordine". Idempotente: tocca SOLO i nomi auto
+   (isAutoFleetName) usando l'ordine corrente di ogni flotta; i nomi scelti a
+   mano restano. La numerazione si riassesta in sequenza (process. in ordine).
+   Stabile: a regime ogni base combacia già → nessun churn ai boot successivi. */
+function migrateAutoFleetNames(game) {
+  if (!game || !Array.isArray(game.fleets)) return;
+  game.fleets.forEach(function (f) {
+    maybeAutoRenameFleet(game, f, f && f.orders);
+  });
+}
 
 /* =====================================================================
    GESTIONE FLOTTE IN VOLO (#88) — strada alternativa al "Crea flotta".
@@ -17798,6 +17811,9 @@ function enterGame(opts) {
   if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
   /* Una tantum per ogni boot: rinomina i crew con ID legacy collidente. */
   migrateLegacyCrewIds(ORION.game);
+  /* Una tantum per ogni boot: riallinea i nomi auto delle flotte allo schema
+     corrente (composizione × taglia) — risistema i salvataggi già passati. */
+  migrateAutoFleetNames(ORION.game);
   /* Decisione #50: ripristina il pin della dx per questo seed (se presente). */
   loadDxPin(ORION.game);
   hideMainMenu();
