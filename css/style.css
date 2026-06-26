@@ -9573,3 +9573,54 @@ select.main-menu__input { cursor: pointer; }
   0%, 100% { text-shadow: 0 0 0 currentColor; }
   50%      { text-shadow: 0 0 8px currentColor; }
 }
+
+/* =====================================================================
+   Tema unificato <select> nativi (richiesta utente 2026-06-26)
+   ---------------------------------------------------------------------
+   Tutti i menu a tendina del gioco perdono il chrome OS (appearance:none)
+   e adottano superficie/bordo/focus tematici + un caret SVG coerente con
+   le icone §3 e opzioni su superficie scura. Longhand (non shorthand) così
+   da NON azzerare i background-color per-classe esistenti; in coda al file
+   per vincere l'ordine a parità di specificità. Il picker classe nave usa
+   <details> (non <select>) e resta indipendente.
+   ===================================================================== */
+select,
+select.main-menu__select,
+select.main-menu__input,
+select.fdetail__select,
+select.dx-selector__select,
+select.fleet-row__select,
+select.crew-filter,
+select.lp-council__level,
+.route-picker__field select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-color: rgb(var(--c-surface-rgb, 34 46 86) / 0.85);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23aeb8dc' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 11px;
+  border: 1px solid var(--c-border-soft, rgba(255, 255, 255, 0.14));
+  border-radius: var(--radius-sm, 5px);
+  color: var(--c-text, #e9ecf6);
+  padding-right: 28px;
+  cursor: pointer;
+  transition: var(--transition, 200ms ease);
+}
+select:hover,
+.route-picker__field select:hover { border-color: var(--c-accent, #2fe6e0); }
+select:focus,
+.route-picker__field select:focus {
+  outline: none;
+  border-color: var(--c-accent, #2fe6e0);
+  box-shadow: var(--glow-focus, 0 0 0 2px rgba(47, 230, 224, 0.45));
+}
+select:disabled { opacity: 0.55; cursor: not-allowed; }
+/* Lista opzioni su superficie scura (onorata da Chrome/Firefox). */
+select option,
+select optgroup {
+  background: var(--c-panel-solid, #1a2342);
+  color: var(--c-text, #e9ecf6);
+}
+select option:disabled { color: var(--c-text-faint, #98a3c8); }
