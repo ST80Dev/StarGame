@@ -1835,7 +1835,12 @@
 
   /* M10 Fase E: risoluzione di un RAIDER pirata contro una flotta del
      giocatore (scaramuccia lampo all'arrivo). Se la preda non è più in orbita
-     nel sistema bersaglio, il raider svanisce (recovery-friendly #22). */
+     nel sistema bersaglio, il raider svanisce (recovery-friendly #22).
+
+     Partecipazione "per presenza nel sistema" (docs/FLEET_FLOW §Combattimento):
+     a difendere il bersaglio scendono in campo ANCHE le altre tue flotte ARMATE
+     presenti nel sistema (una scorta da battaglia protegge l'estrattore preso
+     di mira). Le flotte disarmate non vengono trascinate nello scontro (#22). */
   function resolvePirateRaider(game, inc, events) {
     const C = root.ORION.combat;
     if (!C) return;
@@ -1847,36 +1852,71 @@
       events.push({ kind: 'raider-fizzle', targetSysId: inc.targetSysId, impulso: game.timeImpulsi });
       return;
     }
+    // Difensori = bersaglio + altre flotte armate presenti nel sistema.
+    const participants = [fleet];
+    const present = fleetsPresentAt(game, inc.targetSysId);
+    for (let i = 0; i < present.length; i++) {
+      const f = present[i];
+      if (f === fleet || !fleetHasGuns(f)) continue;
+      participants.push(f);
+    }
     const raider = C.forceFromPirateNest({ level: inc.level || 1 });
     raider.side = 'A'; raider.formation = 'balanced';
-    const B = C.forceFromFleet(game, fleet, 'B');
+    /* Forza difensiva combinata: i bonus (comandante/ammiraglia/tech) sono già
+       cotti per-nave da forceFromFleet, quindi basta concatenare i combattenti;
+       il writeback per-flotta resta corretto perché gli id nave sono univoci.
+       firstStrike = il miglior Stratega fra le flotte schierate. */
+    const combatants = [];
+    let firstStrike = 0;
+    for (let i = 0; i < participants.length; i++) {
+      const ff = C.forceFromFleet(game, participants[i], 'B');
+      firstStrike = Math.max(firstStrike, ff.firstStrike || 0);
+      for (let j = 0; j < ff.combatants.length; j++) combatants.push(ff.combatants[j]);
+    }
+    const B = {
+      side: 'B', name: fleet.name, color: '#5fa8ff', immobile: false,
+      formation: fleet.formation || 'balanced', firstStrike: firstStrike,
+      combatants: combatants
+    };
     const battleId = 'raider:' + inc.id;
     const report = C.resolve(game, battleId, raider, B);
     report.kind = 'raider'; report.systemId = inc.targetSysId; report.enemyKind = 'pirate';
-    const outcome = C.applyOutcomeToFleet(game, fleet, B);
     const playerWon = (report.winner === 'B');
-    /* Servizio (decisione utente 2026-06-11): raider respinto → +1 xp crew. */
-    if (playerWon && root.ORION.fleet && root.ORION.fleet.awardCrewXp) {
-      root.ORION.fleet.awardCrewXp(game, fleet, 1, events, 'combat');
+    /* Esito su OGNI flotta partecipante (writeback per-nave via id univoci). */
+    let totalLost = 0; let totalCrewLost = 0; const promoted = []; const allies = [];
+    for (let i = 0; i < participants.length; i++) {
+      const pf = participants[i];
+      const oc = C.applyOutcomeToFleet(game, pf, B);
+      totalLost += oc.lost;
+      totalCrewLost += (oc.crewLost || 0);
+      for (let j = 0; j < oc.promoted.length; j++) promoted.push(oc.promoted[j]);
+      /* Servizio (decisione utente 2026-06-11): raider respinto → +1 xp crew,
+         a tutte le flotte che hanno difeso e sono sopravvissute. */
+      if (playerWon && pf.ships.length) {
+        if (root.ORION.fleet && root.ORION.fleet.awardCrewXp) root.ORION.fleet.awardCrewXp(game, pf, 1, events, 'combat');
+        if (root.ORION.commander && root.ORION.commander.grantFleetXp) root.ORION.commander.grantFleetXp(game, pf, 1, events);
+      }
+      if (pf !== fleet) allies.push(pf.name);
     }
-    if (playerWon && root.ORION.commander && root.ORION.commander.grantFleetXp) {
-      root.ORION.commander.grantFleetXp(game, fleet, 1, events);
-    }
-    if (outcome.lost > 0) warRegisterLoss(game, outcome.lost * CFG.WAR_MORALE_PER_SHIP, outcome.lost * CFG.WAR_PRESSURE_PER_LOSS);
+    if (totalLost > 0) warRegisterLoss(game, totalLost * CFG.WAR_MORALE_PER_SHIP, totalLost * CFG.WAR_PRESSURE_PER_LOSS);
     if (playerWon) warRegisterWin(game);
     else warRegisterLoss(game, CFG.WAR_MORALE_PER_DEFEAT, CFG.WAR_PRESSURE_PER_LOSS);
-    // flotta annientata → figure in salvo, rimuovi
-    if (fleet.ships.length === 0) {
-      if (root.ORION.commander && root.ORION.commander.releaseAllFromFleet) {
-        root.ORION.commander.releaseAllFromFleet(game, fleet);
+    // flotte annientate → figure in salvo, rimuovi
+    for (let i = 0; i < participants.length; i++) {
+      const pf = participants[i];
+      if (pf.ships.length === 0) {
+        if (root.ORION.commander && root.ORION.commander.releaseAllFromFleet) {
+          root.ORION.commander.releaseAllFromFleet(game, pf);
+        }
+        game.fleets = game.fleets.filter(function (x) { return x !== pf; });
       }
-      game.fleets = game.fleets.filter(function (f) { return f !== fleet; });
     }
     events.push({
       kind: 'raider-hit', report: report,
       fleetId: fleet.id, fleetName: fleet.name,
-      playerWon: playerWon, lost: outcome.lost, promoted: outcome.promoted,
-      crewLost: outcome.crewLost,
+      allies: allies.length ? allies : null,
+      playerWon: playerWon, lost: totalLost, promoted: promoted,
+      crewLost: totalCrewLost,
       systemId: inc.targetSysId, impulso: game.timeImpulsi
     });
   }

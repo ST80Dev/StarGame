@@ -7595,6 +7595,22 @@ function renderFleetView(stage) {
   stage.querySelectorAll('[data-action="war-recall"]').forEach(function (b) {
     b.addEventListener('click', function () { openRecallOverlay(stage); });
   });
+  /* Click su un'incursione in arrivo → mappa gruppo stellare col sistema
+     bersaglio al centro e zoom di gruppo (richiesta utente: rendere esplicita
+     la destinazione e raggiungerla senza navigare la mappa a mano). */
+  stage.querySelectorAll('[data-action="incursion-focus"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const sid = Number(b.dataset.sys);
+      if (!Number.isFinite(sid) || sid < 0) return;
+      const fid = b.dataset.fleet || null;
+      if (ORION.game && ORION.game.state) ORION.game.state.selectedId = sid;
+      navigateView('group');
+      /* Raider mirato a una flotta → centra sulla flotta stessa (è il
+         bersaglio reale); altrimenti centra sul sistema del corpo assediato. */
+      if (fid && ORION.map && ORION.map.focusFleet) ORION.map.focusFleet(fid);
+      else if (ORION.map && ORION.map.focusSystemCentered) ORION.map.focusSystemCentered(sid);
+    });
+  });
 }
 
 /* Roster "Comandanti dell'Impero" (decisione utente 2026-06-11): i
@@ -7682,8 +7698,29 @@ function buildWarSection(g) {
   if (incursions.length) {
     html += '<div class="war-incursions"><h4 class="war-h">Incursioni in arrivo</h4><ul>';
     incursions.forEach(function (inc) {
-      html += '<li>' + uiIcon('warning', 'gold') + ' Predoni verso ' + colonyNameFromKey(inc.targetColonyKey) +
-        ' · arrivo fra <strong>' + (inc.eta | 0) + ' ' + iU() + '</strong></li>';
+      const sysId = inc.targetSysId;
+      const hasSys = sysId != null && sysId >= 0;
+      /* Un raider può mirare a una FLOTTA precisa (kind 'pirate-raider'): in
+         tal caso quella flotta È il bersaglio reale e, se resta in orbita lì,
+         combatte all'arrivo (recovery-friendly #22: spostandola, svanisce). */
+      const fleetId = inc.targetFleetId || null;
+      /* bodyTagHtml = [REGIONE·Sistema]: rende esplicito SIA il bersaglio
+         (colonia/stazione/flotta) SIA il sistema in cui si trova, così il
+         giocatore sa subito cosa e dove senza aprire la mappa. */
+      const tag = hasSys ? bodyTagHtml(sysId) : '';
+      const body = uiIcon('warning', 'gold') + ' <span class="war-incursion-link__txt">Predoni verso ' +
+        incursionTargetLabel(inc) + tag + ' · arrivo fra <strong>' + (inc.eta | 0) + ' ' + iU() + '</strong></span>';
+      if (hasSys) {
+        const fAttr = fleetId ? ' data-fleet="' + escapeHtml(fleetId) + '"' : '';
+        const ttl = fleetId
+          ? 'La tua flotta È il bersaglio: mostrala sulla mappa · spostala per evitare lo scontro, o tienile accanto una scorta armata che la difenda'
+          : 'Mostra sulla mappa del gruppo stellare, sistema al centro';
+        html += '<li><button class="war-incursion-link" data-action="incursion-focus" data-sys="' + sysId + '"' + fAttr +
+          ' type="button" title="' + ttl + '">' +
+          body + uiIcon('chevronRight', 'soft') + '</button></li>';
+      } else {
+        html += '<li>' + body + '</li>';
+      }
     });
     html += '</ul></div>';
   }
@@ -13888,8 +13925,12 @@ function _chronicleEventBody(ev) {
     const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
     const verb = ev.playerWon ? 'respinge i predoni' : 'subisce l\'attacco predone';
     const losses = ev.lost > 0 ? ' · ' + ev.lost + ' nave/i perdute' : ' · nessuna perdita';
+    /* Scorta da battaglia accorsa in difesa (modello presenza nel sistema). */
+    const allies = Array.isArray(ev.allies) && ev.allies.length
+      ? ' (con ' + ev.allies.map(function (n) { return '<strong>' + escapeHtml(n) + '</strong>'; }).join(', ') + ')'
+      : '';
     const crewLoss = ev.crewLost > 0 ? ' · <strong>' + ev.crewLost + ' equipaggi persi</strong>' : '';
-    pushChronicle(ds + ' — Flotta <strong>' + escapeHtml(ev.fleetName || '—') + '</strong> ' + verb + stag + losses + crewLoss + '.', 'system');
+    pushChronicle(ds + ' — Flotta <strong>' + escapeHtml(ev.fleetName || '—') + '</strong>' + allies + ' ' + verb + stag + losses + crewLoss + '.', 'system');
     if (ORION.tutorial) ORION.tutorial.fire('pirates');
   } else if (ev.kind === 'raider-fizzle') {
     /* preda fuggita: voce leggera, niente spam */
@@ -14207,6 +14248,32 @@ function siegeTargetName(ev) {
     return sn ? ('<strong>la stazione in ' + escapeHtml(sn) + '</strong>') : '<strong>una stazione</strong>';
   }
   return colonyNameFromKey(ev.colonyKey);
+}
+
+/* Nome esplicito del bersaglio di un'incursione in arrivo (flotta, colonia o
+   stazione). Garantisce sempre una destinazione leggibile — mai "—":
+   - raider mirato (kind 'pirate-raider') → "la flotta <nome>" (la flotta È il
+     bersaglio reale: se resta lì combatte, se la sposti il raider svanisce);
+   - colonia/stazione → nome del corpo;
+   - fallback → nome del sistema. */
+function incursionTargetLabel(inc) {
+  if (!inc) return '—';
+  if (inc.targetFleetId) {
+    const g = ORION.game;
+    const f = g && (g.fleets || []).filter(function (x) { return x && x.id === inc.targetFleetId; })[0];
+    return f && f.name
+      ? ('la flotta <strong>' + escapeHtml(f.name) + '</strong>')
+      : '<strong>una tua flotta</strong>';
+  }
+  const name = siegeTargetName({
+    stationId: inc.targetStationId,
+    systemId: inc.targetSysId,
+    colonyKey: inc.targetColonyKey
+  });
+  if (name && name !== '—') return name;
+  const g = ORION.game;
+  const sys = (g && inc.targetSysId != null && g.galaxy.systems[inc.targetSysId]) ? g.galaxy.systems[inc.targetSysId] : null;
+  return sys ? ('<strong>' + escapeHtml(sys.name) + '</strong>') : 'Sistema ' + inc.targetSysId;
 }
 
 /* Aggiorna solo il chip delta accanto a "⏭ Evento": il resto del bottone
