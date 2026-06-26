@@ -534,8 +534,11 @@
         'compaiono sulla mappa con un teschio ☠ e nella lista <em>Minacce pirata</em> della vista Civiltà.</p>' +
         '<p>Sono <strong>bersagli raidabili</strong>: manda una <strong>flotta armata</strong> sul loro sistema — lo scontro si risolve ' +
         'da solo. Sgominare un covo frutta una <strong>taglia</strong> in risorse e <strong>riduce le razzie</strong> della zona.</p>' +
-        '<p>Attenzione al rovescio: i predoni possono <strong>colpire le tue flotte esposte</strong> (in orbita lontano dalle colonie). ' +
-        'Tieni le flotte vicino a casa o pronte a combattere. Taglie formali, covi-boss e contratti arriveranno con gli <strong>Eventi</strong> (M17).</p>'
+        '<p>Attenzione al rovescio: i predoni possono <strong>colpire le tue flotte esposte</strong> (in orbita lontano dalle colonie) — ' +
+        'p.es. un estrattore fermo su un\'anomalia. La minaccia compare in <em>Incursioni in arrivo</em> col nome della flotta presa di mira. ' +
+        'Hai due vie d\'uscita: <strong>spostarla</strong> prima dell\'arrivo (il raider va a vuoto), oppure tenerle accanto una ' +
+        '<strong>flotta armata</strong>: tutte le tue flotte armate <strong>presenti nello stesso sistema</strong> scendono a difenderla. ' +
+        'Taglie formali, covi-boss e contratti arriveranno con gli <strong>Eventi</strong> (M17).</p>'
     },
     {
       id: 'combat',

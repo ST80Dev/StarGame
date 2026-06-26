@@ -7713,7 +7713,7 @@ function buildWarSection(g) {
       if (hasSys) {
         const fAttr = fleetId ? ' data-fleet="' + escapeHtml(fleetId) + '"' : '';
         const ttl = fleetId
-          ? 'La tua flotta È il bersaglio: mostrala sulla mappa (spostala se non vuoi ingaggiare)'
+          ? 'La tua flotta È il bersaglio: mostrala sulla mappa · spostala per evitare lo scontro, o tienile accanto una scorta armata che la difenda'
           : 'Mostra sulla mappa del gruppo stellare, sistema al centro';
         html += '<li><button class="war-incursion-link" data-action="incursion-focus" data-sys="' + sysId + '"' + fAttr +
           ' type="button" title="' + ttl + '">' +
@@ -13875,7 +13875,11 @@ function _chronicleEventBody(ev) {
     const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
     const verb = ev.playerWon ? 'respinge i predoni' : 'subisce l\'attacco predone';
     const losses = ev.lost > 0 ? ' · ' + ev.lost + ' nave/i perdute' : ' · nessuna perdita';
-    pushChronicle(ds + ' — Flotta <strong>' + escapeHtml(ev.fleetName || '—') + '</strong> ' + verb + stag + losses + '.', 'system');
+    /* Scorta da battaglia accorsa in difesa (modello presenza nel sistema). */
+    const allies = Array.isArray(ev.allies) && ev.allies.length
+      ? ' (con ' + ev.allies.map(function (n) { return '<strong>' + escapeHtml(n) + '</strong>'; }).join(', ') + ')'
+      : '';
+    pushChronicle(ds + ' — Flotta <strong>' + escapeHtml(ev.fleetName || '—') + '</strong>' + allies + ' ' + verb + stag + losses + '.', 'system');
     if (ORION.tutorial) ORION.tutorial.fire('pirates');
   } else if (ev.kind === 'raider-fizzle') {
     /* preda fuggita: voce leggera, niente spam */
