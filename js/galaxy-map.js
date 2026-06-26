@@ -2014,9 +2014,23 @@
         const stale = !fresh && (af.lastSeenI != null) && (nowI - af.lastSeenI) <= PERSIST;
         if (!fresh && !stale) continue;
         let pos;
-        const inTransit = af.status === 'in-transit'
+        /* Contatto "ultimo avvistamento" (stale): nebbia di guerra sulle flotte
+           (richiesta utente 2026-06-26). NON si insegue la posizione viva: il
+           marker resta CONGELATO dove l'hai visto l'ultima volta (lastSeenSysId)
+           e sbiadisce, poi sparisce. Solo i contatti FRESCHI (sotto i tuoi
+           sensori ora) seguono la posizione reale. */
+        const frozen = stale;
+        const inTransit = !frozen && af.status === 'in-transit'
                        && Array.isArray(af.route) && af.routeIdx + 1 < af.route.length;
-        if (inTransit) {
+        if (frozen) {
+          const fs0 = g.systems[af.lastSeenSysId != null ? af.lastSeenSysId : af.systemId];
+          if (!fs0) continue;
+          const p = this.project(fs0.x, fs0.y, fs0.z || 0);
+          const hash = hashStr(af.id || ('a' + i));
+          const ang = (hash % 360) * Math.PI / 180;
+          const rad = 16 + ((hash >> 8) % 6);
+          pos = { x: p.x + Math.cos(ang) * rad, y: p.y + Math.sin(ang) * rad, depth: p.depth, parallax: p.parallax };
+        } else if (inTransit) {
           anyTransit = true;
           const fromS = g.systems[af.route[af.routeIdx]];
           const toS   = g.systems[af.route[af.routeIdx + 1]];
