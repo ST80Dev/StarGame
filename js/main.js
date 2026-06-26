@@ -6337,7 +6337,14 @@ function renderEconAnomaliesView(stage) {
          "extract"; la colonia d'origine la sceglie il Wizard fra le
          eleggibili (cantiere navale). */
       openFleetDetail(null, {
-        dest: { sysId: Number(b.dataset.sys), bodyKey: b.dataset.body || null },
+        dest: {
+          sysId: Number(b.dataset.sys),
+          bodyKey: b.dataset.body || null,
+          /* Anomalie a livello sistema (nebulosa/detriti/reliquie) non hanno
+             bodyKey: passiamo il tipo così il Wizard pre-seleziona QUEL sito
+             nel selettore destinazione (feedback utente 2026-06-26). */
+          anomKind: b.dataset.body ? null : (b.dataset.kind || null)
+        },
         mission: 'extract'
       });
     });
@@ -9952,7 +9959,7 @@ function openFleetDetail(fleetId, opts) {
     creating: !fleet,
     /* Stadio 3: destinazione/missione pre-compilate da mappa (ingresso
        destination-first). null → renderNew sceglie il default. */
-    dest: opts.dest ? { sysId: opts.dest.sysId, bodyKey: opts.dest.bodyKey || null } : null,
+    dest: opts.dest ? { sysId: opts.dest.sysId, bodyKey: opts.dest.bodyKey || null, anomKind: opts.dest.anomKind || null } : null,
     mission: opts.mission || null,
     renaming: false,
     ordOpen: !!opts.orders,
@@ -10125,11 +10132,19 @@ function openFleetDetail(fleetId, opts) {
       if (ha !== hb) return ha - hb;
       return sysDist(capId, a) - sysDist(capId, b);
     });
-    if (!D.dest) D.dest = { sysId: null, bodyKey: null };
+    if (!D.dest) D.dest = { sysId: null, bodyKey: null, anomKind: null };
     if (D.dest.sysId == null || (disc[D.dest.sysId] || 0) < DISC.DETECTED) {
       const nonCap = knownSys.filter(function (s) { return s !== capId; });
       D.dest.sysId = nonCap.length ? nonCap[0] : (knownSys.length ? knownSys[0] : capId);
       D.dest.bodyKey = null;
+      D.dest.anomKind = null;
+    }
+    /* Registra i siti §17.3 del sistema di destinazione (idempotente, una
+       volta per sessione) così le anomalie a livello sistema sono note a
+       fleetTarget.describe → l'azione Estrai diventa disponibile e la
+       nebulosa/detriti/reliquia compaiono fra gli oggetti selezionabili. */
+    if (ORION.anomaly && ORION.anomaly.ensureSites && D.dest.sysId != null) {
+      ORION.anomaly.ensureSites(g, D.dest.sysId);
     }
 
     if (!D.newColonyKey || elig.indexOf(D.newColonyKey) < 0) {
@@ -10295,16 +10310,38 @@ function openFleetDetail(fleetId, opts) {
     let destBodyHtml = '';
     const destExplored = (disc[D.dest.sysId] || 0) >= DISC.EXPLORED;
     if (destExplored && ORION.system && ORION.system.generate) {
-      let dbodies = [];
-      try { const dsys = ORION.system.generate(g.galaxy, D.dest.sysId); dbodies = (dsys && dsys.bodies) || []; } catch (e) { dbodies = []; }
-      if (dbodies.length) {
-        let bopts = '<option value="">— orbita generica —</option>';
+      let dsys = null;
+      try { dsys = ORION.system.generate(g.galaxy, D.dest.sysId); } catch (e) { dsys = null; }
+      const dbodies = (dsys && dsys.bodies) || [];
+      /* Anomalie a livello sistema (detriti/nebulosa/reliquie): non sono
+         "corpi" ma sono bersagli M2 sfruttabili (Estrai). Senza questo non
+         comparivano fra gli oggetti selezionabili del sistema, pur essendo
+         siti d'energia/metalli noti (feedback utente 2026-06-26). Le anomalie
+         body-tied (cintura/gassoso) restano fra i corpi. Dedup per tipo. */
+      const sysAnoms = [];
+      const seenAnomKind = {};
+      ((dsys && dsys.anomalies) || []).forEach(function (a) {
+        if (!a || !a.kind || seenAnomKind[a.kind]) return;
+        const def = ORION.anomaly && ORION.anomaly.KINDS ? ORION.anomaly.KINDS[a.kind] : null;
+        if (!def || def.perBody) return;
+        seenAnomKind[a.kind] = true;
+        sysAnoms.push(a.kind);
+      });
+      if (dbodies.length || sysAnoms.length) {
+        const generic = !D.dest.bodyKey && !D.dest.anomKind;
+        let bopts = '<option value=""' + (generic ? ' selected' : '') + '>— orbita generica —</option>';
         dbodies.forEach(function (b) {
           if (!b || !b.key) return;
           bopts += bodyOption(b, false);
           (b.moons || []).forEach(function (m) { if (m && m.key) bopts += bodyOption(m, true); });
         });
-        destBodyHtml = '<select class="fdetail__select" data-bind="dest-body" aria-label="Corpo di destinazione">' + bopts + '</select>';
+        sysAnoms.forEach(function (kind) {
+          const meta = anomalyKindMeta(kind);
+          const lbl = meta.label + (meta.res ? ' · ' + meta.res : '');
+          bopts += '<option value="anom:' + escapeHtml(kind) + '"' +
+            (D.dest.anomKind === kind ? ' selected' : '') + '>✦ ' + escapeHtml(lbl) + '</option>';
+        });
+        destBodyHtml = '<select class="fdetail__select" data-bind="dest-body" aria-label="Corpo o anomalia di destinazione">' + bopts + '</select>';
       }
     } else if (!destExplored) {
       destBodyHtml = '<span class="fdest__hint">' + uiIcon('info', 'soft') + ' Sistema non esplorato: corpo non selezionabile.</span>';
@@ -10390,7 +10427,9 @@ function openFleetDetail(fleetId, opts) {
     /* ===== Riepilogo viaggio (sticky, Stadio 2.5) — live su ogni render. ===== */
     const sumSysName = (g.galaxy.systems[D.dest.sysId] || {}).name || ('Sistema ' + D.dest.sysId);
     let sumBodyName = '';
-    if (D.dest.bodyKey) {
+    if (D.dest.anomKind) {
+      sumBodyName = ' · ' + anomalyKindMeta(D.dest.anomKind).label;
+    } else if (D.dest.bodyKey) {
       try { const ds = ORION.system.generate(g.galaxy, D.dest.sysId); const b = ORION.system.findBody(ds, D.dest.bodyKey); if (b) sumBodyName = ' · ' + (b.name || b.key); } catch (e) { /* */ }
     }
     const sumMisLab = MISSION_META[D.mission] ? MISSION_META[D.mission].lab : 'Sposta';
@@ -10768,9 +10807,11 @@ function openFleetDetail(fleetId, opts) {
     if (m === 'attack') return { type: 'attack', toSysId: sys, bodyKey: bk };
     if (m === 'recon') return { type: 'recon', toSysId: sys, bodyKey: bk };
     if (m === 'extract') {
-      /* anomalyKind: giacimento del corpo (cintura/gassoso) o anomalia fluttuante. */
-      let kind = null;
-      if (bk && ORION.system && ORION.system.generate && ORION.system.findBody && ORION.anomaly && ORION.anomaly.bodyGiacimento) {
+      /* anomalyKind: anomalia a livello sistema scelta esplicitamente
+         (D.dest.anomKind, es. nebulosa → bodyKey null), oppure giacimento del
+         corpo (cintura/gassoso), oppure ricavata dal target. */
+      let kind = D.dest.anomKind || null;
+      if (!kind && bk && ORION.system && ORION.system.generate && ORION.system.findBody && ORION.anomaly && ORION.anomaly.bodyGiacimento) {
         try {
           const ds = ORION.system.generate(g.galaxy, sys);
           const b = ORION.system.findBody(ds, bk);
@@ -11045,13 +11086,18 @@ function openFleetDetail(fleetId, opts) {
     /* Destinazione (Stadio 2.3a): sistema + corpo. */
     const destSysSel = host.querySelector('[data-bind="dest-system"]');
     if (destSysSel) destSysSel.addEventListener('change', function () {
-      if (!D.dest) D.dest = { sysId: null, bodyKey: null };
-      D.dest.sysId = Number(destSysSel.value); D.dest.bodyKey = null; render();
+      if (!D.dest) D.dest = { sysId: null, bodyKey: null, anomKind: null };
+      D.dest.sysId = Number(destSysSel.value); D.dest.bodyKey = null; D.dest.anomKind = null; render();
     });
     const destBodySel = host.querySelector('[data-bind="dest-body"]');
     if (destBodySel) destBodySel.addEventListener('change', function () {
-      if (!D.dest) D.dest = { sysId: null, bodyKey: null };
-      D.dest.bodyKey = destBodySel.value || null; render();
+      if (!D.dest) D.dest = { sysId: null, bodyKey: null, anomKind: null };
+      const v = destBodySel.value || '';
+      /* Le anomalie a livello sistema usano il valore sentinella "anom:<kind>"
+         (niente bodyKey); i corpi reali usano il loro key. */
+      if (v.indexOf('anom:') === 0) { D.dest.anomKind = v.slice(5); D.dest.bodyKey = null; }
+      else { D.dest.bodyKey = v || null; D.dest.anomKind = null; }
+      render();
     });
     /* Picker missione (Stadio 2.4). */
     host.querySelectorAll('[data-mission]').forEach(function (b) {
@@ -15964,13 +16010,18 @@ function openFleetReorder(fleetId, opts) {
   for (let i = 0; i < g.galaxy.systems.length; i++) if ((disc[i] || 0) >= DISC.DETECTED) knownSys.push(i);
   const hopsMap = {}; knownSys.forEach(function (s) { hopsMap[s] = hops(s); });
   knownSys.sort(function (a, b) { const ha = hopsMap[a] == null ? 1e9 : hopsMap[a], hb = hopsMap[b] == null ? 1e9 : hopsMap[b]; return ha - hb; });
-  const R = { dest: { sysId: null, bodyKey: null }, mission: null };
+  const R = { dest: { sysId: null, bodyKey: null, anomKind: null }, mission: null };
   if (opts.dest && opts.dest.sysId != null) {
     /* Destinazione pre-compilata (es. "Manda flotta qui" da mappa). */
-    R.dest.sysId = opts.dest.sysId; R.dest.bodyKey = opts.dest.bodyKey || null;
+    R.dest.sysId = opts.dest.sysId; R.dest.bodyKey = opts.dest.bodyKey || null; R.dest.anomKind = opts.dest.anomKind || null;
   } else {
     const cur = fleet.orders && fleet.orders.toSysId;
-    if (cur != null && (disc[cur] || 0) >= DISC.DETECTED) { R.dest.sysId = cur; R.dest.bodyKey = fleet.orders.bodyKey || null; }
+    if (cur != null && (disc[cur] || 0) >= DISC.DETECTED) {
+      R.dest.sysId = cur; R.dest.bodyKey = fleet.orders.bodyKey || null;
+      /* Riapre conservando il bersaglio: anomalia a livello sistema (survey
+         senza bodyKey) → ripristina anomKind così resta pre-selezionata. */
+      if (!R.dest.bodyKey && fleet.orders.type === 'survey' && fleet.orders.anomalyKind) R.dest.anomKind = fleet.orders.anomalyKind;
+    }
     else { const nh = knownSys.filter(function (s) { return s !== fromSys; }); R.dest.sysId = nh.length ? nh[0] : (knownSys[0] != null ? knownSys[0] : fromSys); }
   }
 
@@ -15983,8 +16034,8 @@ function openFleetReorder(fleetId, opts) {
     if (m === 'attack') return { type: 'attack', toSysId: sys, bodyKey: bk };
     if (m === 'recon') return { type: 'recon', toSysId: sys, bodyKey: bk };
     if (m === 'extract') {
-      let kind = null;
-      if (bk && ORION.system && ORION.anomaly && ORION.anomaly.bodyGiacimento) {
+      let kind = R.dest.anomKind || null;
+      if (!kind && bk && ORION.system && ORION.anomaly && ORION.anomaly.bodyGiacimento) {
         try { const ds = ORION.system.generate(g.galaxy, sys); const b = ORION.system.findBody(ds, bk); const gi = b && ORION.anomaly.bodyGiacimento(b); if (gi) kind = gi.kind; } catch (e) { /* */ }
       }
       if (!kind && ORION.fleetTarget) kind = ORION.fleetTarget.describe(g, sys, bk).anomalyKind;
@@ -15994,6 +16045,9 @@ function openFleetReorder(fleetId, opts) {
     return { type: 'move', toSysId: sys, bodyKey: bk };
   }
   function render() {
+    /* Registra i siti §17.3 del sistema corrente (idempotente) così le
+       anomalie a livello sistema sono note a fleetTarget → Estrai disponibile. */
+    if (ORION.anomaly && ORION.anomaly.ensureSites && R.dest.sysId != null) ORION.anomaly.ensureSites(g, R.dest.sysId);
     const sysOpts = knownSys.map(function (s) {
       const nm = sysName2(s); const h = hopsMap[s]; const hop = h === 0 ? 'qui' : (h != null ? h + ' salti' : 'irr.');
       const cn = knownCivs(s).length;
@@ -16002,15 +16056,31 @@ function openFleetReorder(fleetId, opts) {
     let bodyHtml = '';
     const explored = (disc[R.dest.sysId] || 0) >= DISC.EXPLORED;
     if (explored && ORION.system && ORION.system.generate) {
-      let bodies = []; try { const ds = ORION.system.generate(g.galaxy, R.dest.sysId); bodies = (ds && ds.bodies) || []; } catch (e) { bodies = []; }
-      if (bodies.length) {
-        let bopts = '<option value="">— orbita generica —</option>';
+      let ds0 = null; try { ds0 = ORION.system.generate(g.galaxy, R.dest.sysId); } catch (e) { ds0 = null; }
+      const bodies = (ds0 && ds0.bodies) || [];
+      /* Anomalie a livello sistema (detriti/nebulosa/reliquie) come bersagli
+         selezionabili (Estrai) — non sono "corpi". Dedup per tipo. */
+      const sysAnoms = []; const seenAK = {};
+      ((ds0 && ds0.anomalies) || []).forEach(function (a) {
+        if (!a || !a.kind || seenAK[a.kind]) return;
+        const def = ORION.anomaly && ORION.anomaly.KINDS ? ORION.anomaly.KINDS[a.kind] : null;
+        if (!def || def.perBody) return;
+        seenAK[a.kind] = true; sysAnoms.push(a.kind);
+      });
+      if (bodies.length || sysAnoms.length) {
+        const generic = !R.dest.bodyKey && !R.dest.anomKind;
+        let bopts = '<option value=""' + (generic ? ' selected' : '') + '>— orbita generica —</option>';
         bodies.forEach(function (b) {
           if (!b || !b.key) return;
           bopts += '<option value="' + escapeHtml(b.key) + '"' + (String(R.dest.bodyKey || '') === String(b.key) ? ' selected' : '') + '>' + bodyGlyph(b.type) + ' ' + escapeHtml(b.name || b.key) + ' · ' + escapeHtml(bodyTypeLabel(b.type)) + '</option>';
           (b.moons || []).forEach(function (m) { if (m && m.key) bopts += '<option value="' + escapeHtml(m.key) + '"' + (String(R.dest.bodyKey || '') === String(m.key) ? ' selected' : '') + '>  ' + bodyGlyph(m.type) + ' ' + escapeHtml(m.name || m.key) + ' · ' + escapeHtml(bodyTypeLabel(m.type)) + '</option>'; });
         });
-        bodyHtml = '<select class="fdetail__select" data-bind="ro-body" aria-label="Corpo di destinazione">' + bopts + '</select>';
+        sysAnoms.forEach(function (kind) {
+          const meta = anomalyKindMeta(kind);
+          const lbl = meta.label + (meta.res ? ' · ' + meta.res : '');
+          bopts += '<option value="anom:' + escapeHtml(kind) + '"' + (R.dest.anomKind === kind ? ' selected' : '') + '>✦ ' + escapeHtml(lbl) + '</option>';
+        });
+        bodyHtml = '<select class="fdetail__select" data-bind="ro-body" aria-label="Corpo o anomalia di destinazione">' + bopts + '</select>';
       }
     } else if (!explored) {
       bodyHtml = '<span class="fdest__hint">' + uiIcon('info', 'soft') + ' Sistema non esplorato: corpo non selezionabile.</span>';
@@ -16064,9 +16134,14 @@ function openFleetReorder(fleetId, opts) {
   function bindRO() {
     host.querySelectorAll('[data-ro-close]').forEach(function (b) { b.addEventListener('click', closeFleetOverlay); });
     const ss = host.querySelector('[data-bind="ro-system"]');
-    if (ss) ss.addEventListener('change', function () { R.dest.sysId = Number(ss.value); R.dest.bodyKey = null; render(); });
+    if (ss) ss.addEventListener('change', function () { R.dest.sysId = Number(ss.value); R.dest.bodyKey = null; R.dest.anomKind = null; render(); });
     const bs = host.querySelector('[data-bind="ro-body"]');
-    if (bs) bs.addEventListener('change', function () { R.dest.bodyKey = bs.value || null; render(); });
+    if (bs) bs.addEventListener('change', function () {
+      const v = bs.value || '';
+      if (v.indexOf('anom:') === 0) { R.dest.anomKind = v.slice(5); R.dest.bodyKey = null; }
+      else { R.dest.bodyKey = v || null; R.dest.anomKind = null; }
+      render();
+    });
     host.querySelectorAll('[data-ro-mission]').forEach(function (b) { if (b.disabled) return; b.addEventListener('click', function () { R.mission = b.dataset.roMission; render(); }); });
     const cf = host.querySelector('[data-ro-confirm]');
     if (cf) cf.addEventListener('click', doConfirmRO);
