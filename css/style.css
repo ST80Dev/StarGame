@@ -1624,16 +1624,18 @@ button { font-family: inherit; }
   text-transform: none;
 }
 .time-control--inline .btn--play {
-  padding: 4px 7px;
+  padding: 4px 5px;
   font-size: 0.78rem;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.01em;
   white-space: nowrap;
   text-transform: none;
   font-family: var(--font-data);
   /* Larghezza fissa, dimensionata sul label più lungo "0.5× · 60s/Ι"
      (12 caratteri monospace, solo al livello più lento; tutti gli altri
-     ≤10). Fissa così non si stringe/allarga al cambio velocità. */
-  width: 130px;
+     ≤10). Fissa così non si stringe/allarga al cambio velocità.
+     Padding interno e spaziatura caratteri ridotti per recuperare spazio
+     nell'header → larghezza accorciata di conseguenza (130→116px). */
+  width: 116px;
   justify-content: center;
   background: rgba(47, 230, 224, 0.06);
   border-color: var(--c-accent-dim);
@@ -1655,9 +1657,13 @@ button { font-family: inherit; }
   font-size: 0.76rem;
   letter-spacing: 0.08em;
   white-space: nowrap;
-  /* Larghezza fissa: senza etichetta "EVENTO" basta lo spazio per il
-     glifo + delta ("in 5 Ι" → "in 2340 Ι"), così non spinge gli altri. */
-  min-width: 90px;
+  /* Larghezza FISSA (non min-width): il delta varia di lunghezza al
+     variare del countdown ("+Ι9" → "+1Φ·4Κ·9Ι") e, essendo il gruppo
+     ancorato a destra, qualunque crescita spingeva a sinistra play/pause
+     facendolo "scappare" da sotto il mouse. Bloccando la larghezza il
+     gruppo non si sposta più. */
+  width: 106px;
+  gap: 4px;
   justify-content: center;
 }
 /* Etichetta "EVENTO" nascosta anche su desktop: resta glifo ⏭ + countdown. */
@@ -2064,11 +2070,25 @@ button { font-family: inherit; }
 @media (prefers-reduced-motion: reduce) { .hud-pulse { animation: none; } }
 
 .time-control__delta {
-  margin-left: 6px;
-  padding: 2px 6px;
-  font-family: var(--font-mono, monospace);
+  /* Larghezza fissa + testo centrato: il valore (es. "+1Κ·10Ι") cambia
+     lunghezza ad ogni avanzamento; bloccandone la larghezza il bottone
+     Evento — e quindi tutto il gruppo controlli tempo — resta immobile.
+     Nei rari countdown lunghissimi ellissi anziché spingere gli altri. */
+  display: inline-block;
+  box-sizing: border-box;
+  width: 74px;
+  margin-left: 4px;
+  padding: 2px 4px;
+  /* JetBrains Mono (durata, UI_GUIDE §2) — coerente col label velocità;
+     --font-mono non esiste, prima cadeva sul monospace di sistema (largo
+     e incoerente). */
+  font-family: var(--font-data);
   font-size: 0.74rem;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-transform: none;
   color: var(--c-accent);
   background: rgba(47, 230, 224, 0.10);
