@@ -10061,27 +10061,36 @@ function fleetShipIcon(kind) {
         ordine (non solo alla nascita). L'attacco NON ribattezza (decisione
         utente 2026-06-26): l'identità di composizione prevale — una flotta
         di linea resta tale anche mentre attacca.
-     3. Identità per nave di punta (la più forte, fleet.leadKind): caccia
-        → Pattuglia, intercettore → Squadriglia, … Copre il caso neutro
-        `move`/`idle` (basta col "Convoglio" che non diceva nulla).
+     3. Identità per nave di punta (la più forte, fleet.leadKind) × TAGLIA
+        della flotta: il nome cresce da poche unità (Pattuglia) a moltitudine
+        e potenza (Armata, Titano). Copre il caso neutro `move`/`idle`.
    Ribattezza SOLO nomi auto-derivati (default "Squadrone N", callsign
    correnti e legacy) → un nome scelto a mano (es. "Pattuglia Alfa",
    "Mia Flotta") non viene mai toccato. Sempre rinominabile dal dettaglio.
    ===================================================================== */
-/* Identità per nave di punta (fleet.leadKind): un sostantivo di formazione
-   che scala con la classe più forte a bordo, per il suo uso tipico. */
-const FLEET_COMP_NAMES = {
-  'explorer': 'Segugio',       // ricognizione
-  'estrattore': 'Estrattore',  // (anche via override #1)
-  'caccia': 'Pattuglia',       // soli caccia → pattuglia leggera
-  'intercettore': 'Squadriglia',
-  'corvetta': 'Flottiglia',
-  'fregata': 'Squadra',
-  'incrociatore': 'Falange',   // formazione da battaglia pesante
-  'dreadnought': 'Armata',
-  'ammiraglia': 'Aquila',      // lo stormo attorno all'ammiraglia (apice)
-  'coloniale': 'Pioniere'      // (anche via override #1)
+/* Identità per (nave di punta × taglia). Per ogni classe di punta una terna
+   [poche 1–3, diverse 4–7, molte 8+]: il nome cresce da "poche unità" a
+   "moltitudine + potenza". L'intercettore (veloce) ha una terna a parte
+   (Saetta/Falco) anche quando è la nave maggiore tra caccia minori. */
+const FLEET_COMP_TIERS = {
+  'explorer':     ['Segugio',   'Segugio',    'Segugio'],     // ricognizione (flat)
+  'caccia':       ['Pattuglia', 'Squadriglia', 'Stormo'],
+  'intercettore': ['Saetta',    'Falco',      'Stormo'],      // a parte (veloce)
+  'corvetta':     ['Compagnia', 'Battaglione', 'Brigata'],
+  'fregata':      ['Compagnia', 'Battaglione', 'Brigata'],
+  'incrociatore': ['Corazzata', 'Legione',    'Armata'],
+  'dreadnought':  ['Corazzata', 'Legione',    'Armata'],
+  'ammiraglia':   ['Titano',    'Titano',     'Titano'],      // apice (nave unica)
+  'estrattore':   ['Estrattore','Estrattore', 'Estrattore'],  // (anche via override #1)
+  'coloniale':    ['Pioniere',  'Pioniere',   'Pioniere']     // (anche via override #1)
 };
+/* Bucket di taglia dal numero di navi: 0=poche(1–3) · 1=diverse(4–7) · 2=molte(8+). */
+function fleetSizeBucket(fleet) {
+  const n = (fleet && Array.isArray(fleet.ships)) ? fleet.ships.length : 0;
+  if (n >= 8) return 2;
+  if (n >= 4) return 1;
+  return 0;
+}
 /* Overlay di scopo: ordini che caratterizzano la missione e prevalgono
    sull'identità di composizione (ma NON sugli override funzionali §1).
    L'attacco è volutamente assente: non ribattezza (decisione 2026-06-26). */
@@ -10096,9 +10105,10 @@ const FLEET_ORDER_NAMES = {
    cataloghi sopra. */
 const FLEET_NAME_ALT = {
   'Segugio': 'Pellegrino', 'Estrattore': 'Minatrice', 'Pattuglia': 'Ronda',
-  'Squadriglia': 'Stormo', 'Flottiglia': 'Naviglio', 'Squadra': 'Schiera',
-  'Falange': 'Coorte', 'Armata': 'Legione', 'Aquila': 'Astore',
-  'Pioniere': 'Avanguardia', 'Sentinella': 'Bastione'
+  'Squadriglia': 'Nugolo', 'Stormo': 'Sciame', 'Saetta': 'Strale', 'Falco': 'Astore',
+  'Compagnia': 'Coorte', 'Battaglione': 'Reparto', 'Brigata': 'Schiera',
+  'Corazzata': 'Baluardo', 'Legione': 'Falange', 'Armata': 'Armada',
+  'Titano': 'Colosso', 'Pioniere': 'Avanguardia', 'Sentinella': 'Bastione'
 };
 /* Tutte le basi che generiamo noi (correnti + legacy): un nome che combacia
    con "<base> <numero>" è considerato auto-derivato → rinominabile al volo.
@@ -10106,12 +10116,15 @@ const FLEET_NAME_ALT = {
    save vecchi migrano al primo cambio ordine, senza bump di schema. */
 const FLEET_AUTO_BASES = [
   'Squadrone',
-  'Segugio', 'Estrattore', 'Pattuglia', 'Squadriglia', 'Flottiglia',
-  'Squadra', 'Falange', 'Armata', 'Aquila', 'Pioniere', 'Sentinella',
-  /* legacy basi nostre dismesse + callsign per-ordine + pool ALT storico:
-     restano qui così i nomi auto già assegnati migrano al cambio ordine. */
-  'Leviatano', 'Lama', 'Convoglio', 'Vedetta', 'Carovana', 'Pellegrino',
-  'Lupo', 'Bastione', 'Bussola', 'Minatrice', 'Avanguardia'
+  /* basi correnti (composizione × taglia + override + overlay) */
+  'Segugio', 'Estrattore', 'Pioniere', 'Sentinella',
+  'Pattuglia', 'Squadriglia', 'Stormo', 'Saetta', 'Falco',
+  'Compagnia', 'Battaglione', 'Brigata',
+  'Corazzata', 'Legione', 'Armata', 'Titano',
+  /* basi primarie storiche (versioni precedenti di questo branch): restano
+     qui così i nomi auto già assegnati migrano al primo cambio ordine. */
+  'Flottiglia', 'Squadra', 'Falange', 'Aquila', 'Leviatano', 'Lama',
+  'Convoglio', 'Vedetta'
 ];
 /* Numero progressivo per quella base: max suffisso numerico tra le flotte
    esistenti col prefisso "<Base> ", +1. Robusto a rinomine manuali (chi
@@ -10148,9 +10161,10 @@ function autoFleetBase(fleet, order) {
     const ov = FLEET_ORDER_NAMES[order.type];
     if (ov) return ov;
   }
-  /* §3 — identità per nave di punta (caso neutro: move/idle/move-route cargo). */
+  /* §3 — identità per nave di punta × taglia (caso neutro: move/idle/cargo). */
   const lead = (ORION.fleet && ORION.fleet.leadKind) ? ORION.fleet.leadKind(fleet) : null;
-  return (lead && FLEET_COMP_NAMES[lead]) || null;
+  const tier = lead && FLEET_COMP_TIERS[lead];
+  return tier ? tier[fleetSizeBucket(fleet)] : null;
 }
 /* Compone base + numero. Se la flotta porta GIÀ un nome auto con la stessa
    base, ne conserva il numero (niente renumber-churn a ogni cambio ordine). */
