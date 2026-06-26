@@ -548,10 +548,14 @@
         '<p><strong>Veteranità (§12.3):</strong> le navi che <strong>sopravvivono</strong> salgono di grado ' +
         '(Verde→Veterana→Elite→Leggendaria, +5% fuoco/grado). Tienile vive: una flotta esperta vale doppio. Le Leggendarie ' +
         'prendono un <strong>nome proprio</strong>.</p>' +
-        '<p><strong>Perdite d\'equipaggio:</strong> una nave <strong>distrutta in battaglia</strong> si porta dietro il suo ' +
-        '<strong>equipaggio</strong> (a differenza della rottamazione al porto per usura, dove l\'equipaggio si salva). ' +
-        'La scelta è pesata verso i <em>meno esperti</em>: i veterani tendono a cavarsela, le reclute meno. Un\'altra ' +
-        'ragione per non gettare via le flotte.</p>' +
+        '<p><strong>Ordine di caduta:</strong> le <strong>navi da guerra</strong> fanno da scorta e cadono per prime, grosso ' +
+        'modo dalla più piccola alla più grande (caccia → intercettore → corvetta → … → capitali), con un po\' di varianza. ' +
+        'I <strong>non-combattenti</strong> (Pioniere, esploratore, estrattore) stanno dietro la linea e muoiono solo quando ' +
+        'la scorta è esaurita: tienili sempre protetti da navi armate.</p>' +
+        '<p><strong>Perdite d\'equipaggio e coloni:</strong> una nave <strong>distrutta in battaglia</strong> si porta dietro il suo ' +
+        '<strong>equipaggio</strong> (e i <strong>coloni</strong> se è un Pioniere) — a differenza della rottamazione al porto ' +
+        'per usura, dove l\'equipaggio si salva. La perdita d\'equipaggio è pesata verso i <em>meno esperti</em>: i veterani ' +
+        'tendono a cavarsela, le reclute meno. Un\'altra ragione per non gettare via le flotte.</p>' +
         '<p><strong>Formazione:</strong> imposta la soglia di ritirata — <em>Aggressiva</em> (combatti fino alla fine), ' +
         '<em>Bilanciata</em> (ritirata al 30%), <em>Difensiva</em> (al 50%). Gli scontri nello spazio si risolvono in un Impulso.</p>'
     },
@@ -1311,12 +1315,13 @@
         '</ul>' +
         '<p>Travel e Foundation sono <strong>indipendenti</strong>: mondi grandi richiedono più Foundation, mondi lontani più ' +
         'Travel. Intra-sistema resta veloce (~110 Ι totali).</p>' +
-        '<p>Puoi <strong>scortare</strong> il Pioniere con altre navi nella stessa flotta. Senza scorta è esposto: se ' +
-        'intercettato e distrutto, refund <strong>50%</strong> di costo nave + colonizzazione, e <strong>50% dei coloni ' +
-        'a bordo</strong> torna alla colonia origine in <em>scialuppa di salvataggio</em> (recovery-friendly). ' +
-        'L\'<strong>equipaggio</strong> delle navi <em>distrutte in battaglia</em>, invece, cade con lo scafo ' +
-        '(estrazione pesata: i veterani si salvano più spesso, le reclute meno); si salva sempre solo nella ' +
-        '<em>rottamazione al porto</em> per usura/avaria, non nello scontro.</p>' +
+        '<p>Puoi <strong>scortare</strong> il Pioniere con altre navi nella stessa flotta. In battaglia le <strong>navi da ' +
+        'guerra fanno da scudo</strong> e cadono per prime (caccia → intercettore → corvetta → … verso le capitali, con un po\' ' +
+        'di varianza); i non-combattenti come il Pioniere muoiono solo a <em>scorta esaurita</em>. Senza scorta il Pioniere è il ' +
+        'primo bersaglio: se distrutto, resta il refund <strong>50%</strong> di costo nave + colonizzazione (recovery-friendly), ' +
+        'ma i <strong>coloni a bordo</strong> e l\'<strong>equipaggio</strong> cadono con lo scafo (l\'equipaggio con estrazione ' +
+        'pesata: i veterani si salvano più spesso). Si salva sempre solo nella <em>rottamazione al porto</em> per usura/avaria, ' +
+        'non nello scontro.</p>' +
         '<p><strong>Trasferimento colony-to-colony:</strong> stesso meccanismo embark/sbark dalla scheda <em>Gestisci ' +
         'navi/eq.</em> della flotta — quando il Pioniere è in orbita di una qualunque tua colonia operativa puoi <strong>imbarcare ' +
         'o sbarcare livelli</strong> per bilanciare carenze (cibo, rifiuti) tra mondi maturi. Diaspora attiva ogni volta che ' +

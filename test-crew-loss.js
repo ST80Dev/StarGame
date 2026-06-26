@@ -22,11 +22,16 @@ function runFile(rel) {
   (new Function(src)).call(root);
 }
 
-/* Classi nave minime (sottoinsieme di js/fleet.js → CLASSES). */
+/* Classi nave minime (sottoinsieme di js/fleet.js → CLASSES). fp serve al
+   targeting (scudo) e alla risoluzione; crew/popCargo alle perdite. */
 const CLASSES = {
-  explorer: { id: 'explorer', kind: 'explorer', hp: 20, crew: 1 },
-  caccia:   { id: 'caccia',   kind: 'caccia',   hp: 30, crew: 1 },
-  corvetta: { id: 'corvetta', kind: 'corvetta', hp: 80, crew: 4 }
+  explorer:    { id: 'explorer',    kind: 'explorer',    hp: 20,  fp: 2,  crew: 1 },
+  estrattore:  { id: 'estrattore',  kind: 'estrattore',  hp: 35,  fp: 0,  crew: 1 },
+  caccia:      { id: 'caccia',      kind: 'caccia',      hp: 30,  fp: 5,  crew: 1 },
+  intercettore:{ id: 'intercettore',kind: 'intercettore',hp: 45,  fp: 8,  crew: 2 },
+  corvetta:    { id: 'corvetta',    kind: 'corvetta',    hp: 80,  fp: 12, crew: 4 },
+  fregata:     { id: 'fregata',     kind: 'fregata',     hp: 160, fp: 25, crew: 8 },
+  coloniale:   { id: 'coloniale',   kind: 'coloniale',   hp: 70,  fp: 0,  crew: 4, popCargo: 2 }
 };
 
 runFile('js/rng.js');
@@ -144,6 +149,89 @@ console.log('\n— Test 7: applyDefenderWriteback (assedio) uccide il crew per-f
   assert(wb.shipsLost === 2, 'navi perse difesa = 2 (got ' + wb.shipsLost + ')');
   assert(wb.crewLost === 2, 'equipaggi persi difesa = 2 (got ' + wb.crewLost + ')');
   assert(fleet.ships.length === 0 && fleet.crew.length === 0, 'flotta svuotata (navi+crew)');
+}
+
+/* Combatant per resolveRound (lato giocatore: src.type 'ship' → schermabile). */
+function shipCombatant(kind) {
+  return { id: 'c' + (++shipSeq), kind: kind, hp: CLASSES[kind].hp, maxHp: CLASSES[kind].hp,
+    fp: CLASSES[kind].fp, xp: 0, src: { type: 'ship' } };
+}
+function enemyForce(fp) {
+  return { side: 'B', name: 'Predoni', immobile: false, formation: 'balanced',
+    combatants: [{ id: 'enemy', kind: 'predone', hp: 100000, maxHp: 100000, fp: fp, xp: 0, src: { type: 'pirate' } }] };
+}
+function playerForce(kinds) {
+  return { side: 'A', name: 'Flotta', immobile: false, formation: 'aggressive',
+    combatants: kinds.map(shipCombatant) };
+}
+
+console.log('\n— Test 8: scudo — i civili (Pioniere/esploratore) non muoiono se resta una nave da guerra');
+{
+  let violations = 0;
+  for (let s = 0; s < 80; s++) {
+    const A = playerForce(['caccia', 'explorer', 'coloniale']);
+    const B = enemyForce(28); // ~ uccide al più 1 nave per round
+    const rng = ORION.rng.makeRng('SCREEN:' + s);
+    const r = C.resolveRound(rng, A, B);
+    const deadKinds = r.destroyedA.map(function (c) { return c.kind; });
+    const cacciaAlive = A.combatants.some(function (c) { return c.kind === 'caccia'; });
+    // se un civile è morto MA il caccia è ancora vivo → violazione dello scudo
+    if ((deadKinds.indexOf('explorer') >= 0 || deadKinds.indexOf('coloniale') >= 0) && cacciaAlive) violations++;
+  }
+  assert(violations === 0, 'mai un civile distrutto con la scorta ancora viva (violazioni: ' + violations + ')');
+}
+
+console.log('\n— Test 9: ordine ~crescente per stazza, con varianza (non sempre lineare)');
+{
+  // 4 navi da guerra; danno per ~2 vittime. Atteso: cadono per lo più le piccole
+  // (caccia/intercettore), la fregata quasi mai; ma con qualche eccezione (jitter).
+  let cacciaDead = 0, fregataDead = 0, exactSmallTwo = 0;
+  const N = 300;
+  for (let s = 0; s < N; s++) {
+    const A = playerForce(['caccia', 'intercettore', 'corvetta', 'fregata']);
+    const B = enemyForce(78); // ~ caccia(30)+intercettore(45)
+    const rng = ORION.rng.makeRng('ORDER:' + s);
+    const r = C.resolveRound(rng, A, B);
+    const dead = r.destroyedA.map(function (c) { return c.kind; }).sort().join(',');
+    if (dead.indexOf('caccia') >= 0) cacciaDead++;
+    if (dead.indexOf('fregata') >= 0) fregataDead++;
+    if (dead === 'caccia,intercettore') exactSmallTwo++;
+  }
+  console.log('    caccia morto ' + cacciaDead + '/' + N + ' · fregata morta ' + fregataDead + '/' + N +
+    ' · esito {caccia,intercettore} ' + exactSmallTwo + '/' + N);
+  assert(cacciaDead / N > 0.8, 'la nave più piccola (caccia) cade quasi sempre (>80%)');
+  assert(fregataDead / N < 0.2, 'la più grande (fregata) cade raramente (<20%)');
+  assert(exactSmallTwo > 0 && exactSmallTwo < N, 'ordine prevalente ma NON sempre identico (jitter presente)');
+}
+
+console.log('\n— Test 10: i coloni muoiono col Pioniere distrutto (tutti se è l\'unico vettore)');
+{
+  const ships = [ship('coloniale', 0), ship('caccia', 0)];
+  const fleet = { id: 'fcol', ships: ships.slice(), crew: [crew(0), crew(0), crew(0), crew(0), crew(0)], popOnboard: 2 };
+  // sopravvive il caccia → perso il Pioniere
+  const out = C.applyOutcomeToFleet({ seed: 'S', timeImpulsi: 1 }, fleet, forceOfSurvivors([ships[1]]));
+  assert(out.colonistsLost === 2, 'coloni persi = 2 (got ' + out.colonistsLost + ')');
+  assert(fleet.popOnboard === 0, 'popOnboard azzerato (got ' + fleet.popOnboard + ')');
+}
+
+console.log('\n— Test 11: con 2 Pionieri, perderne 1 uccide la quota proporzionale dei coloni');
+{
+  const ships = [ship('coloniale', 0), ship('coloniale', 0), ship('caccia', 0)];
+  const fleet = { id: 'fcol2', ships: ships.slice(), crew: [crew(0), crew(0)], popOnboard: 4 };
+  // sopravvivono 1 Pioniere + caccia → perso 1 Pioniere su 2
+  const out = C.applyOutcomeToFleet({ seed: 'S', timeImpulsi: 1 }, fleet, forceOfSurvivors([ships[1], ships[2]]));
+  assert(out.colonistsLost === 2, 'coloni persi = 4×1/2 = 2 (got ' + out.colonistsLost + ')');
+  assert(fleet.popOnboard === 2, 'restano 2 livelli sul Pioniere superstite (got ' + fleet.popOnboard + ')');
+}
+
+console.log('\n— Test 12: perdere una nave NON coloniale non tocca i coloni');
+{
+  const ships = [ship('coloniale', 0), ship('caccia', 0)];
+  const fleet = { id: 'fcol3', ships: ships.slice(), crew: [crew(0), crew(0)], popOnboard: 2 };
+  // sopravvive il Pioniere → perso il caccia
+  const out = C.applyOutcomeToFleet({ seed: 'S', timeImpulsi: 1 }, fleet, forceOfSurvivors([ships[0]]));
+  assert(out.colonistsLost === 0, 'nessun colono perso (got ' + out.colonistsLost + ')');
+  assert(fleet.popOnboard === 2, 'popOnboard invariato (got ' + fleet.popOnboard + ')');
 }
 
 console.log('\n' + (failures === 0 ? '✅ Tutti i test superati.' : '❌ ' + failures + ' test falliti.'));

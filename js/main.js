@@ -13266,13 +13266,13 @@ function _chronicleEventBody(ev) {
   } else if (ev.kind === 'fleet-colonize-failed') {
     const fname = ev.fleetName || '—';
     const sys = ORION.game.galaxy.systems[ev.systemId];
-    /* Decisione #66 estensione (P0): mostra coloni salvati in scialuppa. */
-    const saved = ev.popSaved || 0;
-    const savedTxt = saved > 0
-      ? ' · <strong>' + saved + ' livell' + (saved === 1 ? 'o' : 'i') + '</strong> di pionieri tornati in scialuppa'
+    /* Decisione utente 2026-06-26: i coloni a bordo cadono con la nave. */
+    const lost = ev.popLost || 0;
+    const lostTxt = lost > 0
+      ? ' · <strong>' + lost + ' livell' + (lost === 1 ? 'o' : 'i') + '</strong> di pionieri perduti con la nave'
       : '';
     pushChronicle(ds + ' — <strong>' + escapeHtml(fname) + '</strong>: fondazione annullata presso <strong>' +
-      (sys ? sys.name : '—') + '</strong> · motivo: ' + escapeHtml(ev.reason || '—') + savedTxt + '.', 'planet');
+      (sys ? sys.name : '—') + '</strong> · motivo: ' + escapeHtml(ev.reason || '—') + lostTxt + '.', 'planet');
   } else if (ev.kind === 'fleet-waypoint-reached') {
     /* Fase B (decisione #46): cronaca breve per ogni tappa. La voce è
        silenziata dal log se si chiude la prima tappa di un singolo move
@@ -13701,8 +13701,9 @@ function _chronicleEventBody(ev) {
   } else if (ev.kind === 'siege-round') {
     const cn = siegeTargetName(ev);
     const crewLoss = ev.crewLost > 0 ? ' · <strong>' + ev.crewLost + ' equipaggi persi</strong>' : '';
+    const popLoss = ev.colonistsLost > 0 ? ' · <strong>' + ev.colonistsLost + ' coloni persi</strong>' : '';
     pushChronicle(ds + ' — Assedio di ' + cn + ' · round ' + ev.round + ' — difese ' + Math.round(ev.def) +
-      ' / attaccante ' + Math.round(ev.atk) + crewLoss + '.', 'system');
+      ' / attaccante ' + Math.round(ev.atk) + crewLoss + popLoss + '.', 'system');
   } else if (ev.kind === 'siege-end') {
     const cn = siegeTargetName(ev);
     const tag = ev.systemId >= 0 ? bodyTagHtml(ev.systemId) : '';
