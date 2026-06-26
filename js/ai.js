@@ -207,7 +207,23 @@
        completo ≥6. Persistenza paga: il FLOOR garantisce un guadagno minimo
        a ogni visita → grindabile con flotta minima. (Tunabile in M20.) */
     INTEL_RATE: 0.2,
-    INTEL_FLOOR: 0.1
+    INTEL_FLOOR: 0.1,
+
+    /* MOBILITAZIONE (2026-06-26): coefficienti contestuali per stimare la
+       forza che una civ schiera SU UN PUNTO PRECISO (colonia/sistema), non
+       in astratto. Tutto vive qui — niente magic numbers nei display. */
+    MOB: {
+      /* Modulatori per stato della relazione vs giocatore. */
+      REL: { alliance: 0.0, peace: 0.40, truce: 0.60, war: 1.00, hostile: 0.85 },
+      /* Boost mobilitazione per la capitale (planets[0]); altre colonie 1.0. */
+      CAPITAL_WEIGHT: 1.5,
+      /* Ogni incursione AI inbound già in corso "impegna" N unità che NON
+         difendono casa. Penalty espressa in unità (sottratte dal totale). */
+      INCURSION_UNIT_COST: 1,
+      /* Civ reduce dopo una sconfitta recente: −15% per Ι, con decadimento. */
+      LAST_BATTLE_LOSS_PENALTY: 0.85,
+      LAST_BATTLE_RECENCY_I: 200
+    }
   };
 
   /* ------------------------------------------------------------------
