@@ -379,6 +379,11 @@
   }
 
   function advanceFleet(game, af, events) {
+    /* Transito-attraverso: una flotta in volo NON è "a" un nodo (è in
+       iperspazio sulla corsia). Solo nell'Impulso in cui TRANSITA un nodo
+       intermedio della rotta la consideriamo momentaneamente lì, per gli
+       incroci a nodo. Resettato a ogni avanzamento. */
+    af._passThrough = null;
     if (af.status === 'orbiting') {
       af.lingerLeft -= 1;
       if (af.lingerLeft > 0) return true;
@@ -409,6 +414,11 @@
       af.lingerLeft = lr.int(CFG.LINGER_MIN, CFG.LINGER_MAX);
       return true;
     }
+    /* Arrivo a un nodo INTERMEDIO: la flotta lo transita in questo Impulso
+       (poi riparte sulla leg successiva). Marca il pass-through così un
+       incrocio a nodo è possibile solo nell'istante del transito reale, non
+       per tutta la durata della leg. */
+    af._passThrough = af.route[af.routeIdx];
     startLeg(game, af);
     return true;
   }
@@ -486,13 +496,27 @@
   function sameEdge(a1, a2, b1, b2) {
     return (a1 === b1 && a2 === b2) || (a1 === b2 && a2 === b1);
   }
+  /* Sistema in cui una flotta AI è GENUINAMENTE presente per l'incrocio a
+     nodo (≠ copertura sensori, che invece raggiunge entrambi gli estremi
+     della corsia). Una flotta in volo è in iperspazio, NON a un nodo: vale
+     solo il sistema dove è ferma (orbita), oppure il nodo intermedio
+     transitato nell'Impulso corrente (pass-through). Così una tua flotta
+     ferma a 1 hop, mentre l'AI è ancora a metà corsia, NON conta come
+     incrocio (richiesta utente 2026-06-26: essere su sistemi diversi senza
+     aver mai incrociato rotta non deve far scattare il meccanismo). */
+  function aiNodeOccupied(af) {
+    if (af.status !== 'in-transit') return af.systemId;
+    if (af._passThrough != null) return af._passThrough;
+    return null;
+  }
   /* Flotte del giocatore che INCROCIANO una flotta AI:
-     - a un NODO: co-locate (stesso sistema) con un nodo-presenza dell'AI;
+     - a un NODO: entrambe nello STESSO sistema in cui l'AI è realmente
+       presente (ferma o nel transito istantaneo di un nodo);
      - in VOLO interstellare: sullo STESSO tratto (stessa coppia di sistemi),
        così "incrociarli nei tratti interstellari" è possibile (richiesta
        utente 2026-06-19), non solo a sistema fermo. */
   function encounteringPlayerFleets(game, af) {
-    const nodes = presenceNodes(af);
+    const node = aiNodeOccupied(af);
     const afLeg = (af.status === 'in-transit' && Array.isArray(af.route) && af.routeIdx + 1 < af.route.length)
       ? [af.route[af.routeIdx], af.route[af.routeIdx + 1]] : null;
     const fleets = game.fleets || [];
@@ -503,7 +527,7 @@
       if (f.location.status === 'in-transit') {
         const fl = fleetLeg(f);
         if (afLeg && fl && sameEdge(fl[0], fl[1], afLeg[0], afLeg[1])) out.push(f);
-      } else if (nodes.indexOf(f.location.systemId) >= 0) {
+      } else if (node != null && f.location.systemId === node) {
         out.push(f);
       }
     }
@@ -781,8 +805,13 @@
       }
       const civ = civById(game, af.civId);
       const playerSys = pf.location && pf.location.systemId;
+      /* Co-locazione REALE (stesso nodo dove l'AI è davvero presente), non la
+         semplice copertura sensori sull'altro estremo della corsia: così un
+         ordine di inseguimento (Segui/Intercetta/Scorta) si risolve solo
+         all'incontro effettivo, non con l'AI ancora a metà tratto a 1 hop. */
+      const aiNode = aiNodeOccupied(af);
       const coLoc = playerSys != null && pf.location.status !== 'in-transit'
-                 && presenceNodes(af).indexOf(playerSys) >= 0;
+                 && aiNode != null && playerSys === aiNode;
 
       if (!coLoc) {
         /* CONVERGENZA TESTA-A-TESTA (richiesta utente 2026-06-20): se la tua
