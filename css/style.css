@@ -3056,15 +3056,19 @@ select.main-menu__input { cursor: pointer; }
 }
 .cantieri-row__cost { font-size: 0.85em; color: var(--c-muted, #8a93b8); }
 .cantieri-row__base { color: var(--c-muted, #8a93b8); opacity: 0.65; font-size: 0.88em; }
-/* M08 Fase A: il dropdown classe nave prende l'intera prima riga del
-   build-row e il pulsante "+ Costruisci" non si comprime — evitiamo
-   troncature del label nel pannello stretto a destra. Le altre righe
-   (Accademia, senza dropdown) restano col comportamento di default. */
-.cantieri-row__build .cantieri-row__select { flex: 1 1 100%; }
-.cantieri-row__build:has(.cantieri-row__select) .btn {
-  flex: 0 0 auto;
-  white-space: nowrap;
+/* M08 Fase A: il picker classe nave prende l'intera prima riga del
+   build-row, costo + "+ Costruisci" stanno sulla riga sotto. Le altre
+   righe (Accademia, senza picker) restano col comportamento di default. */
+.cantieri-row__build .ship-picker { flex: 1 1 100%; }
+.cantieri-row__buildbar {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
 }
+.cantieri-row__buildbar .btn { flex: 0 0 auto; white-space: nowrap; }
 
 /* Decisione #41: capacità Hangar (cantieri + attracchi) + chip tecnici */
 .cantieri-row__caps {
@@ -3149,13 +3153,35 @@ select.main-menu__input { cursor: pointer; }
 }
 .hangar-ship__stats {
   display: flex;
-  gap: 5px;
-  margin-top: 2px;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 3px;
   font-size: 0.72em;
   color: var(--c-muted, #8a93b8);
   font-family: var(--font-mono, monospace);
 }
 .hangar-ship__stats i { opacity: 0.4; font-style: normal; }
+
+/* Chip caratteristiche nave (richiesta utente 2026-06-26): difesa/forza e
+   altro in pill tintate per concetto (UI_GUIDE §1). Condivise tra la card
+   riserva Hangar e il picker di costruzione. */
+.ship-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgb(var(--c-surface-rgb, 34 46 86) / 0.55);
+  border: 1px solid var(--c-border-soft, rgba(255, 255, 255, 0.1));
+  line-height: 1.55;
+  white-space: nowrap;
+}
+.ship-stat--hp { color: #f0a0b0; border-color: rgba(240, 130, 150, 0.32); }  /* corazza / difesa */
+.ship-stat--fp { color: #f0c878; border-color: rgba(240, 200, 110, 0.32); }  /* potenza di fuoco */
+.ship-stat--sp { color: #5fe0d8; border-color: rgba(47, 230, 224, 0.30); }   /* velocità */
+.ship-stat--cr { color: #c2acff; border-color: rgba(184, 156, 255, 0.32); }  /* equipaggio */
+.ship-stat--se { color: #90d0ee; border-color: rgba(128, 200, 230, 0.32); }  /* sensori */
+.ship-stat--pc { color: #7fe6c0; border-color: rgba(111, 224, 184, 0.32); }  /* coloni */
 
 /* Roster equipaggi (tab Forze): lista per-equipaggio a riposo / in missione */
 .crew-roster {
@@ -5727,18 +5753,100 @@ select.main-menu__input { cursor: pointer; }
 /* =====================================================================
    M08 Fase A — Vista Flotte + overlay
    ===================================================================== */
-.cantieri-row__select {
+/* Picker classe nave in stile gioco (sostituisce il <select> nativo,
+   richiesta utente 2026-06-26). <details> robusto in pannelli scrollabili:
+   il menu è inline (non absolute) e spinge il contenuto, niente clipping. */
+.ship-picker { position: relative; min-width: 0; }
+.ship-picker__trigger {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 9px;
   background: rgb(var(--c-surface-rgb) / 0.85);
+  border: 1px solid var(--c-border-soft, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-sm, 5px);
   color: var(--c-text, #e9ecf6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-  padding: 2px 4px;
-  font-family: inherit;
-  font-size: 0.9em;
-  margin-right: 4px;
+  font-size: 0.86em;
+  cursor: pointer;
+  list-style: none;
+  transition: var(--transition, 200ms ease);
 }
-.cantieri-row__select:focus {
-  outline: 1px solid var(--c-cyan, #2fe6e0);
+.ship-picker__trigger::-webkit-details-marker { display: none; }
+.ship-picker__trigger:hover { border-color: var(--c-accent, #2fe6e0); }
+.ship-picker__trigger:focus-visible { outline: 1px solid var(--c-accent, #2fe6e0); }
+.ship-picker[open] .ship-picker__trigger {
+  border-color: var(--c-accent, #2fe6e0);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.ship-picker__trigger .hangar-ship__ico { font-size: 1.4em; }
+.ship-picker__label {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ship-picker__stats { flex: 0 1 auto; }
+.ship-picker__caret {
+  flex: 0 0 auto;
+  font-size: 0.9em;
+  transform: rotate(90deg);
+  transition: transform var(--transition, 200ms ease);
+}
+.ship-picker[open] .ship-picker__caret { transform: rotate(-90deg); }
+.ship-picker__menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  background: rgb(var(--c-surface-rgb) / 0.45);
+  border: 1px solid var(--c-border-soft, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-sm, 6px);
+}
+.ship-opt {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  background: rgb(var(--c-surface-rgb, 34 46 86) / 0.55);
+  border: 1px solid rgba(125, 110, 220, 0.22);
+  border-radius: 10px;
+  color: var(--c-text, #d8def0);
+  cursor: pointer;
+  transition: var(--transition, 200ms ease);
+}
+.ship-opt:hover:not(:disabled) {
+  border-color: var(--c-accent, #2fe6e0);
+  background: rgb(var(--c-surface-rgb) / 0.8);
+}
+.ship-opt.is-active {
+  border-color: var(--c-accent, #2fe6e0);
+  box-shadow: inset 2px 0 0 var(--c-accent, #2fe6e0);
+}
+.ship-opt.is-locked, .ship-opt:disabled { opacity: 0.5; cursor: not-allowed; }
+.ship-opt .hangar-ship__ico { flex: 0 0 auto; font-size: 1.85em; }
+.ship-opt__main { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.ship-opt__name {
+  font-size: 0.84em;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ship-opt__lock { font-weight: 400; font-size: 0.85em; color: var(--c-muted, #8a93b8); }
+.ship-opt__cost {
+  flex: 0 0 auto;
+  font-size: 0.74em;
+  font-family: var(--font-mono, monospace);
+  color: var(--c-text-soft, #b8c0e0);
+  white-space: nowrap;
 }
 
 .fleet-view {
