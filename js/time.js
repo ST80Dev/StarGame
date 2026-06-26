@@ -536,29 +536,18 @@
      Recovery-friendly (#22): il giocatore non perde tutto, può rimettersi
      in piedi. Le risorse vengono restituite alla colonia origine (payerKey
      salvato in fleet._colonizePaidCost al setOrder). */
-  function handleColonialLost(game, fleet, events) {
+  function handleColonialLost(game, fleet, events, popLost) {
     const memo = fleet._colonizePaidCost;
     if (!memo) return;
     const payer = game.colonies && game.colonies[memo.payerKey];
-    /* Decisione #66 estensione (P0 sessione 2026-06-09):
-       50% dei coloni a bordo si salva in scialuppa di salvataggio e
-       torna alla colonia origine (recovery-friendly #22, analogo al
-       crew M07 esploratore #39). Capped al popCap della destinazione.
-       Quel che eccede è perso. */
-    let popSaved = 0;
-    if (payer && fleet.popOnboard > 0) {
-      popSaved = Math.floor((fleet.popOnboard || 0) / 2);
-      if (popSaved > 0 && payer.pop) {
-        const cap = payer.pop.cap || 0;
-        const popNow = payer.pop.total || 0;
-        const room = Math.max(0, cap - popNow);
-        const added = Math.min(popSaved, room);
-        payer.pop.total = popNow + added;
-        if (added < popSaved) popSaved = added;  /* overflow scartato (no spazio) */
-        if (added > 0) addToBestClass(payer, added);
-      }
-      fleet.popOnboard = 0;
-    }
+    /* Decisione utente 2026-06-26: i coloni a bordo NON si salvano più in
+       scialuppa — cadono con la nave coloniale distrutta (la morte è già
+       applicata nel writeback di combat.js → fleet.popOnboard ridotto). Qui
+       resta la leva recovery-friendly (#22): refund 50% di costo nave +
+       colonizzazione. Azzeriamo per sicurezza i coloni residui (nessun
+       vettore superstite). */
+    const colonistsLost = popLost || 0;
+    fleet.popOnboard = 0;
     if (payer && payer.stock) {
       const refund = {};
       ['met', 'en', 'food', 'water'].forEach(function (k) {
@@ -574,7 +563,7 @@
         bodyKey: fleet.orders && fleet.orders.bodyKey,
         reason: 'coloniale-lost',
         refund: refund,
-        popSaved: popSaved,
+        popLost: colonistsLost,
         payerKey: memo.payerKey,
         impulso: game.timeImpulsi
       });
@@ -1457,7 +1446,7 @@
       // Decisione #66: refund 50% se la coloniale è stata persa nel scontro.
       if (hadColonial) {
         const stillColonial = fleet.ships && fleet.ships.some(function (s) { return s.kind === 'coloniale'; });
-        if (!stillColonial) handleColonialLost(game, fleet, events);
+        if (!stillColonial) handleColonialLost(game, fleet, events, fleetOutcome.colonistsLost);
       }
 
       // M16 Fase B (#81): riconquista riuscita → la stazione torna tua
@@ -1491,35 +1480,24 @@
            (ALIGNMENT_IMPACT #23): liberare un sistema da una civiltà MALIGNA
            è "light"; aggredire una buona/neutrale è "dark". */
         if (playerWon && civ.systems.indexOf(sysId) >= 0) {
-          /* M13 B-2 (decisione #93): rimossa la "occupazione di sistema" di
-             M11 Fase A — incoerente col modello multi-proprietà per body
-             (#52). La perdita è MIRATA al body attaccato (`attackBodyKey`,
-             se noto) o al primo pianeta della civ nel sistema. La presenza
-             militare sul sistema si dichiara col PRESIDIO (ORION.garrison),
-             non si subisce automaticamente.
+          /* M13 B-2 (decisione #93): la perdita è MIRATA al body attaccato.
+             Decisione 2026-06-26 (feedback utente): la perdita di un pianeta
+             scatta SOLO se il giocatore ha ESPLICITAMENTE attaccato un BODY
+             preciso — ossia esiste un ordine d'attacco su QUESTO sistema
+             (`civAttacked`) CON `attackBodyKey`. Una scaramuccia incidentale
+             con una flotta ostile nel sistema NON deve più radere un pianeta
+             "a caso" (rimosso il fallback al primo pianeta). La presenza
+             militare sul sistema si dichiara col PRESIDIO (ORION.garrison).
              Verbo morale (#23): liberare un body da una civ maligna è
              "light"; aggredire una buona/neutrale è "dark". */
-          const targetBodyKey = fleet.attackBodyKey || null;
+          const deliberate = !!(civAttacked && fleet.attackBodyKey);
+          const targetBodyKey = deliberate ? fleet.attackBodyKey : null;
           let removedAny = false;
-          if (root.ORION.ai && root.ORION.ai.removePlanet && targetBodyKey) {
+          if (deliberate && root.ORION.ai && root.ORION.ai.removePlanet) {
             const planetKey = sysId + ':' + targetBodyKey;
             if ((civ.planets || []).indexOf(planetKey) >= 0) {
               root.ORION.ai.removePlanet(civ, planetKey);
               removedAny = true;
-            }
-          }
-          /* Fallback: nessun body specifico → rimuovi il primo pianeta che
-             la civ possiede in questo sistema. */
-          if (!removedAny && Array.isArray(civ.planets)) {
-            for (let pp = 0; pp < civ.planets.length; pp++) {
-              const pk = civ.planets[pp];
-              if (pk && pk.indexOf(sysId + ':') === 0) {
-                if (root.ORION.ai && root.ORION.ai.removePlanet) {
-                  root.ORION.ai.removePlanet(civ, pk);
-                }
-                removedAny = true;
-                break;
-              }
             }
           }
           if (removedAny) {
@@ -1530,7 +1508,10 @@
             }
             if (impact === 'light') bumpIcg(game, -1); else bumpIcg(game, 2);
             report.alignmentImpact = impact;
-            report.bodyLost = targetBodyKey || null;
+            report.bodyLost = targetBodyKey;
+            /* La colonia nemica viene RAZZIATA, non occupata: il corpo torna
+               libero (vergine). Il flag alimenta la cronaca esplicativa. */
+            report.bodyRazed = true;
           }
           if ((civ.planets || []).length === 0) {
             civ.alive = false;
@@ -1540,7 +1521,7 @@
              maggiore se il vittorioso ha raidato un body specifico (più
              vicino ai laboratori); altrimenti scaramuccia spaziale. */
           if (root.ORION.research && root.ORION.research.tryCaptureTech) {
-            const captureKind = (removedAny && targetBodyKey) ? 'raid' : 'skirmish';
+            const captureKind = removedAny ? 'raid' : 'skirmish';
             root.ORION.research.tryCaptureTech(game, civ, captureKind, events);
           }
         }
@@ -1572,6 +1553,7 @@
         kind: 'battle-skirmish', report: report,
         fleetId: fleet.id, fleetName: fleet.name,
         playerWon: playerWon, lost: fleetOutcome.lost, promoted: fleetOutcome.promoted,
+        crewLost: fleetOutcome.crewLost,
         systemId: sysId, impulso: game.timeImpulsi
       });
     }
@@ -1717,7 +1699,7 @@
       const r = C.resolveRound(rng, atk, def);
       // scrivi gli esiti del difensore sullo stato vivo
       const survivorsDef = def.combatants;     // post-purge
-      const wb = C.applyDefenderWriteback(colony, survivorsDef, r.destroyedB);
+      const wb = C.applyDefenderWriteback(game, colony, survivorsDef, r.destroyedB);
       if (wb.shipsLost > 0) warRegisterLoss(game, wb.shipsLost * CFG.WAR_MORALE_PER_SHIP, wb.shipsLost * CFG.WAR_PRESSURE_PER_LOSS);
       // l'attaccante hp residuo è già persistito (stesso array di oggetti)
 
@@ -1728,6 +1710,7 @@
         colonyKey: colonyKey, systemId: battle.systemId,
         atk: C.totalHp(atk), def: C.totalHp(def),
         lostDef: r.destroyedB.length, lostAtk: r.destroyedA.length,
+        crewLost: wb.crewLost, colonistsLost: wb.colonistsLost,
         impulso: game.timeImpulsi });
 
       // fine assedio?
@@ -1900,11 +1883,12 @@
     report.kind = 'raider'; report.systemId = inc.targetSysId; report.enemyKind = 'pirate';
     const playerWon = (report.winner === 'B');
     /* Esito su OGNI flotta partecipante (writeback per-nave via id univoci). */
-    let totalLost = 0; const promoted = []; const allies = [];
+    let totalLost = 0; let totalCrewLost = 0; const promoted = []; const allies = [];
     for (let i = 0; i < participants.length; i++) {
       const pf = participants[i];
       const oc = C.applyOutcomeToFleet(game, pf, B);
       totalLost += oc.lost;
+      totalCrewLost += (oc.crewLost || 0);
       for (let j = 0; j < oc.promoted.length; j++) promoted.push(oc.promoted[j]);
       /* Servizio (decisione utente 2026-06-11): raider respinto → +1 xp crew,
          a tutte le flotte che hanno difeso e sono sopravvissute. */
@@ -1932,6 +1916,7 @@
       fleetId: fleet.id, fleetName: fleet.name,
       allies: allies.length ? allies : null,
       playerWon: playerWon, lost: totalLost, promoted: promoted,
+      crewLost: totalCrewLost,
       systemId: inc.targetSysId, impulso: game.timeImpulsi
     });
   }
@@ -2028,7 +2013,7 @@
       const c = def.combatants[i];
       if (c.src && c.src.type === 'station') { stationAlive = true; st.hp = Math.max(1, Math.round(c.hp)); }
     }
-    const wb = C.applyDefenderWriteback(null,
+    const wb = C.applyDefenderWriteback(game, null,
       def.combatants.filter(function (c) { return c.src && c.src.type === 'ship'; }),
       r.destroyedB.filter(function (c) { return c.src && c.src.type === 'ship'; }));
     if (wb.shipsLost > 0) warRegisterLoss(game, wb.shipsLost * CFG.WAR_MORALE_PER_SHIP, wb.shipsLost * CFG.WAR_PRESSURE_PER_LOSS);
@@ -2037,7 +2022,8 @@
       atkHp: Math.round(C.totalHp(atk)), defHp: Math.round(C.totalHp(def)) });
     events.push({ kind: 'siege-round', battleId: battle.id, round: battle.round,
       stationId: st.id, systemId: battle.systemId, atk: C.totalHp(atk), def: C.totalHp(def),
-      lostDef: r.destroyedB.length, lostAtk: r.destroyedA.length, impulso: game.timeImpulsi });
+      lostDef: r.destroyedB.length, lostAtk: r.destroyedA.length, crewLost: wb.crewLost,
+      colonistsLost: wb.colonistsLost, impulso: game.timeImpulsi });
 
     // la PIATTAFORMA è caduta → la stazione cade (le flotte presenti restano)
     if (!stationAlive) {

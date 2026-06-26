@@ -9267,7 +9267,36 @@ function renderCivDetail(stage, c) {
   const defPct = intelRank >= 4 ? 0 : (intelRank >= 3 ? 0.20 : (intelRank >= 2 ? 0.45 : 0.70));
   const defLo = Math.max(0, Math.round(defTot.total * (1 - defPct)));
   const defHi = Math.max(0, Math.round(defTot.total * (1 + defPct)));
-  const defTxt = fpDeepReveal ? ('= ' + defTot.total + ' P difese') : ('≈ ' + defLo + '–' + defHi + ' P difese');
+  /* Presenza REALE di flotte AI ferme nel sistema di ogni colonia: somma
+     garrison.powerOf delle game.aiFleets della civ con systemId=sid e
+     status in {orbiting,docked} (in-transit non difende). A L3 ci serve il
+     TOTALE per impero (range), a L4 il dettaglio per-sistema.
+     NB: dichiarato PRIMA di defTxt perché questo lo usa (bugfix TDZ
+     2026-06-26: realFleetTotal era usato prima dell'inizializzazione). */
+  const fleetBySys = (function () {
+    const m = {};
+    const list = (g.aiFleets || []);
+    const GAR = ORION.garrison;
+    if (!GAR || !GAR.powerOf) return m;
+    for (let i = 0; i < list.length; i++) {
+      const af = list[i];
+      if (!af || af.civId !== c.id) continue;
+      if (af.status === 'in-transit') continue;
+      const p = GAR.powerOf(g, af);
+      if (p <= 0) continue;
+      const sid = af.systemId;
+      m[sid] = (m[sid] || 0) + Math.round(p);
+    }
+    return m;
+  })();
+  const realFleetTotal = Object.keys(fleetBySys).reduce(function (s, k) { return s + fleetBySys[k]; }, 0);
+  /* Presentazione: combiniamo le difese statiche (sintetiche) con la
+     presenza REALE di flotte AI ferme sui loro sistemi. La presenza reale è
+     un dato concreto (game.aiFleets), NON una stima: la mostriamo da L3 in
+     su come "+ N P in orbita". A L4 anche il breakdown per-colonia (sotto). */
+  const defTxt = fpDeepReveal
+    ? ('= ' + defTot.total + ' P difese statiche · + ' + realFleetTotal + ' P in orbita = ' + (defTot.total + realFleetTotal) + ' P totali')
+    : ('≈ ' + defLo + '–' + defHi + ' P difese statiche' + (intelRank >= 3 && realFleetTotal > 0 ? (' · + ' + realFleetTotal + ' P in orbita') : ''));
   /* Per-colonia (solo L4): map planetKey → defense P, da iniettare nella lista colonie. */
   const defByPlanet = (intelRank >= 4 && AI.civDefensePerColony)
     ? (function () {
@@ -9310,12 +9339,20 @@ function renderCivDetail(stage, c) {
          bersaglio piu' scoperto. Il valore e' deterministico (seed di gioco
          + civ + planetKey), non cambia tra render dello stesso save. */
       const planetKey = x.sid + ':' + x.bk;
+      /* Difese statiche stimate (solo L4 mostra il numero per-colonia). */
       const defP = (defByPlanet && defByPlanet[planetKey] != null) ? defByPlanet[planetKey] : null;
       const defTag = (defP != null)
-        ? ' <span class="civ-detail__col-tag" title="Difese stimate sulla colonia · valore P (HP + FP×8)">P ' + defP + '</span>'
+        ? ' <span class="civ-detail__col-tag" title="Difese statiche stimate · sintetiche (le AI non hanno strutture difensive modellate come te)">stimate P ' + defP + '</span>'
+        : '';
+      /* Presenza REALE: flotte AI ferme su questo sistema. Dato concreto,
+         visibile da L3 in su (informazione che varrebbe la pena raccogliere
+         con sensori se ti spingessi nel sistema). */
+      const fleetP = fleetBySys[x.sid] || 0;
+      const fleetTag = (intelRank >= 3 && fleetP > 0)
+        ? ' <span class="civ-detail__col-tag" style="color:#ffaa66;border-color:rgba(255,170,102,0.30);background:rgba(255,170,102,0.10)" title="Presenza reale: flotte AI ferme in orbita o al porto in questo sistema. NON è una stima.">⚡ in orbita P ' + fleetP + '</span>'
         : '';
       return '<li class="civ-detail__col" data-sys="' + x.sid + '"><span class="civ-detail__col-name">' +
-        escapeHtml(sysNm) + (bodyNm ? ' · ' + escapeHtml(bodyNm) : '') + '</span>' + systemTagHtml(x.sid) + dossTag + defTag + '</li>';
+        escapeHtml(sysNm) + (bodyNm ? ' · ' + escapeHtml(bodyNm) : '') + '</span>' + systemTagHtml(x.sid) + dossTag + defTag + fleetTag + '</li>';
     }).join('');
     const hiddenN = planets.length - colKnown.length;
     /* Conteggio colonie non localizzate = informazione di fog-of-war: rivelarlo
@@ -12027,6 +12064,17 @@ function rateGrid(rates, upkeep, colony) {
   const F = ORION.fleet;
   const shipMet = (F && F.portMaintenance) ? F.portMaintenance(ORION.game, colony) : 0;
   const shipEn  = (F && F.portMaintenanceEn) ? F.portMaintenanceEn(ORION.game, colony) : 0;
+  /* Surplus estrattivo da anomalie/cinture/nebulose (richiesta utente
+     2026-06-20): le flotte in raccolta versano il bottino sulla colonia
+     attiva più vicina al sito (anomaly.depositColonyKey). Lo aggiungiamo
+     al saldo del riepilogo dx come fattore esplicito ("anomalia"), come
+     facciamo già nella Plancia di Colonia (colony-deck). Senza, l'utente
+     mandava estrattori e il saldo non sembrava cambiare. */
+  const anomFlow = (ORION.anomaly && ORION.anomaly.harvestByColony)
+    ? (ORION.anomaly.harvestByColony(ORION.game)[colony.systemId + ':' + colony.bodyKey] || null)
+    : null;
+  const anomMet = anomFlow ? anomFlow.met : 0;
+  const anomEn  = anomFlow ? anomFlow.en  : 0;
   const items = [];
   ['met', 'en', 'food', 'water'].forEach(function (k) {
     const r = (rates[k] || 0) * pf.prodMul; const u = upkeep[k] || 0;
@@ -12038,14 +12086,16 @@ function rateGrid(rates, upkeep, colony) {
     const crewDrain = k === 'food' ? (pf.crewFood || 0) : k === 'water' ? (pf.crewWater || 0) : 0;
     const shipDrain = k === 'met' ? shipMet : k === 'en' ? shipEn : 0;
     const trade = tradeNet[k] || 0;   // + entrata, − uscita
-    const net = r - u - popDrain - crewDrain - shipDrain + trade;
-    if (!(r || u || popDrain || crewDrain || shipDrain || trade)) return;
+    const anom = k === 'met' ? anomMet : k === 'en' ? anomEn : 0;   // + entrata
+    const net = r - u - popDrain - crewDrain - shipDrain + trade + anom;
+    if (!(r || u || popDrain || crewDrain || shipDrain || trade || anom)) return;
     let aux = '+' + fmtAbs(r) + ' prod / −' + fmtAbs(u) + ' uso';
     if (popDrain > 0) aux += ' / −' + fmtAbs(popDrain) + ' pop';
     if (crewDrain > 0) aux += ' / −' + fmtAbs(crewDrain) + ' razioni';
     if (shipDrain > 0) aux += ' / −' + fmtAbs(shipDrain) + ' flotta';
     if (trade > 0) aux += ' / +' + fmtAbs(trade) + ' commercio';
     else if (trade < 0) aux += ' / −' + fmtAbs(trade) + ' commercio';
+    if (anom > 0) aux += ' / +' + fmtAbs(anom) + ' anomalia';
     items.push(row(resLabel(k), '<span class="rate ' + (net >= 0 ? 'rate--pos' : 'rate--neg') + '">' + fmtNet(net) + '</span> / ' + iU() + ' <span class="rate-aux">(' + aux + ')</span>'));
   });
   if (rates.research) items.push(row('Ricerca', '<span class="rate rate--pos">+' + (Math.round(rates.research * 100) / 100) + '</span> / ' + iU()));
@@ -13497,13 +13547,13 @@ function _chronicleEventBody(ev) {
   } else if (ev.kind === 'fleet-colonize-failed') {
     const fname = ev.fleetName || '—';
     const sys = ORION.game.galaxy.systems[ev.systemId];
-    /* Decisione #66 estensione (P0): mostra coloni salvati in scialuppa. */
-    const saved = ev.popSaved || 0;
-    const savedTxt = saved > 0
-      ? ' · <strong>' + saved + ' livell' + (saved === 1 ? 'o' : 'i') + '</strong> di pionieri tornati in scialuppa'
+    /* Decisione utente 2026-06-26: i coloni a bordo cadono con la nave. */
+    const lost = ev.popLost || 0;
+    const lostTxt = lost > 0
+      ? ' · <strong>' + lost + ' livell' + (lost === 1 ? 'o' : 'i') + '</strong> di pionieri perduti con la nave'
       : '';
     pushChronicle(ds + ' — <strong>' + escapeHtml(fname) + '</strong>: fondazione annullata presso <strong>' +
-      (sys ? sys.name : '—') + '</strong> · motivo: ' + escapeHtml(ev.reason || '—') + savedTxt + '.', 'planet');
+      (sys ? sys.name : '—') + '</strong> · motivo: ' + escapeHtml(ev.reason || '—') + lostTxt + '.', 'planet');
   } else if (ev.kind === 'fleet-waypoint-reached') {
     /* Fase B (decisione #46): cronaca breve per ogni tappa. La voce è
        silenziata dal log se si chiude la prima tappa di un singolo move
@@ -13879,7 +13929,8 @@ function _chronicleEventBody(ev) {
     const allies = Array.isArray(ev.allies) && ev.allies.length
       ? ' (con ' + ev.allies.map(function (n) { return '<strong>' + escapeHtml(n) + '</strong>'; }).join(', ') + ')'
       : '';
-    pushChronicle(ds + ' — Flotta <strong>' + escapeHtml(ev.fleetName || '—') + '</strong>' + allies + ' ' + verb + stag + losses + '.', 'system');
+    const crewLoss = ev.crewLost > 0 ? ' · <strong>' + ev.crewLost + ' equipaggi persi</strong>' : '';
+    pushChronicle(ds + ' — Flotta <strong>' + escapeHtml(ev.fleetName || '—') + '</strong>' + allies + ' ' + verb + stag + losses + crewLoss + '.', 'system');
     if (ORION.tutorial) ORION.tutorial.fire('pirates');
   } else if (ev.kind === 'raider-fizzle') {
     /* preda fuggita: voce leggera, niente spam */
@@ -13890,6 +13941,7 @@ function _chronicleEventBody(ev) {
     const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
     const verb = ev.playerWon ? 'respinge il nemico' : 'è costretta alla ritirata';
     const losses = ev.lost > 0 ? ' · ' + ev.lost + ' nave/i perdute' : ' · nessuna perdita';
+    const crewLoss = ev.crewLost > 0 ? ' · <strong>' + ev.crewLost + ' equipaggi persi</strong>' : '';
     /* Fase B: se lo scontro ha arretrato il confine di una civiltà AI. */
     let rollback = '';
     if (ev.report && ev.report.rolledBackSystem != null) {
@@ -13897,8 +13949,20 @@ function _chronicleEventBody(ev) {
         ? ' · <strong>sistema liberato</strong> (reputazione luminosa)'
         : ' · <strong>sistema strappato</strong> (reputazione oscura)';
     }
+    /* Decisione 2026-06-26: se l'attacco MIRATO a un loro pianeta lo ha
+       razziato, chiariamo che il corpo NON è occupato — torna libero e va
+       colonizzato ex-novo se lo vuoi tenere (niente passaggio automatico di
+       popolazione/strutture). */
+    let razed = '';
+    if (ev.report && ev.report.bodyRazed) {
+      const bodyNm = (ev.systemId != null && ev.report.bodyLost)
+        ? _flBodyNm(ORION.game, ev.systemId, ev.report.bodyLost) : null;
+      const where = bodyNm ? ('<strong>' + escapeHtml(bodyNm) + '</strong>') : 'la colonia nemica colpita';
+      razed = ' · ' + where + ' <strong>razziata</strong>: il corpo torna <strong>libero</strong> (non occupato) — ' +
+        '<span class="chronicle__hint">coloniza ex-novo per insediartici</span>';
+    }
     pushChronicle(ds + ' — Scontro presso <strong>' + (sys ? sys.name : '—') + '</strong>' + stag + ': <strong>' +
-      escapeHtml(ev.fleetName) + '</strong> ' + verb + losses + rollback + '.', ev.playerWon ? 'explore' : 'system');
+      escapeHtml(ev.fleetName) + '</strong> ' + verb + losses + crewLoss + rollback + razed + '.', ev.playerWon ? 'explore' : 'system');
     ORION.lastBattle = ev.report || null;
     if (ORION.tutorial) ORION.tutorial.fire('combat');
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
@@ -13933,8 +13997,10 @@ function _chronicleEventBody(ev) {
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
   } else if (ev.kind === 'siege-round') {
     const cn = siegeTargetName(ev);
+    const crewLoss = ev.crewLost > 0 ? ' · <strong>' + ev.crewLost + ' equipaggi persi</strong>' : '';
+    const popLoss = ev.colonistsLost > 0 ? ' · <strong>' + ev.colonistsLost + ' coloni persi</strong>' : '';
     pushChronicle(ds + ' — Assedio di ' + cn + ' · round ' + ev.round + ' — difese ' + Math.round(ev.def) +
-      ' / attaccante ' + Math.round(ev.atk) + '.', 'system');
+      ' / attaccante ' + Math.round(ev.atk) + crewLoss + popLoss + '.', 'system');
   } else if (ev.kind === 'siege-end') {
     const cn = siegeTargetName(ev);
     const tag = ev.systemId >= 0 ? bodyTagHtml(ev.systemId) : '';
@@ -14356,6 +14422,13 @@ function buildEmpireState() {
     const Fdash = ORION.fleet;
     const shipMet = (Fdash && Fdash.portMaintenance) ? Fdash.portMaintenance(g, c) : 0;
     const shipEn  = (Fdash && Fdash.portMaintenanceEn) ? Fdash.portMaintenanceEn(g, c) : 0;
+    /* Surplus anomalie: come per rateGrid e colony-deck, conteggia il
+       deposito previsto dal sito più vicino (decisione utente 2026-06-20). */
+    const anomFlowCard = (ORION.anomaly && ORION.anomaly.harvestByColony)
+      ? (ORION.anomaly.harvestByColony(g)[k] || null)
+      : null;
+    const anomCardMet = anomFlowCard ? anomFlowCard.met : 0;
+    const anomCardEn  = anomFlowCard ? anomFlowCard.en  : 0;
     let stockTotal = 0, stockNet = 0;
     ['met', 'en', 'food', 'water'].forEach(function (rk) {
       stockTotal += (c.stock[rk] || 0);
@@ -14366,7 +14439,8 @@ function buildEmpireState() {
         rk === 'en'    ? (pf.popEn   || 0) : 0;
       const crewDrain = rk === 'food' ? (pf.crewFood || 0) : rk === 'water' ? (pf.crewWater || 0) : 0;
       const shipDrain = rk === 'met' ? shipMet : rk === 'en' ? shipEn : 0;
-      stockNet += (out.rates[rk] || 0) * pf.prodMul - (out.upkeep[rk] || 0) - popDrain - crewDrain - shipDrain;
+      const anomBonus = rk === 'met' ? anomCardMet : rk === 'en' ? anomCardEn : 0;
+      stockNet += (out.rates[rk] || 0) * pf.prodMul - (out.upkeep[rk] || 0) - popDrain - crewDrain - shipDrain + anomBonus;
     });
 
     const tel = (ORION._empireTel && ORION._empireTel[k]) || { pop: [], morale: [], stock: [] };

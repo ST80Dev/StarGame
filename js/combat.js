@@ -42,6 +42,17 @@
     FP_VARIANCE: 0.15,          // ±15% "fortuna" del round (deterministica dal seed)
     ROUND_EVERY_I: 5,           // assedi: 1 round di scambio ogni N Impulsi
 
+    /* Bersaglio (decisione utente 2026-06-26). Le navi da guerra del
+       giocatore fanno da SCORTA e cadono per prime; i non-combattenti
+       (fp di classe ≤ SCREEN_FP_MAX: Pioniere, esploratore, estrattore)
+       stanno dietro la linea e muoiono solo a scorta esaurita. Tra i
+       combattenti l'ordine di caduta segue grosso modo la stazza
+       (caccia → intercettore → corvetta → … → capitali), approssimata
+       dall'hp, con un JITTER ±TARGET_HP_JITTER che rompe la linearità (a
+       volte cade prima una nave più grande). */
+    SCREEN_FP_MAX: 3,           // fp di classe ≤ 3 → non-combattente schermato
+    TARGET_HP_JITTER: 0.35,     // ±35% sul punteggio-bersaglio (non-linearità)
+
     /* Soglie di ritirata per formazione (§12.5). Frazione di hp residua
        sotto cui una flotta MOBILE si sgancia. Le difese planetarie sono
        immobili → non si ritirano mai (combattono fino all'ultimo modulo). */
@@ -326,17 +337,38 @@
     return (t == null) ? CFG.RETREAT.balanced : t;
   }
 
-  /* Distribuisce `dmg` totale su `force` colpendo prima i bersagli più
-     deboli (ordine stabile + jitter rng). Ritorna i combattenti distrutti. */
+  /* Una nave del giocatore è "schermata" (non-combattente: Pioniere,
+     esploratore, estrattore) se la potenza di fuoco di CLASSE è sotto la
+     soglia di scorta. Solo le navi (src.type 'ship') sono schermabili: difese
+     planetarie, stazioni e unità nemiche mantengono l'ordinamento normale —
+     così il bilanciamento degli assedi sulle difese non cambia. */
+  function isScreenedSupport(c) {
+    if (!c.src || c.src.type !== 'ship') return false;
+    const F = ORION.fleet;
+    const cls = F && F.getClass && F.getClass(c.kind);
+    const fp = cls ? (cls.fp || 0) : (c.fp || 0);
+    return fp <= CFG.SCREEN_FP_MAX;
+  }
+
+  /* Distribuisce `dmg` totale su `force`. Priorità di bersaglio: le navi da
+     guerra del giocatore (scorta) cadono PRIMA, i non-combattenti dietro la
+     linea solo a scorta esaurita; tra i combattenti l'ordine segue grosso
+     modo la stazza (hp crescente) con un jitter ±TARGET_HP_JITTER che rompe
+     la linearità. Il punteggio è calcolato UNA volta per combatant (un solo
+     rng.float() ciascuno, ordine stabile → deterministico). Ritorna i
+     combattenti distrutti. */
   function applyDamage(force, dmg, rng) {
     if (dmg <= 0) return [];
-    const order = force.combatants.slice().sort(function (a, b) {
-      return a.hp - b.hp || (rng.float() - 0.5);
+    const order = force.combatants.map(function (c) {
+      const jitter = 1 + (rng.float() - 0.5) * 2 * CFG.TARGET_HP_JITTER;
+      return { c: c, screen: isScreenedSupport(c) ? 1 : 0, score: Math.max(0, c.hp) * jitter };
+    }).sort(function (a, b) {
+      return a.screen - b.screen || a.score - b.score;
     });
     let remaining = dmg;
     const destroyed = [];
     for (let i = 0; i < order.length && remaining > 0; i++) {
-      const c = order[i];
+      const c = order[i].c;
       if (c.hp <= 0) continue;
       const hit = Math.min(c.hp, remaining);
       c.hp -= hit;
@@ -457,21 +489,104 @@
      diventare LEGGENDARIE (nome proprio).
      ------------------------------------------------------------------ */
 
+  /* ------------------------------------------------------------------
+     Equipaggio caduto con la nave (decisione utente 2026-06-26).
+     Quando una nave è DISTRUTTA in combattimento muore il suo complemento
+     d'equipaggio (somma `class.crew` delle navi perse), estratto con
+     PREPONDERANZA verso i meno esperti (peso ∝ 1/(xp+1)): le reclute
+     affondano più spesso, i veterani sono favoriti ma NON immuni.
+     Deterministico (#5): rng seedato per-flotta+impulso, zero Math.random.
+     NB: è il caso opposto alla rottamazione al porto (avaria/usura in
+     viaggio, esploratore logoro che rientra) dove lo scafo si perde ma
+     l'equipaggio si salva (#22) — qui la nave esplode coi suoi a bordo.
+     Gli eventuali equipaggi in ECCEDENZA (oltre il complemento delle navi
+     perse) sopravvivono. Ritorna il numero di equipaggi perduti. */
+  function cullFleetCrew(game, fleet, crewToKill, seedScope) {
+    if (!fleet || !Array.isArray(fleet.crew) || !(crewToKill > 0)) return 0;
+    if (!ORION.rng || !ORION.rng.makeRng) return 0;
+    const rng = ORION.rng.makeRng((game && game.seed || '') + ':crewloss:' + seedScope);
+    let kill = Math.min(crewToKill, fleet.crew.length);
+    let killed = 0;
+    while (kill > 0 && fleet.crew.length > 0) {
+      let total = 0;
+      const weights = fleet.crew.map(function (c) {
+        const w = 1 / (((c && c.xp) || 0) + 1);
+        total += w;
+        return w;
+      });
+      let pick = rng.float() * total;
+      let idx = 0;
+      /* L'ultimo indice è il fallback per il residuo floating-point. */
+      for (; idx < weights.length - 1; idx++) {
+        pick -= weights[idx];
+        if (pick <= 0) break;
+      }
+      fleet.crew.splice(idx, 1);
+      killed++;
+      kill--;
+    }
+    return killed;
+  }
+
+  /* Somma del fabbisogno d'equipaggio (`class.crew`) di un insieme di navi.
+     Quantifica quanti equipaggi muoiono con le navi distrutte. */
+  function crewCostOfShips(ships) {
+    const F = ORION.fleet;
+    let n = 0;
+    for (let i = 0; i < ships.length; i++) {
+      const cls = F && F.getClass && F.getClass(ships[i].kind);
+      n += (cls && cls.crew) || 1;
+    }
+    return n;
+  }
+
+  /* Coloni a bordo caduti con la nave coloniale distrutta (decisione utente
+     2026-06-26). `popOnboard` è un pool di flotta distribuito sui Pionieri:
+     se ne cadono k su N, muore la quota k/N dei livelli demografici; se cadono
+     TUTTI i vettori coloniali, muoiono tutti i coloni (esatto). Niente RNG →
+     deterministico. Ritorna i livelli di coloni perduti. */
+  function cullColonists(fleet, destroyedColonialCount) {
+    if (!fleet || !(fleet.popOnboard > 0) || destroyedColonialCount <= 0) return 0;
+    let survivingColonial = 0;
+    const ships = (fleet.ships || []);
+    for (let i = 0; i < ships.length; i++) {
+      if (ships[i].kind === 'coloniale') survivingColonial++;
+    }
+    const totalColonial = destroyedColonialCount + survivingColonial;
+    let lost;
+    if (survivingColonial <= 0 || totalColonial <= 0) {
+      lost = fleet.popOnboard;   // nessun vettore superstite → tutti i coloni periscono
+    } else {
+      lost = Math.min(fleet.popOnboard, Math.round(fleet.popOnboard * destroyedColonialCount / totalColonial));
+    }
+    fleet.popOnboard = Math.max(0, fleet.popOnboard - lost);
+    return lost;
+  }
+
+  /* Conta i Pionieri (`coloniale`) in un insieme di navi. */
+  function colonialCount(ships) {
+    let n = 0;
+    for (let i = 0; i < ships.length; i++) if (ships[i].kind === 'coloniale') n++;
+    return n;
+  }
+
   /* Applica l'esito a una flotta del giocatore: rimuove le navi distrutte,
      scrive l'hp residuo sui sopravvissuti, +1 xp, naming leggendario.
-     Ritorna { lost, survivors, promoted:[{name,kind}] }. */
+     L'equipaggio delle navi distrutte cade con lo scafo (cullFleetCrew).
+     Ritorna { lost, survivors, promoted:[{name,kind}], crewLost }. */
   function applyOutcomeToFleet(game, fleet, force) {
     const survivingIds = {};
     for (let i = 0; i < force.combatants.length; i++) {
       survivingIds[force.combatants[i].id] = force.combatants[i];
     }
     const kept = [];
+    const lostShips = [];
     let lost = 0;
     const promoted = [];
     for (let i = 0; i < fleet.ships.length; i++) {
       const s = fleet.ships[i];
       const surv = survivingIds[s.id];
-      if (!surv) { lost++; continue; }
+      if (!surv) { lost++; lostShips.push(s); continue; }
       /* Clamp al maxHp naturale: l'hpMul da tech (Fase B) è un buffer di
          combattimento, non hp permanente → non si accumula fra battaglie. */
       const F = ORION.fleet;
@@ -491,7 +606,11 @@
       kept.push(s);
     }
     fleet.ships = kept;
-    return { lost: lost, survivors: kept.length, promoted: promoted };
+    const crewLost = cullFleetCrew(game, fleet, crewCostOfShips(lostShips),
+      (fleet.id || 'f') + ':' + (game && game.timeImpulsi || 0));
+    const colonistsLost = cullColonists(fleet, colonialCount(lostShips));
+    return { lost: lost, survivors: kept.length, promoted: promoted,
+      crewLost: crewLost, colonistsLost: colonistsLost };
   }
 
   /* Applica l'esito difensivo a una colonia: traduce l'hp residuo dei
@@ -534,13 +653,25 @@
      force.combatants residui; `destroyed` = combattenti abbattuti nel round.
      Le navi distrutte sono rimosse dalla loro flotta (perdita permanente);
      le difese non si rimuovono mai (al più hp al pavimento). */
-  function applyDefenderWriteback(colony, survivors, destroyed) {
+  function applyDefenderWriteback(game, colony, survivors, destroyed) {
     let shipsLost = 0;
+    /* Navi distrutte raggruppate per flotta d'origine: la rimozione è
+       immediata, la perdita d'equipaggio si calcola dopo (per-flotta). */
+    const lostByFleet = [];
+    function bucketFor(fleet) {
+      for (let k = 0; k < lostByFleet.length; k++) {
+        if (lostByFleet[k].fleet === fleet) return lostByFleet[k];
+      }
+      const b = { fleet: fleet, ships: [] };
+      lostByFleet.push(b);
+      return b;
+    }
     // navi distrutte → rimozione dalla flotta di origine
     for (let i = 0; i < destroyed.length; i++) {
       const c = destroyed[i];
       if (c.src && c.src.type === 'ship' && c.src.fleet) {
         const fl = c.src.fleet;
+        bucketFor(fl).ships.push(c.src.ref);
         fl.ships = fl.ships.filter(function (s) { return s.id !== c.src.ref.id; });
         shipsLost++;
       } else if (c.src && c.src.type === 'defense') {
@@ -558,7 +689,16 @@
         if (st && c.maxHp > 0) st.hp = Math.max(5, Math.round(100 * c.hp / c.maxHp));
       }
     }
-    return { shipsLost: shipsLost };
+    // equipaggio + coloni caduti con le navi distrutte (per-flotta)
+    let crewLost = 0;
+    let colonistsLost = 0;
+    for (let k = 0; k < lostByFleet.length; k++) {
+      const b = lostByFleet[k];
+      crewLost += cullFleetCrew(game, b.fleet, crewCostOfShips(b.ships),
+        (b.fleet.id || 'f') + ':' + (game && game.timeImpulsi || 0));
+      colonistsLost += cullColonists(b.fleet, colonialCount(b.ships));
+    }
+    return { shipsLost: shipsLost, crewLost: crewLost, colonistsLost: colonistsLost };
   }
 
   /* Veteranità a fine battaglia: +1 xp alle navi sopravvissute di una
