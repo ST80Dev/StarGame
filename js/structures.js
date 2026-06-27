@@ -52,7 +52,16 @@
       id: 'miniera', name: 'Miniera', cat: 'estrattiva', glyph: '⛏',
       desc: 'Estrae metalli dal sottosuolo o dagli asteroidi.',
       cost: { met: 40, en: 10 }, time: 10,
-      upkeep: { en: 1 },
+      /* Bilanciamento 2026-06-27: rimosso upkeep en (era 1). Gli estrattori
+         base (miniera/idrico/fattoria) non drenano più energia: era la causa
+         del cold-lock energetico early sui mondi a basso pot.en (con una sola
+         centrale il netto andava negativo → stock a 0 → impossibile pagare il
+         costo en per fare/potenziare la centrale → stallo, contro #22). Le
+         altre strutture (lab/hangar/housing/esotici…) mantengono l'upkeep en:
+         l'energia resta una decisione vera, non un fail-state a freddo. Anche
+         coerente con l'aumentato drain energetico delle flotte (viveri su
+         stazza). Simulazione: rompe il lock su ogni mondo natale plausibile. */
+      upkeep: {},
       rates: { met: 4 },
       slots: 1, maxLevel: 5,
       bodyTypes: HABITABLE.concat(ORBITAL)
@@ -70,7 +79,7 @@
       id: 'impianto-idrico', name: 'Impianto idrico', cat: 'estrattiva', glyph: '≈',
       desc: 'Pozzi, distillatori atmosferici o estrazione da ghiacci.',
       cost: { met: 30, en: 12 }, time: 10,
-      upkeep: { en: 1 },
+      upkeep: {},   // 2026-06-27: rimosso upkeep en (vedi miniera) — fix cold-lock energia early
       rates: { water: 4 },
       slots: 1, maxLevel: 5,
       bodyTypes: HABITABLE
@@ -79,7 +88,7 @@
       id: 'fattoria', name: 'Fattoria idroponica', cat: 'estrattiva', glyph: '❖',
       desc: 'Cicli chiusi di coltura adattati alla biochimica locale.',
       cost: { met: 25, en: 10, water: 5 }, time: 9,
-      upkeep: { en: 1, water: 1 },
+      upkeep: { water: 1 },   // 2026-06-27: rimosso upkeep en (vedi miniera); resta l'acqua di processo
       rates: { food: 4 },
       slots: 1, maxLevel: 5,
       bodyTypes: HABITABLE
