@@ -3182,6 +3182,21 @@ select.main-menu__input { cursor: pointer; }
 .ship-stat--cr { color: #c2acff; border-color: rgba(184, 156, 255, 0.32); }  /* equipaggio */
 .ship-stat--se { color: #90d0ee; border-color: rgba(128, 200, 230, 0.32); }  /* sensori */
 .ship-stat--pc { color: #7fe6c0; border-color: rgba(111, 224, 184, 0.32); }  /* coloni */
+/* Icona SVG inline per FP/corazza (più ricca dei glifi, distinta dal resto,
+   richiesta utente 2026-06-26). Eredita la tinta della chip + glow morbido §3. */
+.ship-stat__ico,
+.fleet-info-fp .ship-stat__ico,
+.fleet-info-fp__sub .ship-stat__ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.05em;
+  height: 1.05em;
+  vertical-align: -0.16em;
+  margin-right: 1px;
+  filter: drop-shadow(0 0 3px currentColor);
+}
+.ship-stat__ico svg { width: 1em; height: 1em; display: block; }
 
 /* Roster equipaggi (tab Forze): lista per-equipaggio a riposo / in missione */
 .crew-roster {

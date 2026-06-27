@@ -226,6 +226,28 @@
       '<line x1="19" y1="21" x2="21" y2="19"/>'
     ),
 
+    /* Firepower (FP) — spade incrociate: potenza di fuoco della nave/flotta.
+       Più ricca del gladio singolo, volutamente distinta dagli altri glifi
+       (richiesta utente 2026-06-26). */
+    firepower: svg(
+      '<polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/>' +
+      '<line x1="13" y1="19" x2="19" y2="13"/>' +
+      '<line x1="16" y1="16" x2="20" y2="20"/>' +
+      '<line x1="19" y1="21" x2="21" y2="19"/>' +
+      '<polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"/>' +
+      '<line x1="5" y1="14" x2="9" y2="18"/>' +
+      '<line x1="7" y1="17" x2="4" y2="20"/>' +
+      '<line x1="3" y1="19" x2="5" y2="21"/>'
+    ),
+
+    /* Armor (corazza) — scudo rinforzato con piastra: punti scafo/difesa.
+       Distinto dallo scudo "Forze" grazie alla banda di placcatura interna. */
+    armor: svg(
+      '<path d="M12 21.5s7-3.5 7-9.5V5.2L12 2.5 5 5.2V12c0 6 7 9.5 7 9.5z"/>' +
+      '<path d="M5.5 10.5h13"/>' +
+      '<path d="M12 6.2v8.6"/>'
+    ),
+
     /* Trophy — coppa per vittoria. */
     trophy: svg(
       '<line x1="6" y1="9" x2="6" y2="6"/>' +
