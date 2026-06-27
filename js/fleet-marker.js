@@ -23,18 +23,20 @@
   const RASTER_PX = 64; /* risoluzione unica di rasterizzazione → scala in drawImage */
 
   /* Disegna una singola icona di classe centrata in (cx,cy), lato `px`.
-     Fallback al glyph della classe se l'icona non è pronta / assente. */
-  function drawShip(ctx, cx, cy, px, kind, onReady) {
-    const F = ORION.fleet;
-    const vis = (F && F.classVisual) ? F.classVisual(kind) : { icon: null, hex: '#98a3c8', glyph: '◈' };
-    const img = (vis.icon && ORION.rasterIcon) ? ORION.rasterIcon(vis.icon, vis.hex, RASTER_PX, onReady) : null;
+     Fallback al glyph della classe se l'icona non è pronta / assente.
+     `colorHex` (opzionale) forza una tinta diversa da quella di classe —
+     usato per le flotte AI: sempre nel colore della civ. */
+  /* Core: rasterizza e disegna un'icona SVG (per nome) centrata in (cx,cy),
+     lato px, tinta `tint`. Fallback al glyph se non pronta/assente. */
+  function drawRaster(ctx, cx, cy, px, iconName, tint, onReady, glyphFallback) {
+    const img = (iconName && ORION.rasterIcon) ? ORION.rasterIcon(iconName, tint, RASTER_PX, onReady) : null;
     ctx.save();
     ctx.shadowColor = 'rgba(0,0,0,0.65)';
     ctx.shadowBlur = Math.max(2, px * 0.16);
     if (img) {
       ctx.drawImage(img, cx - px / 2, cy - px / 2, px, px);
     } else {
-      /* glyph fallback (icona non ancora caricata o classe senza icona) */
+      /* glyph fallback (icona non ancora caricata o assente) */
       const fpx = Math.round(px * 0.92);
       ctx.font = '600 ' + fpx + 'px "JetBrains Mono", ui-monospace, monospace';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -42,11 +44,18 @@
       ctx.lineWidth = Math.max(1.5, fpx / 6);
       ctx.strokeStyle = 'rgba(8,12,24,0.9)';
       ctx.shadowBlur = 0;
-      ctx.strokeText(vis.glyph, cx, cy);
-      ctx.fillStyle = vis.hex;
-      ctx.fillText(vis.glyph, cx, cy);
+      ctx.strokeText(glyphFallback || '◈', cx, cy);
+      ctx.fillStyle = tint;
+      ctx.fillText(glyphFallback || '◈', cx, cy);
     }
     ctx.restore();
+  }
+
+  /* Icona di una classe nave. `colorHex` opzionale forza la tinta. */
+  function drawShip(ctx, cx, cy, px, kind, onReady, colorHex) {
+    const F = ORION.fleet;
+    const vis = (F && F.classVisual) ? F.classVisual(kind) : { icon: null, hex: '#98a3c8', glyph: '◈' };
+    drawRaster(ctx, cx, cy, px, vis.icon, colorHex || vis.hex, onReady, vis.glyph);
   }
 
   /* Etichetta numerica "×n" con stroke scuro per leggibilità. */
@@ -67,12 +76,21 @@
     RASTER_PX: RASTER_PX,
 
     /* Icona singola della nave di punta (classe più forte). `size` = lato px.
+       `colorHex` (opzionale) forza la tinta (flotte AI = colore civ).
        Ritorna il semi-ingombro orizzontale (per posizionare un'etichetta). */
-    lead(ctx, cx, cy, size, fleet, onReady) {
+    lead(ctx, cx, cy, size, fleet, onReady, colorHex) {
       const F = ORION.fleet;
       const kind = (F && F.leadKind) ? F.leadKind(fleet) : null;
       if (!kind) return size / 2;
-      drawShip(ctx, cx, cy, size, kind, onReady);
+      drawShip(ctx, cx, cy, size, kind, onReady, colorHex);
+      return size / 2;
+    },
+
+    /* Icona nave GENERICA (non rivela la classe): per i contatti AI rilevati
+       dai radar ma senza dossier completo — sappiamo che c'è una flotta di
+       quella civ, non la sua composizione (resta nel popup, intel-gated). */
+    genericShip(ctx, cx, cy, size, onReady, colorHex) {
+      drawRaster(ctx, cx, cy, size, 'fleet', colorHex || '#cfe6ff', onReady, '➤');
       return size / 2;
     },
 

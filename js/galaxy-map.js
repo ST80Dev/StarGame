@@ -2096,37 +2096,46 @@
         const color = af.civColor || '#d0d0d0';
         const known = (af.intel || 0) >= PARTIAL;
         const a = alpha * (known ? 0.95 : 0.7) * (fresh ? 1 : 0.45);
+        /* Icona del contatto (richiesta utente 2026-06-26):
+           - intel < PARTIAL: icona nave GENERICA (sai solo che c'è un
+             contatto di quella civ);
+           - intel ≥ PARTIAL: silhouette della nave MAGGIORE (di punta);
+           - composizione COMPLETA di tutta la flotta: solo nel popup a FULL.
+           Sempre nel colore della civ. */
+        const FM = root.ORION && root.ORION.fleetMarker;
+        const showLead = (af.intel || 0) >= PARTIAL && Array.isArray(af.ships) && af.ships.length;
+        let markR = r;
         ctx.save();
         ctx.globalAlpha = a;
-        /* Rombo nel colore della civ. */
-        ctx.beginPath();
-        ctx.moveTo(pos.x, pos.y - r);
-        ctx.lineTo(pos.x + r, pos.y);
-        ctx.lineTo(pos.x, pos.y + r);
-        ctx.lineTo(pos.x - r, pos.y);
-        ctx.closePath();
-        ctx.fillStyle = color;
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(8,12,22,0.85)';
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
-        /* Alone tenue (come i marker flotta del giocatore). */
-        ctx.beginPath();
-        ctx.moveTo(pos.x, pos.y - (r + 3));
-        ctx.lineTo(pos.x + (r + 3), pos.y);
-        ctx.lineTo(pos.x, pos.y + (r + 3));
-        ctx.lineTo(pos.x - (r + 3), pos.y);
-        ctx.closePath();
-        ctx.strokeStyle = hexA(color, 0.35);
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        /* '?' se composizione ignota. */
-        if (!known) {
-          ctx.fillStyle = 'rgba(255,255,255,0.92)';
-          ctx.font = '700 ' + Math.max(9, r + 1) + 'px monospace';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText('?', pos.x, pos.y + 0.5);
+        if (FM) {
+          const zoom = this.fitScale ? this.scale / this.fitScale : 1;
+          const size = clamp(13 + (zoom - 2) * 3.2, 13, 30);
+          markR = size * 0.6;
+          /* alone nel colore civ dietro l'icona */
+          const haloR = size * 1.25;
+          const glow = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, haloR);
+          glow.addColorStop(0, hexA(color, 0.50));
+          glow.addColorStop(0.5, hexA(color, 0.18));
+          glow.addColorStop(1, hexA(color, 0));
+          ctx.fillStyle = glow;
+          ctx.beginPath(); ctx.arc(pos.x, pos.y, haloR, 0, Math.PI * 2); ctx.fill();
+          const onReady = this._fleetIconReady ||
+            (this._fleetIconReady = this.requestRender.bind(this));
+          if (showLead) FM.lead(ctx, pos.x, pos.y, size, af, onReady, color);
+          else FM.genericShip(ctx, pos.x, pos.y, size, onReady, color);
+        } else {
+          /* Fallback (modulo non caricato): rombo nel colore della civ. */
+          ctx.beginPath();
+          ctx.moveTo(pos.x, pos.y - r);
+          ctx.lineTo(pos.x + r, pos.y);
+          ctx.lineTo(pos.x, pos.y + r);
+          ctx.lineTo(pos.x - r, pos.y);
+          ctx.closePath();
+          ctx.fillStyle = color;
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(8,12,22,0.85)';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
         }
         ctx.restore();
         /* Etichetta: SOLO l'identificazione del contatto (nome civ o "non
@@ -2136,7 +2145,7 @@
         let lbl = (root.ORION.aifleet && root.ORION.aifleet.nameLabel) ? root.ORION.aifleet.nameLabel(game, af) : 'Contatto';
         if (lbl.length > 22) lbl = lbl.slice(0, 21) + '…';
         const fs = Math.max(9.5, nr + 3);
-        const offX = (pos.x > this.cssW - 130) ? -(r + 6) : (r + 6);
+        const offX = (pos.x > this.cssW - 130) ? -(markR + 6) : (markR + 6);
         ctx.save();
         ctx.globalAlpha = a;
         ctx.font = '600 ' + fs.toFixed(1) + 'px "JetBrains Mono", ui-monospace, monospace';

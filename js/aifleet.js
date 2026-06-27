@@ -86,7 +86,13 @@
     FLEET_RING_FALLOFF: 0.45,
     CONTACT_PERSIST_I: 32,  // un contatto resta "ultimo avvistamento" dopo l'uscita dai sensori
     DETECT_BASE: 0.22,      // offset prob. rilevamento
-    INTEL_GAIN: 0.16,       // crescita intel/Impulso in copertura
+    /* Crescita intel/Impulso in copertura. Tarato lento di proposito
+       (richiesta utente 2026-06-26): il radar dà presenza/numero, ma la
+       COMPOSIZIONE piena (classi) deve costare permanenza vera. Scala
+       linearmente con la copertura `best` (vedi detect()), così i passaggi
+       al bordo rampano lentissimi e alcune flotte sfuggono senza essere
+       inquadrate (2 hop e via). Pedinamento/ispezione restano rapidi. */
+    INTEL_GAIN: 0.04,       // era 0.16
     INTEL_PARTIAL: 0.45,    // soglia: stima composizione
     INTEL_FULL: 0.85,       // soglia: identità della civ svelata
 
@@ -636,7 +642,10 @@
     af.detected = true;
     af.lastSeenI = I;          // quando l'hai vista l'ultima volta
     af.lastSeenSysId = bestNode; // DOVE l'hai vista (posizione congelata per la nebbia di guerra)
-    af.intel = Math.min(1, af.intel + CFG.INTEL_GAIN * (0.5 + 0.5 * best));
+    /* Scala LINEARE con la copertura (prima `0.5 + 0.5*best`, che dava un
+       pavimento generoso anche al bordo): ora il bordo rampa lentissimo e
+       solo la copertura forte (colonie / pedinamento) porta a FULL in fretta. */
+    af.intel = Math.min(1, af.intel + CFG.INTEL_GAIN * best);
 
     /* Vicino a una colonia? (nodo presenza è un tuo sistema colonia o adiacente). */
     let nearColony = false;

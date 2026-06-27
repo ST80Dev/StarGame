@@ -4538,8 +4538,11 @@ function shipStatChips(cls) {
   if (!cls) return '';
   const F = ORION.fleet || {};
   const chips = [];
-  if (cls.hp) chips.push('<span class="ship-stat ship-stat--hp" title="Corazza / difesa (punti scafo)">♥ ' + cls.hp + '</span>');
-  chips.push('<span class="ship-stat ship-stat--fp" title="Potenza di fuoco">⚔ ' + (cls.fp || 0) + '</span>');
+  const sIco = function (name, fallback) {
+    return '<span class="ship-stat__ico" aria-hidden="true">' + ((ORION.icon && ORION.icon(name)) || fallback) + '</span>';
+  };
+  if (cls.hp) chips.push('<span class="ship-stat ship-stat--hp" title="Corazza / difesa (punti scafo)">' + sIco('armor', '♥') + cls.hp + '</span>');
+  chips.push('<span class="ship-stat ship-stat--fp" title="Potenza di fuoco">' + sIco('firepower', '⚔') + (cls.fp || 0) + '</span>');
   if (cls.speed) chips.push('<span class="ship-stat ship-stat--sp" title="Velocità di crociera">» ' + cls.speed + '</span>');
   if (cls.crew) chips.push('<span class="ship-stat ship-stat--cr" title="Equipaggio richiesto">☗ ' + cls.crew + '</span>');
   const sens = F.shipSensor ? F.shipSensor(cls.id) : null;
@@ -16156,15 +16159,28 @@ function openFleetInfoPopup(fleetId, screenX, screenY) {
   node.setAttribute('role', 'dialog');
   node.setAttribute('aria-label', 'Informazioni flotta ' + fleet.name);
 
-  /* Composizione navi */
+  /* Composizione navi — icone SVG di classe (non più glifi) + ×n, e totali
+     di flotta (richiesta utente 2026-06-26): potenza di fuoco complessiva,
+     numero scafi, corazza totale. */
   const F = ORION.fleet;
   const byKind = {};
-  (fleet.ships || []).forEach(function (s) { byKind[s.kind] = (byKind[s.kind] || 0) + 1; });
+  let fpTotal = 0, hpTotal = 0, shipsN = 0;
+  (fleet.ships || []).forEach(function (s) {
+    byKind[s.kind] = (byKind[s.kind] || 0) + 1;
+    const c = F && F.getClass ? F.getClass(s.kind) : null;
+    if (c) { fpTotal += c.fp || 0; hpTotal += c.hp || 0; }
+    shipsN++;
+  });
   const shipsHtml = Object.keys(byKind).map(function (k) {
     const c = F && F.getClass ? F.getClass(k) : null;
-    const glyph = c ? c.glyph : '?';
-    return '<span title="' + escapeHtml(c ? c.name : k) + '">' + glyph + '×' + byKind[k] + '</span>';
-  }).join(' ');
+    const vis = SHIP_VIS[k] || { tone: 'soft' };
+    const svg = (vis.icon && ORION.icon && ORION.icon(vis.icon)) || '';
+    const ico = svg
+      ? '<span class="ui-icon ui-icon--' + vis.tone + '" aria-hidden="true">' + svg + '</span>'
+      : '<span class="fleet-info-ship__glyph" aria-hidden="true">' + (c ? c.glyph : '?') + '</span>';
+    return '<span class="fleet-info-ship" title="' + escapeHtml(c ? c.name : k) + '">' +
+      ico + '<span class="fleet-info-ship__n">×' + byKind[k] + '</span></span>';
+  }).join('');
   /* Equipaggio + xp medio */
   const crewN = (fleet.crew || []).length;
   const xpAvg = crewN ? ((fleet.crew.reduce(function (a, c) { return a + (c.xp || 0); }, 0)) / crewN) : 0;
@@ -16184,18 +16200,22 @@ function openFleetInfoPopup(fleetId, screenX, screenY) {
     '</header>' +
     '<dl class="fleet-info-popup__meta">' +
       '<div><dt>Posizione</dt><dd>' + escapeHtml(posSys ? posSys.name : '—') + ' · ' + posStatus + '</dd></div>' +
-      '<div><dt>Navi</dt><dd>' + (shipsHtml || '<em>nessuna</em>') + '</dd></div>' +
+      '<div><dt>Navi</dt><dd class="fleet-info-popup__ships">' + (shipsHtml || '<em>nessuna</em>') + '</dd></div>' +
+      '<div><dt>Forza</dt><dd>' +
+        '<span class="fleet-info-fp" title="Potenza di fuoco complessiva della flotta"><span class="ship-stat__ico" aria-hidden="true">' + ((ORION.icon && ORION.icon('firepower')) || '⚔') + '</span>' + fpTotal + '</span>' +
+        (shipsN ? '<span class="fleet-info-fp__sub"> · ' + shipsN + ' navi · <span class="ship-stat__ico" aria-hidden="true">' + ((ORION.icon && ORION.icon('armor')) || '♥') + '</span>' + hpTotal + '</span>' : '') +
+      '</dd></div>' +
       '<div><dt>Equipaggio</dt><dd>' + crewN + (crewN ? ' (xp medio ' + xpAvg.toFixed(1) + ')' : '') + '</dd></div>' +
       '<div><dt>Ordine</dt><dd>' + orderInfo.label + '</dd></div>' +
       (orderInfo.targetSummary ? '<div><dt>Rotta</dt><dd>' + orderInfo.targetSummary + '</dd></div>' : '') +
       (orderInfo.eta != null ? '<div><dt>Arrivo in</dt><dd>' + orderInfo.eta + ' Ι</dd></div>' : '') +
     '</dl>' +
-    '<div class="fleet-info-popup__actions">' +
-      '<button class="btn btn--mini btn--primary btn--with-icon" data-action="fleet-info-detail" type="button">' + uiIcon('settings', 'cyan') + ' Dettaglio</button>' +
-      '<button class="btn btn--mini btn--with-icon" data-action="fleet-info-wizard" type="button">' + uiIcon('fleet', 'cyan') + ' Ordini</button>' +
-      '<button class="btn btn--mini btn--with-icon" data-action="fleet-info-pick" type="button">' + uiIcon('pin', 'cyan') + ' Rotta da mappa</button>' +
+    '<div class="fleet-info-popup__actions fleet-info-popup__actions--row">' +
+      '<button class="btn btn--mini btn--primary btn--with-icon" data-action="fleet-info-detail" type="button" title="Apri il dettaglio completo della flotta">' + uiIcon('settings', 'cyan') + ' Dettaglio</button>' +
+      '<button class="btn btn--mini btn--with-icon" data-action="fleet-info-wizard" type="button" title="Imposta gli ordini della flotta">' + uiIcon('fleet', 'cyan') + ' Ordini</button>' +
+      '<button class="btn btn--mini btn--with-icon" data-action="fleet-info-pick" type="button" title="Traccia la rotta cliccando sulla mappa">' + uiIcon('pin', 'cyan') + ' Rotta</button>' +
       ((ORION.aifleet && ORION.aifleet.detectedFleets(g).length)
-        ? '<button class="btn btn--mini btn--with-icon" data-action="fleet-info-follow" type="button">' + uiIcon('spy', 'pink') + ' Segui contatto</button>'
+        ? '<button class="btn btn--mini btn--with-icon" data-action="fleet-info-follow" type="button" title="Segui un contatto AI rilevato">' + uiIcon('spy', 'pink') + ' Segui</button>'
         : '') +
     '</div>';
 
