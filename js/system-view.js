@@ -938,18 +938,18 @@
         const known = (af.intel || 0) >= PARTIAL;
         const FULL = CFGA.INTEL_FULL != null ? CFGA.INTEL_FULL : 0.85;
         const FM = root.ORION && root.ORION.fleetMarker;
-        /* Identificata con PRECISIONE (intel ≥ FULL): UNA icona nave (nave di
-           punta) SEMPRE nel colore della civ, stesse regole grafiche delle
-           tue flotte; la composizione di dettaglio resta nel popup (richiesta
-           utente 2026-06-26). Sotto soglia: marker "glow" + '?' come prima. */
-        const precise = (af.intel || 0) >= FULL && FM &&
-          Array.isArray(af.ships) && af.ships.length;
+        /* Contatto rilevato → SEMPRE icona nave nel colore della civ, stesse
+           regole grafiche delle tue flotte (richiesta utente 2026-06-26).
+           Reveal progressivo senza svelare più di ora: intel < FULL → icona
+           nave GENERICA; intel ≥ FULL (dossier) → silhouette nave di punta
+           reale. La composizione di dettaglio resta nel popup. */
+        const full = (af.intel || 0) >= FULL && Array.isArray(af.ships) && af.ships.length;
         const r = clamp(this.scale * 0.024, 8, 18);
         const fontPx = Math.round(clamp(this.scale * 0.017, 11, 17));
         this._aiFleetHit[this._aiFleetHit.length - 1].r = r;
         ctx.save();
         if (!known) ctx.globalAlpha = 0.78;
-        if (precise) {
+        if (FM) {
           const cell = clamp(this.scale * 0.03, 14, 30);
           const haloR = cell * 0.95;
           const glow = ctx.createRadialGradient(mx, my, 0, mx, my, haloR);
@@ -958,8 +958,9 @@
           glow.addColorStop(1, hexA(color, 0));
           ctx.fillStyle = glow;
           ctx.beginPath(); ctx.arc(mx, my, haloR, 0, Math.PI * 2); ctx.fill();
-          FM.lead(ctx, mx, my, cell, af,
-            this._fmReady || (this._fmReady = this.requestRender.bind(this)), color);
+          const onReady = this._fmReady || (this._fmReady = this.requestRender.bind(this));
+          if (full) FM.lead(ctx, mx, my, cell, af, onReady, color);
+          else FM.genericShip(ctx, mx, my, cell, onReady, color);
           this._aiFleetHit[this._aiFleetHit.length - 1].r = Math.max(r, cell * 0.6);
         } else {
           this._drawFleetGlow(ctx, mx, my, r, color, { hostile: true });
