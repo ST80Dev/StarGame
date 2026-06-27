@@ -936,14 +936,12 @@
         this._aiFleetHit.push({ id: af.id, x: mx, y: my });
         const color = af.civColor || '#d0d0d0';
         const known = (af.intel || 0) >= PARTIAL;
-        const FULL = CFGA.INTEL_FULL != null ? CFGA.INTEL_FULL : 0.85;
         const FM = root.ORION && root.ORION.fleetMarker;
-        /* Contatto rilevato → SEMPRE icona nave nel colore della civ, stesse
-           regole grafiche delle tue flotte (richiesta utente 2026-06-26).
-           Reveal progressivo senza svelare più di ora: intel < FULL → icona
-           nave GENERICA; intel ≥ FULL (dossier) → silhouette nave di punta
-           reale. La composizione di dettaglio resta nel popup. */
-        const full = (af.intel || 0) >= FULL && Array.isArray(af.ships) && af.ships.length;
+        /* Contatto rilevato dai radar (= "identificato con precisione", il
+           livello di rilevamento attuale — chiarimento utente 2026-06-26):
+           icona della nave di punta nel colore della civ. La composizione di
+           dettaglio resta nel popup. genericShip è solo fallback senza dati. */
+        const hasShips = Array.isArray(af.ships) && af.ships.length;
         const r = clamp(this.scale * 0.024, 8, 18);
         const fontPx = Math.round(clamp(this.scale * 0.017, 11, 17));
         this._aiFleetHit[this._aiFleetHit.length - 1].r = r;
@@ -959,7 +957,7 @@
           ctx.fillStyle = glow;
           ctx.beginPath(); ctx.arc(mx, my, haloR, 0, Math.PI * 2); ctx.fill();
           const onReady = this._fmReady || (this._fmReady = this.requestRender.bind(this));
-          if (full) FM.lead(ctx, mx, my, cell, af, onReady, color);
+          if (hasShips) FM.lead(ctx, mx, my, cell, af, onReady, color);
           else FM.genericShip(ctx, mx, my, cell, onReady, color);
           this._aiFleetHit[this._aiFleetHit.length - 1].r = Math.max(r, cell * 0.6);
         } else {
