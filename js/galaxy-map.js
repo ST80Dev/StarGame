@@ -2009,7 +2009,6 @@
       if (alpha < 0.05) return;
       const CFGA = (root.ORION.aifleet && root.ORION.aifleet.CFG) || {};
       const PARTIAL = CFGA.INTEL_PARTIAL != null ? CFGA.INTEL_PARTIAL : 0.45;
-      const FULL = CFGA.INTEL_FULL != null ? CFGA.INTEL_FULL : 0.85;
       const PERSIST = CFGA.CONTACT_PERSIST_I != null ? CFGA.CONTACT_PERSIST_I : 32;
       const nowI = game.timeImpulsi || 0;
       let anyTransit = false;
@@ -2072,15 +2071,13 @@
         const color = af.civColor || '#d0d0d0';
         const known = (af.intel || 0) >= PARTIAL;
         const a = alpha * (known ? 0.95 : 0.7) * (fresh ? 1 : 0.45);
-        /* Contatto rilevato dai radar → SEMPRE icona nave nel colore della
-           civ, stesse regole grafiche delle tue flotte (richiesta utente
-           2026-06-26). Reveal progressivo SENZA svelare più di ora:
-           - intel < FULL: icona nave GENERICA (sai che c'è una flotta di
-             quella civ, non la sua composizione);
-           - intel ≥ FULL (dossier): silhouette della nave di punta reale.
-           La composizione di dettaglio resta nel popup (intel-gated). */
+        /* Contatto rilevato dai radar (= "identificato con precisione", il
+           livello di rilevamento attuale, non il dossier — chiarimento utente
+           2026-06-26): icona della nave di punta nel colore della civ, stesse
+           regole grafiche delle tue flotte. La composizione di dettaglio resta
+           nel popup. La genericShip è solo fallback se mancano i dati nave. */
         const FM = root.ORION && root.ORION.fleetMarker;
-        const full = (af.intel || 0) >= FULL && Array.isArray(af.ships) && af.ships.length;
+        const hasShips = Array.isArray(af.ships) && af.ships.length;
         let markR = r;
         ctx.save();
         ctx.globalAlpha = a;
@@ -2098,7 +2095,7 @@
           ctx.beginPath(); ctx.arc(pos.x, pos.y, haloR, 0, Math.PI * 2); ctx.fill();
           const onReady = this._fleetIconReady ||
             (this._fleetIconReady = this.requestRender.bind(this));
-          if (full) FM.lead(ctx, pos.x, pos.y, size, af, onReady, color);
+          if (hasShips) FM.lead(ctx, pos.x, pos.y, size, af, onReady, color);
           else FM.genericShip(ctx, pos.x, pos.y, size, onReady, color);
         } else {
           /* Fallback (modulo non caricato): rombo nel colore della civ. */
