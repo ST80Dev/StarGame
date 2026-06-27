@@ -397,13 +397,16 @@
   const VIVERI_CAP_MAX = 1500;
   /* Decisione utente 2026-06-11: la riserva di viaggio è a 4 risorse, con
      quantità tarate perché far partire/rifornire una flotta pesi davvero sul
-     bilancio della colonia (cibo/acqua sostentamento equipaggio; metalli
-     riparazioni; energia sistemi, in quota minore). Per Ι di autonomia,
-     per equipaggio. Pieno (250 Ι) per 8 equip ≈ 140/100/80/50. */
+     bilancio della colonia. Cibo/acqua/metalli scalano sull'EQUIPAGGIO
+     (sostentamento bocche + manutenzione). Decisione utente 2026-06-27:
+     l'ENERGIA scala invece sulla STAZZA della flotta (dockWeight), non
+     sull'equipaggio: è il carburante di propulsione → la vera autonomia di
+     viaggio delle navi. Una nave capitale (stazza 3/6/10) è assetata a
+     prescindere dall'equipaggio. Tassi per Ι di autonomia. */
   const VIVERI_RATE_FOOD = 0.07;   // food per equipaggio per Ι di autonomia
   const VIVERI_RATE_WATER = 0.05;  // acqua per equipaggio per Ι di autonomia
   const VIVERI_RATE_MET = 0.04;    // metalli per equipaggio per Ι (riparazioni)
-  const VIVERI_RATE_EN = 0.025;    // energia per equipaggio per Ι (sistemi, la più piccola)
+  const VIVERI_RATE_EN = 0.12;     // 2026-06-27: 0.025→0.12 e per STAZZA (non equip): propulsione = voce dominante
   const VIVERI_WARN = 60;          // soglia avviso (~25% del cap)
   const VIVERI_DRIFT_WEAR = 2;     // usura/Ι sulle navi in deriva (viveri a 0)
   /* Usura per Ι in transito (decisione utente 2026-06-16): sostituisce il
@@ -2000,9 +2003,10 @@
     if (civ && (civ.relation === 'peace' || civ.relation === 'truce')) return civ;
     return null;
   }
-  /* Rifornisce al cap. A una tua colonia addebita food/acqua dallo stock
-     (parziale se a corto, recovery-friendly); porto alleato = gratis. Costo
-     di 1 Ι di autonomia = equipaggio × (RATE_FOOD + RATE_WATER). */
+  /* Rifornisce al cap. A una tua colonia addebita cibo/acqua/metalli (su
+     equipaggio) + energia (su stazza) dallo stock — parziale se a corto,
+     recovery-friendly; porto alleato = gratis. Ritorna l'autonomia (Ι)
+     effettivamente caricata. */
   function loadViveriAtPort(game, fleet) {
     const cap = viveriCapOf(fleet);
     const cur = viveriOf(fleet);
@@ -2023,21 +2027,26 @@
     }
     if (colony && colony.stock) {
       /* Riserva a 4 risorse: per ogni Ι di autonomia attinge cibo/acqua
-         (sostentamento) + metalli/energia (riparazioni/sistemi, quota
-         minore) dallo stock della colonia. La frazione caricabile è
-         limitata dalla risorsa più scarsa (recovery-friendly: carica
-         parziale, autonomia ridotta, mai un blocco). */
+         (sostentamento) + metalli (riparazioni) + energia (propulsione,
+         ora voce dominante) dallo stock della colonia. La frazione
+         caricabile è limitata dalla risorsa più scarsa (recovery-friendly:
+         carica parziale, autonomia ridotta, mai un blocco).
+         Base di scaling per risorsa (decisione utente 2026-06-27): cibo/acqua/
+         metalli sull'equipaggio (bocche + manutenzione), energia sulla STAZZA
+         (propulsione = autonomia di viaggio). */
+      const mass = Math.max(1, dockWeightOfFleet(fleet));
+      const base = { food: crew, water: crew, met: crew, en: mass };
       const rate = { food: VIVERI_RATE_FOOD, water: VIVERI_RATE_WATER, met: VIVERI_RATE_MET, en: VIVERI_RATE_EN };
       let frac = 1;
       Object.keys(rate).forEach(function (k) {
-        const per = crew * rate[k];
+        const per = base[k] * rate[k];
         const have = colony.stock[k] || 0;
         if (per * fillI > have && per > 0) frac = Math.min(frac, have / (per * fillI));
       });
       if (frac < 1) fillI = Math.floor(fillI * frac);
       if (fillI <= 0) return 0;
       Object.keys(rate).forEach(function (k) {
-        colony.stock[k] = Math.max(0, (colony.stock[k] || 0) - crew * rate[k] * fillI);
+        colony.stock[k] = Math.max(0, (colony.stock[k] || 0) - base[k] * rate[k] * fillI);
       });
     }
     fleet.viveri = cur + fillI;

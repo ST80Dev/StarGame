@@ -10985,16 +10985,24 @@ function openFleetDetail(fleetId, opts) {
     const def = F.VIVERI_CAP || 250;
     const cap = (D.draft.viveriCap != null) ? D.draft.viveriCap : def;
     const crew = Math.max(1, crewReq | 0);
+    /* Stazza della bozza (per il costo ENERGIA, 2026-06-27: scala sulla
+       stazza, non sull'equipaggio). */
+    let mass = 0;
+    const dships = (D.draft && D.draft.ships) ? D.draft.ships : {};
+    Object.keys(dships).forEach(function (k) {
+      mass += (dships[k] || 0) * (F.dockWeightOf ? F.dockWeightOf(k) : 1);
+    });
+    mass = Math.max(1, mass);
     const rate = {
       food: F.VIVERI_RATE_FOOD || 0.07, water: F.VIVERI_RATE_WATER || 0.05,
-      met: F.VIVERI_RATE_MET || 0.04, en: F.VIVERI_RATE_EN || 0.025
+      met: F.VIVERI_RATE_MET || 0.04, en: F.VIVERI_RATE_EN || 0.12
     };
     const m = Math.ceil(crew * rate.met * cap);
-    const e = Math.ceil(crew * rate.en * cap);
+    const e = Math.ceil(mass * rate.en * cap);
     const f = Math.ceil(crew * rate.food * cap);
     const w = Math.ceil(crew * rate.water * cap);
     const costStr = '⛭ ' + m + ' · ⚡ ' + e + ' · ❖ ' + f + ' · ≈ ' + w;
-    const hint = 'Capienza serbatoio: scegli quanta autonomia caricare al pieno alla partenza. Costo proporzionale a equipaggio (' + crew + ') × Ι caricati.';
+    const hint = 'Capienza serbatoio: scegli quanta autonomia caricare al pieno alla partenza. Cibo/acqua/metalli ∝ equipaggio (' + crew + '); energia ∝ stazza (' + mass + ') × Ι caricati.';
     return '<div class="fdetail__sec fdetail__sec--supply' + (dis ? ' is-locked' : '') + '">' +
       secHead('forces', 'amber', 'Viveri alla partenza', dis ? 'aggiungi una nave' : '') +
       '<div class="fleet-viveri-cap" title="' + escapeHtml(hint) + '">' +
@@ -11501,23 +11509,25 @@ function openFleetDetail(fleetId, opts) {
       const min = F.VIVERI_CAP_MIN || 50;
       const max = F.VIVERI_CAP_MAX || 1500;
       const crew = (F.fleetCrewRequired ? F.fleetCrewRequired(fleet) : 0) || 1;
+      const mass = Math.max(1, (F.dockWeightOfFleet ? F.dockWeightOfFleet(fleet) : 1));
       const editable = atFriendlyPort;
-      /* Stima costo PIENO completo (Ι caricati = cap, crew totale × rate). */
+      /* Stima costo PIENO completo (Ι caricati = cap). Cibo/acqua/metalli ∝
+         equipaggio; energia ∝ stazza (2026-06-27). */
       const rate = {
         food: F.VIVERI_RATE_FOOD || 0.07, water: F.VIVERI_RATE_WATER || 0.05,
-        met: F.VIVERI_RATE_MET || 0.04, en: F.VIVERI_RATE_EN || 0.025
+        met: F.VIVERI_RATE_MET || 0.04, en: F.VIVERI_RATE_EN || 0.12
       };
       const cost = {
         food: Math.ceil(crew * rate.food * cap),
         water: Math.ceil(crew * rate.water * cap),
         met: Math.ceil(crew * rate.met * cap),
-        en: Math.ceil(crew * rate.en * cap)
+        en: Math.ceil(mass * rate.en * cap)
       };
       const costStr = '⛭ ' + cost.met + ' · ⚡ ' + cost.en + ' · ❖ ' + cost.food + ' · ≈ ' + cost.water;
       const editAttr = editable ? '' : ' disabled';
       const inTransit = fleet.location && fleet.location.status === 'in-transit';
       const hintTxt = editable
-        ? 'Capienza serbatoio: scegli quanta autonomia caricare alla prossima sosta al porto. Costo proporzionale a equipaggio (' + crew + ') × Ι caricati.'
+        ? 'Capienza serbatoio: scegli quanta autonomia caricare alla prossima sosta al porto. Cibo/acqua/metalli ∝ equipaggio (' + crew + '); energia ∝ stazza (' + mass + ') × Ι caricati.'
         : inTransit
           ? 'In viaggio: capienza non modificabile fino al ritorno al porto.'
           : 'Modifica capienza disponibile solo al porto amico (tua colonia, tua stazione, alleato).';
@@ -11627,8 +11637,31 @@ function openFleetDetail(fleetId, opts) {
       const nf = r.fleet;
       if (D.draft.viveriCap != null && ORION.fleet.setViveriCap) {
         ORION.fleet.setViveriCap(nf, D.draft.viveriCap);
-        nf.viveri = nf.viveriCap;
       }
+      /* Decisione utente 2026-06-27: la prima provvista NON è gratis. Serbatoio
+         a 0 finché non viene addebitato allo stock della colonia, e solo qui
+         alla conferma "Crea e parti" (vedi chargeProvision più sotto) — dopo
+         che navi+equipaggio sono assegnati, così crew e stazza sono note. */
+      nf.viveri = 0;
+      /* Addebita la prima provvista (cibo/acqua/metalli su equipaggio + energia
+         su stazza) allo stock della colonia origine. Recovery-friendly: se a
+         corto, carica parziale (la flotta parte con meno autonomia). Va chiamata
+         SOLO sui rami di successo (dopo ordine/colonize confermati) per non
+         lasciare un addebito orfano se la creazione fa rollback (#22). */
+      const chargeProvision = function () {
+        if (!ORION.fleet.loadViveriAtPort) return;
+        const col = g.colonies[colKey];
+        const before = (col && col.stock) ? Object.assign({}, col.stock) : null;
+        ORION.fleet.loadViveriAtPort(g, nf);
+        if (!before || !col.stock) return;
+        const lab = { food: 'cibo', water: 'acqua', met: 'metallo', en: 'energia' };
+        const parts = [];
+        Object.keys(lab).forEach(function (k) {
+          const d = Math.round((before[k] || 0) - (col.stock[k] || 0));
+          if (d > 0) parts.push('−' + d + ' ' + lab[k]);
+        });
+        if (parts.length) showToast('Provvista flotta: ' + parts.join(' · '));
+      };
       let failed = null;
       Object.keys(draft.ships).forEach(function (k) {
         if (failed) return; const n = draft.ships[k] || 0; if (n <= 0) return;
@@ -11648,6 +11681,7 @@ function openFleetDetail(fleetId, opts) {
         if (!planet) { ORION.fleet.dissolveFleet(g, nf); showToast('Pianeta non valido'); return; }
         doColonize(planet, nf, 0);   // mostra il toast in caso di costo/ordine ko
         if (!nf.orders || nf.orders.type !== 'colonize') { ORION.fleet.dissolveFleet(g, nf); return; }
+        chargeProvision();
         persistGame(g);
         fleet = nf; D.creating = false;
         D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: false, exploreEach: false } };
@@ -11667,6 +11701,7 @@ function openFleetDetail(fleetId, opts) {
       }
       /* Nuova flotta formata dal giocatore: niente entry — la flotta
          compare in tab Flotte e il toast/UI sono il feedback. */
+      chargeProvision();
       persistGame(g);
       fleet = nf;
       D.creating = false;
@@ -11721,16 +11756,32 @@ function openFleetDetail(fleetId, opts) {
       const valEl = host.querySelector('[data-bind="vcap-val"]');
       const costEl = host.querySelector('[data-bind="vcap-cost"]');
       const F = ORION.fleet;
-      const crew = (F.fleetCrewRequired ? F.fleetCrewRequired(fleet) : 0) || 1;
+      /* crew + stazza per il preview live. In creazione `fleet` è null: si
+         derivano dalla bozza (D.draft.ships). Energia ∝ stazza (2026-06-27). */
+      let crew, mass;
+      if (D.creating) {
+        crew = 0; mass = 0;
+        const dships = (D.draft && D.draft.ships) ? D.draft.ships : {};
+        Object.keys(dships).forEach(function (k) {
+          const n = dships[k] || 0;
+          const cls = F.getClass ? F.getClass(k) : null;
+          crew += n * (cls && cls.crew ? cls.crew : 0);
+          mass += n * (F.dockWeightOf ? F.dockWeightOf(k) : 1);
+        });
+        crew = Math.max(1, crew); mass = Math.max(1, mass);
+      } else {
+        crew = (F.fleetCrewRequired ? F.fleetCrewRequired(fleet) : 0) || 1;
+        mass = Math.max(1, (F.dockWeightOfFleet ? F.dockWeightOfFleet(fleet) : 1));
+      }
       const rate = {
         food: F.VIVERI_RATE_FOOD || 0.07, water: F.VIVERI_RATE_WATER || 0.05,
-        met: F.VIVERI_RATE_MET || 0.04, en: F.VIVERI_RATE_EN || 0.025
+        met: F.VIVERI_RATE_MET || 0.04, en: F.VIVERI_RATE_EN || 0.12
       };
       function updatePreview(val) {
         if (valEl) valEl.textContent = val;
         if (costEl) {
           const m = Math.ceil(crew * rate.met * val);
-          const e = Math.ceil(crew * rate.en * val);
+          const e = Math.ceil(mass * rate.en * val);
           const f = Math.ceil(crew * rate.food * val);
           const w = Math.ceil(crew * rate.water * val);
           costEl.textContent = '⛭ ' + m + ' · ⚡ ' + e + ' · ❖ ' + f + ' · ≈ ' + w;
