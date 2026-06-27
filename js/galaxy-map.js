@@ -2072,18 +2072,19 @@
         const color = af.civColor || '#d0d0d0';
         const known = (af.intel || 0) >= PARTIAL;
         const a = alpha * (known ? 0.95 : 0.7) * (fresh ? 1 : 0.45);
-        /* Identificata con PRECISIONE (intel ≥ FULL): segue le stesse regole
-           grafiche delle tue flotte, ma con una SOLA icona nave (la nave di
-           punta) SEMPRE nel colore della civ — la composizione dettagliata si
-           vede col popup (richiesta utente 2026-06-26). Sotto soglia resta il
-           rombo + '?' (contatto non identificato). */
+        /* Contatto rilevato dai radar → SEMPRE icona nave nel colore della
+           civ, stesse regole grafiche delle tue flotte (richiesta utente
+           2026-06-26). Reveal progressivo SENZA svelare più di ora:
+           - intel < FULL: icona nave GENERICA (sai che c'è una flotta di
+             quella civ, non la sua composizione);
+           - intel ≥ FULL (dossier): silhouette della nave di punta reale.
+           La composizione di dettaglio resta nel popup (intel-gated). */
         const FM = root.ORION && root.ORION.fleetMarker;
-        const precise = (af.intel || 0) >= FULL && FM &&
-          Array.isArray(af.ships) && af.ships.length;
+        const full = (af.intel || 0) >= FULL && Array.isArray(af.ships) && af.ships.length;
         let markR = r;
         ctx.save();
         ctx.globalAlpha = a;
-        if (precise) {
+        if (FM) {
           const zoom = this.fitScale ? this.scale / this.fitScale : 1;
           const size = clamp(13 + (zoom - 2) * 3.2, 13, 30);
           markR = size * 0.6;
@@ -2097,9 +2098,10 @@
           ctx.beginPath(); ctx.arc(pos.x, pos.y, haloR, 0, Math.PI * 2); ctx.fill();
           const onReady = this._fleetIconReady ||
             (this._fleetIconReady = this.requestRender.bind(this));
-          FM.lead(ctx, pos.x, pos.y, size, af, onReady, color);
+          if (full) FM.lead(ctx, pos.x, pos.y, size, af, onReady, color);
+          else FM.genericShip(ctx, pos.x, pos.y, size, onReady, color);
         } else {
-          /* Rombo nel colore della civ. */
+          /* Fallback (modulo non caricato): rombo nel colore della civ. */
           ctx.beginPath();
           ctx.moveTo(pos.x, pos.y - r);
           ctx.lineTo(pos.x + r, pos.y);
@@ -2111,24 +2113,6 @@
           ctx.strokeStyle = 'rgba(8,12,22,0.85)';
           ctx.lineWidth = 1.2;
           ctx.stroke();
-          /* Alone tenue (come i marker flotta del giocatore). */
-          ctx.beginPath();
-          ctx.moveTo(pos.x, pos.y - (r + 3));
-          ctx.lineTo(pos.x + (r + 3), pos.y);
-          ctx.lineTo(pos.x, pos.y + (r + 3));
-          ctx.lineTo(pos.x - (r + 3), pos.y);
-          ctx.closePath();
-          ctx.strokeStyle = hexA(color, 0.35);
-          ctx.lineWidth = 1;
-          ctx.stroke();
-          /* '?' se composizione ignota. */
-          if (!known) {
-            ctx.fillStyle = 'rgba(255,255,255,0.92)';
-            ctx.font = '700 ' + Math.max(9, r + 1) + 'px monospace';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('?', pos.x, pos.y + 0.5);
-          }
         }
         ctx.restore();
         /* Etichetta: SOLO l'identificazione del contatto (nome civ o "non
