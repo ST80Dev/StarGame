@@ -4537,8 +4537,11 @@ function shipStatChips(cls) {
   if (!cls) return '';
   const F = ORION.fleet || {};
   const chips = [];
-  if (cls.hp) chips.push('<span class="ship-stat ship-stat--hp" title="Corazza / difesa (punti scafo)">♥ ' + cls.hp + '</span>');
-  chips.push('<span class="ship-stat ship-stat--fp" title="Potenza di fuoco">⚔ ' + (cls.fp || 0) + '</span>');
+  const sIco = function (name, fallback) {
+    return '<span class="ship-stat__ico" aria-hidden="true">' + ((ORION.icon && ORION.icon(name)) || fallback) + '</span>';
+  };
+  if (cls.hp) chips.push('<span class="ship-stat ship-stat--hp" title="Corazza / difesa (punti scafo)">' + sIco('armor', '♥') + cls.hp + '</span>');
+  chips.push('<span class="ship-stat ship-stat--fp" title="Potenza di fuoco">' + sIco('firepower', '⚔') + (cls.fp || 0) + '</span>');
   if (cls.speed) chips.push('<span class="ship-stat ship-stat--sp" title="Velocità di crociera">» ' + cls.speed + '</span>');
   if (cls.crew) chips.push('<span class="ship-stat ship-stat--cr" title="Equipaggio richiesto">☗ ' + cls.crew + '</span>');
   const sens = F.shipSensor ? F.shipSensor(cls.id) : null;
@@ -16198,8 +16201,8 @@ function openFleetInfoPopup(fleetId, screenX, screenY) {
       '<div><dt>Posizione</dt><dd>' + escapeHtml(posSys ? posSys.name : '—') + ' · ' + posStatus + '</dd></div>' +
       '<div><dt>Navi</dt><dd class="fleet-info-popup__ships">' + (shipsHtml || '<em>nessuna</em>') + '</dd></div>' +
       '<div><dt>Forza</dt><dd>' +
-        '<span class="fleet-info-fp" title="Potenza di fuoco complessiva della flotta">⚔ ' + fpTotal + '</span>' +
-        (shipsN ? '<span class="fleet-info-fp__sub"> · ' + shipsN + ' navi · ♥ ' + hpTotal + '</span>' : '') +
+        '<span class="fleet-info-fp" title="Potenza di fuoco complessiva della flotta"><span class="ship-stat__ico" aria-hidden="true">' + ((ORION.icon && ORION.icon('firepower')) || '⚔') + '</span>' + fpTotal + '</span>' +
+        (shipsN ? '<span class="fleet-info-fp__sub"> · ' + shipsN + ' navi · <span class="ship-stat__ico" aria-hidden="true">' + ((ORION.icon && ORION.icon('armor')) || '♥') + '</span>' + hpTotal + '</span>' : '') +
       '</dd></div>' +
       '<div><dt>Equipaggio</dt><dd>' + crewN + (crewN ? ' (xp medio ' + xpAvg.toFixed(1) + ')' : '') + '</dd></div>' +
       '<div><dt>Ordine</dt><dd>' + orderInfo.label + '</dd></div>' +
