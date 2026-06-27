@@ -61,7 +61,13 @@
     intercettore: {
       id: 'intercettore', name: 'Intercettore', glyph: '➤',
       cost: { met: 35, en: 15 }, time: 14,
-      hp: 45, fp: 8, speed: 1.4, crew: 2, hangarLvl: 2, maintMet: 0.15
+      /* Bilanciamento 2026-06-27: hangarLvl 2→1. Sbloccare la prima nave
+         da combattimento "veloce" già con Hangar L1 rende l'early-fleet
+         (esploratore + caccia + intercettore) componibile senza dover
+         prima upgradare l'Hangar. La Corvetta resta a L2 → il salto a L2
+         dell'Hangar diventa una scelta di scalata (più hp/fp), non un
+         pedaggio per avere la prima nave veloce. */
+      hp: 45, fp: 8, speed: 1.4, crew: 2, hangarLvl: 1, maintMet: 0.15
     },
     corvetta: {
       id: 'corvetta', name: 'Corvetta', glyph: '◅',
