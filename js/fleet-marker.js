@@ -76,8 +76,11 @@
       return size / 2;
     },
 
-    /* Flotta scomposta: riga di icone per tipo + "×n". Centrata su (cx,cy).
-       `cell` = lato icona px. opts: { max=4 }. Ritorna { w, h } d'ingombro. */
+    /* Flotta scomposta: ELENCO VERTICALE (un tipo per riga, "tipo sopra tipo")
+       di icone + "×n", ordinato per forza decrescente. Centrato su (cx,cy).
+       `cell` = lato icona px. opts: { max=4 }. Ritorna { w, h } d'ingombro.
+       Layout verticale (richiesta utente 2026-06-26): più leggibile delle
+       icone affiancate in larghezza, soprattutto con icone ingrandite. */
     composition(ctx, cx, cy, cell, fleet, onReady, opts) {
       opts = opts || {};
       const F = ORION.fleet;
@@ -87,44 +90,47 @@
       const shown = comp.slice(0, max);
       let extra = 0;
       for (let i = max; i < comp.length; i++) extra += comp[i].n;
-      const fontPx = Math.max(8, cell * 0.5);
-      const gap = cell * 0.34;
+      const rows = shown.length + (extra > 0 ? 1 : 0);
+      const fontPx = Math.max(9, cell * 0.55);
+      const rowH = cell * 1.04;          /* riga = icona + respiro verticale */
+      const countGap = cell * 0.18;      /* spazio icona → "×n" */
 
-      /* Pre-misura per centrare la riga. */
+      /* Pre-misura: larghezza massima riga (icona + etichetta) per centrare. */
       ctx.save();
       ctx.font = '700 ' + Math.round(fontPx) + 'px "JetBrains Mono", ui-monospace, monospace';
-      const cellWidths = shown.map(function (it) {
-        return cell * 0.86 + 2 + ctx.measureText('×' + it.n).width;
-      });
-      let extraW = 0;
-      if (extra > 0) extraW = gap + ctx.measureText('+' + extra).width + cell * 0.2;
-      ctx.restore();
-
-      let totalW = 0;
-      for (let i = 0; i < cellWidths.length; i++) totalW += cellWidths[i] + (i ? gap : 0);
-      totalW += extraW;
-
-      let x = cx - totalW / 2;
+      let maxRowW = 0;
       for (let i = 0; i < shown.length; i++) {
-        if (i) x += gap;
-        const it = shown[i];
-        drawShip(ctx, x + cell * 0.43, cy, cell, it.kind, onReady);
-        drawCount(ctx, x + cell * 0.86 + 2, cy + cell * 0.04, it.n, fontPx, 'left');
-        x += cellWidths[i];
+        const w = cell + countGap + ctx.measureText('×' + shown[i].n).width;
+        if (w > maxRowW) maxRowW = w;
       }
       if (extra > 0) {
-        x += gap;
+        const w = cell + countGap + ctx.measureText('+' + extra).width;
+        if (w > maxRowW) maxRowW = w;
+      }
+      ctx.restore();
+
+      const totalH = rows * rowH;
+      const left = cx - maxRowW / 2;             /* colonna icone allineata a sx del blocco */
+      let y = cy - totalH / 2 + rowH / 2;        /* centro della prima riga */
+
+      for (let i = 0; i < shown.length; i++) {
+        const it = shown[i];
+        drawShip(ctx, left + cell / 2, y, cell, it.kind, onReady);
+        drawCount(ctx, left + cell + countGap, y + cell * 0.02, it.n, fontPx, 'left');
+        y += rowH;
+      }
+      if (extra > 0) {
         ctx.save();
         ctx.font = '700 ' + Math.round(fontPx) + 'px "JetBrains Mono", ui-monospace, monospace';
         ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
         ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2, fontPx / 3.5);
         ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-        ctx.strokeText('+' + extra, x, cy);
+        ctx.strokeText('+' + extra, left + cell / 2, y);
         ctx.fillStyle = 'rgba(180,192,224,0.95)';
-        ctx.fillText('+' + extra, x, cy);
+        ctx.fillText('+' + extra, left + cell / 2, y);
         ctx.restore();
       }
-      return { w: totalW, h: cell };
+      return { w: maxRowW, h: totalH };
     }
   };
 })(typeof window !== 'undefined' ? window : this);
