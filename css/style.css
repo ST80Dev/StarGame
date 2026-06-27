@@ -6752,8 +6752,8 @@ select.main-menu__input { cursor: pointer; }
   border-radius: 6px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
   color: var(--c-text, #e9ecf6);
-  padding: 12px 14px;
-  font-size: 0.9em;
+  padding: 9px 11px;
+  font-size: 0.82em;
   animation: fleet-info-pop 120ms ease-out;
 }
 @keyframes fleet-info-pop {
@@ -6765,27 +6765,27 @@ select.main-menu__input { cursor: pointer; }
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 8px;
-  padding-bottom: 8px;
+  margin-bottom: 6px;
+  padding-bottom: 6px;
   border-bottom: 1px solid rgba(255, 220, 60, 0.20);
 }
 .fleet-info-popup__name {
   margin: 0;
   font-family: var(--font-display, sans-serif);
-  font-size: 1.0em;
+  font-size: 0.98em;
   letter-spacing: 0.03em;
   color: rgb(255, 232, 110);
 }
 .fleet-info-popup__meta {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 0.88em;
+  gap: 3px;
+  font-size: 0.86em;
 }
 .fleet-info-popup__meta > div {
   display: grid;
-  grid-template-columns: 76px 1fr;
+  grid-template-columns: 60px 1fr;
   gap: 6px;
   align-items: baseline;
 }
@@ -6793,8 +6793,26 @@ select.main-menu__input { cursor: pointer; }
   margin: 0;
   font-weight: 600;
   color: var(--c-muted, #8a93b8);
-  font-size: 0.85em;
+  font-size: 0.82em;
 }
+/* Composizione flotta: icone SVG di classe + ×n (richiesta utente). */
+.fleet-info-popup__ships {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 7px;
+  align-items: center;
+}
+.fleet-info-ship { display: inline-flex; align-items: center; gap: 2px; }
+.fleet-info-ship .ui-icon { font-size: 1.15em; }
+.fleet-info-ship__glyph { font-size: 0.95em; }
+.fleet-info-ship__n {
+  font-family: var(--font-data, monospace);
+  font-size: 0.84em;
+  color: var(--c-text-soft, #b8c0e0);
+}
+/* Potenza di fuoco complessiva (FP) della flotta. */
+.fleet-info-fp { font-family: var(--font-data, monospace); font-weight: 700; color: #f0c878; }
+.fleet-info-fp__sub { color: var(--c-muted, #8a93b8); font-size: 0.86em; }
 .fleet-info-popup__meta dd {
   margin: 0;
   word-break: break-word;
@@ -6802,7 +6820,7 @@ select.main-menu__input { cursor: pointer; }
 .fleet-info-popup__actions {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
   margin-top: 4px;
 }
 .fleet-info-popup__actions .btn {
@@ -6810,9 +6828,11 @@ select.main-menu__input { cursor: pointer; }
   justify-content: center;
   white-space: nowrap;
   text-align: center;
-  padding: 6px 10px;
-  font-size: 0.86em;
+  padding: 4px 8px;
+  font-size: 0.76em;
+  gap: 4px;
 }
+.fleet-info-popup__actions .btn .ui-icon { font-size: 0.95em; }
 /* M18.x — inseguimento flotte AI: azioni in riga (Segui/Intercetta/Scorta),
    selettore flotta, hint e righe contatto. Civiltà AI = rosa (UI_GUIDE §1). */
 .fleet-info-popup__actions--row {
