@@ -147,14 +147,14 @@
   const VIEWER_D = 1.55;
 
   /* Zoom: moltiplicatori di fitScale per il range di scala. Il tetto è
-     stato allungato 9→12 (richiesta utente 2026-06-26) per creare una
-     fascia di zoom extra a livello gruppo, PRIMA del dive-in nel sistema:
-     in quella fascia le flotte si scompongono in icone per tipo + numero. */
+     stato allungato 9→12→16 (richiesta utente 2026-06-26) per tenere ancora
+     di più la vista GRUPPO prima del dive-in nel sistema: in quella fascia
+     le flotte si scompongono in icone per tipo + numero. */
   const MIN_ZOOM_MUL = 0.6;
-  const MAX_ZOOM_MUL = 12;
+  const MAX_ZOOM_MUL = 16;
   /* Sopra questo zoom (scale/fitScale) la flotta passa da icona singola
      (nave di punta) a scomposizione in icone per tipo + numero. */
-  const FLEET_DECOMP_ZOOM = 6;
+  const FLEET_DECOMP_ZOOM = 5;
 
   class GalaxyMap {
     constructor() {
@@ -264,6 +264,25 @@
       });
       container.appendChild(layerBtn);
       this._layerBtn = layerBtn;
+
+      /* Pulsanti zoom +/- (richiesta utente 2026-06-26): colonna laterale a
+         dx, utile su touch dove manca la rotella. Su desktop sono nascosti via
+         CSS (la rotella basta). Centrano lo zoom sul viewport. */
+      var zoomCol = document.createElement('div');
+      zoomCol.className = 'gmap-zoom';
+      [['+', 'Ingrandisci', 1.25], ['−', 'Riduci', 1 / 1.25]].forEach(function (spec) {
+        var b = document.createElement('button');
+        b.className = 'gmap-zoom-btn';
+        b.type = 'button';
+        b.textContent = spec[0];
+        b.setAttribute('aria-label', spec[1]);
+        b.addEventListener('click', function () {
+          self._zoomAt(self.cssW / 2, self.cssH / 2, spec[2]);
+        });
+        zoomCol.appendChild(b);
+      });
+      container.appendChild(zoomCol);
+      this._zoomCol = zoomCol;
 
       this.canvas = canvas;
       this.ctx = canvas.getContext('2d');
@@ -545,7 +564,13 @@
       const game = root.ORION && root.ORION.game;
       if (!game || !Array.isArray(game.fleets) || !game.fleets.length) return null;
       let best = null, bestD = Infinity;
-      const R = 14;
+      /* Raggio di tocco proporzionato all'icona disegnata: cresce nella fascia
+         scomposta (icone ingrandite, richiesta utente 2026-06-26) così i marker
+         grandi restano facili da toccare su touch. */
+      const zoom = this.fitScale ? this.scale / this.fitScale : 1;
+      const R = zoom >= FLEET_DECOMP_ZOOM
+        ? clamp(18 + (zoom - FLEET_DECOMP_ZOOM) * 2.4, 18, 40)
+        : 14;
       for (let i = 0; i < game.fleets.length; i++) {
         const f = game.fleets[i];
         const pos = this._fleetScreenPos(f);
@@ -2687,8 +2712,10 @@
          di zoom allungata prima del dive-in al sistema) = flotta scomposta
          in icone per tipo + numero. */
       const decompose = zoom >= FLEET_DECOMP_ZOOM;
+      /* Scomposte: icone più grandi e in crescita col zoom (richiesta utente
+         2026-06-26) — più leggibili nella fascia gruppo allungata. */
       const baseR = decompose
-        ? clamp(11 + (zoom - FLEET_DECOMP_ZOOM) * 1.4, 11, 20)
+        ? clamp(15 + (zoom - FLEET_DECOMP_ZOOM) * 2.4, 15, 34)
         : clamp(13 + (zoom - 2) * 3.2, 13, 30);
 
       ctx.save();

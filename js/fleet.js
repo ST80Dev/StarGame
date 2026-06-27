@@ -3360,10 +3360,10 @@
      Visual per classe nave su CANVAS (mappa/sistema, richiesta utente
      2026-06-26). Specchio di SHIP_VIS in main.js ma con colore esadecimale
      (il canvas non eredita dalle classi CSS .ui-icon--<tone>). Le tinte
-     seguono UI_GUIDE §1 per ruolo. L'estrattore non ha icona dedicata →
-     fallback al glyph della classe. */
+     seguono UI_GUIDE §1 per ruolo. */
   const CLASS_ICON = {
     explorer:     { icon: 'shipExplorer',     hex: '#2fe6e0' },
+    estrattore:   { icon: 'shipEstrattore',   hex: '#80c8e6' },
     caccia:       { icon: 'shipCaccia',       hex: '#f0d670' },
     intercettore: { icon: 'shipIntercettore', hex: '#f0a868' },
     corvetta:     { icon: 'shipCorvetta',     hex: '#f08296' },

@@ -550,6 +550,39 @@ button { font-family: inherit; }
   background: rgba(15, 40, 50, 0.85);
 }
 
+/* Pulsanti zoom +/- su canvas (mappa galassia/gruppo + vista sistema), colonna
+   laterale a dx centrata in verticale. Solo touch/non-desktop (richiesta utente
+   2026-06-26): su desktop la rotella basta → nascosti. */
+.gmap-zoom {
+  position: absolute;
+  right: 8px; top: 50%;
+  transform: translateY(-50%);
+  z-index: 18;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+}
+.gmap-zoom-btn {
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  font: 700 1.5rem/1 'Orbitron', 'JetBrains Mono', monospace;
+  color: #a0b0d4;
+  background: rgba(10, 14, 28, 0.82);
+  border: 1px solid rgba(120, 140, 200, 0.3);
+  border-radius: 8px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.gmap-zoom-btn:hover, .gmap-zoom-btn:active {
+  background: rgba(20, 28, 50, 0.92);
+  color: #d0d8ef;
+  border-color: rgba(150, 170, 220, 0.5);
+}
+@media (hover: none) and (pointer: coarse) {
+  .gmap-zoom { display: flex; }
+}
+
 /* decisione #80 — navigazione a zoom: mini-dissolvenza dell'holder che
    compare cambiando livello (Galassia↔Sistema↔Pianeta). */
 .is-zoom-entering { animation: zoom-fade-in 200ms ease-out; }

@@ -4511,6 +4511,7 @@ function capitalBuildBlock(colony, cls) {
    coloniale verde · capitali M15). Fallback al glifo monocolore se manca. */
 const SHIP_VIS = {
   explorer:     { icon: 'shipExplorer',     tone: 'cyan' },
+  estrattore:   { icon: 'shipEstrattore',   tone: 'blue' },
   caccia:       { icon: 'shipCaccia',       tone: 'gold' },
   intercettore: { icon: 'shipIntercettore', tone: 'amber' },
   corvetta:     { icon: 'shipCorvetta',     tone: 'pink' },

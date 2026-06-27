@@ -116,6 +116,26 @@
       this._tooltip = tip;
       this._chipHits = [];
 
+      /* Pulsanti zoom +/- (richiesta utente 2026-06-26): colonna laterale a dx,
+         per touch dove manca la rotella. Nascosti su desktop via CSS. Riusa la
+         classe .gmap-zoom della mappa galassia per stile coerente. */
+      var sv = this;
+      var zoomCol = document.createElement('div');
+      zoomCol.className = 'gmap-zoom';
+      [['+', 'Ingrandisci', 1.25], ['−', 'Riduci', 1 / 1.25]].forEach(function (spec) {
+        var b = document.createElement('button');
+        b.className = 'gmap-zoom-btn';
+        b.type = 'button';
+        b.textContent = spec[0];
+        b.setAttribute('aria-label', spec[1]);
+        b.addEventListener('click', function () {
+          sv._zoomAt(sv.cssW / 2, sv.cssH / 2, spec[2]);
+        });
+        zoomCol.appendChild(b);
+      });
+      container.appendChild(zoomCol);
+      this._zoomCol = zoomCol;
+
       this.canvas = canvas;
       this.ctx = canvas.getContext('2d');
 
@@ -878,8 +898,10 @@
         } else {
           this._drawFleetGlow(ctx, mx, my, cell * 0.5, col);
         }
-        /* hit-test: raggio che copre l'ingombro della composizione. */
-        this._fleetHit[this._fleetHit.length - 1].r = Math.max(cell, (box.w || cell) / 2);
+        /* hit-test: raggio che copre l'ingombro (ora verticale) della
+           composizione — considera l'altezza dell'elenco. */
+        this._fleetHit[this._fleetHit.length - 1].r =
+          Math.max(cell, (box.h || cell) / 2, (box.w || cell) / 2);
         /* etichetta nome, centrata SOTTO la composizione (con stroke per
            leggibilità su nebulose/polvere). */
         ctx.save();
@@ -888,7 +910,8 @@
         ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2, fontPx / 4);
         ctx.strokeStyle = 'rgba(0,0,0,0.85)';
         const lbl = (f.name || '').slice(0, 18);
-        const ly = my + cell * 0.62 + 2;
+        /* sotto l'elenco verticale: usa l'altezza reale della composizione. */
+        const ly = my + (box.h || cell) / 2 + 3;
         ctx.strokeText(lbl, mx, ly);
         ctx.fillStyle = 'rgba(222,236,255,0.96)';
         ctx.fillText(lbl, mx, ly);
