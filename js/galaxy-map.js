@@ -2009,6 +2009,7 @@
       if (alpha < 0.05) return;
       const CFGA = (root.ORION.aifleet && root.ORION.aifleet.CFG) || {};
       const PARTIAL = CFGA.INTEL_PARTIAL != null ? CFGA.INTEL_PARTIAL : 0.45;
+      const FULL = CFGA.INTEL_FULL != null ? CFGA.INTEL_FULL : 0.85;
       const PERSIST = CFGA.CONTACT_PERSIST_I != null ? CFGA.CONTACT_PERSIST_I : 32;
       const nowI = game.timeImpulsi || 0;
       let anyTransit = false;
@@ -2071,37 +2072,63 @@
         const color = af.civColor || '#d0d0d0';
         const known = (af.intel || 0) >= PARTIAL;
         const a = alpha * (known ? 0.95 : 0.7) * (fresh ? 1 : 0.45);
+        /* Identificata con PRECISIONE (intel ≥ FULL): segue le stesse regole
+           grafiche delle tue flotte, ma con una SOLA icona nave (la nave di
+           punta) SEMPRE nel colore della civ — la composizione dettagliata si
+           vede col popup (richiesta utente 2026-06-26). Sotto soglia resta il
+           rombo + '?' (contatto non identificato). */
+        const FM = root.ORION && root.ORION.fleetMarker;
+        const precise = (af.intel || 0) >= FULL && FM &&
+          Array.isArray(af.ships) && af.ships.length;
+        let markR = r;
         ctx.save();
         ctx.globalAlpha = a;
-        /* Rombo nel colore della civ. */
-        ctx.beginPath();
-        ctx.moveTo(pos.x, pos.y - r);
-        ctx.lineTo(pos.x + r, pos.y);
-        ctx.lineTo(pos.x, pos.y + r);
-        ctx.lineTo(pos.x - r, pos.y);
-        ctx.closePath();
-        ctx.fillStyle = color;
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(8,12,22,0.85)';
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
-        /* Alone tenue (come i marker flotta del giocatore). */
-        ctx.beginPath();
-        ctx.moveTo(pos.x, pos.y - (r + 3));
-        ctx.lineTo(pos.x + (r + 3), pos.y);
-        ctx.lineTo(pos.x, pos.y + (r + 3));
-        ctx.lineTo(pos.x - (r + 3), pos.y);
-        ctx.closePath();
-        ctx.strokeStyle = hexA(color, 0.35);
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        /* '?' se composizione ignota. */
-        if (!known) {
-          ctx.fillStyle = 'rgba(255,255,255,0.92)';
-          ctx.font = '700 ' + Math.max(9, r + 1) + 'px monospace';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText('?', pos.x, pos.y + 0.5);
+        if (precise) {
+          const zoom = this.fitScale ? this.scale / this.fitScale : 1;
+          const size = clamp(13 + (zoom - 2) * 3.2, 13, 30);
+          markR = size * 0.6;
+          /* alone nel colore civ dietro l'icona */
+          const haloR = size * 1.25;
+          const glow = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, haloR);
+          glow.addColorStop(0, hexA(color, 0.50));
+          glow.addColorStop(0.5, hexA(color, 0.18));
+          glow.addColorStop(1, hexA(color, 0));
+          ctx.fillStyle = glow;
+          ctx.beginPath(); ctx.arc(pos.x, pos.y, haloR, 0, Math.PI * 2); ctx.fill();
+          const onReady = this._fleetIconReady ||
+            (this._fleetIconReady = this.requestRender.bind(this));
+          FM.lead(ctx, pos.x, pos.y, size, af, onReady, color);
+        } else {
+          /* Rombo nel colore della civ. */
+          ctx.beginPath();
+          ctx.moveTo(pos.x, pos.y - r);
+          ctx.lineTo(pos.x + r, pos.y);
+          ctx.lineTo(pos.x, pos.y + r);
+          ctx.lineTo(pos.x - r, pos.y);
+          ctx.closePath();
+          ctx.fillStyle = color;
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(8,12,22,0.85)';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+          /* Alone tenue (come i marker flotta del giocatore). */
+          ctx.beginPath();
+          ctx.moveTo(pos.x, pos.y - (r + 3));
+          ctx.lineTo(pos.x + (r + 3), pos.y);
+          ctx.lineTo(pos.x, pos.y + (r + 3));
+          ctx.lineTo(pos.x - (r + 3), pos.y);
+          ctx.closePath();
+          ctx.strokeStyle = hexA(color, 0.35);
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          /* '?' se composizione ignota. */
+          if (!known) {
+            ctx.fillStyle = 'rgba(255,255,255,0.92)';
+            ctx.font = '700 ' + Math.max(9, r + 1) + 'px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('?', pos.x, pos.y + 0.5);
+          }
         }
         ctx.restore();
         /* Etichetta: SOLO l'identificazione del contatto (nome civ o "non
@@ -2111,7 +2138,7 @@
         let lbl = (root.ORION.aifleet && root.ORION.aifleet.nameLabel) ? root.ORION.aifleet.nameLabel(game, af) : 'Contatto';
         if (lbl.length > 22) lbl = lbl.slice(0, 21) + '…';
         const fs = Math.max(9.5, nr + 3);
-        const offX = (pos.x > this.cssW - 130) ? -(r + 6) : (r + 6);
+        const offX = (pos.x > this.cssW - 130) ? -(markR + 6) : (markR + 6);
         ctx.save();
         ctx.globalAlpha = a;
         ctx.font = '600 ' + fs.toFixed(1) + 'px "JetBrains Mono", ui-monospace, monospace';

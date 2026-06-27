@@ -936,20 +936,39 @@
         this._aiFleetHit.push({ id: af.id, x: mx, y: my });
         const color = af.civColor || '#d0d0d0';
         const known = (af.intel || 0) >= PARTIAL;
-        /* Decisione utente 2026-06-20: marker AI come icona "glow" (non più
-           rombo semplice), auto-dimensionato con zoom — un filo più grande
-           del giocatore (×1.10) per distinguere subito le AI. */
+        const FULL = CFGA.INTEL_FULL != null ? CFGA.INTEL_FULL : 0.85;
+        const FM = root.ORION && root.ORION.fleetMarker;
+        /* Identificata con PRECISIONE (intel ≥ FULL): UNA icona nave (nave di
+           punta) SEMPRE nel colore della civ, stesse regole grafiche delle
+           tue flotte; la composizione di dettaglio resta nel popup (richiesta
+           utente 2026-06-26). Sotto soglia: marker "glow" + '?' come prima. */
+        const precise = (af.intel || 0) >= FULL && FM &&
+          Array.isArray(af.ships) && af.ships.length;
         const r = clamp(this.scale * 0.024, 8, 18);
         const fontPx = Math.round(clamp(this.scale * 0.017, 11, 17));
         this._aiFleetHit[this._aiFleetHit.length - 1].r = r;
         ctx.save();
         if (!known) ctx.globalAlpha = 0.78;
-        this._drawFleetGlow(ctx, mx, my, r, color, { hostile: true });
-        if (!known) {
-          ctx.fillStyle = 'rgba(255,255,255,0.96)';
-          ctx.font = '700 ' + Math.max(10, Math.round(r * 0.85)) + 'px monospace';
-          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          ctx.fillText('?', mx, my + 0.5);
+        if (precise) {
+          const cell = clamp(this.scale * 0.03, 14, 30);
+          const haloR = cell * 0.95;
+          const glow = ctx.createRadialGradient(mx, my, 0, mx, my, haloR);
+          glow.addColorStop(0, hexA(color, 0.50));
+          glow.addColorStop(0.5, hexA(color, 0.16));
+          glow.addColorStop(1, hexA(color, 0));
+          ctx.fillStyle = glow;
+          ctx.beginPath(); ctx.arc(mx, my, haloR, 0, Math.PI * 2); ctx.fill();
+          FM.lead(ctx, mx, my, cell, af,
+            this._fmReady || (this._fmReady = this.requestRender.bind(this)), color);
+          this._aiFleetHit[this._aiFleetHit.length - 1].r = Math.max(r, cell * 0.6);
+        } else {
+          this._drawFleetGlow(ctx, mx, my, r, color, { hostile: true });
+          if (!known) {
+            ctx.fillStyle = 'rgba(255,255,255,0.96)';
+            ctx.font = '700 ' + Math.max(10, Math.round(r * 0.85)) + 'px monospace';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText('?', mx, my + 0.5);
+          }
         }
         /* Solo l'identificazione, niente missione/ETA (coerente con la mappa). */
         let lbl = (root.ORION.aifleet && root.ORION.aifleet.nameLabel) ? root.ORION.aifleet.nameLabel(game, af) : 'Contatto';

@@ -23,11 +23,14 @@
   const RASTER_PX = 64; /* risoluzione unica di rasterizzazione → scala in drawImage */
 
   /* Disegna una singola icona di classe centrata in (cx,cy), lato `px`.
-     Fallback al glyph della classe se l'icona non è pronta / assente. */
-  function drawShip(ctx, cx, cy, px, kind, onReady) {
+     Fallback al glyph della classe se l'icona non è pronta / assente.
+     `colorHex` (opzionale) forza una tinta diversa da quella di classe —
+     usato per le flotte AI: sempre nel colore della civ. */
+  function drawShip(ctx, cx, cy, px, kind, onReady, colorHex) {
     const F = ORION.fleet;
     const vis = (F && F.classVisual) ? F.classVisual(kind) : { icon: null, hex: '#98a3c8', glyph: '◈' };
-    const img = (vis.icon && ORION.rasterIcon) ? ORION.rasterIcon(vis.icon, vis.hex, RASTER_PX, onReady) : null;
+    const tint = colorHex || vis.hex;
+    const img = (vis.icon && ORION.rasterIcon) ? ORION.rasterIcon(vis.icon, tint, RASTER_PX, onReady) : null;
     ctx.save();
     ctx.shadowColor = 'rgba(0,0,0,0.65)';
     ctx.shadowBlur = Math.max(2, px * 0.16);
@@ -43,7 +46,7 @@
       ctx.strokeStyle = 'rgba(8,12,24,0.9)';
       ctx.shadowBlur = 0;
       ctx.strokeText(vis.glyph, cx, cy);
-      ctx.fillStyle = vis.hex;
+      ctx.fillStyle = tint;
       ctx.fillText(vis.glyph, cx, cy);
     }
     ctx.restore();
@@ -67,12 +70,13 @@
     RASTER_PX: RASTER_PX,
 
     /* Icona singola della nave di punta (classe più forte). `size` = lato px.
+       `colorHex` (opzionale) forza la tinta (flotte AI = colore civ).
        Ritorna il semi-ingombro orizzontale (per posizionare un'etichetta). */
-    lead(ctx, cx, cy, size, fleet, onReady) {
+    lead(ctx, cx, cy, size, fleet, onReady, colorHex) {
       const F = ORION.fleet;
       const kind = (F && F.leadKind) ? F.leadKind(fleet) : null;
       if (!kind) return size / 2;
-      drawShip(ctx, cx, cy, size, kind, onReady);
+      drawShip(ctx, cx, cy, size, kind, onReady, colorHex);
       return size / 2;
     },
 
