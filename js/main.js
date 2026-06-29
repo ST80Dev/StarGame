@@ -6292,7 +6292,13 @@ function economyAnomaliesHtml(g) {
           const got = +(s.harvested || 0).toFixed(1);
           const rate = s.harvestRate != null ? s.harvestRate : 0.6;
           const resLbl = resShortLabel(s.res);
-          if (s.harvesting) harvestTxt = '<span class="econ-chip econ-chip--harvest" title="Risorse raccolte · ritmo per Impulso">raccolti <strong>' + got + ' ' + resLbl + '</strong> · <strong>' + rate + '</strong>/' + iU() + '</span>';
+          /* Quando il sito è quasi esaurito il ritmo effettivo scende alla
+             rigenerazione sostenibile, sotto la capacità della flotta: lo
+             spieghiamo nel tooltip (capacità lorda vs ritmo effettivo). */
+          const rateTitle = (s.harvestRateGross && s.harvestRateGross > rate)
+            ? 'Ritmo effettivo per Impulso. Capacità flotta ' + s.harvestRateGross + '/' + iU() + ', ma la riserva è quasi esaurita → eroga la rigenerazione sostenibile finché non si ricostituisce.'
+            : 'Risorse raccolte · ritmo per Impulso (Estrattore: scala con l\'Hangar d\'origine; Esploratore: 0.6 fisso)';
+          if (s.harvesting) harvestTxt = '<span class="econ-chip econ-chip--harvest" title="' + rateTitle + '">raccolti <strong>' + got + ' ' + resLbl + '</strong> · <strong>' + rate + '</strong>/' + iU() + '</span>';
           else if (got > 0) harvestTxt = '<span class="econ-chip" title="Risorse raccolte (raccolta interrotta)">raccolti ' + got + ' ' + resLbl + '</span>';
         }
         const inbound = inboundForSite(s);
