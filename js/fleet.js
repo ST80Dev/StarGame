@@ -1810,6 +1810,14 @@
     /* Decisione #69: in deriva (viveri esauriti) la flotta arranca — i leg
        successivi durano di più (razionamento). */
     if (fleet._drift && (fleet.viveri || 0) <= 0) t = Math.max(1, t * VIVERI_DRIFT_SLOW);
+    /* Campo di prossimità FSP (richiesta utente 2026-06-29, §17.7.4): se il leg
+       tocca la zona di un Fenomeno di Spazio Profondo (entro 1 hop dall'aggancio),
+       la traversata rallenta o accelera. Lieve e cappato; opaco al giocatore.
+       Stora il `legTotal` post-modificatori così il renderer interpola corretto. */
+    if (ORION.phenomena && ORION.phenomena.legField) {
+      const fld = ORION.phenomena.legField(galaxy, from, toSys);
+      if (fld && fld.dragMul && fld.dragMul !== 1) t = Math.max(1, Math.round(t * fld.dragMul));
+    }
     /* Fix bug renderer (decisione di sessione): stora il `legTotal`
        effettivo (post-modificatori comandante/deriva/incidenti) così il
        renderer in `_drawFleets` può interpolare correttamente la posizione
@@ -1852,6 +1860,12 @@
     }
     if (ORION.cohesion && ORION.cohesion.expeditionRiskBonus && fleet.orders && fleet.orders.toSysId != null) {
       c += ORION.cohesion.expeditionRiskBonus(game, fleet.orders.toSysId);
+    }
+    /* Campo di prossimità FSP (richiesta utente 2026-06-29, §17.7.4): i
+       Fenomeni gravitazionali lungo la rotta deformano i viaggi → +rischio
+       incidente. Effetto di rotta (un FSP conta una volta), cappato. */
+    if (ORION.phenomena && ORION.phenomena.routeIncident) {
+      c += ORION.phenomena.routeIncident(game.galaxy, fleet.route);
     }
     return Math.max(0, Math.min(INCIDENT_RISK_MAX, c));
   }
@@ -2177,7 +2191,15 @@
     if (!Array.isArray(fleet.ships) || !fleet.ships.length) return;
     const sys = game.galaxy && game.galaxy.systems && game.galaxy.systems[fleet.location.systemId];
     const danger = sys ? Math.max(0, Math.min(1, (sys.danger || 0) / 100)) : 0;
-    const w = WEAR_TRANSIT_BASE * (1 + danger);
+    let w = WEAR_TRANSIT_BASE * (1 + danger);
+    /* Campo di prossimità FSP (richiesta utente 2026-06-29, §17.7.4): vicino a
+       certi Fenomeni le navi si logorano di più (hazard) o di meno (boon, es.
+       una struttura-riparo). Lieve e cappato; modula il drip per-Ι. */
+    if (ORION.phenomena && ORION.phenomena.legField) {
+      const toSys = Array.isArray(fleet.route) ? fleet.route[(fleet.routeIdx || 0) + 1] : null;
+      const fld = ORION.phenomena.legField(game.galaxy, fleet.location.systemId, toSys);
+      if (fld && fld.wearMul) w *= fld.wearMul;
+    }
     for (let i = 0; i < fleet.ships.length; i++) {
       fleet.ships[i].wear = Math.min(100, (fleet.ships[i].wear || 0) + w);
     }
@@ -2430,6 +2452,14 @@
        tutte le classi, scalato sul danger del sistema. Sostituisce il lump-sum
        all'arrivo dell'esploratore (rimosso più sotto). */
     applyTransitWear(game, fleet);
+    /* Campo di prossimità FSP (richiesta utente 2026-06-29): se la flotta sta
+       attraversando la zona di un Fenomeno non ancora classificato, un nudge
+       opaco in Cronaca spinge a indagarlo ("si impara giocando", §17.7.1). */
+    if (fleet.location && fleet.location.status === 'in-transit' && !fleet.location.intra &&
+        ORION.phenomena && ORION.phenomena.noteAmbientFelt) {
+      const toSys = Array.isArray(fleet.route) ? fleet.route[(fleet.routeIdx || 0) + 1] : null;
+      ORION.phenomena.noteAmbientFelt(game, fleet, fleet.location.systemId, toSys, events);
+    }
     if (fleet.orders.type === 'idle') {
       /* Stadio 1.4: la flotta è "settled" (fine di uno step non continuativo).
          Se c'è una coda, applica il prossimo step (M1→M2→azione). Gli ordini

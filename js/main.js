@@ -320,7 +320,7 @@ function computeChronicleTarget(ev) {
   if (kind === 'incursion-inbound') return sysOpenTarget(ev.targetSysId);
   if (kind === 'trade-raid' || kind === 'fsp-contact' || kind === 'fsp-scanned' ||
       kind === 'fsp-revealed' || kind === 'fsp-claimed' || kind === 'fsp-lost' ||
-      kind === 'mekhari-contract-done') {
+      kind === 'fsp-ambient' || kind === 'mekhari-contract-done') {
     return sysOpenTarget(ev.sysId);
   }
   if (kind === 'station-built' || kind === 'station-upgraded' ||
@@ -12758,6 +12758,8 @@ const DEFAULT_AUTOPAUSE = {
   /* FSP §17.7: contatto/scansione/controllo atmosferici (OFF); rivelazione
      dell'effetto è la commit significativa (ON). */
   'fsp-contact': false, 'fsp-scanned': false, 'fsp-revealed': true, 'fsp-claimed': false, 'fsp-lost': true,
+  /* Campo di prossimità (richiesta utente 2026-06-29): nudge ambientale, minore → OFF. */
+  'fsp-ambient': false,
   /* Fase B (decisione #46): tappa intermedia raggiunta. Default OFF —
      non interrompiamo a ogni waypoint, può essere una rotta lunga. L'arrivo
      finale e la `route-complete` continuano a fermare il tempo. */
@@ -13262,6 +13264,7 @@ function showEventOverlay(events) {
     'fsp-revealed': 'Fenomeno investigato',
     'fsp-claimed': 'Fenomeno sotto controllo',
     'fsp-lost': 'Fenomeno perduto',
+    'fsp-ambient': 'Corrente anomala sulle rotte',
     'fleet-leg-hop': 'Flotta: hop intermedio',
     'fleet-waypoint-reached': 'Flotta: tappa raggiunta',
     'garrison-threat-detected': 'Garrison: minaccia rilevata',
@@ -14336,6 +14339,12 @@ function _chronicleEventBody(ev) {
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.name || 'Fenomeno') + '</strong> ora sotto il tuo controllo (presidio).', 'system');
   } else if (ev.kind === 'fsp-lost') {
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.name || 'Fenomeno') + '</strong> presso ' + escapeHtml(ev.sysName || '—') + ' è stato sottratto da ' + escapeHtml(ev.faction || 'una fazione rivale') + ': lasciato indifeso. Puoi tornare a rivendicarlo.', 'crit');
+  } else if (ev.kind === 'fsp-ambient') {
+    /* Nudge "si impara giocando" (§17.7.1): la flotta sente un campo anomalo
+       attraversando lo spazio profondo presso un sistema. Testo OPACO (niente
+       numeri/segno): spinge solo a scansionare/investigare il Fenomeno. */
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName || 'Una flotta') + '</strong> avverte una corrente anomala nei pressi di <strong>' + escapeHtml(ev.sysName || '—') + '</strong>: un Fenomeno di Spazio Profondo influenza i viaggi nei dintorni. Scansionalo per capirne la natura.', 'system');
+    if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('fenomeni');
   } else if (ev.kind === 'empire-fallen') {
     if (ev.hard) {
       pushChronicle(ds + ' — <strong>La tua civiltà è caduta.</strong> Senza più colonie, l\'impero si dissolve negli annali galattici.', 'system');
@@ -16925,6 +16934,9 @@ function _renderPhenomenonPopup(id, screenX, screenY) {
             ? 'Prendi il <strong>controllo</strong> (flotta nel sistema d\'aggancio) per <strong>aprire il varco</strong> alle tue rotte.'
             : 'Puoi prenderne il <strong>controllo</strong> presidiandolo con una flotta nel sistema d\'aggancio.') + '</p>' : '');
   }
+  /* Campo di prossimità (richiesta utente 2026-06-29): cenno OPACO sempre
+     presente — la zona influenza i viaggi nei dintorni. Niente numeri/segno. */
+  body += '<p class="fleet-info-popup__hint">Proietta un debole <strong>campo</strong> sui viaggi nei dintorni (sistema d\'aggancio e a un salto): le rotte vicine possono risentirne.</p>';
 
   let actions = '';
   if (disc === D.CONTATTO) { const c = PH.canScan(g, id); actions += _phenBtn('phen-scan', 'spy', 'cyan', 'Scansiona', c.ok, c.reason); }

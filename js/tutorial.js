@@ -99,6 +99,7 @@
         '<strong>Scansiona</strong> (flotta o colonia nel sistema d\'aggancio) per conoscerne la classe. ' +
         '<strong>Investiga</strong> con una flotta per scoprirne l\'effetto — può aiutarti poco o molto, o essere un rischio. ' +
         'Alcuni puoi <strong>Controllarli</strong> (presidio) per un beneficio continuo; altri conviene <strong>Evitarli</strong>.</p>' +
+        '<p>Anche senza investigarli, i Fenomeni proiettano un <strong>debole campo sui dintorni</strong> — il sistema d\'aggancio e quelli a <strong>un salto</strong>. Le flotte che vi <strong>transitano vicino</strong> possono procedere più <strong>lente o più spedite</strong> e <strong>usurarsi</strong> di più o di meno. Ogni classe ha la sua indole: un buon motivo per <strong>scegliere le rotte</strong> (o marcare una zona da evitare).</p>' +
         '<p class="tut-hint">Non sono mai vincitori di partita: aiutano in base alla tua strategia, e chi li possiede può perderli.</p>'
     },
     {

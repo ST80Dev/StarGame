@@ -837,6 +837,17 @@ I **tenori** indicano la tendenza, **non** l'effetto (volutamente non blindato).
   Vehryn/pirati/AI (insidia o sottrazione). È il vincolo anti-game-winner.
 - **Uso una tantum** — *attivi/investighi*: bonus **o** malus immediato, una
   scommessa. Si **consuma**.
+- **Campo di prossimità (perenne)** — anche senza interagirci, ogni FSP
+  proietta un **debole campo ambientale** sul **sistema d'aggancio e su quelli
+  entro 1 hop**. Una flotta che vi **transita** ne risente in **continuo**:
+  effetti **leggeri, cappati e opachi** (il giocatore li *sente*, non li legge
+  a numeri) che variano per **classe** (es. gravitazionali = viaggi più lenti,
+  scafi sollecitati e **maggior rischio di incidente** lungo la rotta; faro =
+  rotta più spedita; struttura dormiente = acque calme/meno usura). Rende la
+  presenza dei corpi speciali **strategica e perenne** — una *zona da evitare*
+  (o da cercare) per le rotte — senza affossare chi nasce adiacente. Vale anche
+  per le flottiglie ambientali AI (canale di viaggio). Recovery-friendly (#22):
+  sempre lieve, e marcare/aggirare la zona è una scelta valida.
 
 #### 17.7.5 Variabilità (due assi)
 
