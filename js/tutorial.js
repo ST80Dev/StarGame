@@ -1447,6 +1447,19 @@
         '</ul>' +
         '<p>Il pattugliamento <em>tra più pianeti</em> dello stesso sistema arriverà in un polish successivo ' +
         '(oggi: una flotta in garrison per pianeta).</p>'
+    },
+    {
+      id: 'journal',
+      tag: 'Diario',
+      title: 'Diario Strategico',
+      body:
+        '<p>Il <strong>Diario</strong> raccoglie i tuoi appunti strategici: pianeti da colonizzare, sistemi da presidiare, ' +
+        'bersagli da sorvegliare, promemoria diplomatici e di ricerca.</p>' +
+        '<p>Da un <strong>sistema</strong>, un <strong>pianeta</strong>, una <strong>flotta</strong> o una <strong>civiltà</strong> ' +
+        'usa il bottone <strong>📌 Appunta</strong> nella barra contestuale: scegli una categoria, una priorità e (se vuoi) ' +
+        'una nota breve. Lo trovi nella linguetta <strong>Diario</strong> della Plancia d\'Impero.</p>' +
+        '<p>Filtra per categoria con i chip in alto; <strong>✓</strong> archivia un appunto risolto, ' +
+        '<strong>✕</strong> lo elimina. Niente scadenze, niente cronaca: solo tu e la tua lista.</p>'
     }
   ];
 

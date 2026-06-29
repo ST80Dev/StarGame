@@ -269,7 +269,13 @@
          di schema: save vecchi → [] e ORION.reputation.ensure() lo inizializza
          al primo accesso. I drift passivi NON vengono registrati per non
          saturare il buffer. */
-      repHistory: Array.isArray(game.repHistory) ? game.repHistory.slice(0, 20) : []
+      repHistory: Array.isArray(game.repHistory) ? game.repHistory.slice(0, 20) : [],
+      /* M-journal (Diario Strategico): appunti del giocatore. Additivo /
+         lazy-init: NIENTE bump di schemaVersion (i save vecchi caricano e
+         ORION.journal.ensure() crea la struttura vuota al boot). */
+      journal: (ORION.journal && ORION.journal.serialize)
+        ? ORION.journal.serialize(game)
+        : ((game.journal && typeof game.journal === 'object') ? game.journal : { pins: [], nextId: 1 })
     };
   }
 
