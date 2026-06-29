@@ -655,6 +655,7 @@
        pavimento generoso anche al bordo): ora il bordo rampa lentissimo e
        solo la copertura forte (colonie / pedinamento) porta a FULL in fretta. */
     af.intel = Math.min(1, af.intel + CFG.INTEL_GAIN * best);
+    markCivFlagSeen(game, af);
 
     /* Vicino a una colonia? (nodo presenza è un tuo sistema colonia o adiacente). */
     let nearColony = false;
@@ -768,6 +769,22 @@
     for (let i = 0; i < arr.length; i++) if (arr[i] && arr[i].id === id) return arr[i];
     return null;
   }
+  /* Identificazione "bandiera": quando l'intel su una flotta raggiunge FULL
+     (sai a CHI appartiene), registra un marker leggero sulla civ di appartenenza.
+     `flagSeen` è uno stato di consapevolezza SOTTO "Avvistata" (§13.10): conosci
+     l'esistenza/identità della civ per aver inquadrato una loro flotta, ma NON
+     sai ancora dove vive né nulla del dossier. È il prerequisito che sblocca il
+     dossier mirato dei Mekhari (mekhari.js): pedinare/identificare una flotta
+     ORA serve a qualcosa sul piano della civiltà (chiude il silo flotta↔civ).
+     Idempotente, additivo, persiste wholesale dentro game.civs (nessun bump). */
+  function markCivFlagSeen(game, af) {
+    if (!af || (af.intel || 0) < CFG.INTEL_FULL) return;
+    const civ = civById(game, af.civId);
+    if (!civ || civ.flagSeen) return;
+    civ.flagSeen = true;
+    civ.flagSeenI = game.timeImpulsi || 0;
+    civ.flagSeenSysId = af.lastSeenSysId != null ? af.lastSeenSysId : af.systemId;
+  }
   function nudgeDisposition(civ, delta) {
     if (!civ) return;
     civ.disposition = Math.max(-100, Math.min(100, (civ.disposition || 0) + delta));
@@ -797,6 +814,7 @@
         af.lastSeenI = I;
         af.lastSeenSysId = pf.location.systemId; // visto incrociando: ultima posizione nota
         af.intel = Math.min(1, (af.intel || 0) + CFG.CROSS_INTEL_BUMP);
+        markCivFlagSeen(game, af);
         /* Incrocio con una flotta OSTILE che NON è stata ingaggiata (la tua
            non è aggressiva): è il "momento per decidere" — evento con
            auto-pausa, niente danno (richiesta utente 2026-06-19). Le altre
@@ -963,6 +981,7 @@
       af.lastSeenI = I;
       af.lastSeenSysId = playerSys; // pedinata da co-locato: ultima posizione nota
       af.intel = Math.min(1, (af.intel || 0) + CFG.FOLLOW_INTEL_GAIN);
+      markCivFlagSeen(game, af);
       af.shadowedBy = pf.id;
       /* Sosta col bersaglio: ferma la flotta (non vagare). */
       if (pf.orders && pf.orders.type !== 'idle' && pf.location.status === 'orbiting') {

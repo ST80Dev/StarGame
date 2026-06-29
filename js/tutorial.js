@@ -850,8 +850,13 @@
         '<p><strong>Il prezzo:</strong> un <strong>sovrapprezzo</strong> da mercato grigio (più basso con buona reputazione) ' +
         '+ un <strong>costo di reputazione</strong> §14 a ogni acquisto — è la pista <em>Tiranno</em>: scorciatoie comode ' +
         'che ti rendono meno raccomandabile.</p>' +
+        '<p><strong>Intel grigia (§6e):</strong> i Mekhari vendono anche <em>informazioni</em>. Se hai <strong>identificato ' +
+        'una flotta</strong> di una civiltà (pedinandola) ma non sai dove vive, comprane la <strong>localizzazione</strong> ' +
+        '(rivela le sue colonie) o un <strong>profilo grigio</strong> (chi è — forza a fascia, indole, disposizione, ma ' +
+        '<em>fonte non verificata</em> e datata). Oppure compra <strong>voci di galassia</strong>: spunti generici ed ' +
+        'economici su minacce e opportunità. Meno affidabile dello <em>spionaggio</em> vero, ma non richiede flotte sul posto.</p>' +
         '<p><strong>In arrivo:</strong> mercato secondario delle risorse avanzate (M13), contratti mercenari (M14), ' +
-        'taglie e mercato nero pieno (M17), intel grigia (M19).</p>'
+        'taglie e mercato nero pieno (M17).</p>'
     },
     {
       id: 'trade-raids', tag: 'Commercio · ☠', title: 'Razzie sulle rotte',
