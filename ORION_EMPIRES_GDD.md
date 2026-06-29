@@ -261,9 +261,26 @@ L'avvio non è "colonia già operativa": l'umanità (o civiltà giocata) **scegl
 | Pianeta ghiacciato | Risorse criogeniche, rarità | Energia costosa, lento |
 | Pianeta vulcanico | Energia geotermica, metalli pesanti | Instabile, pericoloso |
 | Pianeta forestale | Biomassa, farmaceutici | Minerali scarsi |
-| Gigante gassoso | Elio-3, gas rari | Non abitabile, solo estrazione orbitale |
-| Luna | Varia, compatta | Gravità bassa, capacità ridotta |
-| Cintura asteroidale | Minerali puri, metalli rari | Solo estrazione, non abitabile |
+| Gigante gassoso | Elio-3, gas rari | Non abitabile, solo estrazione orbitale (energia) |
+| Luna | Estrazione a **paniere** (tutte le risorse in proporzione) + strato avanzato | **Non colonizzabile** (redesign 2026), gravità bassa |
+| Cintura asteroidale | Minerali puri, metalli rari | Solo estrazione (metalli), non abitabile |
+
+> **Redesign lune (2026).** La luna **non è più colonizzabile**: competeva male coi
+> pianeti (14 slot, pop cap 3, brutta copia di un mondo vero). Ora è un **giacimento
+> a paniere** non abitabile, nello stesso paradigma di cinture (metalli) e giganti
+> gassosi (energia), ma con un profilo estrattivo distinto:
+> - **Strato base** — estrae **tutte e 4 le risorse base in proporzione** ai potenziali
+>   seed-derived (non solo la più abbondante), depositate nello stock della colonia
+>   attiva più vicina.
+> - **Strato avanzato** — risorse avanzate (esotici) verso `exoticAccum`, sbloccato
+>   solo quando una colonia con **Osservatorio** è entro raggio (la scansione rivela
+>   in modo permanente l'identità avanzata: ridà un mestiere durevole all'Osservatorio).
+> - **Due vie d'estrazione:** flotta con **Estrattore** in survey (via base, early-game)
+>   oppure **Stazione ancorata** alla luna (estrae di default per sola presenza, rate ∝
+>   livello stazione). Le due si **escludono a vicenda** sullo stesso corpo: con una
+>   stazione ancorata non si manda anche un estrattore.
+> - Riserva più capiente delle altre, stessa rigenerazione continua (recovery-friendly).
+>   I corpi prime d'origine restano rocciosi: nessun impatto su home/AI.
 
 ---
 

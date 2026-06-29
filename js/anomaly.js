@@ -57,7 +57,21 @@
     EXTRACTOR_RATE_BASE: 1.0,
     EXTRACTOR_RATE_PER_LVL: 0.3,
     /* XP equipaggio durante harvest: +1 ogni N Ι di drenaggio effettivo. */
-    SURVEY_XP_EVERY: 40
+    SURVEY_XP_EVERY: 40,
+    /* Redesign lune 2026 — paniere + scan + stazione ancorata.
+       OBS_SCAN_RANGE: hop entro cui una colonia con Osservatorio rivela lo
+         strato avanzato di una luna (flag permanente site.advRevealed).
+       ADV_WEIGHT_SCALE: scala il peso delle avanzate nel paniere (i potenziali
+         avanzati 30-100 sovrasterebbero il base ~50; le teniamo una fetta
+         pregiata ma non dominante).
+       STATION_EXTRACT_*: rate di estrazione di una STAZIONE ancorata alla luna
+         (alternativa all'estrattore, scala col livello stazione). lvl1=1.2 ·
+         lvl2=1.6 · lvl3=2.0 · lvl4=2.4 — leggermente sopra un estrattore L1,
+         premio del "set-and-forget" logistico. */
+    OBS_SCAN_RANGE: 3,
+    ADV_WEIGHT_SCALE: 0.3,
+    STATION_EXTRACT_BASE: 1.2,
+    STATION_EXTRACT_PER_LVL: 0.4
   };
 
   /* Mappa kind → comportamento.
@@ -76,12 +90,23 @@
        colonizzabili. Il gigante gassoso è sfruttabile (energia) — stesso
        modello perBody della cintura. Risponde a "estrarre da pianeta non
        colonizzabile" senza inventare meccaniche nuove. */
-    gassoso:  { harvest: true, res: 'en', cap: 500, perBody: true }
+    gassoso:  { harvest: true, res: 'en', cap: 500, perBody: true },
+    /* Redesign lune 2026 (richiesta utente): la luna, ora NON colonizzabile
+       (system.js → habitable:false), diventa un GIACIMENTO A PANIERE. A
+       differenza di cintura (solo met) e gassoso (solo en), rende TUTTE le sue
+       risorse in PROPORZIONE ai potenziali seed-derived: strato base
+       (met/en/food/water → stock) + strato avanzato (esotici → exoticAccum),
+       quest'ultimo sbloccato dallo scan dell'Osservatorio entro raggio. `basket`
+       segnala il deposito multi-risorsa (vedi depositBasket). Riserva più alta
+       delle altre, stessa regen continua (recovery-friendly #22). Niente `res`
+       singolo: il mix vive in site.mix/site.exoticW (computeBasketMix). */
+    luna:     { harvest: true, basket: true, cap: 1200, perBody: true }
   };
 
   /* Corpi (non colonizzabili) che espongono un giacimento sfruttabile:
-     body.type → kind harvest. Cintura (met) + gigante gassoso (en). */
-  const BODY_GIACIMENTO = { cintura: 'cintura', gassoso: 'gassoso' };
+     body.type → kind harvest. Cintura (met) + gigante gassoso (en) + luna
+     (paniere proporzionale). */
+  const BODY_GIACIMENTO = { cintura: 'cintura', gassoso: 'gassoso', luna: 'luna' };
 
   /* Helper esposto: il corpo ha un giacimento? → { kind, res, cap } | null.
      Usato da actionsFor (gate Estrai) e dall'ingresso-da-mappa. Deterministico
@@ -91,7 +116,7 @@
     const kind = BODY_GIACIMENTO[body.type];
     if (!kind) return null;
     const def = KINDS[kind];
-    return { kind: kind, res: def.res, cap: def.cap };
+    return { kind: kind, res: def.res || null, cap: def.cap, basket: !!def.basket };
   }
 
   function ensure(game) {
@@ -173,10 +198,19 @@
       }
     });
     /* Giacimenti su CORPI (decisione A): UN sito per ogni corpo non
-       colonizzabile sfruttabile (cintura → met, gigante gassoso → en).
-       Il corpo è §6.3, ma il modello harvest §17.3 si applica naturalmente
-       (riserva ricorrente). Generalizza il vecchio loop solo-cinture. */
-    const bodies = (sys && sys.bodies) || [];
+       colonizzabile sfruttabile (cintura → met, gigante gassoso → en, luna →
+       paniere). Il corpo è §6.3, ma il modello harvest §17.3 si applica
+       naturalmente (riserva ricorrente). Generalizza il vecchio loop solo-cinture.
+       IMPORTANTE: le lune NON sono in sys.bodies (top-level) ma annidate in
+       body.moons → appiattiamo top-level + lune, così i siti-luna si creano. */
+    const tops = (sys && sys.bodies) || [];
+    const bodies = [];
+    for (let t = 0; t < tops.length; t++) {
+      const tb = tops[t];
+      if (!tb) continue;
+      bodies.push(tb);
+      if (Array.isArray(tb.moons)) for (let mm = 0; mm < tb.moons.length; mm++) bodies.push(tb.moons[mm]);
+    }
     for (let j = 0; j < bodies.length; j++) {
       const b = bodies[j];
       if (!b || !b.key) continue;
@@ -185,12 +219,39 @@
       const gdef = KINDS[kind];
       const bk = siteKey(sysId, kind, b.key);
       if (game.anomalies[bk]) continue;
-      game.anomalies[bk] = {
+      const site = {
         sysId: sysId, kind: kind, bodyKey: b.key,
-        res: gdef.res, cap: gdef.cap, reserve: gdef.cap,
+        res: gdef.res || null, cap: gdef.cap, reserve: gdef.cap,
         lowFlag: false, harvested: 0
       };
+      /* Luna (paniere): calcola il mix proporzionale dai potenziali del corpo
+         (seed-derived, deterministico). Strato avanzato gated da advRevealed. */
+      if (gdef.basket) computeBasketMix(game, sysId, b.key, site);
+      game.anomalies[bk] = site;
     }
+  }
+
+  /* Mix del paniere di una luna: pesi base dai 4 potenziali + peso esotico
+     aggregato dalle risorse avanzate del corpo (scalato). Deterministico dal
+     seed via ORION.planet.generate. Idempotente: ricalcolabile. Guard headless:
+     senza planet/system caricati il sito resta senza mix (estrarrà 0 finché i
+     moduli ci sono — i siti veri si creano comunque solo a moduli presenti). */
+  function computeBasketMix(game, sysId, bodyKey, site) {
+    if (!(ORION.planet && ORION.planet.generate && ORION.system && ORION.system.generate)) return;
+    let planet = null;
+    try {
+      const sys = ORION.system.generate(game.galaxy, sysId);
+      planet = ORION.planet.generate(game.galaxy, sys, bodyKey);
+    } catch (_) { return; }
+    if (!planet) return;
+    const pot = planet.potentials || {};
+    site.basket = true;
+    site.mix = { met: pot.met || 0, en: pot.en || 0, food: pot.food || 0, water: pot.water || 0 };
+    let exW = 0; const ids = [];
+    (planet.advanced || []).forEach(function (a) { exW += (a.potential || 0); ids.push(a.id); });
+    site.exoticW = Math.round(exW * CFG.ADV_WEIGHT_SCALE * 10) / 10;
+    site.advIds = ids;            // identità avanzate (rivelate da advRevealed)
+    /* advRevealed lazy (default falsy): true quando un Osservatorio entra in raggio. */
   }
 
   /* Flotta presente nel sistema, a prescindere dall'ordine (uso generico). */
@@ -281,6 +342,86 @@
     if (col && col.stock) col.stock[res] = (col.stock[res] || 0) + amt;
   }
 
+  /* Deposito a PANIERE (luna): ripartisce `take` su TUTTE le risorse del corpo
+     in proporzione ai pesi. Base (met/en/food/water) → stock; strato avanzato
+     (esotici) → colony.exoticAccum, incluso SOLO se site.advRevealed (scan
+     Osservatorio). `fleet` può essere null (estrazione da stazione ancorata):
+     depositColonyKey ricade comunque sulla colonia attiva più vicina al sito. */
+  function depositBasket(game, fleet, site, take) {
+    const mix = site.mix || { met: 0, en: 0, food: 0, water: 0 };
+    let total = (mix.met || 0) + (mix.en || 0) + (mix.food || 0) + (mix.water || 0);
+    let exoticShare = 0;
+    if (site.advRevealed && site.exoticW > 0) { exoticShare = site.exoticW; total += exoticShare; }
+    if (total <= 0) return;
+    const k = depositColonyKey(game, fleet, site);
+    const col = k && game.colonies[k];
+    if (!col) return;
+    if (col.stock) {
+      ['met', 'en', 'food', 'water'].forEach(function (r) {
+        const w = mix[r] || 0;
+        if (w > 0) col.stock[r] = (col.stock[r] || 0) + take * (w / total);
+      });
+    }
+    if (exoticShare > 0) col.exoticAccum = (col.exoticAccum || 0) + take * (exoticShare / total);
+  }
+
+  /* Stazione del giocatore ANCORATA a questo corpo (luna) e operativa →
+     estrazione di default per sola presenza (no sotto-struttura, scelta utente).
+     Mutua esclusione con l'estrattore: se ancorata, il sito è drenato dalla
+     stazione (la flotta è ignorata, vedi tick). Slice 2 popola station.bodyKey
+     via UI; qui il check è inerte finché nessuna stazione è ancorata. */
+  function anchoredStation(game, site) {
+    if (!site || site.bodyKey == null || !ORION.station) return null;
+    const list = ORION.station.listOf ? ORION.station.listOf(game) : (game.stations || []);
+    for (let i = 0; i < list.length; i++) {
+      const st = list[i];
+      if (!st || st.systemId !== site.sysId) continue;
+      if (st.bodyKey == null || String(st.bodyKey) !== String(site.bodyKey)) continue;
+      if (ORION.station.isPlayerStation && !ORION.station.isPlayerStation(st)) continue;
+      if (st.phase === 'building' || (st.level || 0) < 1) continue;
+      if (st.supplyState === 'isolated') continue;   // isolata → estrazione in pausa (recovery-friendly)
+      return st;
+    }
+    return null;
+  }
+  function stationExtractRate(st) {
+    const lvl = Math.max(1, st.level || 1);
+    return CFG.STATION_EXTRACT_BASE + CFG.STATION_EXTRACT_PER_LVL * (lvl - 1);
+  }
+
+  /* Scan Osservatorio (redesign lune): una colonia con la struttura
+     'osservatorio' rivela lo strato avanzato delle lune entro OBS_SCAN_RANGE
+     hop. Ritorna l'indice {sysId:true} dei sistemi con Osservatorio, o null se
+     nessuno (così il tick salta del tutto il pass). */
+  function observatorySystems(game) {
+    const cols = game.colonies || {};
+    const idx = {}; let any = false;
+    Object.keys(cols).forEach(function (k) {
+      const c = cols[k];
+      if (c && c.colonized && c.structures && c.structures['osservatorio']) { idx[c.systemId] = true; any = true; }
+    });
+    return any ? idx : null;
+  }
+  /* Un Osservatorio è entro OBS_SCAN_RANGE hop dal sistema del sito? (BFS) */
+  function observatoryInRange(game, sysId, obsBySys) {
+    if (!obsBySys || !game.galaxy || !game.galaxy.systems) return false;
+    const R = CFG.OBS_SCAN_RANGE;
+    const seen = {}; seen[sysId] = 0; const q = [sysId];
+    while (q.length) {
+      const u = q.shift(); const d = seen[u];
+      if (obsBySys[u]) return true;
+      if (d >= R) continue;
+      const sys = game.galaxy.systems[u];
+      const links = (sys && sys.links) || [];
+      for (let i = 0; i < links.length; i++) {
+        const v = links[i];
+        if (seen[v] != null) continue;
+        seen[v] = d + 1; q.push(v);
+      }
+    }
+    return false;
+  }
+
   /* Rate di raccolta della flotta sul sito (decisione utente 2026-06-16).
      - Estrattore: base + bonus per livello Hangar della colonia origine.
        Se la flotta ha più Estrattori (caso teorico), il rate somma per ogni
@@ -348,9 +489,26 @@
         ensureSites(game, f.location.systemId);
       }
     });
+    /* ... e per i sistemi con una STAZIONE del giocatore: una stazione ancorata
+       a una luna estrae anche senza flotta presente, quindi il sito deve esistere. */
+    (game.stations || []).forEach(function (st) {
+      if (st && st.systemId >= 0 && (!ORION.station || !ORION.station.isPlayerStation || ORION.station.isPlayerStation(st))) {
+        ensureSites(game, st.systemId);
+      }
+    });
+    /* Scan Osservatorio: indice (una volta per tick) dei sistemi con
+       Osservatorio, per rivelare lo strato avanzato delle lune in raggio. */
+    const obsBySys = observatorySystems(game);
     const keys = Object.keys(game.anomalies);
     for (let i = 0; i < keys.length; i++) {
       const site = game.anomalies[keys[i]];
+      /* Scan Osservatorio (luna): rivela in modo PERMANENTE lo strato avanzato
+         se una colonia con Osservatorio è entro raggio. Flag persistito sul
+         sito (game.anomalies è serializzato): scansiona una volta, sai per sempre. */
+      if (site.basket && !site.advRevealed && site.exoticW > 0 && obsBySys &&
+          observatoryInRange(game, site.sysId, obsBySys)) {
+        site.advRevealed = true;
+      }
       /* Solo una flotta che sta facendo ricognizione SU QUESTO sito (sistema
          + tipo [+ bodyKey per cinture]) lo raccoglie/esplora — non basta
          orbitare nel sistema. */
@@ -385,27 +543,33 @@
         site.reserve = Math.min(site.cap, site.reserve + CFG.REGEN);
         if (site.lowFlag && site.reserve > site.cap * CFG.LOW_FRAC * 2) site.lowFlag = false;
       }
-      /* Raccolta ricorrente. */
-      if (fleet && site.reserve > 0) {
-        const rate = harvestRateFor(game, fleet);
+      /* Raccolta ricorrente. Su una luna, una STAZIONE ancorata estrae di
+         default (rate ∝ livello) e ha la PRECEDENZA sull'estrattore (mutua
+         esclusione, scelta utente): se ancorata, la flotta è ignorata. */
+      const station = site.basket ? anchoredStation(game, site) : null;
+      if ((station || fleet) && site.reserve > 0) {
+        const rate = station ? stationExtractRate(station) : harvestRateFor(game, fleet);
         const take = Math.min(rate, site.reserve);
-        deposit(game, fleet, site.res, take, site);
-        site.reserve -= take;
-        site.harvested = (site.harvested || 0) + take;
-        /* Usura/XP per Ι in survey (decisione utente 2026-06-16): le navi che
-           drenano subiscono un drip leggero di wear; gli equipaggi maturano
-           XP ogni SURVEY_XP_EVERY Ι. Trigger di rientro automatico se wear
-           supera la soglia (delegato a fleet.forceReturnForWear). */
-        applySurveyWear(fleet);
-        accrueSurveyXp(game, fleet, events);
-        if (!site.lowFlag && site.reserve <= site.cap * CFG.LOW_FRAC) {
-          site.lowFlag = true;
-          events.push({ kind: 'anomaly-depleted', sysId: site.sysId, res: site.res, impulso: game.timeImpulsi });
-        }
-        if (ORION.fleet && ORION.fleet.forceReturnForWear) {
-          if (ORION.fleet.forceReturnForWear(game, fleet)) {
-            events.push({ kind: 'fleet-wear-return', fleetId: fleet.id, fleetName: fleet.name,
-              sysId: site.sysId, impulso: game.timeImpulsi });
+        if (take > 0) {
+          if (site.basket) depositBasket(game, station ? null : fleet, site, take);
+          else deposit(game, fleet, site.res, take, site);
+          site.reserve -= take;
+          site.harvested = (site.harvested || 0) + take;
+          /* Usura/XP per Ι in survey (decisione utente 2026-06-16): SOLO per le
+             navi che drenano (non per le stazioni, che non si consumano). */
+          if (fleet && !station) {
+            applySurveyWear(fleet);
+            accrueSurveyXp(game, fleet, events);
+          }
+          if (!site.lowFlag && site.reserve <= site.cap * CFG.LOW_FRAC) {
+            site.lowFlag = true;
+            events.push({ kind: 'anomaly-depleted', sysId: site.sysId, res: site.res || null, impulso: game.timeImpulsi });
+          }
+          if (fleet && !station && ORION.fleet && ORION.fleet.forceReturnForWear) {
+            if (ORION.fleet.forceReturnForWear(game, fleet)) {
+              events.push({ kind: 'fleet-wear-return', fleetId: fleet.id, fleetName: fleet.name,
+                sysId: site.sysId, impulso: game.timeImpulsi });
+            }
           }
         }
       }
@@ -442,9 +606,13 @@
          resta al fallback 0.6. `harvestRate` è il deposito EFFETTIVO per Ι
          (cappato dalla riserva+regen: a sito esaurito converge alla regen
          sostenibile); `harvestRateGross` è la capacità lorda della flotta. */
-      const fleet = fleetSurveyingSite(game, s.sysId, s.kind, s.bodyKey);
-      const grossRate = fleet ? harvestRateFor(game, fleet) : 0;
-      const effRate = fleet
+      /* Una luna può essere drenata da una STAZIONE ancorata (senza flotta):
+         il rate riflette la fonte attiva (stazione o flotta). */
+      const station = s.basket ? anchoredStation(game, s) : null;
+      const fleet = station ? null : fleetSurveyingSite(game, s.sysId, s.kind, s.bodyKey);
+      const harvesting = !!station || !!fleet;
+      const grossRate = station ? stationExtractRate(station) : (fleet ? harvestRateFor(game, fleet) : 0);
+      const effRate = harvesting
         ? Math.round(Math.min(grossRate, (s.reserve || 0) + CFG.REGEN) * 10) / 10
         : CFG.HARVEST_RATE;
       return {
@@ -455,7 +623,11 @@
         harvested: s.harvested || 0,
         harvestRate: effRate,
         harvestRateGross: grossRate,
-        harvesting: !!fleet
+        harvesting: harvesting,
+        /* Redesign lune: metadati paniere per la UI. */
+        basket: !!s.basket, mix: s.mix || null,
+        advRevealed: !!s.advRevealed, advIds: s.advIds || [],
+        bySource: station ? 'station' : (fleet ? 'fleet' : null)
       };
     });
   }
@@ -473,16 +645,27 @@
     Object.keys(game.anomalies).forEach(function (k) {
       const s = game.anomalies[k];
       if (!s || s.kind === 'reliquie' || !(s.reserve > 0)) return;
-      const fleet = fleetSurveyingSite(game, s.sysId, s.kind, s.bodyKey);
-      if (!fleet) return;
+      const station = s.basket ? anchoredStation(game, s) : null;
+      const fleet = station ? null : fleetSurveyingSite(game, s.sysId, s.kind, s.bodyKey);
+      if (!station && !fleet) return;
       const colKey = depositColonyKey(game, fleet, s);
       if (!colKey) return;
-      const rate = Math.min(harvestRateFor(game, fleet), s.reserve);
+      const rate = Math.min(station ? stationExtractRate(station) : harvestRateFor(game, fleet), s.reserve);
       if (rate <= 0) return;
       const slot = out[colKey] = out[colKey] || { met: 0, en: 0, sitesMet: 0, sitesEn: 0, fleets: 0, total: 0 };
       slot.fleets += 1;
       slot.total  += rate;
-      if (s.res === 'met') { slot.met += rate; slot.sitesMet += 1; }
+      if (s.basket && s.mix) {
+        /* Paniere: ripartisci il rate sui pesi base; il pannello surplus mostra
+           met/en, le altre confluiscono comunque nello stock via depositBasket. */
+        const mix = s.mix;
+        let tot = (mix.met || 0) + (mix.en || 0) + (mix.food || 0) + (mix.water || 0);
+        if (s.advRevealed && s.exoticW > 0) tot += s.exoticW;
+        if (tot > 0) {
+          if (mix.met > 0) { slot.met += rate * (mix.met / tot); slot.sitesMet += 1; }
+          if (mix.en  > 0) { slot.en  += rate * (mix.en  / tot); slot.sitesEn += 1; }
+        }
+      } else if (s.res === 'met') { slot.met += rate; slot.sitesMet += 1; }
       else if (s.res === 'en') { slot.en += rate; slot.sitesEn += 1; }
     });
     return out;
