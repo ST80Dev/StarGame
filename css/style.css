@@ -8586,7 +8586,11 @@ select.main-menu__input { cursor: pointer; }
 }
 .fleet-viveri-cap input[type="range"]:disabled { opacity: 0.5; cursor: not-allowed; }
 .fleet-viveri-cap__cost { font-size: 0.68rem; opacity: 0.85; }
-.fleet-viveri-cap__cost span { color: var(--c-text, #d8e0f8); }
+.fleet-viveri-cap__cost strong { color: var(--c-text, #d8e0f8); font-weight: 600; }
+/* #69 follow-up: residuo nella colonia origine + nota di limite barra. */
+.fleet-viveri-cap__cost .vcap-rem { color: var(--c-text-faint, #98a3c8); }
+.fleet-viveri-cap__cost .vcap-rem strong { color: var(--c-good, #4fe08a); }
+.fleet-viveri-cap__lbl .vcap-limit { color: var(--c-warn, #ffca55); }
 /* P1: chip Diaspora compatto nel deck colonia (riga Popolazione). */
 .deck-pop__diaspora {
   display: inline-block; margin-left: 8px; padding: 1px 6px; border-radius: 4px;

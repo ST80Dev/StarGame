@@ -2052,6 +2052,48 @@
     fleet.viveri = cur + fillI;
     return fillI;
   }
+  /* UI helper (#69 follow-up, feedback utente 2026-06-29): stima il pieno
+     caricabile da una colonia data crew + stazza, SENZA mutare nulla. Mirror
+     della logica di carico in loadViveriAtPort, esposto perché lo slider di
+     creazione/dettaglio possa (a) bloccarsi al cap che esaurisce la prima
+     risorsa e (b) mostrare sulla stessa riga lo stock residuo per risorsa.
+       colony      — colonia origine (con .stock); null/no-stock → nessun tetto
+       crew, mass  — equipaggio e stazza della flotta (bozza o esistente)
+       fromViveri  — autonomia già a bordo (0 in creazione)
+       cap         — autonomia bersaglio scelta sullo slider
+     Ritorna { maxCap, fillI, cost, remaining, limiting, hasStock } dove maxCap
+     è l'autonomia massima (Ι) raggiungibile senza esaurire risorse, cost/
+     remaining sono mappe per risorsa per il pieno fino a min(cap, maxCap), e
+     limiting è la risorsa collo di bottiglia (null se nessuna). */
+  function viveriFillEstimate(colony, crew, mass, fromViveri, cap) {
+    crew = Math.max(1, crew | 0);
+    mass = Math.max(1, mass | 0);
+    fromViveri = Math.max(0, fromViveri || 0);
+    cap = Math.max(0, cap || 0);
+    const base = { food: crew, water: crew, met: crew, en: mass };
+    const rate = { food: VIVERI_RATE_FOOD, water: VIVERI_RATE_WATER, met: VIVERI_RATE_MET, en: VIVERI_RATE_EN };
+    const stock = (colony && colony.stock) ? colony.stock : null;
+    /* Autonomia massima caricabile: la risorsa più scarsa fissa il tetto. */
+    let maxFill = Infinity, limiting = null;
+    if (stock) {
+      Object.keys(rate).forEach(function (k) {
+        const per = base[k] * rate[k];
+        if (per <= 0) return;
+        const f = (stock[k] || 0) / per;
+        if (f < maxFill) { maxFill = f; limiting = k; }
+      });
+    }
+    const maxCap = (maxFill === Infinity) ? VIVERI_CAP_MAX
+      : Math.max(0, Math.min(VIVERI_CAP_MAX, Math.floor(fromViveri + maxFill)));
+    const fillI = Math.max(0, Math.min(cap, maxCap) - fromViveri);
+    const cost = {}, remaining = {};
+    Object.keys(rate).forEach(function (k) {
+      const c = base[k] * rate[k] * fillI;
+      cost[k] = c;
+      remaining[k] = stock ? Math.max(0, Math.floor((stock[k] || 0) - c)) : null;
+    });
+    return { maxCap: maxCap, fillI: fillI, cost: cost, remaining: remaining, limiting: limiting, hasStock: !!stock };
+  }
   /* Colonia più vicina (origine se viva, altrimenti BFS minima) — meta del
      rientro forzato in deriva. null in esilio (nessuna colonia → la flotta
      resta in deriva sul posto, mai un fail-state). */
@@ -3528,6 +3570,8 @@
     viveriStatus: viveriStatus,
     fleetAtFriendlyPort: fleetAtFriendlyPort,
     loadViveriAtPort: loadViveriAtPort,
+    viveriFillEstimate: viveriFillEstimate,
+    ownColonyAt: ownColonyAt,
     routeImpulsi: routeImpulsi,
     viveriNextEventDelta: viveriNextEventDelta,
     /* Spostamento intra-sistema (decisione utente): stima Ι corpo→corpo. */
