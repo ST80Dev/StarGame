@@ -435,14 +435,27 @@
     return Object.keys(game.anomalies).map(function (k) {
       const s = game.anomalies[k];
       const sys = game.galaxy.systems[s.sysId];
+      /* Fix display 2026-06-27: il rate mostrato in UI era CFG.HARVEST_RATE
+         statico (0.6) per OGNI sito → sembrava che l'estrazione fosse sempre
+         0.6/Ι a prescindere da nave e Hangar. Ora riflette la flotta reale che
+         drena: Estrattore scala con l'Hangar d'origine (1.0→2.2), Esploratore
+         resta al fallback 0.6. `harvestRate` è il deposito EFFETTIVO per Ι
+         (cappato dalla riserva+regen: a sito esaurito converge alla regen
+         sostenibile); `harvestRateGross` è la capacità lorda della flotta. */
+      const fleet = fleetSurveyingSite(game, s.sysId, s.kind, s.bodyKey);
+      const grossRate = fleet ? harvestRateFor(game, fleet) : 0;
+      const effRate = fleet
+        ? Math.round(Math.min(grossRate, (s.reserve || 0) + CFG.REGEN) * 10) / 10
+        : CFG.HARVEST_RATE;
       return {
         key: k, sysId: s.sysId, sysName: sys ? sys.name : '—', kind: s.kind,
         bodyKey: s.bodyKey || null,
         res: s.res || null, reserve: s.reserve, cap: s.cap,
         explored: !!s.explored, progress: s.progress || 0, loot: s.loot || null,
         harvested: s.harvested || 0,
-        harvestRate: CFG.HARVEST_RATE,
-        harvesting: !!fleetSurveyingSite(game, s.sysId, s.kind, s.bodyKey)
+        harvestRate: effRate,
+        harvestRateGross: grossRate,
+        harvesting: !!fleet
       };
     });
   }
