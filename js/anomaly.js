@@ -32,7 +32,15 @@
 
   const CFG = {
     HARVEST_RATE: 0.6,    // risorse/Ι base con esploratore (legacy)
-    REGEN: 0.15,          // rigenerazione/Ι della riserva quando idle
+    /* Decisione utente 2026-06-27: rigenerazione velocizzata 0.15 → 1.0/Ι, e
+       ora VALIDA ANCHE durante l'estrazione (vedi tick). Vale per TUTTI i siti
+       harvest (energia: nebulosa/gassoso; metallo: detriti/cintura). Motivo:
+       con la regen vecchia (solo a sito idle) un estrattore parcheggiato
+       prosciugava il sito e il netto sostenibile crollava a ~0 — peggio ancora
+       sull'energia, dove la flotta in orbita costa viveri (energia su stazza).
+       Con regen continua il sito raggiunge un equilibrio ≈ regen, rendendo
+       l'estrazione un supplemento reale invece di un burst una-tantum. */
+    REGEN: 1.0,           // rigenerazione/Ι della riserva (continua, anche in harvest)
     RELIC_HOLD: 40,       // Ι di presenza per esplorare una reliquia
     RELIC_REWARD: { met: 220, en: 130 },
     LOW_FRAC: 0.15,       // soglia "riserva quasi esaurita" (evento una volta)
@@ -41,11 +49,13 @@
        sul posto a lungo. Calibrazione target: ~1000 Ι di harvest continuo
        producono ~30% wear, lasciando margine per più cicli prima del refit. */
     WEAR_SURVEY_BASE: 0.03,
-    /* Estrattore: rate base + bonus per livello Hangar della colonia origine
-       (richiesta utente 2026-06-16). lvl1=0.6 · lvl2=0.8 · lvl3=1.0 · lvl4=1.2
-       · lvl5=1.4. Calcolato come EXTRACTOR_RATE_BASE + EXTRACTOR_RATE_PER_LVL * (lvl-1). */
-    EXTRACTOR_RATE_BASE: 0.6,
-    EXTRACTOR_RATE_PER_LVL: 0.2,
+    /* Estrattore: rate base + bonus per livello Hangar della colonia origine.
+       Decisione utente 2026-06-27: drenaggio alzato (0.6/0.2 → 1.0/0.3) così il
+       burst è più veloce e il netto supera nettamente il costo viveri della
+       flotta in orbita. lvl1=1.0 · lvl2=1.3 · lvl3=1.6 · lvl4=1.9 · lvl5=2.2.
+       Calcolato come EXTRACTOR_RATE_BASE + EXTRACTOR_RATE_PER_LVL * (lvl-1). */
+    EXTRACTOR_RATE_BASE: 1.0,
+    EXTRACTOR_RATE_PER_LVL: 0.3,
     /* XP equipaggio durante harvest: +1 ogni N Ι di drenaggio effettivo. */
     SURVEY_XP_EVERY: 40
   };
@@ -366,6 +376,15 @@
         }
         continue;
       }
+      /* Rigenerazione CONTINUA (decisione utente 2026-06-27): la riserva si
+         ricostituisce sempre, anche mentre una flotta estrae. A regime, se il
+         drenaggio ≥ regen, il sito si stabilizza erogando ≈ regen/Ι in modo
+         sostenibile (più il burst iniziale fino a `cap`). Vale per energia e
+         metallo. Idempotente, deterministico (nessun RNG). */
+      if (site.reserve < site.cap) {
+        site.reserve = Math.min(site.cap, site.reserve + CFG.REGEN);
+        if (site.lowFlag && site.reserve > site.cap * CFG.LOW_FRAC * 2) site.lowFlag = false;
+      }
       /* Raccolta ricorrente. */
       if (fleet && site.reserve > 0) {
         const rate = harvestRateFor(game, fleet);
@@ -389,10 +408,9 @@
               sysId: site.sysId, impulso: game.timeImpulsi });
           }
         }
-      } else if (!fleet && site.reserve < site.cap) {
-        site.reserve = Math.min(site.cap, site.reserve + CFG.REGEN);
-        if (site.lowFlag && site.reserve > site.cap * CFG.LOW_FRAC * 2) site.lowFlag = false;
       }
+      /* (la rigenerazione idle del vecchio ramo `else` è ora coperta dalla
+         regen continua in cima al blocco, valida con o senza flotta.) */
     }
   }
 
