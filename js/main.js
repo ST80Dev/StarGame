@@ -8110,6 +8110,23 @@ function fleetWearHtml(fleet) {
     '</div>';
 }
 
+/* #69 follow-up (feedback utente 2026-06-29): riga costo viveri del pieno.
+   Mostra sulla STESSA riga quante risorse si imbarcano E quante resterebbero
+   nella colonia origine (così non si carica oltre il disponibile). `est` è il
+   risultato di ORION.fleet.viveriFillEstimate(...). Se la colonia non ha stock
+   noto (es. stazione orbitale) mostra solo l'imbarcato. */
+function viveriLoadCostHtml(est) {
+  if (!est) return '';
+  const order = [['met', '⛭'], ['en', '⚡'], ['food', '❖'], ['water', '≈']];
+  const load = order.map(function (p) { return p[1] + ' ' + Math.ceil(est.cost[p[0]] || 0); }).join(' · ');
+  let html = 'Imbarco <strong>' + load + '</strong>';
+  if (est.hasStock) {
+    const rem = order.map(function (p) { return p[1] + ' ' + (est.remaining[p[0]] != null ? est.remaining[p[0]] : '—'); }).join(' · ');
+    html += ' · <span class="vcap-rem">resta in colonia <strong>' + rem + '</strong></span>';
+  }
+  return html;
+}
+
 /* Decisione #69: gauge viveri di flotta. Autonomia in Ι (0..cap) con stato
    ok/low/crit colorato. La flotta a un porto amico è sempre rifornita. */
 function fleetViveriHtml(fleet) {
@@ -10904,7 +10921,13 @@ function openFleetDetail(fleetId, opts) {
         sumEta = p ? (ORION.fleet.routeImpulsi(g.galaxy, draftFleet, p) + ' Ι') : 'irraggiungibile';
       }
     }
-    const sumVcap = (D.draft.viveriCap != null) ? D.draft.viveriCap : (ORION.fleet.VIVERI_CAP || 250);
+    let sumVcap = (D.draft.viveriCap != null) ? D.draft.viveriCap : (ORION.fleet.VIVERI_CAP || 250);
+    /* Riflette il tetto imposto dallo stock della colonia origine (#69 follow-up). */
+    if (nShips > 0 && ORION.fleet.viveriFillEstimate) {
+      const colS = g.colonies && g.colonies[D.newColonyKey];
+      const massS = ORION.fleet.dockWeightOfFleet ? ORION.fleet.dockWeightOfFleet(draftFleet) : 1;
+      sumVcap = Math.min(sumVcap, ORION.fleet.viveriFillEstimate(colS, crewReq, massS, 0, sumVcap).maxCap);
+    }
     const riepilogo = '<div class="fdetail__summary">' +
       '<span class="fsum__chip">' + uiIcon('pin', 'cyan') + ' ' + escapeHtml(sumSysName) + escapeHtml(sumBodyName) + '</span>' +
       '<span class="fsum__chip">' + uiIcon('send', 'cyan') + ' ' + escapeHtml(sumMisLab) + '</span>' +
@@ -11001,18 +11024,30 @@ function openFleetDetail(fleetId, opts) {
       food: F.VIVERI_RATE_FOOD || 0.07, water: F.VIVERI_RATE_WATER || 0.05,
       met: F.VIVERI_RATE_MET || 0.04, en: F.VIVERI_RATE_EN || 0.12
     };
-    const m = Math.ceil(crew * rate.met * cap);
-    const e = Math.ceil(mass * rate.en * cap);
-    const f = Math.ceil(crew * rate.food * cap);
-    const w = Math.ceil(crew * rate.water * cap);
-    const costStr = '⛭ ' + m + ' · ⚡ ' + e + ' · ❖ ' + f + ' · ≈ ' + w;
-    const hint = 'Capienza serbatoio: scegli quanta autonomia caricare al pieno alla partenza. Cibo/acqua/metalli ∝ equipaggio (' + crew + '); energia ∝ stazza (' + mass + ') × Ι caricati.';
+    /* Stima del pieno dallo stock della colonia origine: blocca lo slider al
+       cap che esaurisce la prima risorsa e mostra il residuo per risorsa
+       (feedback utente 2026-06-29). Origine = colonia bozza (D.newColonyKey). */
+    const colony = g.colonies && g.colonies[D.newColonyKey];
+    const est0 = F.viveriFillEstimate
+      ? F.viveriFillEstimate(colony, crew, mass, 0, cap)
+      : { maxCap: max, cost: { met: Math.ceil(crew * rate.met * cap), en: Math.ceil(mass * rate.en * cap), food: Math.ceil(crew * rate.food * cap), water: Math.ceil(crew * rate.water * cap) }, remaining: { met: null, en: null, food: null, water: null }, limiting: null, hasStock: false };
+    /* Tetto effettivo dello slider: mai oltre quanto la colonia può fornire. */
+    const capMax = Math.min(max, est0.maxCap);
+    const effMin = Math.min(min, capMax);
+    const effCap = Math.max(effMin, Math.min(cap, capMax));
+    const est = (effCap !== cap && F.viveriFillEstimate)
+      ? F.viveriFillEstimate(colony, crew, mass, 0, effCap) : est0;
+    const RES_LBL = { met: 'metallo', en: 'energia', food: 'cibo', water: 'acqua' };
+    const limitNote = (est0.hasStock && est0.maxCap < max && est0.limiting)
+      ? ' · <span class="vcap-limit">max ' + est0.maxCap + ' Ι (' + RES_LBL[est0.limiting] + ' in esaurimento)</span>'
+      : '';
+    const hint = 'Capienza serbatoio: scegli quanta autonomia caricare al pieno alla partenza. Cibo/acqua/metalli ∝ equipaggio (' + crew + '); energia ∝ stazza (' + mass + ') × Ι caricati. La barra è limitata da quanto la colonia origine può fornire.';
     return '<div class="fdetail__sec fdetail__sec--supply' + (dis ? ' is-locked' : '') + '">' +
       secHead('forces', 'amber', 'Viveri alla partenza', dis ? 'aggiungi una nave' : '') +
       '<div class="fleet-viveri-cap" title="' + escapeHtml(hint) + '">' +
-        '<label class="fleet-viveri-cap__lbl">Capienza serbatoio · <strong data-bind="vcap-val">' + cap + '</strong> Ι</label>' +
-        '<input type="range" min="' + min + '" max="' + max + '" step="10" value="' + cap + '" data-bind="vcap-slider"' + (dis ? ' disabled' : '') + '>' +
-        '<div class="fleet-viveri-cap__cost">Pieno completo: <span data-bind="vcap-cost">' + costStr + '</span></div>' +
+        '<label class="fleet-viveri-cap__lbl">Capienza serbatoio · <strong data-bind="vcap-val">' + effCap + '</strong> Ι' + limitNote + '</label>' +
+        '<input type="range" min="' + effMin + '" max="' + capMax + '" step="10" value="' + effCap + '" data-bind="vcap-slider"' + (dis ? ' disabled' : '') + '>' +
+        '<div class="fleet-viveri-cap__cost"><span data-bind="vcap-cost">' + viveriLoadCostHtml(est) + '</span></div>' +
       '</div>' +
     '</div>';
   }
@@ -11521,13 +11556,13 @@ function openFleetDetail(fleetId, opts) {
         food: F.VIVERI_RATE_FOOD || 0.07, water: F.VIVERI_RATE_WATER || 0.05,
         met: F.VIVERI_RATE_MET || 0.04, en: F.VIVERI_RATE_EN || 0.12
       };
-      const cost = {
-        food: Math.ceil(crew * rate.food * cap),
-        water: Math.ceil(crew * rate.water * cap),
-        met: Math.ceil(crew * rate.met * cap),
-        en: Math.ceil(mass * rate.en * cap)
-      };
-      const costStr = '⛭ ' + cost.met + ' · ⚡ ' + cost.en + ' · ❖ ' + cost.food + ' · ≈ ' + cost.water;
+      /* Costo del pieno + residuo nella colonia origine (#69 follow-up
+         2026-06-29). Lo stock è noto solo se la flotta è a una TUA colonia
+         (porto amico): in tal caso mostriamo quanto resterebbe. */
+      const colony = (editable && F.ownColonyAt) ? F.ownColonyAt(g, fleet.location.systemId) : null;
+      const est = F.viveriFillEstimate
+        ? F.viveriFillEstimate(colony, crew, mass, 0, cap)
+        : { cost: { met: Math.ceil(crew * rate.met * cap), en: Math.ceil(mass * rate.en * cap), food: Math.ceil(crew * rate.food * cap), water: Math.ceil(crew * rate.water * cap) }, remaining: { met: null, en: null, food: null, water: null }, hasStock: false };
       const editAttr = editable ? '' : ' disabled';
       const inTransit = fleet.location && fleet.location.status === 'in-transit';
       const hintTxt = editable
@@ -11539,7 +11574,7 @@ function openFleetDetail(fleetId, opts) {
         '<div class="fleet-viveri-cap" title="' + escapeHtml(hintTxt) + '">' +
           '<label class="fleet-viveri-cap__lbl">Capienza serbatoio · <strong data-bind="vcap-val">' + cap + '</strong> Ι</label>' +
           '<input type="range" min="' + min + '" max="' + max + '" step="10" value="' + cap + '" data-bind="vcap-slider"' + editAttr + '>' +
-          '<div class="fleet-viveri-cap__cost">Pieno completo: <span data-bind="vcap-cost">' + costStr + '</span></div>' +
+          '<div class="fleet-viveri-cap__cost">Pieno completo: <span data-bind="vcap-cost">' + viveriLoadCostHtml(est) + '</span></div>' +
         '</div>';
     }
     /* Decisione utente 2026-06-16: pillola usura accanto ai viveri nel
@@ -11655,6 +11690,18 @@ function openFleetDetail(fleetId, opts) {
       const chargeProvision = function () {
         if (!ORION.fleet.loadViveriAtPort) return;
         const col = g.colonies[colKey];
+        /* Safeguard (feedback utente 2026-06-29): ora che navi+equipaggio sono
+           assegnati, blocca il cap a quanto la colonia può davvero fornire —
+           così viveriCap == carico effettivo e la flotta non parte con capacità
+           "fantasma" che la lascia subito a secco. Recovery-friendly: mai sotto
+           il floor di setViveriCap. */
+        if (col && ORION.fleet.viveriFillEstimate && ORION.fleet.setViveriCap && ORION.fleet.viveriCapOf) {
+          const crewN = ORION.fleet.fleetCrewRequired ? ORION.fleet.fleetCrewRequired(nf) : 1;
+          const massN = ORION.fleet.dockWeightOfFleet ? ORION.fleet.dockWeightOfFleet(nf) : 1;
+          const capN = ORION.fleet.viveriCapOf(nf);
+          const estN = ORION.fleet.viveriFillEstimate(col, crewN, massN, 0, capN);
+          if (estN.hasStock && estN.maxCap < capN) ORION.fleet.setViveriCap(nf, estN.maxCap);
+        }
         const before = (col && col.stock) ? Object.assign({}, col.stock) : null;
         ORION.fleet.loadViveriAtPort(g, nf);
         if (!before || !col.stock) return;
@@ -11781,14 +11828,28 @@ function openFleetDetail(fleetId, opts) {
         food: F.VIVERI_RATE_FOOD || 0.07, water: F.VIVERI_RATE_WATER || 0.05,
         met: F.VIVERI_RATE_MET || 0.04, en: F.VIVERI_RATE_EN || 0.12
       };
+      /* Colonia origine + autonomia già a bordo, per il residuo live (#69
+         follow-up 2026-06-29). In creazione la flotta non esiste ancora →
+         colonia bozza, serbatoio a 0. */
+      let viveriColony;
+      if (D.creating) {
+        viveriColony = g.colonies && g.colonies[D.newColonyKey];
+      } else {
+        const atPortNow = !!(F.fleetAtFriendlyPort && F.fleetAtFriendlyPort(g, fleet));
+        viveriColony = (atPortNow && F.ownColonyAt && fleet.location) ? F.ownColonyAt(g, fleet.location.systemId) : null;
+      }
       function updatePreview(val) {
         if (valEl) valEl.textContent = val;
         if (costEl) {
-          const m = Math.ceil(crew * rate.met * val);
-          const e = Math.ceil(mass * rate.en * val);
-          const f = Math.ceil(crew * rate.food * val);
-          const w = Math.ceil(crew * rate.water * val);
-          costEl.textContent = '⛭ ' + m + ' · ⚡ ' + e + ' · ❖ ' + f + ' · ≈ ' + w;
+          if (F.viveriFillEstimate) {
+            costEl.innerHTML = viveriLoadCostHtml(F.viveriFillEstimate(viveriColony, crew, mass, 0, val));
+          } else {
+            const m = Math.ceil(crew * rate.met * val);
+            const e = Math.ceil(mass * rate.en * val);
+            const f = Math.ceil(crew * rate.food * val);
+            const w = Math.ceil(crew * rate.water * val);
+            costEl.textContent = '⛭ ' + m + ' · ⚡ ' + e + ' · ❖ ' + f + ' · ≈ ' + w;
+          }
         }
       }
       vcapSlider.addEventListener('input', function () {
