@@ -177,4 +177,31 @@ console.log('— Test 6: stazione ancorata — estrae di default, precedenza su 
   assert(fleet.ships[0].wear === 0, 'nave NON usurata (estrazione dalla stazione, mutua esclusione)');
 }
 
+console.log('— Test 7: build stazione con ancoraggio + mutua esclusione (fetta 2)');
+{
+  const ST = ORION.station;
+  assert(ST.isAnchorableBody({ galaxy: {} }, 7, 'b0m0') === true, 'isAnchorableBody(luna) = true');
+  assert(ST.isAnchorableBody({ galaxy: {} }, 7, 'b0') === false, 'isAnchorableBody(gigante) = false (solo lune)');
+  const g = makeGame(false);
+  g.state.discovery[7] = 2; g.state.discovery[8] = 2;
+  const col = g.colonies['8:b0'];
+  col.stock = { met: 500, en: 300, food: 100, water: 100 };
+  /* Build con ancoraggio alla luna b0m0. */
+  const r = ST.build(g, '8:b0', 7, null, 'b0m0');
+  assert(r.ok && r.station && r.station.bodyKey === 'b0m0', 'build ancora la stazione alla luna (station.bodyKey)');
+  const st = r.station;
+  assert(ST.stationAnchoredAt(g, 7, 'b0m0') === null, 'stazione in costruzione → non ancora ancorata (operativa)');
+  /* Rendi operativa: l\'ancoraggio diventa effettivo. */
+  st.phase = 'operational'; st.level = 2; st.supplyState = 'ok';
+  assert(ST.stationAnchoredAt(g, 7, 'b0m0') === st, 'stazione operativa → ancorata');
+  /* Mutua esclusione: con la stazione ancorata, l\'estrattore non ha più Estrai. */
+  const d = ORION.fleetTarget.describe(g, 7, 'b0m0');
+  assert(d.giacimento === false && d.stationAnchored === true, 'describe: giacimento OFF (stazione ancorata) → niente estrattore');
+  /* Build con bodyKey non-luna è rifiutato. */
+  const g2 = makeGame(false); g2.state.discovery[7] = 2; g2.state.discovery[8] = 2;
+  g2.colonies['8:b0'].stock = { met: 500, en: 300, food: 100, water: 100 };
+  const r2 = ST.build(g2, '8:b0', 7, null, 'b0');
+  assert(!r2.ok, 'build con ancoraggio su corpo non-luna rifiutato');
+}
+
 console.log('\nTutti i test superati.');

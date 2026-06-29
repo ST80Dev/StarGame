@@ -6604,12 +6604,27 @@ function renderStationsView(stage) {
           stationYardHtml(st);
       }
 
+      /* Redesign lune: riga d'ancoraggio a una luna (estrazione a paniere). */
+      let anchorHtml = '';
+      if (ST.isPlayerStation(st) && st.bodyKey != null) {
+        let moonName = st.bodyKey;
+        try {
+          const asys = ORION.system.generate(g.galaxy, st.systemId);
+          const mb = ORION.system.findBody(asys, st.bodyKey);
+          if (mb && mb.name) moonName = mb.name;
+        } catch (_) { /* fallback alla key */ }
+        const extracting = st.phase !== 'building' && st.level >= 1 && st.supplyState !== 'isolated';
+        anchorHtml = '<div class="station-anchor">⚓ Ancorata a <strong>' + escapeHtml(moonName) + '</strong> · ' +
+          (extracting ? 'estrazione a paniere attiva' : 'estrazione in pausa (stazione non operativa)') + '</div>';
+      }
+
       const capturedCls = ST.isPlayerStation(st) ? '' : ' is-captured';
       return '<li class="station-item' + capturedCls + '">' +
         '<div class="station-item__head">' +
           '<span class="station-item__name">' + escapeHtml(st.name) + ' <span class="station-item__sys">' + sysName(st.systemId) + sysTag(st.systemId) + '</span></span>' +
           '<span class="station-item__lvl">' + (ST.isPlayerStation(st) ? (st.level > 0 ? ('lvl ' + st.level) : 'in opera') : 'occupata') + '</span>' +
         '</div>' +
+        anchorHtml +
         body +
       '</li>';
     }).join('') + '</ul>';
@@ -7119,6 +7134,27 @@ function renderDispatchView(stage) {
   });
 }
 
+/* Lune sfruttabili (giacimento a paniere) di un sistema, per l'ancoraggio
+   stazione. Deterministico dal seed (system.generate). Le lune sono annidate
+   in body.moons (non top-level). */
+function harvestableMoonsOf(g, sysId) {
+  const out = [];
+  if (!(ORION.system && ORION.system.generate && ORION.anomaly && ORION.anomaly.bodyGiacimento)) return out;
+  let sys;
+  try { sys = ORION.system.generate(g.galaxy, sysId); } catch (_) { return out; }
+  const tops = (sys && sys.bodies) || [];
+  for (let i = 0; i < tops.length; i++) {
+    const b = tops[i];
+    const moons = (b && Array.isArray(b.moons)) ? b.moons : [];
+    for (let m = 0; m < moons.length; m++) {
+      const mn = moons[m];
+      const gi = mn && ORION.anomaly.bodyGiacimento(mn);
+      if (gi && gi.basket) out.push({ key: mn.key, name: mn.name || mn.key });
+    }
+  }
+  return out;
+}
+
 /* Overlay di costruzione: scegli la colonia fondatrice + il sistema target
    (esplorato, entro raggio, senza stazione), poi conferma. */
 function openStationBuildPicker(stage) {
@@ -7163,10 +7199,22 @@ function openStationBuildPicker(stage) {
     if (cands.length) {
       candHtml = '<ul class="station-cand-list">' + cands.map(function (c) {
         const s = g.galaxy.systems[c.id];
-        const occ = ST.stationAt(g, c.id);
+        /* Redesign lune: se il sistema ha lune (giacimento a paniere), offri
+           l'ancoraggio opzionale della stazione → estrazione di default. */
+        const moons = harvestableMoonsOf(g, c.id);
+        let anchorHtml = '';
+        if (moons.length) {
+          anchorHtml = '<select class="fleet-row__select station-cand__anchor" data-anchor="' + c.id + '" title="Ancora la stazione a una luna per estrarne il paniere di risorse">' +
+            '<option value="">Orbita il sistema (nessun ancoraggio)</option>' +
+            moons.map(function (mn) {
+              return '<option value="' + escapeHtml(mn.key) + '">⚓ Ancora a ' + escapeHtml(mn.name) + ' (estrazione)</option>';
+            }).join('') +
+          '</select>';
+        }
         return '<li class="station-cand">' +
           '<span class="station-cand__name">' + (s ? s.name : '—') + systemTagHtml(c.id) + '</span>' +
           '<span class="station-cand__hops">' + c.hops + ' salti</span>' +
+          anchorHtml +
           '<button class="btn btn--mini btn--enter" data-build="' + c.id + '"' + (payable ? '' : ' disabled') + ' type="button">Costruisci</button>' +
         '</li>';
       }).join('') + '</ul>';
@@ -7195,7 +7243,10 @@ function openStationBuildPicker(stage) {
       if (b.disabled) return;
       b.addEventListener('click', function () {
         const targetId = Number(b.dataset.build);
-        const r = ST.build(g, ORION.stationBuildColony, targetId);
+        /* Ancoraggio luna scelto per QUESTO sistema (se presente il selettore). */
+        const anchorSel = ov.querySelector('[data-anchor="' + targetId + '"]');
+        const anchorKey = (anchorSel && anchorSel.value) ? anchorSel.value : null;
+        const r = ST.build(g, ORION.stationBuildColony, targetId, null, anchorKey);
         if (!r.ok) { showToast(r.reason || 'Costruzione rifiutata'); return; }
         /* Avvio costruzione stazione: azione del giocatore — niente
            entry in cronaca, la vista Stazioni mostra il cantiere. */
