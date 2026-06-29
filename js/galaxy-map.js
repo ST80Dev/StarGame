@@ -146,6 +146,16 @@
   /* Distanza camera-centro: regola l'intensità della prospettiva. */
   const VIEWER_D = 1.55;
 
+  /* Zoom: moltiplicatori di fitScale per il range di scala. Il tetto è
+     stato allungato 9→12→16 (richiesta utente 2026-06-26) per tenere ancora
+     di più la vista GRUPPO prima del dive-in nel sistema: in quella fascia
+     le flotte si scompongono in icone per tipo + numero. */
+  const MIN_ZOOM_MUL = 0.6;
+  const MAX_ZOOM_MUL = 16;
+  /* Sopra questo zoom (scale/fitScale) la flotta passa da icona singola
+     (nave di punta) a scomposizione in icone per tipo + numero. */
+  const FLEET_DECOMP_ZOOM = 5;
+
   class GalaxyMap {
     constructor() {
       this.canvas = null;
@@ -254,6 +264,25 @@
       });
       container.appendChild(layerBtn);
       this._layerBtn = layerBtn;
+
+      /* Pulsanti zoom +/- (richiesta utente 2026-06-26): colonna laterale a
+         dx, utile su touch dove manca la rotella. Su desktop sono nascosti via
+         CSS (la rotella basta). Centrano lo zoom sul viewport. */
+      var zoomCol = document.createElement('div');
+      zoomCol.className = 'gmap-zoom';
+      [['+', 'Ingrandisci', 1.25], ['−', 'Riduci', 1 / 1.25]].forEach(function (spec) {
+        var b = document.createElement('button');
+        b.className = 'gmap-zoom-btn';
+        b.type = 'button';
+        b.textContent = spec[0];
+        b.setAttribute('aria-label', spec[1]);
+        b.addEventListener('click', function () {
+          self._zoomAt(self.cssW / 2, self.cssH / 2, spec[2]);
+        });
+        zoomCol.appendChild(b);
+      });
+      container.appendChild(zoomCol);
+      this._zoomCol = zoomCol;
 
       this.canvas = canvas;
       this.ctx = canvas.getContext('2d');
@@ -535,7 +564,13 @@
       const game = root.ORION && root.ORION.game;
       if (!game || !Array.isArray(game.fleets) || !game.fleets.length) return null;
       let best = null, bestD = Infinity;
-      const R = 14;
+      /* Raggio di tocco proporzionato all'icona disegnata: cresce nella fascia
+         scomposta (icone ingrandite, richiesta utente 2026-06-26) così i marker
+         grandi restano facili da toccare su touch. */
+      const zoom = this.fitScale ? this.scale / this.fitScale : 1;
+      const R = zoom >= FLEET_DECOMP_ZOOM
+        ? clamp(18 + (zoom - FLEET_DECOMP_ZOOM) * 2.4, 18, 40)
+        : 14;
       for (let i = 0; i < game.fleets.length; i++) {
         const f = game.fleets[i];
         const pos = this._fleetScreenPos(f);
@@ -891,8 +926,8 @@
     }
 
     _zoomAt(sx, sy, factor) {
-      const minScale = this.fitScale * 0.6;
-      const maxScale = this.fitScale * 9;
+      const minScale = this.fitScale * MIN_ZOOM_MUL;
+      const maxScale = this.fitScale * MAX_ZOOM_MUL;
       /* decisione #80 — navigazione a zoom: sei contro il muro dello zoom IN,
          a livello gruppo, e continui a spingere → scendi nel sistema centrato
          (sostituisce il click in sidebar / doppio-click, senza toglierli). */
@@ -965,7 +1000,7 @@
       }
       const w = Math.max(maxX - minX, 0.06), h = Math.max(maxY - minY, 0.06);
       let s = Math.min(this.cssW / w, this.cssH / h) * (fill || 0.62);
-      s = clamp(s, minS || this.fitScale * 0.6, this.fitScale * 9);
+      s = clamp(s, minS || this.fitScale * MIN_ZOOM_MUL, this.fitScale * MAX_ZOOM_MUL);
       const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
       const ox = this.cssW / 2 - cx * s - s * 0.5;
       const oy = this.cssH / 2 - cy * s - s * 0.5;
@@ -1127,7 +1162,7 @@
       if (!w) return;
       const sysC = this.galaxy.systems[f.location.systemId];
       if (sysC) { this.activeGroupId = sysC.cluster; this.state.selectedId = f.location.systemId; }
-      const scale = clamp(this.fitScale * (scaleMul || 4.0), this.fitScale * 0.6, this.fitScale * 9);
+      const scale = clamp(this.fitScale * (scaleMul || 4.0), this.fitScale * MIN_ZOOM_MUL, this.fitScale * MAX_ZOOM_MUL);
       const r = this.orient.rotate(w.x - 0.5, w.y - 0.5, w.z || 0);
       const persp = VIEWER_D / Math.max(0.4, VIEWER_D - r.z);
       const ox = this.cssW / 2 - r.x * persp * scale - scale * 0.5;
@@ -2014,9 +2049,23 @@
         const stale = !fresh && (af.lastSeenI != null) && (nowI - af.lastSeenI) <= PERSIST;
         if (!fresh && !stale) continue;
         let pos;
-        const inTransit = af.status === 'in-transit'
+        /* Contatto "ultimo avvistamento" (stale): nebbia di guerra sulle flotte
+           (richiesta utente 2026-06-26). NON si insegue la posizione viva: il
+           marker resta CONGELATO dove l'hai visto l'ultima volta (lastSeenSysId)
+           e sbiadisce, poi sparisce. Solo i contatti FRESCHI (sotto i tuoi
+           sensori ora) seguono la posizione reale. */
+        const frozen = stale;
+        const inTransit = !frozen && af.status === 'in-transit'
                        && Array.isArray(af.route) && af.routeIdx + 1 < af.route.length;
-        if (inTransit) {
+        if (frozen) {
+          const fs0 = g.systems[af.lastSeenSysId != null ? af.lastSeenSysId : af.systemId];
+          if (!fs0) continue;
+          const p = this.project(fs0.x, fs0.y, fs0.z || 0);
+          const hash = hashStr(af.id || ('a' + i));
+          const ang = (hash % 360) * Math.PI / 180;
+          const rad = 16 + ((hash >> 8) % 6);
+          pos = { x: p.x + Math.cos(ang) * rad, y: p.y + Math.sin(ang) * rad, depth: p.depth, parallax: p.parallax };
+        } else if (inTransit) {
           anyTransit = true;
           const fromS = g.systems[af.route[af.routeIdx]];
           const toS   = g.systems[af.route[af.routeIdx + 1]];
@@ -2047,37 +2096,46 @@
         const color = af.civColor || '#d0d0d0';
         const known = (af.intel || 0) >= PARTIAL;
         const a = alpha * (known ? 0.95 : 0.7) * (fresh ? 1 : 0.45);
+        /* Icona del contatto (richiesta utente 2026-06-26):
+           - intel < PARTIAL: icona nave GENERICA (sai solo che c'è un
+             contatto di quella civ);
+           - intel ≥ PARTIAL: silhouette della nave MAGGIORE (di punta);
+           - composizione COMPLETA di tutta la flotta: solo nel popup a FULL.
+           Sempre nel colore della civ. */
+        const FM = root.ORION && root.ORION.fleetMarker;
+        const showLead = (af.intel || 0) >= PARTIAL && Array.isArray(af.ships) && af.ships.length;
+        let markR = r;
         ctx.save();
         ctx.globalAlpha = a;
-        /* Rombo nel colore della civ. */
-        ctx.beginPath();
-        ctx.moveTo(pos.x, pos.y - r);
-        ctx.lineTo(pos.x + r, pos.y);
-        ctx.lineTo(pos.x, pos.y + r);
-        ctx.lineTo(pos.x - r, pos.y);
-        ctx.closePath();
-        ctx.fillStyle = color;
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(8,12,22,0.85)';
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
-        /* Alone tenue (come i marker flotta del giocatore). */
-        ctx.beginPath();
-        ctx.moveTo(pos.x, pos.y - (r + 3));
-        ctx.lineTo(pos.x + (r + 3), pos.y);
-        ctx.lineTo(pos.x, pos.y + (r + 3));
-        ctx.lineTo(pos.x - (r + 3), pos.y);
-        ctx.closePath();
-        ctx.strokeStyle = hexA(color, 0.35);
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        /* '?' se composizione ignota. */
-        if (!known) {
-          ctx.fillStyle = 'rgba(255,255,255,0.92)';
-          ctx.font = '700 ' + Math.max(9, r + 1) + 'px monospace';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText('?', pos.x, pos.y + 0.5);
+        if (FM) {
+          const zoom = this.fitScale ? this.scale / this.fitScale : 1;
+          const size = clamp(13 + (zoom - 2) * 3.2, 13, 30);
+          markR = size * 0.6;
+          /* alone nel colore civ dietro l'icona */
+          const haloR = size * 1.25;
+          const glow = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, haloR);
+          glow.addColorStop(0, hexA(color, 0.50));
+          glow.addColorStop(0.5, hexA(color, 0.18));
+          glow.addColorStop(1, hexA(color, 0));
+          ctx.fillStyle = glow;
+          ctx.beginPath(); ctx.arc(pos.x, pos.y, haloR, 0, Math.PI * 2); ctx.fill();
+          const onReady = this._fleetIconReady ||
+            (this._fleetIconReady = this.requestRender.bind(this));
+          if (showLead) FM.lead(ctx, pos.x, pos.y, size, af, onReady, color);
+          else FM.genericShip(ctx, pos.x, pos.y, size, onReady, color);
+        } else {
+          /* Fallback (modulo non caricato): rombo nel colore della civ. */
+          ctx.beginPath();
+          ctx.moveTo(pos.x, pos.y - r);
+          ctx.lineTo(pos.x + r, pos.y);
+          ctx.lineTo(pos.x, pos.y + r);
+          ctx.lineTo(pos.x - r, pos.y);
+          ctx.closePath();
+          ctx.fillStyle = color;
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(8,12,22,0.85)';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
         }
         ctx.restore();
         /* Etichetta: SOLO l'identificazione del contatto (nome civ o "non
@@ -2087,7 +2145,7 @@
         let lbl = (root.ORION.aifleet && root.ORION.aifleet.nameLabel) ? root.ORION.aifleet.nameLabel(game, af) : 'Contatto';
         if (lbl.length > 22) lbl = lbl.slice(0, 21) + '…';
         const fs = Math.max(9.5, nr + 3);
-        const offX = (pos.x > this.cssW - 130) ? -(r + 6) : (r + 6);
+        const offX = (pos.x > this.cssW - 130) ? -(markR + 6) : (markR + 6);
         ctx.save();
         ctx.globalAlpha = a;
         ctx.font = '600 ' + fs.toFixed(1) + 'px "JetBrains Mono", ui-monospace, monospace';
@@ -2645,47 +2703,59 @@
 
     _drawFleetMarker(ctx, pos, fleet, isSelected, someoneSelected) {
       const inTransit = fleet.location.status === 'in-transit';
-      const baseColor = inTransit ? '#5cd0ff'
-                      : fleet.location.status === 'docked' ? '#7fe6a0'
-                      : '#ffae5c';   /* orbiting */
-      /* Quando una flotta è selezionata, le altre vengono attenuate. */
+      /* Colore di STATO (movimento) → alone dietro l'icona. L'icona stessa
+         porta il colore della CLASSE (riconoscibilità del tipo nave). */
+      const statusColor = inTransit ? '#5cd0ff'
+                        : fleet.location.status === 'docked' ? '#7fe6a0'
+                        : '#ffae5c';   /* orbiting */
       const dim = (someoneSelected && !isSelected);
-      const color = baseColor;
-      const r = isSelected ? 6 : 4.5;
+      const FM = root.ORION && root.ORION.fleetMarker;
+      const zoom = this.fitScale ? this.scale / this.fitScale : 1;
+      /* requestRender memoizzato: lo passiamo come onReady alle icone
+         rasterizzate (ridisegno quando un'immagine SVG finisce di caricare). */
+      const onReady = this._fleetIconReady ||
+        (this._fleetIconReady = this.requestRender.bind(this));
 
-      /* Anello di selezione (dietro al marker, giallo brillante pulsante). */
-      if (isSelected) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, r + 6, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(255, 220, 60, 0.85)';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, r + 10, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(255, 220, 60, 0.35)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.restore();
-      }
+      /* Soglia di scomposizione (richiesta utente 2026-06-26): sotto =
+         una sola icona (nave di punta) che cresce col zoom; sopra (fascia
+         di zoom allungata prima del dive-in al sistema) = flotta scomposta
+         in icone per tipo + numero. */
+      const decompose = zoom >= FLEET_DECOMP_ZOOM;
+      /* Scomposte: icone più grandi e in crescita col zoom (richiesta utente
+         2026-06-26) — più leggibili nella fascia gruppo allungata. */
+      const baseR = decompose
+        ? clamp(15 + (zoom - FLEET_DECOMP_ZOOM) * 2.4, 15, 34)
+        : clamp(13 + (zoom - 2) * 3.2, 13, 30);
 
       ctx.save();
-      if (dim) ctx.globalAlpha = ctx.globalAlpha * 0.35;
-      /* corpo */
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
-      /* contorno */
-      ctx.lineWidth = isSelected ? 1.6 : 1.2;
-      ctx.strokeStyle = 'rgba(8,12,22,0.85)';
-      ctx.stroke();
-      /* alone tenue */
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, r + 3, 0, Math.PI * 2);
-      ctx.strokeStyle = hexA(color, isSelected ? 0.60 : 0.35);
-      ctx.lineWidth = 1;
-      ctx.stroke();
+      if (dim) ctx.globalAlpha = ctx.globalAlpha * 0.4;
+
+      /* Alone tenue nel colore di stato dietro l'icona. */
+      const haloR = baseR * (isSelected ? 1.6 : 1.25);
+      const glow = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, haloR);
+      glow.addColorStop(0, hexA(statusColor, 0.50));
+      glow.addColorStop(0.5, hexA(statusColor, 0.18));
+      glow.addColorStop(1, hexA(statusColor, 0));
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(pos.x, pos.y, haloR, 0, Math.PI * 2); ctx.fill();
+
+      /* Anello di selezione (giallo brillante). */
+      if (isSelected) {
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, baseR + 6, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255, 220, 60, 0.85)';
+        ctx.lineWidth = 2; ctx.stroke();
+      }
+
+      if (FM) {
+        if (decompose) FM.composition(ctx, pos.x, pos.y, baseR, fleet, onReady, { max: 4 });
+        else FM.lead(ctx, pos.x, pos.y, baseR, fleet, onReady);
+      } else {
+        /* Fallback estremo se il modulo non è caricato: vecchio pallino. */
+        ctx.beginPath(); ctx.arc(pos.x, pos.y, 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = statusColor; ctx.fill();
+        ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(8,12,22,0.85)'; ctx.stroke();
+      }
       ctx.restore();
     }
 

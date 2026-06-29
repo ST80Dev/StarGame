@@ -90,6 +90,70 @@
     return Math.min(REP_COST_CAP, Math.round(credits * REP_COST_RATE * 100) / 100);
   }
 
+  /* ------------------------------------------------------------------
+     INTEL GRIGIA (M19, GDD §6e): i Mekhari vendono informazioni su altre
+     civiltà — remota (nessuna flotta), a pagamento, MENO completa dello
+     spionaggio vero: porta il dossier al massimo a "parziale" (il dossier
+     COMPLETO + i segreti restano appannaggio dell'Infiltrazione M19).
+     ------------------------------------------------------------------ */
+  const INTEL_BASE_PRICE = 60;     // crediti neutri, base prima del sovrapprezzo
+  const INTEL_CAP = 'partial';     // tetto del canale grigio
+
+  function intelRank(level) {
+    const AI = root.ORION.ai;
+    if (AI && AI.intelLevelRank) return AI.intelLevelRank(level);
+    return ({ fragmentary: 1, partial: 2, complete: 3 })[level] || 1;
+  }
+  function currentIntel(civ) {
+    const AI = root.ORION.ai;
+    return civ.intelLevel ||
+      (AI && AI.intelLevelFromProgress ? AI.intelLevelFromProgress(civ.intelProgress || 0) : 'fragmentary');
+  }
+  function findCiv(game, civId) {
+    const civs = (game && game.civs) || [];
+    for (let i = 0; i < civs.length; i++) if (civs[i] && civs[i].id === civId) return civs[i];
+    return null;
+  }
+
+  /* Preventivo intel grigia su una civiltà bersaglio. */
+  function quoteIntel(game, civId) {
+    if (!isAvailable(game)) return { ok: false, reason: 'Mercato grigio non disponibile (contatta i Mekhari)' };
+    const civ = findCiv(game, civId);
+    if (!civ || !civ.alive) return { ok: false, reason: 'Civiltà non disponibile' };
+    if (civ.faction === 'mekhari') return { ok: false, reason: 'I Mekhari non vendono dossier su sé stessi' };
+    const AI = root.ORION.ai;
+    const krank = (AI && AI.knowledgeRank) ? AI.knowledgeRank(civ) : (civ.contacted ? 2 : 0);
+    if (krank < 2) return { ok: false, reason: 'Serve prima un contatto formale con questa civiltà' };
+    if (intelRank(currentIntel(civ)) >= intelRank(INTEL_CAP)) {
+      return { ok: false, reason: 'I Mekhari non hanno nulla di più affidabile su di loro' };
+    }
+    const sc = surcharge(game);
+    const cost = Math.round(INTEL_BASE_PRICE * (1 + sc));
+    return { ok: true, costCredits: cost, surcharge: sc, repCost: repCostFor(cost), toLevel: INTEL_CAP };
+  }
+
+  /* Acquisto: paga in crediti (qualunque valuta), porta il dossier a parziale.
+     Costo di reputazione del mercato grigio (§14, pista Tiranno), come smuggle.
+     Nessun rischio, nessuna flotta richiesta. Deterministico. */
+  function buyIntel(game, civId) {
+    const q = quoteIntel(game, civId);
+    if (!q.ok) return q;
+    const T = root.ORION.treasury;
+    if (!T || !T.spendCredits) return { ok: false, reason: 'Tesoreria non disponibile' };
+    if (T.totalCredits(game) + 1e-6 < q.costCredits) {
+      return { ok: false, reason: 'Tesoreria insufficiente (servono ≈' + q.costCredits.toFixed(0) + ' crediti)' };
+    }
+    const spent = T.spendCredits(game, q.costCredits);
+    if (!spent.ok) return spent;
+    const civ = findCiv(game, civId);
+    civ.intelLevel = INTEL_CAP;
+    if ((civ.intelProgress || 0) < 3) civ.intelProgress = 3;   // soglia "parziale"
+    if (q.repCost > 0 && root.ORION.diplomacy && root.ORION.diplomacy.adjustReputation) {
+      root.ORION.diplomacy.adjustReputation(game, -q.repCost);
+    }
+    return { ok: true, toLevel: INTEL_CAP, costCredits: q.costCredits, repCost: q.repCost };
+  }
+
   /* Preventivo di contrabbando: costo in crediti (valore neutro, pagabile da
      qualunque valuta) + costo di reputazione. */
   function quoteSmuggle(game, colonyKey, resource, amount) {
@@ -127,11 +191,14 @@
   ORION.mekhari = {
     BUY_RES: BUY_RES,
     SURCHARGE_BASE: SURCHARGE_BASE,
+    INTEL_CAP: INTEL_CAP,
     mekhariCiv: mekhariCiv,
     isAvailable: isAvailable,
     surcharge: surcharge,
     repCostFor: repCostFor,
     quoteSmuggle: quoteSmuggle,
-    buySmuggle: buySmuggle
+    buySmuggle: buySmuggle,
+    quoteIntel: quoteIntel,
+    buyIntel: buyIntel
   };
 })(typeof window !== 'undefined' ? window : this);

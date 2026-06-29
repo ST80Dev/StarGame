@@ -248,6 +248,13 @@
       crises: Array.isArray(game.crises) ? game.crises : [],
       crisisMeta: (game.crisisMeta && typeof game.crisisMeta === 'object') ? game.crisisMeta : { icgTier: 0 },
       anomalies: (game.anomalies && typeof game.anomalies === 'object') ? game.anomalies : {},
+      /* M19 Fase A (spionaggio): operazioni coperte in corso. Additivo lazy
+         (nessun bump di schema). I segreti svelati (civ.deepIntel) vivono
+         dentro game.civs (auto-serializzato). Save vecchi → ensure() ricrea
+         lo stato vuoto al load. */
+      espionage: (game.espionage && typeof game.espionage === 'object')
+        ? { ops: Array.isArray(game.espionage.ops) ? game.espionage.ops : [], seq: game.espionage.seq || 0 }
+        : { ops: [], seq: 0 },
       /* FSP §17.7: stato delta dei Fenomeni di Spazio Profondo (scoperta/
          proprietà/uso). Additivo lazy (nessun bump): la struttura immutabile
          degli FSP si rigenera dal seed (come i gruppi), nel save vive solo il
@@ -257,6 +264,12 @@
          (schema 32, additivo). Save vecchi → lista vuota: si ripopola dal
          seed giocando. */
       aiFleets: Array.isArray(game.aiFleets) ? game.aiFleets : [],
+      /* M18 — Reputazione/ICG: storico delle ultime 20 mutazioni discrete
+         (dispacci, crisi, scelte di diplomazia). Additivo lazy, niente bump
+         di schema: save vecchi → [] e ORION.reputation.ensure() lo inizializza
+         al primo accesso. I drift passivi NON vengono registrati per non
+         saturare il buffer. */
+      repHistory: Array.isArray(game.repHistory) ? game.repHistory.slice(0, 20) : [],
       /* M-journal (Diario Strategico): appunti del giocatore. Additivo /
          lazy-init: NIENTE bump di schemaVersion (i save vecchi caricano e
          ORION.journal.ensure() crea la struttura vuota al boot). */

@@ -210,6 +210,22 @@
       id: 'nav-commerciale', name: 'Navigazione commerciale iperspaziale', cat: 'trasferimento', cost: 280,
       requires: ['iperguida'], mod: { hopBonus: 1 },
       desc: '+1 salto al raggio massimo dei mercantili (rotte più lunghe).'
+    },
+    /* Informatica — SENSORI (richiesta utente 2026-06-26): potenziamento
+       GLOBALE e proporzionale della rilevazione flotte. Solo modificatori
+       passivi (vincolo #57) letti da aifleet.buildCoverage. Garantite: la
+       visuale strategica dev'essere una leva sempre disponibile, non un
+       sorteggio. */
+    {
+      id: 'sensori-lungo-raggio', name: 'Sensori a lungo raggio', cat: 'informatica', cost: 200,
+      requires: [], guaranteed: true, mod: { sensorPowerMul: 0.30 },
+      desc: 'Antenne e calcolo di bordo migliori: +30% potenza di rilevamento di colonie, capitale e stazioni. Vedi prima e meglio le flotte altrui che entrano nella tua copertura.'
+    },
+    {
+      id: 'rete-sensoriale', name: 'Rete sensoriale integrata', cat: 'informatica', cost: 320,
+      requires: ['sensori-lungo-raggio'], hidden: true, guaranteed: true,
+      mod: { sensorRangeBonus: 1, sensorPowerMul: 0.15 },
+      desc: 'Rete sensoriale d\'impero condivisa: +1 salto al raggio sensori di TUTTE le fonti (capitale 2→3, colonia 1→2, stazione +1) e ulteriore potenza. Le colonie lontane diventano osservatori sugli spostamenti altrui.'
     }
   ];
 
@@ -313,9 +329,13 @@
        fpMul / hpMul → combat.js (forze del giocatore)
        popGrowthMul  → time.js (crescita pop)
        cargoMul / hopBonus → trade.js (mercantili)
+       sensorPowerMul / sensorRangeBonus → aifleet.buildCoverage (sensori)
+     Canali ADDITIVI (base 0): hopBonus, sensorRangeBonus. Gli altri sono
+     moltiplicativi (base 1 + Σ bonus).
      Cache invalidata quando cresce `unlocked` (cresce solo, mai cala). */
+  const ADDITIVE_MODS = { hopBonus: true, sensorRangeBonus: true };
   function mods(game) {
-    const base = { extractionMul: 1, buildSpeedMul: 1, researchMul: 1, fpMul: 1, hpMul: 1, popGrowthMul: 1, cargoMul: 1, hopBonus: 0, wasteGenMul: 1, wasteEffMul: 1 };
+    const base = { extractionMul: 1, buildSpeedMul: 1, researchMul: 1, fpMul: 1, hpMul: 1, popGrowthMul: 1, cargoMul: 1, hopBonus: 0, wasteGenMul: 1, wasteEffMul: 1, sensorPowerMul: 1, sensorRangeBonus: 0 };
     const r = game && game.research;
     if (!r || !Array.isArray(r.unlocked)) return base;
     if (r._mods && r._modsLen === r.unlocked.length) return r._mods;
@@ -323,7 +343,7 @@
       const t = BY_ID[id];
       if (!t || !t.mod) return;
       Object.keys(t.mod).forEach(function (k) {
-        if (k === 'hopBonus') base.hopBonus += t.mod[k];
+        if (ADDITIVE_MODS[k]) base[k] += t.mod[k];
         else base[k] = (base[k] || 1) + t.mod[k];
       });
     });

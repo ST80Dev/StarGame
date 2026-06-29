@@ -271,19 +271,23 @@
         );
       }
 
-      /* === Morale d'impero (warState M09) === */
-      const ws = game.warState;
-      if (ws && typeof ws.morale === 'number') {
-        const mor = Math.round(ws.morale * 100);
-        const mStateCls = mor < 70 ? ' is-crit' : mor < 90 ? ' is-low' : '';
+      /* === Morale di colonia (§9.3) === */
+      /* Sostituisce il vecchio morale d'impero, che era globale e fuori
+         contesto sulla scheda di un singolo pianeta. Il morale d'impero
+         (warState) resta in vista Civiltà e Flotta. */
+      if (ORION.time && ORION.time.colonyMorale) {
+        const cm = ORION.time.colonyMorale(game, colony);
+        const cmCap = (ORION.time.CFG && ORION.time.CFG.POP_MORALE_MAX) || 1.35;
+        const morPct = Math.round((cm / cmCap) * 100);
+        const cmStateCls = morPct < 50 ? ' is-crit' : morPct < 75 ? ' is-low' : '';
         cards.push(
-          '<div class="deck-res deck-status-card deck-status-card--morale' + mStateCls + '" title="Morale d\'impero — sotto pressione cala con perdite belliche">' +
+          '<div class="deck-res deck-status-card deck-status-card--morale' + cmStateCls + '" title="Morale colonia — modulatore della crescita popolazione (base + pianeta base + centri abitativi; ridotto da scorte basse e sovraffollamento)">' +
             '<div class="deck-res__head">' +
-              glyph('forces') +
-              '<span class="deck-res__label">Morale</span>' +
+              glyph('home') +
+              '<span class="deck-res__label">Morale colonia</span>' +
             '</div>' +
-            '<div class="deck-res__value">' + mor + '%</div>' +
-            '<div class="deck-status-card__bar"><i style="width:' + mor + '%"></i></div>' +
+            '<div class="deck-res__value">' + cm.toFixed(2) + '</div>' +
+            '<div class="deck-status-card__bar"><i style="width:' + Math.min(100, morPct) + '%"></i></div>' +
           '</div>'
         );
       }
@@ -303,24 +307,49 @@
          malus temporanei del tick (Insediamento ×0.5, scarsità, rifiuti, guerra). */
       const pf = (ORION.time && ORION.time.productionFactors)
         ? ORION.time.productionFactors(ORION.game, colony)
-        : { prodMul: 1, popFood: 0, popWater: 0, crewFood: 0, crewWater: 0 };
+        : { prodMul: 1, popFood: 0, popWater: 0, popMet: 0, popEn: 0, crewFood: 0, crewWater: 0 };
       /* Flusso rotte commerciali nel saldo (decisione utente 2026-06-15):
          + in entrata, − in uscita. */
       const colKey = colony.systemId + ':' + colony.bodyKey;
       const tradeNet = (ORION.trade && ORION.trade.colonyTradeFlow)
         ? ORION.trade.colonyTradeFlow(ORION.game, colKey)
         : { met: 0, en: 0, food: 0, water: 0 };
+      /* Manutenzione flotta (richiesta utente 2026-06-20: il saldo del
+         centro non coincideva col riepilogo dx perché qui mancavano i
+         drenaggi pop-met/en e la manutenzione delle navi al porto).
+         Specchio coerente di processProduction in time.js. */
+      const F = ORION.fleet;
+      const shipMet = (F && F.portMaintenance)   ? F.portMaintenance(ORION.game, colony)   : 0;
+      const shipEn  = (F && F.portMaintenanceEn) ? F.portMaintenanceEn(ORION.game, colony) : 0;
+      /* Surplus estrattivo da anomalie/cinture/nebulose: le flotte in
+         raccolta versano il bottino sulla colonia attiva più vicina al
+         sito (anomaly.depositColonyKey). Lo includiamo nel saldo e lo
+         mostriamo come chip esplicito. */
+      const anomFlow = (ORION.anomaly && ORION.anomaly.harvestByColony)
+        ? (ORION.anomaly.harvestByColony(ORION.game)[colKey] || null)
+        : null;
+      const anomMet = anomFlow ? anomFlow.met : 0;
+      const anomEn  = anomFlow ? anomFlow.en  : 0;
 
       let html = '<aside class="deck-resources" aria-label="Risorse della colonia">';
       keys.forEach(function (k) {
         const stock = colony.stock[k] || 0;
-        const popDrain = k === 'food' ? pf.popFood : k === 'water' ? pf.popWater : 0;
+        const popDrain =
+          k === 'food'  ? pf.popFood  :
+          k === 'water' ? pf.popWater :
+          k === 'met'   ? (pf.popMet  || 0) :
+          k === 'en'    ? (pf.popEn   || 0) : 0;
         const crewDrain = k === 'food' ? (pf.crewFood || 0) : k === 'water' ? (pf.crewWater || 0) : 0;
-        const net = (out.rates[k] || 0) * pf.prodMul - (out.upkeep[k] || 0) - popDrain - crewDrain + (tradeNet[k] || 0);
+        const shipDrain = k === 'met' ? shipMet : k === 'en' ? shipEn : 0;
+        const anomBonus = k === 'met' ? anomMet : k === 'en' ? anomEn : 0;
+        const net = (out.rates[k] || 0) * pf.prodMul - (out.upkeep[k] || 0) - popDrain - crewDrain - shipDrain + (tradeNet[k] || 0) + anomBonus;
         const state = scar && scar[k] ? scar[k].state : 'ok';
         const stateCls = state === 'crit' ? ' is-crit' : state === 'low' ? ' is-low' : '';
         const stateLabel = state === 'crit' ? 'critica' : state === 'low' ? 'allerta' : 'ok';
         const netCls = net > 0.01 ? 'is-pos' : net < -0.01 ? 'is-neg' : '';
+        const anomChip = anomBonus > 0
+          ? '<span class="deck-res__anom" title="Surplus da flotte in raccolta su anomalie">✦ +' + (Math.round(anomBonus * 10) / 10) + '/Ι</span>'
+          : '';
         html +=
           '<div class="deck-res' + stateCls + '" data-res="' + k + '" title="' + RES_LABEL[k] + ' · ' + stateLabel + '">' +
             '<div class="deck-res__head">' +
@@ -329,6 +358,7 @@
             '</div>' +
             '<div class="deck-res__value">' + fmtNum(stock) + '</div>' +
             '<div class="deck-res__rate ' + netCls + '">' + fmtRate(net) + ' / Ι</div>' +
+            anomChip +
           '</div>';
       });
       /* PR-M: status cards (slot/rifiuti/capitale/morale) sotto le 4 res

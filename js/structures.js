@@ -52,7 +52,16 @@
       id: 'miniera', name: 'Miniera', cat: 'estrattiva', glyph: '⛏',
       desc: 'Estrae metalli dal sottosuolo o dagli asteroidi.',
       cost: { met: 40, en: 10 }, time: 10,
-      upkeep: { en: 1 },
+      /* Bilanciamento 2026-06-27: rimosso upkeep en (era 1). Gli estrattori
+         base (miniera/idrico/fattoria) non drenano più energia: era la causa
+         del cold-lock energetico early sui mondi a basso pot.en (con una sola
+         centrale il netto andava negativo → stock a 0 → impossibile pagare il
+         costo en per fare/potenziare la centrale → stallo, contro #22). Le
+         altre strutture (lab/hangar/housing/esotici…) mantengono l'upkeep en:
+         l'energia resta una decisione vera, non un fail-state a freddo. Anche
+         coerente con l'aumentato drain energetico delle flotte (viveri su
+         stazza). Simulazione: rompe il lock su ogni mondo natale plausibile. */
+      upkeep: {},
       rates: { met: 4 },
       slots: 1, maxLevel: 5,
       bodyTypes: HABITABLE.concat(ORBITAL)
@@ -70,7 +79,7 @@
       id: 'impianto-idrico', name: 'Impianto idrico', cat: 'estrattiva', glyph: '≈',
       desc: 'Pozzi, distillatori atmosferici o estrazione da ghiacci.',
       cost: { met: 30, en: 12 }, time: 10,
-      upkeep: { en: 1 },
+      upkeep: {},   // 2026-06-27: rimosso upkeep en (vedi miniera) — fix cold-lock energia early
       rates: { water: 4 },
       slots: 1, maxLevel: 5,
       bodyTypes: HABITABLE
@@ -79,7 +88,7 @@
       id: 'fattoria', name: 'Fattoria idroponica', cat: 'estrattiva', glyph: '❖',
       desc: 'Cicli chiusi di coltura adattati alla biochimica locale.',
       cost: { met: 25, en: 10, water: 5 }, time: 9,
-      upkeep: { en: 1, water: 1 },
+      upkeep: { water: 1 },   // 2026-06-27: rimosso upkeep en (vedi miniera); resta l'acqua di processo
       rates: { food: 4 },
       slots: 1, maxLevel: 5,
       bodyTypes: HABITABLE
@@ -141,10 +150,16 @@
     {
       id: 'cantiere-navale', name: 'Hangar di costruzione', cat: 'militare', glyph: '▱',
       desc: 'Necessario per costruire astronavi. Offre cantieri (build paralleli) e attracchi (porto a terra). Cresce coi livelli.',
-      cost: { met: 95, en: 40 }, time: 50,
-      /* Bilanciamento 2026-06-16: hangar ABBASSATO 120→95 (sblocco esplorazione
+      cost: { met: 60, en: 25 }, time: 30,
+      /* Bilanciamento 2026-06-27: L1 ABBASSATO 95→60 met, 40→25 en, time 50→30,
+         upkeep 4 en/2 met → 3 en/1 met. Motivazione: l'early game era bloccato
+         per ~300I sulle sole strutture militari, rendendo impossibile costruire
+         pioniere+intercettore prima del mid. Per non sgonfiare anche i livelli
+         alti, lo scaling per livello passa a L^1.3 (vedi EARLY_TIER_IDS in
+         stepCost): L5 finisce ≈486 met (era 475), L2-L4 leggermente più morbidi.
+         Bilanciamento 2026-06-16: hangar ABBASSATO 120→95 (sblocco esplorazione
          più rapido nell'early); upkeep en 3→4 (carico militare al porto). */
-      upkeep: { en: 4, met: 2 },   // bilanciamento 2026-06-16: en 3→4, met 1→2
+      upkeep: { en: 3, met: 1 },   // 2026-06-27: 4→3 en, 2→1 met (early relief)
       rates: {},
       slots: 2, maxLevel: 5,
       bodyTypes: HABITABLE,
@@ -162,7 +177,11 @@
     {
       id: 'accademia-militare', name: 'Accademia militare', cat: 'militare', glyph: '⚔',
       desc: 'Forma quadri militari e veterani (figure speciali, M14).',
-      cost: { met: 90, en: 45, food: 15 }, time: 22,
+      cost: { met: 50, en: 20, food: 8 }, time: 14,
+      /* Bilanciamento 2026-06-27: L1 ABBASSATO 90→50 met, 45→20 en, 15→8 food,
+         time 22→14. Stesso intento dell'Hangar (vedi sopra): early game troppo
+         caro per arrivare al primo equipaggio. Scaling L^1.3 (EARLY_TIER_IDS)
+         tiene morbida la curva fino a L5 (≈405 met vs vecchio 450). */
       upkeep: { en: 1, food: 1 },   // decisione #48: 2 → 1
       rates: {},
       slots: 1, maxLevel: 5,
@@ -399,9 +418,16 @@
      Bilanciamento 2026-06-16: le strutture TIER 3 (avanzate strategiche) usano
      una scala più ripida L^1.4 per rendere i salti di livello davvero costosi
      in end-game (scudo L2, esotico L2, bacino L2). Tutte le altre restano
-     lineari. */
+     lineari.
+     Bilanciamento 2026-06-27: gli edifici militari "early gate" (Hangar e
+     Accademia) usano L^1.3 per il costo. Il loro L1 è stato abbassato di
+     ~37/44% per sbloccare la prima flotta nell'early; lo scaling più ripido
+     mantiene i livelli alti vicini ai valori storici (L5 Hangar ≈486 met vs
+     475 storici). Il tempo resta lineare sulla nuova base più bassa → tempi
+     ridotti su tutta la curva, coerente con lo scopo "militare giocabile". */
   const ADVANCED_TIER_IDS = ['scudo-planetario', 'centro-ingegneria-planetaria',
     'terraformatori', 'bacino-orbitale', 'impianto-esotico'];
+  const EARLY_TIER_IDS = ['cantiere-navale', 'accademia-militare'];
   function scaleCost(cost, factor) {
     const out = {};
     Object.keys(cost || {}).forEach(function (k) { out[k] = Math.round(cost[k] * factor); });
@@ -409,7 +435,10 @@
   }
   function stepCost(def, toLevel) {
     const L = Math.max(1, toLevel || 1);
-    const factor = (def && ADVANCED_TIER_IDS.indexOf(def.id) >= 0) ? Math.pow(L, 1.4) : L;
+    let factor;
+    if (def && ADVANCED_TIER_IDS.indexOf(def.id) >= 0) factor = Math.pow(L, 1.4);
+    else if (def && EARLY_TIER_IDS.indexOf(def.id) >= 0) factor = Math.pow(L, 1.3);
+    else factor = L;
     return scaleCost(def.cost || {}, factor);
   }
   function stepTime(def, toLevel) {

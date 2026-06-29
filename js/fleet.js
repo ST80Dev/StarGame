@@ -61,7 +61,13 @@
     intercettore: {
       id: 'intercettore', name: 'Intercettore', glyph: '➤',
       cost: { met: 35, en: 15 }, time: 14,
-      hp: 45, fp: 8, speed: 1.4, crew: 2, hangarLvl: 2, maintMet: 0.15
+      /* Bilanciamento 2026-06-27: hangarLvl 2→1. Sbloccare la prima nave
+         da combattimento "veloce" già con Hangar L1 rende l'early-fleet
+         (esploratore + caccia + intercettore) componibile senza dover
+         prima upgradare l'Hangar. La Corvetta resta a L2 → il salto a L2
+         dell'Hangar diventa una scelta di scalata (più hp/fp), non un
+         pedaggio per avere la prima nave veloce. */
+      hp: 45, fp: 8, speed: 1.4, crew: 2, hangarLvl: 1, maintMet: 0.15
     },
     corvetta: {
       id: 'corvetta', name: 'Corvetta', glyph: '◅',
@@ -391,13 +397,16 @@
   const VIVERI_CAP_MAX = 1500;
   /* Decisione utente 2026-06-11: la riserva di viaggio è a 4 risorse, con
      quantità tarate perché far partire/rifornire una flotta pesi davvero sul
-     bilancio della colonia (cibo/acqua sostentamento equipaggio; metalli
-     riparazioni; energia sistemi, in quota minore). Per Ι di autonomia,
-     per equipaggio. Pieno (250 Ι) per 8 equip ≈ 140/100/80/50. */
+     bilancio della colonia. Cibo/acqua/metalli scalano sull'EQUIPAGGIO
+     (sostentamento bocche + manutenzione). Decisione utente 2026-06-27:
+     l'ENERGIA scala invece sulla STAZZA della flotta (dockWeight), non
+     sull'equipaggio: è il carburante di propulsione → la vera autonomia di
+     viaggio delle navi. Una nave capitale (stazza 3/6/10) è assetata a
+     prescindere dall'equipaggio. Tassi per Ι di autonomia. */
   const VIVERI_RATE_FOOD = 0.07;   // food per equipaggio per Ι di autonomia
   const VIVERI_RATE_WATER = 0.05;  // acqua per equipaggio per Ι di autonomia
   const VIVERI_RATE_MET = 0.04;    // metalli per equipaggio per Ι (riparazioni)
-  const VIVERI_RATE_EN = 0.025;    // energia per equipaggio per Ι (sistemi, la più piccola)
+  const VIVERI_RATE_EN = 0.12;     // 2026-06-27: 0.025→0.12 e per STAZZA (non equip): propulsione = voce dominante
   const VIVERI_WARN = 60;          // soglia avviso (~25% del cap)
   const VIVERI_DRIFT_WEAR = 2;     // usura/Ι sulle navi in deriva (viveri a 0)
   /* Usura per Ι in transito (decisione utente 2026-06-16): sostituisce il
@@ -715,6 +724,57 @@
     }
   }
 
+  /* ------------------------------------------------------------------
+     Riserva scafi della colonia (richiesta utente 2026-06-26: simmetria
+     con colony.crews). Uno scafo che ATTRACCA conserva la propria identità
+     (id/hp/wear/xp/nome) invece di collassare in un counter fungibile.
+     `colony.shipReserve[kind]` = array di entità che "decora" il counter
+     colony.ships[kind] — invariante: shipReserve[kind].length ≤ ships[kind].
+     Gli scafi NUOVI da cantiere entrano solo nel counter (scafo vergine,
+     wear 0). Additivo/lazy: i save vecchi non hanno shipReserve → gli scafi
+     già a terra restano fungibili finché non riattraccano (non distruttivo,
+     niente bump di schema). Determinismo (#5): nessun RNG. */
+  function ensureColonyShipReserve(colony) {
+    if (!colony.shipReserve || typeof colony.shipReserve !== 'object') colony.shipReserve = {};
+    return colony.shipReserve;
+  }
+  /* Estrae UNA entità-scafo della classe dal porto, scalando il counter.
+     Preferisce un veterano dalla riserva (identità preservata); se vuota
+     materializza uno scafo vergine. Trim difensivo al counter (robusto a
+     decrementi esterni). Presuppone disponibilità già verificata. */
+  function takeColonyHull(game, colony, kind) {
+    const cls = CLASSES[kind];
+    if (!cls || (colony.ships[kind] || 0) <= 0) return null;
+    colony.ships[kind] -= 1;
+    const pool = ensureColonyShipReserve(colony)[kind];
+    if (Array.isArray(pool) && pool.length) {
+      /* mai più entità in riserva delle navi a terra (la +1 è quella presa). */
+      while (pool.length > colony.ships[kind] + 1) pool.shift();
+      if (pool.length) {
+        const e = pool.pop();
+        const out = { id: e.id || nextShipId(game), kind: kind,
+                      hp: (e.hp != null ? e.hp : cls.hp), wear: e.wear || 0 };
+        if (e.xp) out.xp = e.xp;
+        if (e.name) out.name = e.name;
+        return out;
+      }
+    }
+    return { id: nextShipId(game), kind: kind, hp: cls.hp, wear: 0 };
+  }
+  /* Deposita un'entità-scafo nel porto conservandone l'identità (incrementa
+     il counter + accoda alla riserva). Simmetrico a takeColonyHull. */
+  function putColonyHull(colony, ship) {
+    if (!ship || !ship.kind || !CLASSES[ship.kind]) return;
+    ensureColonyShipKinds(colony);
+    colony.ships[ship.kind] = (colony.ships[ship.kind] || 0) + 1;
+    const reserve = ensureColonyShipReserve(colony);
+    if (!Array.isArray(reserve[ship.kind])) reserve[ship.kind] = [];
+    const e = { id: ship.id, kind: ship.kind, hp: ship.hp, wear: ship.wear || 0 };
+    if (ship.xp) e.xp = ship.xp;
+    if (ship.name) e.name = ship.name;
+    reserve[ship.kind].push(e);
+  }
+
   /* assignShips — sposta `count` navi di una classe dal counter colonia
      all'array della flotta come entità individuali. La colonia deve
      essere nel sistema della flotta e la flotta `docked`. */
@@ -736,14 +796,12 @@
     if ((colony.ships[kind] || 0) < count) {
       return { ok: false, reason: 'Navi disponibili insufficienti' };
     }
-    colony.ships[kind] -= count;
     for (let i = 0; i < count; i++) {
-      fleet.ships.push({
-        id: nextShipId(game),
-        kind: kind,
-        hp: cls.hp,
-        wear: 0
-      });
+      /* preferisce un veterano dalla riserva (id/hp/wear/xp/nome) → identità
+         persistente anche dopo un attracco; altrimenti scafo vergine. */
+      const hull = takeColonyHull(game, colony, kind);
+      if (!hull) break;   // sicurezza: disponibilità già verificata sopra
+      fleet.ships.push(hull);
     }
     return { ok: true };
   }
@@ -762,10 +820,11 @@
     return ship;
   }
 
-  /* unassignShips — riporta `count` navi della classe dalla flotta al
-     counter colonia. La flotta deve essere `docked` nel sistema della
-     colonia. Le entità rimosse perdono la propria identità (intercambiabili
-     a terra) — coerente col misto counter/entità. */
+  /* unassignShips — riporta `count` navi della classe dalla flotta al porto
+     colonia. La flotta deve essere `docked` nel sistema della colonia. Le
+     entità rimosse CONSERVANO la propria identità (id/hp/wear/xp/nome) nella
+     riserva del porto (simmetria con gli equipaggi) — riemergono identiche
+     al prossimo assignShips. */
   function unassignShips(game, fleet, colonyKey, kind, count) {
     if (!fleet) return { ok: false, reason: 'Flotta inesistente' };
     if (!CLASSES[kind]) return { ok: false, reason: 'Classe nave sconosciuta' };
@@ -779,13 +838,11 @@
     let removed = 0;
     for (let i = fleet.ships.length - 1; i >= 0 && removed < count; i--) {
       if (fleet.ships[i].kind === kind) {
-        fleet.ships.splice(i, 1);
+        putColonyHull(colony, fleet.ships.splice(i, 1)[0]);
         removed++;
       }
     }
     if (removed === 0) return { ok: false, reason: 'Nessuna nave di quella classe in flotta' };
-    ensureColonyShipKinds(colony);
-    colony.ships[kind] = (colony.ships[kind] || 0) + removed;
     return { ok: true, returned: removed };
   }
 
@@ -943,11 +1000,10 @@
     if (!colony) {
       return { ok: false, reason: 'La flotta deve essere ormeggiata a una tua colonia per essere sciolta.' };
     }
-    /* Restituisci navi al counter colonia per classe. */
+    /* Restituisci navi al porto colonia conservandone l'identità (riserva). */
     ensureColonyShipKinds(colony);
     for (let i = 0; i < fleet.ships.length; i++) {
-      const s = fleet.ships[i];
-      colony.ships[s.kind] = (colony.ships[s.kind] || 0) + 1;
+      putColonyHull(colony, fleet.ships[i]);
     }
     /* Restituisci equipaggi. */
     if (!colony.crews) colony.crews = { explorer: [] };
@@ -1754,6 +1810,14 @@
     /* Decisione #69: in deriva (viveri esauriti) la flotta arranca — i leg
        successivi durano di più (razionamento). */
     if (fleet._drift && (fleet.viveri || 0) <= 0) t = Math.max(1, t * VIVERI_DRIFT_SLOW);
+    /* Campo di prossimità FSP (richiesta utente 2026-06-29, §17.7.4): se il leg
+       tocca la zona di un Fenomeno di Spazio Profondo (entro 1 hop dall'aggancio),
+       la traversata rallenta o accelera. Lieve e cappato; opaco al giocatore.
+       Stora il `legTotal` post-modificatori così il renderer interpola corretto. */
+    if (ORION.phenomena && ORION.phenomena.legField) {
+      const fld = ORION.phenomena.legField(galaxy, from, toSys);
+      if (fld && fld.dragMul && fld.dragMul !== 1) t = Math.max(1, Math.round(t * fld.dragMul));
+    }
     /* Fix bug renderer (decisione di sessione): stora il `legTotal`
        effettivo (post-modificatori comandante/deriva/incidenti) così il
        renderer in `_drawFleets` può interpolare correttamente la posizione
@@ -1796,6 +1860,12 @@
     }
     if (ORION.cohesion && ORION.cohesion.expeditionRiskBonus && fleet.orders && fleet.orders.toSysId != null) {
       c += ORION.cohesion.expeditionRiskBonus(game, fleet.orders.toSysId);
+    }
+    /* Campo di prossimità FSP (richiesta utente 2026-06-29, §17.7.4): i
+       Fenomeni gravitazionali lungo la rotta deformano i viaggi → +rischio
+       incidente. Effetto di rotta (un FSP conta una volta), cappato. */
+    if (ORION.phenomena && ORION.phenomena.routeIncident) {
+      c += ORION.phenomena.routeIncident(game.galaxy, fleet.route);
     }
     return Math.max(0, Math.min(INCIDENT_RISK_MAX, c));
   }
@@ -1947,9 +2017,10 @@
     if (civ && (civ.relation === 'peace' || civ.relation === 'truce')) return civ;
     return null;
   }
-  /* Rifornisce al cap. A una tua colonia addebita food/acqua dallo stock
-     (parziale se a corto, recovery-friendly); porto alleato = gratis. Costo
-     di 1 Ι di autonomia = equipaggio × (RATE_FOOD + RATE_WATER). */
+  /* Rifornisce al cap. A una tua colonia addebita cibo/acqua/metalli (su
+     equipaggio) + energia (su stazza) dallo stock — parziale se a corto,
+     recovery-friendly; porto alleato = gratis. Ritorna l'autonomia (Ι)
+     effettivamente caricata. */
   function loadViveriAtPort(game, fleet) {
     const cap = viveriCapOf(fleet);
     const cur = viveriOf(fleet);
@@ -1970,25 +2041,72 @@
     }
     if (colony && colony.stock) {
       /* Riserva a 4 risorse: per ogni Ι di autonomia attinge cibo/acqua
-         (sostentamento) + metalli/energia (riparazioni/sistemi, quota
-         minore) dallo stock della colonia. La frazione caricabile è
-         limitata dalla risorsa più scarsa (recovery-friendly: carica
-         parziale, autonomia ridotta, mai un blocco). */
+         (sostentamento) + metalli (riparazioni) + energia (propulsione,
+         ora voce dominante) dallo stock della colonia. La frazione
+         caricabile è limitata dalla risorsa più scarsa (recovery-friendly:
+         carica parziale, autonomia ridotta, mai un blocco).
+         Base di scaling per risorsa (decisione utente 2026-06-27): cibo/acqua/
+         metalli sull'equipaggio (bocche + manutenzione), energia sulla STAZZA
+         (propulsione = autonomia di viaggio). */
+      const mass = Math.max(1, dockWeightOfFleet(fleet));
+      const base = { food: crew, water: crew, met: crew, en: mass };
       const rate = { food: VIVERI_RATE_FOOD, water: VIVERI_RATE_WATER, met: VIVERI_RATE_MET, en: VIVERI_RATE_EN };
       let frac = 1;
       Object.keys(rate).forEach(function (k) {
-        const per = crew * rate[k];
+        const per = base[k] * rate[k];
         const have = colony.stock[k] || 0;
         if (per * fillI > have && per > 0) frac = Math.min(frac, have / (per * fillI));
       });
       if (frac < 1) fillI = Math.floor(fillI * frac);
       if (fillI <= 0) return 0;
       Object.keys(rate).forEach(function (k) {
-        colony.stock[k] = Math.max(0, (colony.stock[k] || 0) - crew * rate[k] * fillI);
+        colony.stock[k] = Math.max(0, (colony.stock[k] || 0) - base[k] * rate[k] * fillI);
       });
     }
     fleet.viveri = cur + fillI;
     return fillI;
+  }
+  /* UI helper (#69 follow-up, feedback utente 2026-06-29): stima il pieno
+     caricabile da una colonia data crew + stazza, SENZA mutare nulla. Mirror
+     della logica di carico in loadViveriAtPort, esposto perché lo slider di
+     creazione/dettaglio possa (a) bloccarsi al cap che esaurisce la prima
+     risorsa e (b) mostrare sulla stessa riga lo stock residuo per risorsa.
+       colony      — colonia origine (con .stock); null/no-stock → nessun tetto
+       crew, mass  — equipaggio e stazza della flotta (bozza o esistente)
+       fromViveri  — autonomia già a bordo (0 in creazione)
+       cap         — autonomia bersaglio scelta sullo slider
+     Ritorna { maxCap, fillI, cost, remaining, limiting, hasStock } dove maxCap
+     è l'autonomia massima (Ι) raggiungibile senza esaurire risorse, cost/
+     remaining sono mappe per risorsa per il pieno fino a min(cap, maxCap), e
+     limiting è la risorsa collo di bottiglia (null se nessuna). */
+  function viveriFillEstimate(colony, crew, mass, fromViveri, cap) {
+    crew = Math.max(1, crew | 0);
+    mass = Math.max(1, mass | 0);
+    fromViveri = Math.max(0, fromViveri || 0);
+    cap = Math.max(0, cap || 0);
+    const base = { food: crew, water: crew, met: crew, en: mass };
+    const rate = { food: VIVERI_RATE_FOOD, water: VIVERI_RATE_WATER, met: VIVERI_RATE_MET, en: VIVERI_RATE_EN };
+    const stock = (colony && colony.stock) ? colony.stock : null;
+    /* Autonomia massima caricabile: la risorsa più scarsa fissa il tetto. */
+    let maxFill = Infinity, limiting = null;
+    if (stock) {
+      Object.keys(rate).forEach(function (k) {
+        const per = base[k] * rate[k];
+        if (per <= 0) return;
+        const f = (stock[k] || 0) / per;
+        if (f < maxFill) { maxFill = f; limiting = k; }
+      });
+    }
+    const maxCap = (maxFill === Infinity) ? VIVERI_CAP_MAX
+      : Math.max(0, Math.min(VIVERI_CAP_MAX, Math.floor(fromViveri + maxFill)));
+    const fillI = Math.max(0, Math.min(cap, maxCap) - fromViveri);
+    const cost = {}, remaining = {};
+    Object.keys(rate).forEach(function (k) {
+      const c = base[k] * rate[k] * fillI;
+      cost[k] = c;
+      remaining[k] = stock ? Math.max(0, Math.floor((stock[k] || 0) - c)) : null;
+    });
+    return { maxCap: maxCap, fillI: fillI, cost: cost, remaining: remaining, limiting: limiting, hasStock: !!stock };
   }
   /* Colonia più vicina (origine se viva, altrimenti BFS minima) — meta del
      rientro forzato in deriva. null in esilio (nessuna colonia → la flotta
@@ -2073,7 +2191,15 @@
     if (!Array.isArray(fleet.ships) || !fleet.ships.length) return;
     const sys = game.galaxy && game.galaxy.systems && game.galaxy.systems[fleet.location.systemId];
     const danger = sys ? Math.max(0, Math.min(1, (sys.danger || 0) / 100)) : 0;
-    const w = WEAR_TRANSIT_BASE * (1 + danger);
+    let w = WEAR_TRANSIT_BASE * (1 + danger);
+    /* Campo di prossimità FSP (richiesta utente 2026-06-29, §17.7.4): vicino a
+       certi Fenomeni le navi si logorano di più (hazard) o di meno (boon, es.
+       una struttura-riparo). Lieve e cappato; modula il drip per-Ι. */
+    if (ORION.phenomena && ORION.phenomena.legField) {
+      const toSys = Array.isArray(fleet.route) ? fleet.route[(fleet.routeIdx || 0) + 1] : null;
+      const fld = ORION.phenomena.legField(game.galaxy, fleet.location.systemId, toSys);
+      if (fld && fld.wearMul) w *= fld.wearMul;
+    }
     for (let i = 0; i < fleet.ships.length; i++) {
       fleet.ships[i].wear = Math.min(100, (fleet.ships[i].wear || 0) + w);
     }
@@ -2326,6 +2452,14 @@
        tutte le classi, scalato sul danger del sistema. Sostituisce il lump-sum
        all'arrivo dell'esploratore (rimosso più sotto). */
     applyTransitWear(game, fleet);
+    /* Campo di prossimità FSP (richiesta utente 2026-06-29): se la flotta sta
+       attraversando la zona di un Fenomeno non ancora classificato, un nudge
+       opaco in Cronaca spinge a indagarlo ("si impara giocando", §17.7.1). */
+    if (fleet.location && fleet.location.status === 'in-transit' && !fleet.location.intra &&
+        ORION.phenomena && ORION.phenomena.noteAmbientFelt) {
+      const toSys = Array.isArray(fleet.route) ? fleet.route[(fleet.routeIdx || 0) + 1] : null;
+      ORION.phenomena.noteAmbientFelt(game, fleet, fleet.location.systemId, toSys, events);
+    }
     if (fleet.orders.type === 'idle') {
       /* Stadio 1.4: la flotta è "settled" (fine di uno step non continuativo).
          Se c'è una coda, applica il prossimo step (M1→M2→azione). Gli ordini
@@ -2674,10 +2808,9 @@
         if (!colony.crews) colony.crews = { explorer: [] };
         if (!Array.isArray(colony.crews.explorer)) colony.crews.explorer = [];
         colony.crews.explorer.push(newCrew);
-        /* Restituisci scafo solo se non perso. */
+        /* Restituisci scafo solo se non perso, conservandone l'identità. */
         if (!shipLost) {
-          if (!colony.ships) colony.ships = {};
-          colony.ships.explorer = (colony.ships.explorer || 0) + 1;
+          putColonyHull(colony, ship);
         } else {
           events.push({
             kind: 'fleet-ship-lost',
@@ -3310,9 +3443,71 @@
   }
   function clearQueue(fleet) { if (fleet) fleet.queue = []; }
 
+  /* =====================================================================
+     Visual per classe nave su CANVAS (mappa/sistema, richiesta utente
+     2026-06-26). Specchio di SHIP_VIS in main.js ma con colore esadecimale
+     (il canvas non eredita dalle classi CSS .ui-icon--<tone>). Le tinte
+     seguono UI_GUIDE §1 per ruolo. */
+  const CLASS_ICON = {
+    explorer:     { icon: 'shipExplorer',     hex: '#2fe6e0' },
+    estrattore:   { icon: 'shipEstrattore',   hex: '#80c8e6' },
+    caccia:       { icon: 'shipCaccia',       hex: '#f0d670' },
+    intercettore: { icon: 'shipIntercettore', hex: '#f0a868' },
+    corvetta:     { icon: 'shipCorvetta',     hex: '#f08296' },
+    fregata:      { icon: 'shipFregata',      hex: '#b89cff' },
+    coloniale:    { icon: 'shipColoniale',    hex: '#6fe0b8' },
+    incrociatore: { icon: 'shipIncrociatore', hex: '#f08296' },
+    dreadnought:  { icon: 'shipDreadnought',  hex: '#f08296' },
+    ammiraglia:   { icon: 'shipAmmiraglia',   hex: '#f0d670' }
+  };
+  function classVisual(kind) {
+    const v = CLASS_ICON[kind];
+    const c = CLASSES[kind] || {};
+    return {
+      icon: v ? v.icon : null,
+      hex:  v ? v.hex : '#98a3c8',
+      glyph: c.glyph || '◈',
+      name: c.name || kind
+    };
+  }
+  /* Composizione di una flotta: conteggio per classe, ordinata per "forza"
+     (potenza di fuoco poi corazza) decrescente. Deterministica (tie-break
+     per kind). Usata per la scomposizione in icone+numero su mappa/sistema
+     e per l'icona singola della nave di punta a basso zoom. */
+  function composition(fleet) {
+    if (!fleet || !Array.isArray(fleet.ships)) return [];
+    const by = {};
+    for (let i = 0; i < fleet.ships.length; i++) {
+      const k = fleet.ships[i].kind; if (!k) continue;
+      by[k] = (by[k] || 0) + 1;
+    }
+    const arr = Object.keys(by).map(function (k) {
+      const c = CLASSES[k] || {};
+      return { kind: k, n: by[k], fp: c.fp || 0, hp: c.hp || 0 };
+    });
+    arr.sort(function (a, b) {
+      if (b.fp !== a.fp) return b.fp - a.fp;
+      if (b.hp !== a.hp) return b.hp - a.hp;
+      return a.kind < b.kind ? -1 : (a.kind > b.kind ? 1 : 0);
+    });
+    return arr;
+  }
+  /* Classe "di punta" (più forte) della flotta — per l'icona singola
+     a basso zoom sulla mappa. */
+  function leadKind(fleet) {
+    const c = composition(fleet);
+    return c.length ? c[0].kind : null;
+  }
+
   ORION.fleet = {
     CLASSES: CLASSES,
     CLASS_ORDER: CLASS_ORDER,
+    CLASS_ICON: CLASS_ICON,
+    classVisual: classVisual,
+    composition: composition,
+    leadKind: leadKind,
+    classList: classList,
+    getClass: getClass,
     classList: classList,
     getClass: getClass,
     computePath: computePath,
@@ -3405,6 +3600,8 @@
     viveriStatus: viveriStatus,
     fleetAtFriendlyPort: fleetAtFriendlyPort,
     loadViveriAtPort: loadViveriAtPort,
+    viveriFillEstimate: viveriFillEstimate,
+    ownColonyAt: ownColonyAt,
     routeImpulsi: routeImpulsi,
     viveriNextEventDelta: viveriNextEventDelta,
     /* Spostamento intra-sistema (decisione utente): stima Ι corpo→corpo. */

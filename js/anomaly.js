@@ -32,7 +32,15 @@
 
   const CFG = {
     HARVEST_RATE: 0.6,    // risorse/Ι base con esploratore (legacy)
-    REGEN: 0.15,          // rigenerazione/Ι della riserva quando idle
+    /* Decisione utente 2026-06-27: rigenerazione velocizzata 0.15 → 1.0/Ι, e
+       ora VALIDA ANCHE durante l'estrazione (vedi tick). Vale per TUTTI i siti
+       harvest (energia: nebulosa/gassoso; metallo: detriti/cintura). Motivo:
+       con la regen vecchia (solo a sito idle) un estrattore parcheggiato
+       prosciugava il sito e il netto sostenibile crollava a ~0 — peggio ancora
+       sull'energia, dove la flotta in orbita costa viveri (energia su stazza).
+       Con regen continua il sito raggiunge un equilibrio ≈ regen, rendendo
+       l'estrazione un supplemento reale invece di un burst una-tantum. */
+    REGEN: 1.0,           // rigenerazione/Ι della riserva (continua, anche in harvest)
     RELIC_HOLD: 40,       // Ι di presenza per esplorare una reliquia
     RELIC_REWARD: { met: 220, en: 130 },
     LOW_FRAC: 0.15,       // soglia "riserva quasi esaurita" (evento una volta)
@@ -41,11 +49,13 @@
        sul posto a lungo. Calibrazione target: ~1000 Ι di harvest continuo
        producono ~30% wear, lasciando margine per più cicli prima del refit. */
     WEAR_SURVEY_BASE: 0.03,
-    /* Estrattore: rate base + bonus per livello Hangar della colonia origine
-       (richiesta utente 2026-06-16). lvl1=0.6 · lvl2=0.8 · lvl3=1.0 · lvl4=1.2
-       · lvl5=1.4. Calcolato come EXTRACTOR_RATE_BASE + EXTRACTOR_RATE_PER_LVL * (lvl-1). */
-    EXTRACTOR_RATE_BASE: 0.6,
-    EXTRACTOR_RATE_PER_LVL: 0.2,
+    /* Estrattore: rate base + bonus per livello Hangar della colonia origine.
+       Decisione utente 2026-06-27: drenaggio alzato (0.6/0.2 → 1.0/0.3) così il
+       burst è più veloce e il netto supera nettamente il costo viveri della
+       flotta in orbita. lvl1=1.0 · lvl2=1.3 · lvl3=1.6 · lvl4=1.9 · lvl5=2.2.
+       Calcolato come EXTRACTOR_RATE_BASE + EXTRACTOR_RATE_PER_LVL * (lvl-1). */
+    EXTRACTOR_RATE_BASE: 1.0,
+    EXTRACTOR_RATE_PER_LVL: 0.3,
     /* XP equipaggio durante harvest: +1 ogni N Ι di drenaggio effettivo. */
     SURVEY_XP_EVERY: 40
   };
@@ -206,19 +216,67 @@
     return null;
   }
 
-  /* Colonia su cui depositare il raccolto: origine della flotta, altrimenti
-     fallback (capitale/prima colonia via dispatch). */
-  function depositColonyKey(game, fleet) {
+  /* Colonia su cui depositare il raccolto (decisione utente 2026-06-20):
+     **colonia attiva più vicina al sito** in distanza-hop sui collegamenti
+     di galassia. Il giocatore può poi usare le rotte commerciali per
+     spostare le risorse altrove. Fallback: origine della flotta →
+     capitale/prima colonia colonizzata. BFS limitato ai sistemi del
+     grafo (niente vincolo discovery: il giacimento è "stato scoperto"
+     altrimenti la flotta non lo starebbe drenando). */
+  function nearestActiveColonyKey(game, sysId) {
+    if (!game || !game.colonies || !game.galaxy || !game.galaxy.systems) return null;
+    /* Indicizza colonie per sistema (solo quelle effettivamente colonizzate). */
+    const bySys = {};
+    Object.keys(game.colonies).forEach(function (k) {
+      const c = game.colonies[k];
+      if (!c || !c.colonized) return;
+      (bySys[c.systemId] = bySys[c.systemId] || []).push(k);
+    });
+    /* BFS sui link di galassia partendo dal sistema del sito. */
+    const seen = {}; seen[sysId] = 0;
+    const queue = [sysId];
+    while (queue.length) {
+      const u = queue.shift();
+      if (bySys[u]) return bySys[u][0];
+      const sys = game.galaxy.systems[u];
+      const links = (sys && sys.links) || [];
+      for (let i = 0; i < links.length; i++) {
+        const v = links[i];
+        if (seen[v] != null) continue;
+        seen[v] = seen[u] + 1;
+        queue.push(v);
+      }
+    }
+    return null;
+  }
+  function depositColonyKey(game, fleet, site) {
+    /* 1) Colonia attiva più vicina al sito (priorità nuova). Se non
+       conosciamo il `site`, lo cerchiamo via reverse-lookup sulla flotta
+       (caso raro: chiamanti vecchi). */
+    let s = site;
+    if (!s && fleet && game.anomalies) {
+      const ks = Object.keys(game.anomalies);
+      for (let i = 0; i < ks.length; i++) {
+        const cand = game.anomalies[ks[i]];
+        if (fleetSurveyingSite(game, cand.sysId, cand.kind, cand.bodyKey) === fleet) { s = cand; break; }
+      }
+    }
+    if (s) {
+      const near = nearestActiveColonyKey(game, s.sysId);
+      if (near) return near;
+    }
+    /* 2) Fallback: colonia d'origine della flotta. */
     const ok = fleet && fleet.ownerColonyKey;
     if (ok && game.colonies[ok] && game.colonies[ok].colonized) return ok;
+    /* 3) Fallback estremo: dispatch o prima colonia colonizzata. */
     if (ORION.dispatch && ORION.dispatch.payColonyKey) return ORION.dispatch.payColonyKey(game);
     const keys = Object.keys(game.colonies || {});
     for (let i = 0; i < keys.length; i++) if (game.colonies[keys[i]].colonized) return keys[i];
     return null;
   }
 
-  function deposit(game, fleet, res, amt) {
-    const k = depositColonyKey(game, fleet);
+  function deposit(game, fleet, res, amt, site) {
+    const k = depositColonyKey(game, fleet, site);
     const col = k && game.colonies[k];
     if (col && col.stock) col.stock[res] = (col.stock[res] || 0) + amt;
   }
@@ -303,7 +361,7 @@
           site.progress = (site.progress || 0) + 1;
           if (site.progress >= CFG.RELIC_HOLD) {
             site.explored = true;
-            const colKey = depositColonyKey(game, fleet);
+            const colKey = depositColonyKey(game, fleet, site);
             const col = colKey && game.colonies[colKey];
             if (col && col.stock) {
               Object.keys(CFG.RELIC_REWARD).forEach(function (r) { col.stock[r] = (col.stock[r] || 0) + CFG.RELIC_REWARD[r]; });
@@ -318,11 +376,20 @@
         }
         continue;
       }
+      /* Rigenerazione CONTINUA (decisione utente 2026-06-27): la riserva si
+         ricostituisce sempre, anche mentre una flotta estrae. A regime, se il
+         drenaggio ≥ regen, il sito si stabilizza erogando ≈ regen/Ι in modo
+         sostenibile (più il burst iniziale fino a `cap`). Vale per energia e
+         metallo. Idempotente, deterministico (nessun RNG). */
+      if (site.reserve < site.cap) {
+        site.reserve = Math.min(site.cap, site.reserve + CFG.REGEN);
+        if (site.lowFlag && site.reserve > site.cap * CFG.LOW_FRAC * 2) site.lowFlag = false;
+      }
       /* Raccolta ricorrente. */
       if (fleet && site.reserve > 0) {
         const rate = harvestRateFor(game, fleet);
         const take = Math.min(rate, site.reserve);
-        deposit(game, fleet, site.res, take);
+        deposit(game, fleet, site.res, take, site);
         site.reserve -= take;
         site.harvested = (site.harvested || 0) + take;
         /* Usura/XP per Ι in survey (decisione utente 2026-06-16): le navi che
@@ -341,10 +408,9 @@
               sysId: site.sysId, impulso: game.timeImpulsi });
           }
         }
-      } else if (!fleet && site.reserve < site.cap) {
-        site.reserve = Math.min(site.cap, site.reserve + CFG.REGEN);
-        if (site.lowFlag && site.reserve > site.cap * CFG.LOW_FRAC * 2) site.lowFlag = false;
       }
+      /* (la rigenerazione idle del vecchio ramo `else` è ora coperta dalla
+         regen continua in cima al blocco, valida con o senza flotta.) */
     }
   }
 
@@ -369,16 +435,57 @@
     return Object.keys(game.anomalies).map(function (k) {
       const s = game.anomalies[k];
       const sys = game.galaxy.systems[s.sysId];
+      /* Fix display 2026-06-27: il rate mostrato in UI era CFG.HARVEST_RATE
+         statico (0.6) per OGNI sito → sembrava che l'estrazione fosse sempre
+         0.6/Ι a prescindere da nave e Hangar. Ora riflette la flotta reale che
+         drena: Estrattore scala con l'Hangar d'origine (1.0→2.2), Esploratore
+         resta al fallback 0.6. `harvestRate` è il deposito EFFETTIVO per Ι
+         (cappato dalla riserva+regen: a sito esaurito converge alla regen
+         sostenibile); `harvestRateGross` è la capacità lorda della flotta. */
+      const fleet = fleetSurveyingSite(game, s.sysId, s.kind, s.bodyKey);
+      const grossRate = fleet ? harvestRateFor(game, fleet) : 0;
+      const effRate = fleet
+        ? Math.round(Math.min(grossRate, (s.reserve || 0) + CFG.REGEN) * 10) / 10
+        : CFG.HARVEST_RATE;
       return {
         key: k, sysId: s.sysId, sysName: sys ? sys.name : '—', kind: s.kind,
         bodyKey: s.bodyKey || null,
         res: s.res || null, reserve: s.reserve, cap: s.cap,
         explored: !!s.explored, progress: s.progress || 0, loot: s.loot || null,
         harvested: s.harvested || 0,
-        harvestRate: CFG.HARVEST_RATE,
-        harvesting: !!fleetSurveyingSite(game, s.sysId, s.kind, s.bodyKey)
+        harvestRate: effRate,
+        harvestRateGross: grossRate,
+        harvesting: !!fleet
       };
     });
+  }
+
+  /* Surplus estrattivo per colonia (in capo all'origine della flotta che
+     drena, NON alla colonia più vicina al sito). Ritorna una mappa
+     { [colKey]: { met, en, sitesMet, sitesEn, fleets, total } } usata
+     dalla UI (vista Anomalie & sfruttamenti + scheda risorse colonia)
+     per mostrare in modo esplicito da dove vengono i +X met/Ι extra.
+     Stesso calcolo di `tick`: harvestRateFor (scala con Hangar) sul lato
+     attivo del sito, cappato da reserve. */
+  function harvestByColony(game) {
+    const out = {};
+    if (!game || !game.anomalies) return out;
+    Object.keys(game.anomalies).forEach(function (k) {
+      const s = game.anomalies[k];
+      if (!s || s.kind === 'reliquie' || !(s.reserve > 0)) return;
+      const fleet = fleetSurveyingSite(game, s.sysId, s.kind, s.bodyKey);
+      if (!fleet) return;
+      const colKey = depositColonyKey(game, fleet, s);
+      if (!colKey) return;
+      const rate = Math.min(harvestRateFor(game, fleet), s.reserve);
+      if (rate <= 0) return;
+      const slot = out[colKey] = out[colKey] || { met: 0, en: 0, sitesMet: 0, sitesEn: 0, fleets: 0, total: 0 };
+      slot.fleets += 1;
+      slot.total  += rate;
+      if (s.res === 'met') { slot.met += rate; slot.sitesMet += 1; }
+      else if (s.res === 'en') { slot.en += rate; slot.sitesEn += 1; }
+    });
+    return out;
   }
 
   ORION.anomaly = {
@@ -389,6 +496,7 @@
     tick: tick,
     nextEventDelta: nextEventDelta,
     knownSites: knownSites,
+    harvestByColony: harvestByColony,
     bodyGiacimento: bodyGiacimento
   };
 })(typeof window !== 'undefined' ? window : this);

@@ -55,10 +55,29 @@
     SCOUT_CHANCE: 0.40,     // prob. che una missione punti verso il giocatore
     SCOUT_MAX_HOPS: 11,     // budget rotta più ampio per raggiungerti
 
-    /* Sensori. */
+    /* Sensori. Portata (in hop) differenziata per fonte (richiesta utente
+       2026-06-26): la CAPITALE ha la rete più estesa, una colonia normale è
+       più corta, una colonia ancora in insediamento copre solo il proprio
+       sistema, e una stazione operativa fa da avamposto-radar leggero. Così
+       per avere visuale lontana non si è più costretti a "una colonia ogni 2
+       hop". */
     COLONY_SENSOR: 0.62,    // potenza rilevamento passiva di una colonia
     COLONY_RANGE_FALLOFF: 0.55, // copertura sui sistemi adiacenti (1° anello)
     COLONY_RANGE2_FALLOFF: 0.30, // copertura sul 2° anello (2 hop, più debole)
+    CAPITAL_RANGE: 2,       // hop coperti dalla CAPITALE (rete estesa)
+    COLONY_RANGE: 1,        // hop coperti da una colonia normale operativa
+    /* Stazione come AVAMPOSTO-RADAR a livelli (richiesta utente 2026-06-26):
+       portata e potenza crescono col livello → investi su un avamposto lontano
+       per la visuale, invece di colonizzare ogni 2 hop. Indice = livello (1..4).
+       L1-2 = 1 hop · L3-4 = 2 hop · potenza che sale fino alla pari di una
+       colonia. */
+    STATION_SENSOR_BY_LEVEL: [
+      null,                       // 0: non operativa
+      { power: 0.50, range: 1 },  // L1
+      { power: 0.52, range: 1 },  // L2
+      { power: 0.56, range: 2 },  // L3
+      { power: 0.62, range: 2 }   // L4
+    ],
     /* Sensori di FLOTTA (mobili): raggio < colonia e tarato sul tipo di navi
        (richiesta utente 2026-06-19). Una flotta vede SEMPRE il proprio
        sistema (incrocio/co-locazione); solo gli scafi da ricognizione
@@ -67,7 +86,13 @@
     FLEET_RING_FALLOFF: 0.45,
     CONTACT_PERSIST_I: 32,  // un contatto resta "ultimo avvistamento" dopo l'uscita dai sensori
     DETECT_BASE: 0.22,      // offset prob. rilevamento
-    INTEL_GAIN: 0.16,       // crescita intel/Impulso in copertura
+    /* Crescita intel/Impulso in copertura. Tarato lento di proposito
+       (richiesta utente 2026-06-26): il radar dà presenza/numero, ma la
+       COMPOSIZIONE piena (classi) deve costare permanenza vera. Scala
+       linearmente con la copertura `best` (vedi detect()), così i passaggi
+       al bordo rampano lentissimi e alcune flotte sfuggono senza essere
+       inquadrate (2 hop e via). Pedinamento/ispezione restano rapidi. */
+    INTEL_GAIN: 0.04,       // era 0.16
     INTEL_PARTIAL: 0.45,    // soglia: stima composizione
     INTEL_FULL: 0.85,       // soglia: identità della civ svelata
 
@@ -162,8 +187,17 @@
     return fp;
   }
   function legEta(game, fromId, toId, minSpeed) {
-    if (ORION.fleet && ORION.fleet.tempoLeg) return ORION.fleet.tempoLeg(game.galaxy, fromId, toId, minSpeed);
-    return 50;
+    let t = (ORION.fleet && ORION.fleet.tempoLeg)
+      ? ORION.fleet.tempoLeg(game.galaxy, fromId, toId, minSpeed) : 50;
+    /* Campo di prossimità FSP (richiesta utente 2026-06-29, §17.7.4): il
+       rallentamento/accelerazione vale anche per le flottiglie ambientali AI
+       ("legge fisica" simmetrica). Usura/viveri non sono modellati per queste
+       flotte leggere → applichiamo solo il canale di viaggio (drag). */
+    if (ORION.phenomena && ORION.phenomena.legField) {
+      const fld = ORION.phenomena.legField(game.galaxy, fromId, toId);
+      if (fld && fld.dragMul && fld.dragMul !== 1) t = Math.max(1, Math.round(t * fld.dragMul));
+    }
+    return t;
   }
   function path(game, fromId, toId) {
     if (ORION.fleet && ORION.fleet.computePath) return ORION.fleet.computePath(game.galaxy, fromId, toId);
@@ -379,6 +413,11 @@
   }
 
   function advanceFleet(game, af, events) {
+    /* Transito-attraverso: una flotta in volo NON è "a" un nodo (è in
+       iperspazio sulla corsia). Solo nell'Impulso in cui TRANSITA un nodo
+       intermedio della rotta la consideriamo momentaneamente lì, per gli
+       incroci a nodo. Resettato a ogni avanzamento. */
+    af._passThrough = null;
     if (af.status === 'orbiting') {
       af.lingerLeft -= 1;
       if (af.lingerLeft > 0) return true;
@@ -409,6 +448,11 @@
       af.lingerLeft = lr.int(CFG.LINGER_MIN, CFG.LINGER_MAX);
       return true;
     }
+    /* Arrivo a un nodo INTERMEDIO: la flotta lo transita in questo Impulso
+       (poi riparte sulla leg successiva). Marca il pass-through così un
+       incrocio a nodo è possibile solo nell'istante del transito reale, non
+       per tutta la durata della leg. */
+    af._passThrough = af.route[af.routeIdx];
     startLeg(game, af);
     return true;
   }
@@ -416,22 +460,74 @@
   /* ------------------------------------------------------------------
      SENSORI / RILEVAMENTO
      ------------------------------------------------------------------ */
+  /* Diffonde la copertura di UNA fonte (colonia/stazione) dal suo sistema
+     fino a `range` hop, con attenuazione per anello (1°/2°). range 0 = solo
+     il proprio sistema. */
+  function spreadCoverage(game, bump, sysId, power, range) {
+    bump(sysId, power);
+    if (range < 1) return;
+    const nb1 = neighborsOf(game, sysId);
+    for (let i = 0; i < nb1.length; i++) {
+      bump(nb1[i], power * CFG.COLONY_RANGE_FALLOFF);
+      if (range < 2) continue;
+      const nb2 = neighborsOf(game, nb1[i]);
+      for (let j = 0; j < nb2.length; j++) bump(nb2[j], power * CFG.COLONY_RANGE2_FALLOFF);
+    }
+  }
+  function isCapitalKey(game, colonyKey) {
+    return !!(ORION.capital && ORION.capital.isCapital && ORION.capital.isCapital(game, colonyKey));
+  }
+  function stationSensorOf(level) {
+    const tbl = CFG.STATION_SENSOR_BY_LEVEL;
+    const lvl = Math.max(1, Math.min(tbl.length - 1, level || 1));
+    return tbl[lvl] || tbl[1];
+  }
+  /* Bonus globali dalla ricerca (richiesta utente 2026-06-26): potenza +X% e
+     +N hop a TUTTE le fonti infrastrutturali. Il +hop estende solo le fonti
+     che già rilevano (range ≥ 1): una colonia in insediamento resta sul
+     proprio sistema. */
+  function researchSensorBonus(game) {
+    const m = (ORION.research && ORION.research.mods) ? ORION.research.mods(game) : null;
+    return {
+      powerMul: m ? (m.sensorPowerMul || 1) : 1,
+      rangeBonus: m ? (m.sensorRangeBonus || 0) : 0
+    };
+  }
+  function extendRange(baseRange, rangeBonus) {
+    return baseRange > 0 ? baseRange + rangeBonus : 0;
+  }
   /* Mappa di copertura sensori del giocatore: sysId → potenza [0..1.2]. */
   function buildCoverage(game) {
     const cov = {};
     function bump(sysId, p) { if (sysId != null && (cov[sysId] == null || cov[sysId] < p)) cov[sysId] = p; }
-    /* Colonie: copertura passiva sul sistema + 1° anello + 2° anello (più
-       debole). Allarga la rete così cogli chi passa fino a 2 hop. */
-    const colSys = playerColonySystems(game);
-    colSys.forEach(function (s) {
-      bump(s, CFG.COLONY_SENSOR);
-      const nb1 = neighborsOf(game, s);
-      for (let i = 0; i < nb1.length; i++) {
-        bump(nb1[i], CFG.COLONY_SENSOR * CFG.COLONY_RANGE_FALLOFF);
-        const nb2 = neighborsOf(game, nb1[i]);
-        for (let j = 0; j < nb2.length; j++) bump(nb2[j], CFG.COLONY_SENSOR * CFG.COLONY_RANGE2_FALLOFF);
-      }
+    const rb = researchSensorBonus(game);
+    /* Colonie: portata differenziata (richiesta utente 2026-06-26).
+       Capitale → 2 hop; colonia operativa → 1 hop; colonia ancora in
+       insediamento (colonizing o phase 'settling') → solo il proprio sistema. */
+    const cols = game.colonies || {};
+    Object.keys(cols).forEach(function (k) {
+      const c = cols[k];
+      if (!c || c.systemId == null) return;
+      if (!(c.colonized || c.colonizing)) return;
+      const operational = c.colonized && c.phase !== 'settling';
+      let range;
+      if (!operational) range = 0;
+      else if (isCapitalKey(game, k)) range = CFG.CAPITAL_RANGE;
+      else range = CFG.COLONY_RANGE;
+      spreadCoverage(game, bump, c.systemId, CFG.COLONY_SENSOR * rb.powerMul, extendRange(range, rb.rangeBonus));
     });
+    /* Stazioni operative del giocatore: avamposto-radar a livelli (portata e
+       potenza crescono col livello). Le catturate (owner != null) e quelle in
+       costruzione non contano. */
+    const stations = game.stations || [];
+    for (let i = 0; i < stations.length; i++) {
+      const st = stations[i];
+      if (!st || st.systemId == null) continue;
+      if (st.owner != null) continue;
+      if (st.phase === 'building' || (st.level || 0) < 1) continue;
+      const ss = stationSensorOf(st.level);
+      spreadCoverage(game, bump, st.systemId, ss.power * rb.powerMul, extendRange(ss.range, rb.rangeBonus));
+    }
     /* Flotte del giocatore: copertura nel/i nodo/i correnti (entrambi gli
        estremi della leg se in volo interstellare) + 1° anello; gli scafi da
        ricognizione estendono al 2° anello. Le tue flotte in giro fanno da
@@ -486,13 +582,27 @@
   function sameEdge(a1, a2, b1, b2) {
     return (a1 === b1 && a2 === b2) || (a1 === b2 && a2 === b1);
   }
+  /* Sistema in cui una flotta AI è GENUINAMENTE presente per l'incrocio a
+     nodo (≠ copertura sensori, che invece raggiunge entrambi gli estremi
+     della corsia). Una flotta in volo è in iperspazio, NON a un nodo: vale
+     solo il sistema dove è ferma (orbita), oppure il nodo intermedio
+     transitato nell'Impulso corrente (pass-through). Così una tua flotta
+     ferma a 1 hop, mentre l'AI è ancora a metà corsia, NON conta come
+     incrocio (richiesta utente 2026-06-26: essere su sistemi diversi senza
+     aver mai incrociato rotta non deve far scattare il meccanismo). */
+  function aiNodeOccupied(af) {
+    if (af.status !== 'in-transit') return af.systemId;
+    if (af._passThrough != null) return af._passThrough;
+    return null;
+  }
   /* Flotte del giocatore che INCROCIANO una flotta AI:
-     - a un NODO: co-locate (stesso sistema) con un nodo-presenza dell'AI;
+     - a un NODO: entrambe nello STESSO sistema in cui l'AI è realmente
+       presente (ferma o nel transito istantaneo di un nodo);
      - in VOLO interstellare: sullo STESSO tratto (stessa coppia di sistemi),
        così "incrociarli nei tratti interstellari" è possibile (richiesta
        utente 2026-06-19), non solo a sistema fermo. */
   function encounteringPlayerFleets(game, af) {
-    const nodes = presenceNodes(af);
+    const node = aiNodeOccupied(af);
     const afLeg = (af.status === 'in-transit' && Array.isArray(af.route) && af.routeIdx + 1 < af.route.length)
       ? [af.route[af.routeIdx], af.route[af.routeIdx + 1]] : null;
     const fleets = game.fleets || [];
@@ -503,7 +613,7 @@
       if (f.location.status === 'in-transit') {
         const fl = fleetLeg(f);
         if (afLeg && fl && sameEdge(fl[0], fl[1], afLeg[0], afLeg[1])) out.push(f);
-      } else if (nodes.indexOf(f.location.systemId) >= 0) {
+      } else if (node != null && f.location.systemId === node) {
         out.push(f);
       }
     }
@@ -515,10 +625,21 @@
 
   function detect(game, af, cov, colSys, events) {
     const nodes = presenceNodes(af);
-    let best = 0, bestNode = nodes[0];
-    for (let i = 0; i < nodes.length; i++) {
-      const c = cov[nodes[i]] || 0;
-      if (c > best) { best = c; bestNode = nodes[i]; }
+    /* Copertura PESATA sulla posizione (richiesta utente 2026-06-26): per una
+       flotta in volo non si prende più il MIGLIORE dei due estremi del tratto
+       (che faceva "vedere" fino a 2+1 hop), ma si interpola la copertura tra
+       partenza e arrivo in base a quanto è avanzata. Così una flotta oltre
+       metà tratto verso un sistema scoperto non viene più rilevata. */
+    let best, bestNode;
+    if (af.status === 'in-transit' && Array.isArray(af.route) && af.routeIdx + 1 < af.route.length) {
+      const from = af.route[af.routeIdx], to = af.route[af.routeIdx + 1];
+      const cFrom = cov[from] || 0, cTo = cov[to] || 0;
+      const t = Math.max(0, Math.min(1, 1 - (af.etaImpulsi || 0) / Math.max(1, af.legTotal || 1)));
+      best = cFrom + (cTo - cFrom) * t;
+      bestNode = t < 0.5 ? from : to;
+    } else {
+      best = cov[af.systemId] || 0;
+      bestNode = af.systemId;
     }
     if (best <= 0) { af.detected = false; return; }
 
@@ -528,8 +649,12 @@
     if (!drng.chance(p)) { af.detected = false; return; }
 
     af.detected = true;
-    af.lastSeenI = I;   // persistenza "ultimo avvistamento" per il render
-    af.intel = Math.min(1, af.intel + CFG.INTEL_GAIN * (0.5 + 0.5 * best));
+    af.lastSeenI = I;          // quando l'hai vista l'ultima volta
+    af.lastSeenSysId = bestNode; // DOVE l'hai vista (posizione congelata per la nebbia di guerra)
+    /* Scala LINEARE con la copertura (prima `0.5 + 0.5*best`, che dava un
+       pavimento generoso anche al bordo): ora il bordo rampa lentissimo e
+       solo la copertura forte (colonie / pedinamento) porta a FULL in fretta. */
+    af.intel = Math.min(1, af.intel + CFG.INTEL_GAIN * best);
 
     /* Vicino a una colonia? (nodo presenza è un tuo sistema colonia o adiacente). */
     let nearColony = false;
@@ -669,6 +794,8 @@
         if (af.crossedBy.indexOf(pf.id) >= 0) continue;
         af.crossedBy.push(pf.id);
         af.detected = true;
+        af.lastSeenI = I;
+        af.lastSeenSysId = pf.location.systemId; // visto incrociando: ultima posizione nota
         af.intel = Math.min(1, (af.intel || 0) + CFG.CROSS_INTEL_BUMP);
         /* Incrocio con una flotta OSTILE che NON è stata ingaggiata (la tua
            non è aggressiva): è il "momento per decidere" — evento con
@@ -781,8 +908,13 @@
       }
       const civ = civById(game, af.civId);
       const playerSys = pf.location && pf.location.systemId;
+      /* Co-locazione REALE (stesso nodo dove l'AI è davvero presente), non la
+         semplice copertura sensori sull'altro estremo della corsia: così un
+         ordine di inseguimento (Segui/Intercetta/Scorta) si risolve solo
+         all'incontro effettivo, non con l'AI ancora a metà tratto a 1 hop. */
+      const aiNode = aiNodeOccupied(af);
       const coLoc = playerSys != null && pf.location.status !== 'in-transit'
-                 && presenceNodes(af).indexOf(playerSys) >= 0;
+                 && aiNode != null && playerSys === aiNode;
 
       if (!coLoc) {
         /* CONVERGENZA TESTA-A-TESTA (richiesta utente 2026-06-20): se la tua
@@ -828,6 +960,8 @@
 
       /* Co-locato: osserva (intel rapido) e applica il comportamento per modo. */
       af.detected = true;
+      af.lastSeenI = I;
+      af.lastSeenSysId = playerSys; // pedinata da co-locato: ultima posizione nota
       af.intel = Math.min(1, (af.intel || 0) + CFG.FOLLOW_INTEL_GAIN);
       af.shadowedBy = pf.id;
       /* Sosta col bersaglio: ferma la flotta (non vagare). */

@@ -607,10 +607,13 @@
         });
       }
 
-      /* Flusso effettivo = min(rate target, cargo mercantile, budget, stock). */
+      /* Flusso effettivo = min(rate target, cargo mercantile, budget, stock).
+         Bonus Logista (figura colonia, sorgente) moltiplica il flusso. */
       const cargoCap = mercantileCargo(merc);
       let flow = Math.min(route.rate, cargoCap, budget, avail);
       if (flow <= 0) continue;
+      const CF_log = root.ORION && root.ORION.colonyFigure;
+      if (CF_log && CF_log.cargoMul) flow *= CF_log.cargoMul(src);
       flow = Math.round(flow * 10) / 10;
 
       /* §15.7 — Razzia pirata sulla rotta (deterministica). Lungo un percorso

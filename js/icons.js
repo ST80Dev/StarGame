@@ -226,6 +226,28 @@
       '<line x1="19" y1="21" x2="21" y2="19"/>'
     ),
 
+    /* Firepower (FP) — spade incrociate: potenza di fuoco della nave/flotta.
+       Più ricca del gladio singolo, volutamente distinta dagli altri glifi
+       (richiesta utente 2026-06-26). */
+    firepower: svg(
+      '<polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/>' +
+      '<line x1="13" y1="19" x2="19" y2="13"/>' +
+      '<line x1="16" y1="16" x2="20" y2="20"/>' +
+      '<line x1="19" y1="21" x2="21" y2="19"/>' +
+      '<polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"/>' +
+      '<line x1="5" y1="14" x2="9" y2="18"/>' +
+      '<line x1="7" y1="17" x2="4" y2="20"/>' +
+      '<line x1="3" y1="19" x2="5" y2="21"/>'
+    ),
+
+    /* Armor (corazza) — scudo rinforzato con piastra: punti scafo/difesa.
+       Distinto dallo scudo "Forze" grazie alla banda di placcatura interna. */
+    armor: svg(
+      '<path d="M12 21.5s7-3.5 7-9.5V5.2L12 2.5 5 5.2V12c0 6 7 9.5 7 9.5z"/>' +
+      '<path d="M5.5 10.5h13"/>' +
+      '<path d="M12 6.2v8.6"/>'
+    ),
+
     /* Trophy — coppa per vittoria. */
     trophy: svg(
       '<line x1="6" y1="9" x2="6" y2="6"/>' +
@@ -361,6 +383,16 @@
       '<path d="M9.8 14l-2.5 3M14.2 14l2.5 3"/>'
     ),
 
+    /* Estrattore — scafo industriale: imbuto-collettore in punta, apertura
+       di estrazione centrale e bracci d'aspirazione laterali. */
+    shipEstrattore: svg(
+      '<path d="M9 6h6l1.6 7-1.6 5H9l-1.6-5z"/>' +
+      '<path d="M9.6 6L12 2.6 14.4 6"/>' +
+      '<circle cx="12" cy="12" r="2.4"/>' +
+      '<path d="M8.6 10L4 12M15.4 10l4.6 2"/>' +
+      '<path d="M8.8 15.5L5.5 17.5M15.2 15.5l3.3 2"/>'
+    ),
+
     /* Caccia stellare — fusoliera + ali a freccia (star-fighter). */
     shipCaccia: svg(
       '<path d="M12 2v17"/>' +
@@ -475,5 +507,32 @@
   ORION.icons = ICONS;
   ORION.icon = function (name) {
     return ICONS[name] || '';
+  };
+
+  /* =====================================================================
+     Raster cache (canvas) — rasterizza un'icona SVG tintata in un <img>
+     da disegnare via drawImage su mappa/sistema (stesso pattern blit di
+     planet-view). Async: la prima richiesta avvia il caricamento e ritorna
+     null; quando l'immagine è pronta chiama onReady() (il chiamante fa un
+     requestRender). Cache per chiave name|hex|px → non si rigenera ad ogni
+     frame. Niente CDN: data URI inline dalla stringa SVG del catalogo.
+     ===================================================================== */
+  const _rasterCache = {};
+  ORION.rasterIcon = function (name, hex, px, onReady) {
+    const svgStr = ICONS[name];
+    if (!svgStr) return null;
+    const size = px || 64;
+    const color = hex || '#cfe6ff';
+    const key = name + '|' + color + '|' + size;
+    const cached = _rasterCache[key];
+    if (cached) return (cached.complete && cached.naturalWidth) ? cached : null;
+    const tinted = svgStr
+      .replace(/currentColor/g, color)
+      .replace('width="1em" height="1em"', 'width="' + size + '" height="' + size + '"');
+    const img = new Image();
+    _rasterCache[key] = img;
+    img.onload = function () { if (typeof onReady === 'function') onReady(); };
+    img.src = 'data:image/svg+xml,' + encodeURIComponent(tinted);
+    return (img.complete && img.naturalWidth) ? img : null;
   };
 })(typeof window !== 'undefined' ? window : this);

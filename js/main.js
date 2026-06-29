@@ -19,7 +19,8 @@ ORION.version = '0.6.6';
 ORION.viewLabels = {
   research:  { caption: 'VISTA RICERCA',    hint: 'Pool d’impero + albero tecnologico (M13).' },
   diplomacy: { caption: 'VISTA DIPLOMAZIA', hint: 'La diplomazia arriverà più avanti nello sviluppo.' },
-  crews:     { caption: 'ROSTER EQUIPAGGI', hint: 'Riepilogo equipaggi e figure d\'impero.' }
+  crews:     { caption: 'ROSTER EQUIPAGGI', hint: 'Riepilogo equipaggi e figure d\'impero.' },
+  stability: { caption: 'STABILITÀ GALATTICA', hint: 'Indice di Corruzione + Reputazione: valori, fattori, storico (M18).' }
 };
 
 /* Stato sidebar/centrale del Roster Equipaggi (richiesta utente 2026-06-16).
@@ -197,7 +198,7 @@ function chronicleCategoryFromKind(kind) {
 /* Fallback per entry storiche senza `cat` (save pre-bump): deriva dalla
    classe semantica `mod` (UI_GUIDE §7 — stessi colori usati nel rendering). */
 function chronicleCategoryFromMod(mod) {
-  if (mod === 'civ' || mod === 'fleet' || mod === 'explore') return 'galaxy';
+  if (mod === 'civ' || mod === 'fleet' || mod === 'explore' || mod === 'reputation') return 'galaxy';
   return 'colony';
 }
 /* Stato non-letto per linguetta (aura pulsante quando arriva un evento
@@ -319,7 +320,7 @@ function computeChronicleTarget(ev) {
   if (kind === 'incursion-inbound') return sysOpenTarget(ev.targetSysId);
   if (kind === 'trade-raid' || kind === 'fsp-contact' || kind === 'fsp-scanned' ||
       kind === 'fsp-revealed' || kind === 'fsp-claimed' || kind === 'fsp-lost' ||
-      kind === 'mekhari-contract-done') {
+      kind === 'fsp-ambient' || kind === 'mekhari-contract-done') {
     return sysOpenTarget(ev.sysId);
   }
   if (kind === 'station-built' || kind === 'station-upgraded' ||
@@ -340,6 +341,7 @@ function computeChronicleTarget(ev) {
 
   /* --- civiltà (solo se conosciute almeno come spotted) --- */
   if (kind === 'civ-contact' || kind === 'civ-spotted' || kind === 'civ-intel-upgraded' ||
+      kind === 'espionage-result' ||
       kind === 'civ-expand' || kind === 'civ-emerged' || kind === 'civ-fallen' ||
       kind === 'civ-war' ||
       kind === 'diplo-war' || kind === 'diplo-peace' || kind === 'diplo-alliance' ||
@@ -939,7 +941,15 @@ function newGame(seed, opts) {
     if (Array.isArray(saved.contracts)) ORION.game.contracts = saved.contracts.slice();
     if (Array.isArray(saved.crises)) ORION.game.crises = saved.crises.slice();
     if (saved.crisisMeta && typeof saved.crisisMeta === 'object') ORION.game.crisisMeta = Object.assign({ icgTier: 0 }, saved.crisisMeta);
+    /* M18: storico delle ultime 20 mutazioni discrete di ICG/Reputazione.
+       Additivo lazy (no bump schema): save vecchi → [] e il modulo lo
+       inizializza al primo accesso via ORION.reputation.ensure(). */
+    if (Array.isArray(saved.repHistory)) ORION.game.repHistory = saved.repHistory.slice(0, 20);
     if (saved.anomalies && typeof saved.anomalies === 'object') ORION.game.anomalies = Object.assign({}, saved.anomalies);
+    /* M19 Fase A (spionaggio): operazioni coperte in corso. Additivo lazy
+       (nessun bump di schema): save vecchi → ensure() sotto crea lo stato
+       vuoto. civ.deepIntel vive dentro saved.civs (ripristinato wholesale). */
+    if (saved.espionage && typeof saved.espionage === 'object') ORION.game.espionage = saved.espionage;
     /* FSP §17.7 (Fenomeni di Spazio Profondo): stato delta additivo (scoperta/
        proprietà). Save vecchi senza chiave → {}: gli FSP esistono comunque
        (rigenerati dal seed) e partono tutti a "Eco" come in partita nuova. */
@@ -1020,6 +1030,11 @@ function newGame(seed, opts) {
      della Memoria. Idempotente. */
   if (ORION.dispatch && ORION.dispatch.ensure) {
     ORION.dispatch.ensure(ORION.game);
+  }
+  /* M19 Fase A (spionaggio): inizializza lo stato operazioni coperte se
+     assente (partita nuova o save pre-M19). Idempotente. */
+  if (ORION.espionage && ORION.espionage.ensure) {
+    ORION.espionage.ensure(ORION.game);
   }
   if (ORION.anomaly && ORION.anomaly.ensure) {
     ORION.anomaly.ensure(ORION.game);
@@ -1187,6 +1202,7 @@ function updateGlobalResourceHud() {
 function updateGlobalIndicesHud() {
   const g = ORION.game;
   if (!g) return;
+  const REP = ORION.reputation;
   const icgEl = document.querySelector('[data-bind="icg"]');
   if (icgEl && typeof g.icg === 'number') icgEl.textContent = Math.round(g.icg).toString();
   const repEl = document.querySelector('[data-bind="reputazione"]');
@@ -1199,6 +1215,42 @@ function updateGlobalIndicesHud() {
       repEl.textContent = ORION.ai.reputationPreview(g).toString();
     }
   }
+  /* M18: tinta del chip HUD per fascia (verde/giallo/arancio/rosso). */
+  if (REP) {
+    REP.ensure(g);
+    const icgChip = icgEl && icgEl.closest('.index');
+    if (icgChip) {
+      const band = REP.bandIndex(REP.getICG(g), REP.ICG_THRESHOLDS);
+      icgChip.classList.remove('index--ok','index--warn','index--bad','index--crit');
+      icgChip.classList.add('index--' + (REP.ICG_BAND_TONE[band] || 'warn'));
+    }
+    const repChip = repEl && repEl.closest('.index');
+    if (repChip) {
+      const band = REP.bandIndex(REP.getRep(g), REP.REP_THRESHOLDS);
+      repChip.classList.remove('index--ok','index--warn','index--bad','index--crit');
+      repChip.classList.add('index--' + (REP.REP_BAND_TONE[band] || 'warn'));
+    }
+  }
+}
+
+/* M18: chip HUD ICG/Reputazione cliccabili → apre vista Stabilità.
+   Chiamata una sola volta al boot (i chip vivono nell'HTML statico). */
+function initStabilityHudChips() {
+  document.querySelectorAll('.index--icg, .index--rep').forEach(function (chip) {
+    if (chip.dataset.stabilityBound === '1') return;
+    chip.dataset.stabilityBound = '1';
+    chip.setAttribute('role', 'button');
+    chip.setAttribute('tabindex', '0');
+    chip.setAttribute('aria-label', 'Apri Stabilità galattica');
+    function open() {
+      if (!ORION.game) return;
+      navigateView('stability');
+    }
+    chip.addEventListener('click', open);
+    chip.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    });
+  });
 }
 
 /* ---------------------------------------------------------------------
@@ -1231,6 +1283,7 @@ function renderView(stage, view) {
   const SIDEBAR_CRUMB = {
     civ: 'Diplomazia', stations: 'Stazioni', research: 'Ricerca',
     crews: 'Equipaggi', dispatch: 'Dispacci', destiny: 'Destino', fleet: 'Flotte',
+    stability: 'Stabilità galattica',
     'econ-anomalies': 'Economia · Anomalie', 'econ-market': 'Economia · Mercato',
     'econ-treasury': 'Economia · Tesoreria', 'econ-ai': 'Economia · Scambi AI'
   };
@@ -1356,6 +1409,17 @@ function renderView(stage, view) {
     if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
     if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
     if (ORION.crewRoster && ORION.crewRoster.renderCentral) ORION.crewRoster.renderCentral(stage);
+    return;
+  }
+
+  // M18: vista "Stabilità galattica" — ICG + Reputazione con valore,
+  // fascia, fattori istantanei e storico delle ultime 20 mutazioni.
+  if (view === 'stability') {
+    if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; } if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
+    if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
+    if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
+    if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
+    renderStabilityView(stage);
     return;
   }
 
@@ -2385,8 +2449,8 @@ function planetTabAlerts(colony) {
       else if (s === 'low' && a.risorse !== 'bad') a.risorse = 'warn';
     });
   }
-  // popolazione: malus morale temporaneo
-  if (colony.moraleMalus) a.popolazione = 'warn';
+  // popolazione: malus morale temporaneo o sovraffollamento attivo
+  if (colony.moraleMalus || colony.crowdAlert) a.popolazione = 'warn';
   // colonia: insediamento o colonizzazione in corso
   if (colony.colonizing || colony.phase === 'settling') a.colonia = 'info';
   // forze: coda scafi/equipaggi attiva
@@ -2406,7 +2470,7 @@ function alertTitle(tab, colony, level) {
   }
   if (tab === 'strutture') return 'Osservatorio in scansione';
   if (tab === 'risorse') return level === 'bad' ? 'Scarsità critica' : 'Scarsità in allerta';
-  if (tab === 'popolazione') return 'Morale in calo';
+  if (tab === 'popolazione') return colony.crowdAlert ? 'Sovraffollamento' : 'Morale in calo';
   if (tab === 'colonia') return colony.phase === 'settling' ? 'Insediamento in corso' : 'Colonizzazione in corso';
   if (tab === 'forze') return 'Reclutamento in corso';
   return '';
@@ -2680,7 +2744,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
         : '';
       wasteRow =
         '<p class="sysinfo__sub">Rifiuti ♻</p>' +
-        '<dl class="sysinfo__list">' +
+        '<dl class="sysinfo__list sysinfo__list--tight">' +
           row('Accumulo', Math.round(W.stock) + ' / ' + Math.round(W.capacity)) +
           row('Saturazione', '<span class="waste-tag waste--' + cls + '">' + stateLbl + ' · ' + pct + '%</span>') +
           row('Netto', impHtml(netTxt, '/') + (W.net > 0 ? ' (in accumulo)' : W.net < 0 ? ' (in calo)' : ' (stabile)')) +
@@ -2744,7 +2808,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
         settlingBanner +
         stateLine +
         diasporaLine +
-        '<dl class="sysinfo__list">' +
+        '<dl class="sysinfo__list sysinfo__list--tight">' +
           row('Colonizzato dal', colony.colonizedDS || '—') +
           row('Popolazione', popRangePeople(colony, planet)) +
           row('Slot utilizzati', out.used + ' / ' + ORION.planet.effectiveSlots(planet, colony, g)) +
@@ -2752,6 +2816,7 @@ function renderPlanetColoniaTab(host, planet, colony) {
         '</dl>' +
         scarRow +
         wasteRow +
+        renderColonyDefenseSection(colony, planet) +
         renderCapitalSection(colony, planet) +
         renderGovernorSection(colony, planet) +
         renderColonyFigureSection(colony, planet) +
@@ -3141,6 +3206,67 @@ function renderColonyFigureSection(colony, planet) {
       '<span class="gov-section__glyph ui-icon ui-icon--amber" aria-hidden="true">' + glyph + '</span> Figura di colonia</p></div>' +
     body +
   '</div>';
+}
+/* Sezione DIFESA della scheda Colonia (richiesta utente): colpo d'occhio su
+   quanto regge la colonia = strutture difensive (Batteria/Scudo) + flotte in
+   orbita/in porto, con corazza/fuoco/potenza aggregati e un verdetto rispetto
+   alla razzia pirata peggiore NOTA. Solo display (combat.colonyDefenseSummary). */
+function renderColonyDefenseSection(colony, planet) {
+  if (!colony || !colony.colonized) return '';
+  const C = ORION.combat;
+  if (!C || !C.colonyDefenseSummary) return '';
+  const colonyKey = planet ? (planet.systemId + ':' + planet.bodyKey) : null;
+  const d = C.colonyDefenseSummary(ORION.game, colony, colonyKey);
+  if (ORION.tutorial) ORION.tutorial.fire('colony-defense');
+
+  const glyph = (ORION.icon && ORION.icon('forces')) || '⛨';
+  const head = '<p class="sysinfo__sub def-section__title">' +
+    '<span class="ui-icon ui-icon--pink" aria-hidden="true">' + glyph + '</span> Difesa</p>';
+
+  const totals =
+    '<dl class="sysinfo__list sysinfo__list--tight def-totals">' +
+      row('Corazza', d.totalHp) +
+      row('Fuoco', d.totalFp) +
+      row('Potenza', '<span class="def-power">' + d.totalPower + '</span>') +
+    '</dl>';
+
+  const s = d.struct, f = d.fleets;
+  const breakdown =
+    '<div class="def-breakdown">' +
+      '<div class="def-src" title="Batteria di difesa, Scudo planetario costruiti">' +
+        '<span class="def-src__lbl">Strutture</span>' +
+        '<span class="def-src__val">' + (s.count ? (s.count + ' · P ' + s.power) : '—') + '</span>' +
+      '</div>' +
+      '<div class="def-src" title="Tue flotte in orbita o in porto in questo sistema">' +
+        '<span class="def-src__lbl">In orbita / porto</span>' +
+        '<span class="def-src__val">' + (f.count ? (f.ships + (f.ships === 1 ? ' nave · P ' : ' navi · P ') + f.power) : '—') + '</span>' +
+      '</div>' +
+    '</div>';
+
+  /* Verdetto rispetto alla minaccia nota. */
+  let verdict = '';
+  if (d.totalPower <= 0) {
+    verdict = '<p class="def-verdict def-verdict--crit">' +
+      'Nessuna difesa: costruisci una <strong>Batteria di difesa</strong> o lascia una flotta in orbita.</p>';
+  } else if (d.threat) {
+    const t = d.threat;
+    const ratio = t.power > 0 ? d.totalPower / t.power : 99;
+    let cls, msg;
+    if (ratio >= 1.5)      { cls = 'ok';   msg = 'Regge una razzia'; }
+    else if (ratio >= 0.9) { cls = 'warn'; msg = 'Battaglia incerta'; }
+    else                   { cls = 'crit'; msg = 'Difesa insufficiente'; }
+    const nestTxt = (t.boss && t.name ? escapeHtml(t.name) : ('covo liv. ' + t.level)) +
+      (t.local ? ' (nel sistema)' : '');
+    verdict =
+      '<p class="def-verdict def-verdict--' + cls + '">' +
+        '<span class="def-verdict__tag">' + msg + '</span> · ' +
+        'razzia max nota: <strong>P ' + t.power + '</strong> <span class="def-verdict__nest">' + nestTxt + '</span>' +
+      '</p>';
+  } else {
+    verdict = '<p class="def-verdict def-verdict--soft">Nessun covo pirata noto nei dintorni. La potenza è il riferimento per ogni incursione.</p>';
+  }
+
+  return '<div class="gov-section def-section">' + head + totals + breakdown + verdict + '</div>';
 }
 function bindColonyFigureHandlers(host, planet, colony) {
   if (!host || !ORION.colonyFigure) return;
@@ -4257,12 +4383,13 @@ function renderPlanetForzeTab(host, planet, colony) {
   host.querySelectorAll('[data-cancel-crew]').forEach(function (btn) {
     btn.addEventListener('click', function () { tryCancelCrew(Number(btn.dataset.cancelCrew)); });
   });
-  /* M08 Fase A: dropdown classe nave. La scelta è ricordata per-colonia
+  /* M08 Fase A: picker classe nave. La scelta è ricordata per-colonia
      in ORION.cantieriPickedKind (vive in memoria, non nel save). */
-  host.querySelectorAll('[data-ship-kind]').forEach(function (sel) {
-    sel.addEventListener('change', function () {
+  host.querySelectorAll('[data-ship-pick]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (btn.disabled) return;
       if (!ORION.cantieriPickedKind) ORION.cantieriPickedKind = {};
-      ORION.cantieriPickedKind[ORION.openPlanetKey || ''] = sel.value;
+      ORION.cantieriPickedKind[ORION.openPlanetKey || ''] = btn.dataset.shipPick;
       updatePlanetUI();
     });
   });
@@ -4397,6 +4524,7 @@ function capitalBuildBlock(colony, cls) {
    coloniale verde · capitali M15). Fallback al glifo monocolore se manca. */
 const SHIP_VIS = {
   explorer:     { icon: 'shipExplorer',     tone: 'cyan' },
+  estrattore:   { icon: 'shipEstrattore',   tone: 'blue' },
   caccia:       { icon: 'shipCaccia',       tone: 'gold' },
   intercettore: { icon: 'shipIntercettore', tone: 'amber' },
   corvetta:     { icon: 'shipCorvetta',     tone: 'pink' },
@@ -4413,21 +4541,40 @@ function shipVisIcon(cls) {
   return '<span class="hangar-ship__ico ui-icon ui-icon--' + v.tone + '" aria-hidden="true">' + inner + '</span>';
 }
 
+/* Caratteristiche compatte di una classe nave come chip tintate (richiesta
+   utente 2026-06-26): corazza/difesa · potenza di fuoco · velocità ·
+   equipaggio · sensori · capienza coloni. Riusato sia dalla card della
+   riserva Hangar sia dal picker di costruzione, così "stessa nave = stesse
+   caratteristiche, ovunque". Tinte per concetto (UI_GUIDE §1): difesa rosa,
+   fuoco oro, flotta ciano, equipaggio viola, intel azzurro, coloni verde. */
+function shipStatChips(cls) {
+  if (!cls) return '';
+  const F = ORION.fleet || {};
+  const chips = [];
+  const sIco = function (name, fallback) {
+    return '<span class="ship-stat__ico" aria-hidden="true">' + ((ORION.icon && ORION.icon(name)) || fallback) + '</span>';
+  };
+  if (cls.hp) chips.push('<span class="ship-stat ship-stat--hp" title="Corazza / difesa (punti scafo)">' + sIco('armor', '♥') + cls.hp + '</span>');
+  chips.push('<span class="ship-stat ship-stat--fp" title="Potenza di fuoco">' + sIco('firepower', '⚔') + (cls.fp || 0) + '</span>');
+  if (cls.speed) chips.push('<span class="ship-stat ship-stat--sp" title="Velocità di crociera">» ' + cls.speed + '</span>');
+  if (cls.crew) chips.push('<span class="ship-stat ship-stat--cr" title="Equipaggio richiesto">☗ ' + cls.crew + '</span>');
+  const sens = F.shipSensor ? F.shipSensor(cls.id) : null;
+  if (sens != null) chips.push('<span class="ship-stat ship-stat--se" title="Qualità sensori (ricognizione)">◎ ' + sens.toFixed(1) + '</span>');
+  if (cls.popCargo) chips.push('<span class="ship-stat ship-stat--pc" title="Capienza coloni trasportabili">◉ ' + cls.popCargo + '</span>');
+  return chips.join('');
+}
+
 /* Riquadro di riepilogo della riserva navi a terra (#42): una card per
    classe presente, con icona estesa + conteggio + stazza (hp/fuoco/eq). */
 function shipReserveBox(colony, classes) {
   const cards = classes.map(function (cls) {
     const n = (colony.ships && colony.ships[cls.id]) || 0;
     if (!n) return null;
-    const stats = [];
-    if (cls.hp) stats.push('<span title="Corazza">♥ ' + cls.hp + '</span>');
-    if (cls.fp) stats.push('<span title="Potenza di fuoco">⚔ ' + cls.fp + '</span>');
-    if (cls.crew) stats.push('<span title="Equipaggio richiesto">☗ ' + cls.crew + '</span>');
     return '<div class="hangar-ship" title="' + escapeHtml(cls.name) + '">' +
         shipVisIcon(cls) +
         '<div class="hangar-ship__main">' +
           '<div class="hangar-ship__top"><b>×' + n + '</b> ' + escapeHtml(cls.name) + '</div>' +
-          '<div class="hangar-ship__stats">' + stats.join('<i>·</i>') + '</div>' +
+          '<div class="hangar-ship__stats">' + shipStatChips(cls) + '</div>' +
         '</div>' +
       '</div>';
   }).filter(Boolean);
@@ -4570,25 +4717,48 @@ function renderCantieriSection(colony, planet) {
       '</div>';
     });
 
-    /* Dropdown classi: opzioni disabilitate se l'Hangar non è di livello
-       adeguato (M08 Fase A, decisione #42) o se manca il Bacino orbitale /
-       la Nave Ammiraglia esiste già (M15). */
-    const options = classes.map(function (cls) {
+    /* Picker classe nave in stile gioco (sostituisce il <select> nativo,
+       richiesta utente 2026-06-26): trigger con icona SVG + menu di card
+       classe con icona, caratteristiche (difesa/forza/velocità/equipaggio)
+       e costo. Opzioni disabilitate se l'Hangar non è di livello adeguato
+       (M08 Fase A, decisione #42) o se manca il Bacino orbitale / la Nave
+       Ammiraglia esiste già (M15). */
+    const pickOpts = classes.map(function (cls) {
       const lockedByHangar = (cls.hangarLvl || 1) > hangarLvl;
       const capReason = capitalBuildBlock(colony, cls);
-      let label = cls.glyph + ' ' + cls.name;
-      if (lockedByHangar) label += ' — Hangar lvl ' + cls.hangarLvl;
-      else if (capReason) label += ' — ' + capReason;
-      const sel = (cls.id === pickedKind) ? ' selected' : '';
-      const dis = (lockedByHangar || capReason) ? ' disabled' : '';
-      return '<option value="' + cls.id + '"' + sel + dis + '>' + escapeHtml(label) + '</option>';
+      const locked = lockedByHangar || capReason;
+      const reason = lockedByHangar ? ('Hangar lvl ' + cls.hangarLvl) : (capReason || '');
+      const costS = Object.keys(cls.cost || {}).map(function (k) { return resIcon(k) + cls.cost[k]; }).join(' ');
+      return '<button type="button" role="option" aria-selected="' + (cls.id === pickedKind ? 'true' : 'false') + '"' +
+          ' class="ship-opt' + (cls.id === pickedKind ? ' is-active' : '') + (locked ? ' is-locked' : '') + '"' +
+          (locked ? ' disabled title="' + escapeHtml(reason) + '"' : '') +
+          ' data-ship-pick="' + cls.id + '">' +
+          shipVisIcon(cls) +
+          '<span class="ship-opt__main">' +
+            '<span class="ship-opt__name">' + escapeHtml(cls.name) +
+              (locked ? ' <span class="ship-opt__lock">' + escapeHtml(reason) + '</span>' : '') +
+            '</span>' +
+            '<span class="ship-opt__stats hangar-ship__stats">' + shipStatChips(cls) + '</span>' +
+          '</span>' +
+          '<span class="ship-opt__cost">' + costS + '</span>' +
+        '</button>';
     }).join('');
 
     const buildAttrs = buildEnabled ? '' : (' disabled title="' + escapeHtml(blockReason) + '"');
     html += '<div class="cantieri-row__build">' +
-      '<select class="cantieri-row__select" data-ship-kind aria-label="Classe nave">' + options + '</select>' +
-      '<span class="cantieri-row__cost">' + costStr(pickedCls.cost) + ' · ' + effShipTime + ' ' + iU() + (techBonus > 0 ? ' <span class="cantieri-row__base">(' + pickedCls.time + ' base)</span>' : '') + '</span>' +
-      '<button class="btn btn--mini" data-build-ship type="button"' + buildAttrs + '>+ Costruisci</button>' +
+      '<details class="ship-picker">' +
+        '<summary class="ship-picker__trigger" aria-label="Scegli classe nave da costruire">' +
+          shipVisIcon(pickedCls) +
+          '<span class="ship-picker__label">' + escapeHtml(pickedCls.name) + '</span>' +
+          '<span class="ship-picker__stats hangar-ship__stats">' + shipStatChips(pickedCls) + '</span>' +
+          '<span class="ship-picker__caret ui-icon ui-icon--soft" aria-hidden="true">' + (ORION.icon ? ORION.icon('chevronRight') : '▸') + '</span>' +
+        '</summary>' +
+        '<div class="ship-picker__menu" role="listbox" aria-label="Classi nave costruibili">' + pickOpts + '</div>' +
+      '</details>' +
+      '<div class="cantieri-row__buildbar">' +
+        '<span class="cantieri-row__cost">' + costStr(pickedCls.cost) + ' · ' + effShipTime + ' ' + iU() + (techBonus > 0 ? ' <span class="cantieri-row__base">(' + pickedCls.time + ' base)</span>' : '') + '</span>' +
+        '<button class="btn btn--mini" data-build-ship type="button"' + buildAttrs + '>+ Costruisci</button>' +
+      '</div>' +
     '</div></div>';
   }
 
@@ -4953,6 +5123,19 @@ function anomalyKindMeta(kind) {
   return { label: kind, res: null };
 }
 
+/* Icona + tinta canoniche per tipo di anomalia/giacimento.
+   Richiesta utente 2026-06-20: differenziare cinture/detriti/nebulose/
+   gassosi/reliquie con icone glow coerenti (UI_GUIDE §3) invece del solo
+   testo. Glow è già fornito da .ui-icon-svg (drop-shadow currentColor). */
+function anomalyKindIcon(kind) {
+  if (kind === 'detriti')  return uiIcon('fspEmis', 'cyan');   /* scintille metalliche */
+  if (kind === 'cintura')  return uiIcon('dotCircle', 'cyan'); /* anello di asteroidi */
+  if (kind === 'nebulosa') return uiIcon('fspBio', 'amber');   /* nube concentrica */
+  if (kind === 'gassoso')  return uiIcon('fspGrav', 'amber');  /* orbita gravitazionale */
+  if (kind === 'reliquie') return uiIcon('fspRelic', 'violet');/* esagono reliquia */
+  return uiIcon('star', 'soft');
+}
+
 /* Etichetta breve della risorsa per UI "raccolti X met". */
 function resShortLabel(res) {
   if (res === 'met') return 'met';
@@ -4960,65 +5143,6 @@ function resShortLabel(res) {
   if (res === 'food') return 'food';
   if (res === 'water') return 'water';
   return res || '';
-}
-
-/* Invia una flotta di ricognizione (1 scafo + 1 equipaggio) verso il
-   sistema di un'anomalia con ordine `survey`: arriva e RESTA a
-   raccogliere/esplorare. Stesso pattern di doLaunchExpedition (decisione
-   #60), ma l'ordine non rientra. */
-function doSurveyAnomaly(colony, targetSystemId, anomalyKind, bodyKey, opts) {
-  opts = opts || {};
-  const g = ORION.game;
-  const key = colony.systemId + ':' + colony.bodyKey;
-  if (!ORION.fleet || !ORION.fleet.createFleet) { showToast('Modulo flotta non disponibile'); return; }
-  const extractorsAvail = (colony.ships && colony.ships.estrattore) || 0;
-  const explorersAvail  = (colony.ships && colony.ships.explorer)   || 0;
-  /* Decisione utente 2026-06-17: se l'opt.shipKind è esplicito (picker),
-     rispettarlo. Altrimenti preferiamo Esploratore per le reliquie (l'
-     Estrattore non porta vantaggi quando anomaly.harvest=false: meglio
-     tenerlo per cinture/detriti/nebulose) e Estrattore per il resto. */
-  let shipKind = opts.shipKind;
-  if (shipKind !== 'estrattore' && shipKind !== 'explorer') {
-    if (anomalyKind === 'reliquie') {
-      shipKind = explorersAvail >= 1 ? 'explorer' : (extractorsAvail >= 1 ? 'estrattore' : null);
-    } else {
-      shipKind = extractorsAvail >= 1 ? 'estrattore' : (explorersAvail >= 1 ? 'explorer' : null);
-    }
-  }
-  if (shipKind === 'estrattore' && extractorsAvail < 1) {
-    shipKind = explorersAvail >= 1 ? 'explorer' : null;
-  }
-  if (shipKind === 'explorer' && explorersAvail < 1) {
-    shipKind = extractorsAvail >= 1 ? 'estrattore' : null;
-  }
-  const crewsAvail = (colony.crews && Array.isArray(colony.crews.explorer)) ? colony.crews.explorer.length : 0;
-  if (!shipKind) { showToast('Nessuno scafo idoneo (Estrattore o Esploratore) disponibile'); return; }
-  if (crewsAvail < 1) { showToast('Nessun equipaggio disponibile'); return; }
-  const cf = ORION.fleet.createFleet(g, key, null);
-  if (!cf.ok) { showToast(cf.reason || 'Creazione flotta fallita'); return; }
-  const fleet = cf.fleet;
-  const as = ORION.fleet.assignShips(g, fleet, key, shipKind, 1);
-  if (!as.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(as.reason || 'Assegnazione nave fallita'); return; }
-  let ac = null;
-  if (opts.crewId != null && ORION.fleet.assignCrewById) {
-    ac = ORION.fleet.assignCrewById(g, fleet, key, opts.crewId);
-  }
-  if (!ac || !ac.ok) ac = ORION.fleet.assignCrew(g, fleet, key, 1);
-  if (!ac.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(ac.reason || 'Assegnazione equipaggio fallita'); return; }
-  const so = ORION.fleet.setOrder(g, fleet, { type: 'survey', toSysId: targetSystemId, anomalyKind: anomalyKind || null, bodyKey: bodyKey || null });
-  if (!so.ok) { ORION.fleet.dissolveFleet(g, fleet); showToast(so.reason || 'Ordine ricognizione rifiutato'); return; }
-  /* Callsign d'esordio "Vedetta N". */
-  maybeAutoRenameFleet(g, fleet, { type: 'survey', toSysId: targetSystemId });
-  const sys = g.galaxy.systems[targetSystemId];
-  const acr = regionAcronymFor(targetSystemId);
-  const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
-  const where = (targetSystemId === colony.systemId)
-    ? 'verso l\'anomalia nel sistema'
-    : 'verso l\'anomalia di <strong>' + (sys ? sys.name : 'sistema') + '</strong>' + tag;
-  pushChronicle(ORION.time.currentDS(g) + ' — Flotta di ricognizione in rotta ' + where + '.', 'explore');
-  if (ORION.tutorial) ORION.tutorial.fire('anomalies');
-  persistGame(g);
-  updatePlanetUI();
 }
 
 /* Decisione #76: stima del tempo di viaggio (sola andata) verso un sistema,
@@ -5171,160 +5295,6 @@ function openExpeditionPicker(colony, opts) {
 
 function closeExpeditionPicker() {
   const host = document.querySelector('[data-bind="exp-picker"]');
-  if (host) { host.hidden = true; host.innerHTML = ''; }
-}
-
-/* Picker per "Invia flotta" su anomalia (decisione utente 2026-06-17):
-   prima era un quick-action che usava primo scafo idoneo + primo
-   equipaggio in lista, senza scelta. Disallineato dal picker spedizione
-   e fastidioso quando si vuole mandare un equipaggio specifico a una
-   reliquia. Apriamo un dialog con stessa estetica del picker spedizione:
-   scelta scafo (Estrattore/Esploratore) + scelta equipaggio (chip per xp).
-   Per le reliquie il default è Esploratore (sull'anomalia.harvest=false
-   l'Estrattore non aggiunge nulla: meglio tenerlo per le miniere vere). */
-function openAnomalySurveyPicker(colony, targetSystemId, anomalyKind, bodyKey, opts) {
-  opts = opts || {};
-  const g = ORION.game;
-  const extractors = (colony.ships && colony.ships.estrattore) || 0;
-  const explorers  = (colony.ships && colony.ships.explorer)   || 0;
-  const crews = (colony.crews && colony.crews.explorer) || [];
-  const crewsSorted = crews.slice().sort(function (a, b) { return (b.xp || 0) - (a.xp || 0); });
-
-  /* Default scafo: reliquie → esploratore (estrattore non porta vantaggi
-     sui siti relic), altrimenti estrattore (rate scalato sull'Hangar).
-     Fallback all'unico disponibile. */
-  const isRelic = anomalyKind === 'reliquie';
-  let defaultKind;
-  if (extractors >= 1 && explorers >= 1) {
-    defaultKind = isRelic ? 'explorer' : 'estrattore';
-  } else if (extractors >= 1) {
-    defaultKind = 'estrattore';
-  } else if (explorers >= 1) {
-    defaultKind = 'explorer';
-  } else {
-    defaultKind = null;
-  }
-  let selectedKind = opts.shipKind;
-  if (selectedKind !== 'estrattore' && selectedKind !== 'explorer') selectedKind = defaultKind;
-  if (selectedKind === 'estrattore' && extractors < 1) selectedKind = explorers >= 1 ? 'explorer' : null;
-  if (selectedKind === 'explorer'   && explorers   < 1) selectedKind = extractors >= 1 ? 'estrattore' : null;
-
-  let selectedCrewId = opts.selectedCrewId;
-  if (selectedCrewId == null || !crews.some(function (c) { return c.id === selectedCrewId; })) {
-    selectedCrewId = crewsSorted.length ? crewsSorted[0].id : null;
-  }
-
-  let host = document.querySelector('[data-bind="anom-picker"]');
-  if (!host) {
-    host = document.createElement('div');
-    host.className = 'expedition-pick-overlay';
-    host.setAttribute('data-bind', 'anom-picker');
-    host.setAttribute('role', 'dialog');
-    host.setAttribute('aria-modal', 'true');
-    host.setAttribute('aria-label', 'Invia flotta su anomalia');
-    document.body.appendChild(host);
-  }
-
-  const meta = anomalyKindMeta(anomalyKind);
-  const sys = g.galaxy.systems[targetSystemId];
-  const acr = regionAcronymFor(targetSystemId);
-  const tag = acr ? ' <span class="name-tag">[' + acr + ']</span>' : '';
-
-  /* Chip selettore tipo scafo. */
-  function shipChip(kind, label, sub, count, disabled) {
-    const sel = selectedKind === kind;
-    return '<button class="exp-crew-chip' + (sel ? ' is-selected' : '') + '" type="button"' +
-      ' role="radio" aria-checked="' + (sel ? 'true' : 'false') + '"' +
-      ' data-action="anom-ship-pick" data-kind="' + escapeHtml(kind) + '"' +
-      (disabled ? ' disabled title="Nessuno disponibile"' : ' title="' + escapeHtml(sub) + '"') + '>' +
-      '<span class="exp-crew-chip__rank">' + escapeHtml(label) + '</span>' +
-      '<span class="exp-crew-chip__xp">' + count + ' disp.</span>' +
-    '</button>';
-  }
-  const shipChips = '<div class="exp-crew-select" role="radiogroup" aria-label="Scegli scafo">' +
-    shipChip('estrattore', 'Estrattore', 'rate scalato sull\'Hangar — consigliato per harvest', extractors, extractors < 1) +
-    shipChip('explorer',   'Esploratore', 'rate base, niente bonus harvest', explorers, explorers < 1) +
-  '</div>';
-
-  let crewChips;
-  if (!crewsSorted.length) {
-    crewChips = '<p class="panel__note">Nessun equipaggio disponibile: formane uno nell\'<em>Accademia militare</em>.</p>';
-  } else {
-    crewChips = '<div class="exp-crew-select" role="radiogroup" aria-label="Scegli equipaggio">' +
-      crewsSorted.map(function (c) {
-        const xp = c.xp || 0;
-        const enr = ORION.expedition.enrichmentForXp(xp);
-        const sel = c.id === selectedCrewId;
-        return '<button class="exp-crew-chip' + (sel ? ' is-selected' : '') + '" type="button"' +
-          ' role="radio" aria-checked="' + (sel ? 'true' : 'false') + '"' +
-          ' data-action="anom-crew-pick" data-crew="' + escapeHtml(String(c.id)) + '"' +
-          ' title="' + escapeHtml(enr.label) + ' · xp ' + xp + '">' +
-          '<span class="exp-crew-chip__rank">' + escapeHtml(enr.label) + '</span>' +
-          '<span class="exp-crew-chip__xp">xp ' + xp + '</span>' +
-        '</button>';
-      }).join('') +
-    '</div>';
-  }
-
-  const canSend = selectedKind != null && selectedCrewId != null;
-  const sendTitle = !selectedKind ? 'Nessuno scafo idoneo disponibile'
-    : !selectedCrewId ? 'Serve un equipaggio'
-    : 'Invia la flotta sul sito (resta in raccolta finché non la richiami)';
-
-  host.innerHTML =
-    '<div class="expedition-pick-overlay__panel" role="document">' +
-      '<header class="expedition-pick-overlay__head">' +
-        '<h2 class="expedition-pick-overlay__title">Invia flotta su anomalia</h2>' +
-        '<button class="btn btn--mini btn--icon-only" data-action="anom-pick-close" type="button" aria-label="Chiudi">' +
-          '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('close')) || '✕') + '</span>' +
-        '</button>' +
-      '</header>' +
-      '<p class="panel__note">' + escapeHtml(meta.label) + ' nel sistema <strong>' + (sys ? escapeHtml(sys.name) : '—') + '</strong>' + tag + '.</p>' +
-      '<p class="sysinfo__sub">Scafo</p>' +
-      shipChips +
-      '<p class="sysinfo__sub">Equipaggio</p>' +
-      crewChips +
-      '<div class="expedition-card__actions" style="margin-top:12px">' +
-        '<button class="btn btn--mini btn--primary btn--with-icon" data-action="anom-launch" type="button"' +
-          (canSend ? '' : ' disabled') + ' title="' + escapeHtml(sendTitle) + '">' +
-          '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('send')) || '') + '</span> Invia flotta' +
-        '</button>' +
-      '</div>' +
-    '</div>';
-  host.hidden = false;
-
-  function reopen(next) {
-    openAnomalySurveyPicker(colony, targetSystemId, anomalyKind, bodyKey, {
-      shipKind: (next && 'shipKind' in next) ? next.shipKind : selectedKind,
-      selectedCrewId: (next && 'selectedCrewId' in next) ? next.selectedCrewId : selectedCrewId
-    });
-  }
-
-  host.addEventListener('click', function (e) {
-    if (e.target === host || e.target.closest('[data-action="anom-pick-close"]')) {
-      closeAnomalySurveyPicker();
-    }
-  });
-  host.querySelectorAll('[data-action="anom-ship-pick"]').forEach(function (b) {
-    if (b.disabled) return;
-    b.addEventListener('click', function () { reopen({ shipKind: b.dataset.kind }); });
-  });
-  host.querySelectorAll('[data-action="anom-crew-pick"]').forEach(function (b) {
-    b.addEventListener('click', function () { reopen({ selectedCrewId: b.dataset.crew }); });
-  });
-  const launchBtn = host.querySelector('[data-action="anom-launch"]');
-  if (launchBtn && !launchBtn.disabled) {
-    launchBtn.addEventListener('click', function () {
-      doSurveyAnomaly(colony, targetSystemId, anomalyKind, bodyKey, {
-        shipKind: selectedKind, crewId: selectedCrewId
-      });
-      closeAnomalySurveyPicker();
-    });
-  }
-}
-
-function closeAnomalySurveyPicker() {
-  const host = document.querySelector('[data-bind="anom-picker"]');
   if (host) { host.hidden = true; host.innerHTML = ''; }
 }
 
@@ -6171,45 +6141,6 @@ function knownExploitableSites() {
   });
 }
 
-/* Colonia più vicina (spazio esplorato) capace di inviare una flotta di
-   ricognizione sul sistema `sysId` (almeno 1 scafo + 1 equipaggio). Se
-   nessuna ha capacità ritorna comunque la colonia più vicina (per un
-   tooltip esplicativo). */
-function nearestSurveyColony(sysId) {
-  const g = ORION.game;
-  const D = ORION.galaxy.DISCOVERY;
-  const bySystem = {};
-  myColonyKeys().forEach(function (k) {
-    const c = g.colonies[k];
-    if (c && c.colonized) (bySystem[c.systemId] = bySystem[c.systemId] || []).push(c);
-  });
-  function hasCapacity(c) {
-    const ships = (c.ships && ((c.ships.estrattore || 0) + (c.ships.explorer || 0))) || 0;
-    const crews = (c.crews && c.crews.explorer && c.crews.explorer.length) || 0;
-    return ships >= 1 && crews >= 1;
-  }
-  const seen = {}; seen[sysId] = 0;
-  const queue = [sysId];
-  let fallback = null;
-  while (queue.length) {
-    const u = queue.shift();
-    if (bySystem[u]) {
-      const cap = bySystem[u].filter(hasCapacity);
-      if (cap.length) return { colony: cap[0], hops: seen[u], capable: true };
-      if (!fallback) fallback = { colony: bySystem[u][0], hops: seen[u], capable: false };
-    }
-    const sys = g.galaxy.systems[u];
-    const links = (sys && sys.links) || [];
-    for (let i = 0; i < links.length; i++) {
-      const v = links[i];
-      if (seen[v] != null) continue;
-      if (g.state.discovery[v] < D.EXPLORED) continue;
-      seen[v] = seen[u] + 1; queue.push(v);
-    }
-  }
-  return fallback;
-}
-
 function round1(n) { return Math.round((n || 0) * 10) / 10; }
 
 /* Stato collassamento per-sistema della vista "Anomalie & sfruttamenti".
@@ -6236,6 +6167,32 @@ function economyAnomaliesHtml(g) {
   const chips = '<div class="exp-crew-select" role="radiogroup" aria-label="Filtra per risorsa">' +
     fchip('all', 'Tutte') + fchip('met', 'Metalli') + fchip('en', 'Energia') + fchip('reliquie', 'Reliquie') +
   '</div>';
+
+  /* Esiste almeno una colonia con cantiere navale? — gate per il
+     bottone Invia. Il Fleet Wizard (openFleetDetail) richiede una
+     colonia eleggibile; senza, il pannello apparirebbe vuoto. */
+  const hasShipyard = Object.keys(g.colonies || {}).some(function (k) {
+    const c = g.colonies[k];
+    return c && c.colonized && c.structures && c.structures['cantiere-navale'];
+  });
+
+  /* Mappa "flotte survey inbound" per sito: chiave sysId|bodyKey|kind.
+     Serve a mostrare "in viaggio" sulla riga dell'anomalia quando la
+     flotta è stata inviata ma non è ancora arrivata (richiesta utente
+     2026-06-20: senza questo, dopo "Invia flotta" il giocatore non
+     vedeva alcun riscontro fino all'inizio della raccolta). */
+  const inboundBySite = {};
+  (g.fleets || []).forEach(function (f) {
+    const o = f && f.orders;
+    if (!o || o.type !== 'survey') return;
+    const k = (o.toSysId == null ? '' : o.toSysId) + '|' + (o.bodyKey || '') + '|' + (o.anomalyKind || '');
+    (inboundBySite[k] = inboundBySite[k] || []).push(f);
+  });
+  function inboundForSite(s) {
+    const k = s.sysId + '|' + (s.bodyKey || '') + '|' + (s.kind || '');
+    const list = inboundBySite[k] || [];
+    return list.filter(function (f) { return !s.harvesting || f.location.status === 'in-transit'; });
+  }
 
   /* Riepilogo testata: aggrega TUTTI i siti noti (non filtrati) per dare
      un colpo d'occhio "quanto sto estraendo ora" indipendente dal filtro. */
@@ -6265,6 +6222,29 @@ function economyAnomaliesHtml(g) {
     sumCell('star', round1(sumEn) + '/' + iU(), activeEn + ' siti · energia', 'is-en') +
   '</section>';
 
+  /* Ripartizione per colonia ricevente (richiesta utente 2026-06-20):
+     il raccolto va in capo alla COLONIA D'ORIGINE della flotta — non
+     alla più vicina al sito — quindi qui mostriamo esplicitamente
+     "+X met/Ι · +Y en/Ι" per ogni colonia attualmente beneficiaria. */
+  const byColony = (ORION.anomaly && ORION.anomaly.harvestByColony) ? ORION.anomaly.harvestByColony(g) : {};
+  const colKeys = Object.keys(byColony).sort(function (a, b) { return byColony[b].total - byColony[a].total; });
+  let byColonyHtml = '';
+  if (colKeys.length) {
+    byColonyHtml = '<section class="econ-bycol" aria-label="Surplus estrattivo per colonia">' +
+      '<h3 class="econ-bycol__h">Ripartizione per colonia</h3>' +
+      '<ul class="econ-bycol__list">' + colKeys.map(function (ck) {
+        const r = byColony[ck];
+        let chips = '';
+        if (r.met > 0) chips += '<span class="econ-bycol__chip is-met">+' + round1(r.met) + ' met/' + iU() + ' <em>· ' + r.sitesMet + (r.sitesMet === 1 ? ' sito' : ' siti') + '</em></span>';
+        if (r.en  > 0) chips += '<span class="econ-bycol__chip is-en">+' + round1(r.en) + ' en/' + iU() + ' <em>· ' + r.sitesEn + (r.sitesEn === 1 ? ' sito' : ' siti') + '</em></span>';
+        return '<li class="econ-bycol__row">' +
+          '<span class="econ-bycol__name">' + escapeHtml(systemNameFromKey(g, ck)) + '</span>' +
+          '<span class="econ-bycol__chips">' + chips + '</span>' +
+        '</li>';
+      }).join('') + '</ul>' +
+    '</section>';
+  }
+
   const sites = allSites.filter(passFilter);
   let body;
   if (!sites.length) {
@@ -6291,7 +6271,6 @@ function economyAnomaliesHtml(g) {
         const r = s.harvestRate != null ? s.harvestRate : 0.6;
         if (s.res === 'met') sysMet += r; else if (s.res === 'en') sysEn += r;
       });
-      const send = nearestSurveyColony(sid);
       const tag = systemTagHtml(sid);
       const collapsed = !!ORION._econGroupCollapsed[sid];
       const caret = collapsed ? '▸' : '▾';
@@ -6326,36 +6305,52 @@ function economyAnomaliesHtml(g) {
           const got = +(s.harvested || 0).toFixed(1);
           const rate = s.harvestRate != null ? s.harvestRate : 0.6;
           const resLbl = resShortLabel(s.res);
-          if (s.harvesting) harvestTxt = '<span class="econ-chip econ-chip--harvest" title="Risorse raccolte · ritmo per Impulso">raccolti <strong>' + got + ' ' + resLbl + '</strong> · <strong>' + rate + '</strong>/' + iU() + '</span>';
+          /* Quando il sito è quasi esaurito il ritmo effettivo scende alla
+             rigenerazione sostenibile, sotto la capacità della flotta: lo
+             spieghiamo nel tooltip (capacità lorda vs ritmo effettivo). */
+          const rateTitle = (s.harvestRateGross && s.harvestRateGross > rate)
+            ? 'Ritmo effettivo per Impulso. Capacità flotta ' + s.harvestRateGross + '/' + iU() + ', ma la riserva è quasi esaurita → eroga la rigenerazione sostenibile finché non si ricostituisce.'
+            : 'Risorse raccolte · ritmo per Impulso (Estrattore: scala con l\'Hangar d\'origine; Esploratore: 0.6 fisso)';
+          if (s.harvesting) harvestTxt = '<span class="econ-chip econ-chip--harvest" title="' + rateTitle + '">raccolti <strong>' + got + ' ' + resLbl + '</strong> · <strong>' + rate + '</strong>/' + iU() + '</span>';
           else if (got > 0) harvestTxt = '<span class="econ-chip" title="Risorse raccolte (raccolta interrotta)">raccolti ' + got + ' ' + resLbl + '</span>';
         }
-        const canSend = !s.harvesting && send && send.capable;
+        const inbound = inboundForSite(s);
+        const inboundTransit = inbound.filter(function (f) { return f.location.status === 'in-transit'; });
+        const canSend = !s.harvesting && !inboundTransit.length && hasShipyard;
         const sendTitle = s.harvesting ? 'Una flotta è già presente sul sito'
-          : (send && send.capable
-              ? 'Invia una flotta da ' + escapeHtml(systemNameFromKey(g, send.colony.systemId + ':' + send.colony.bodyKey)) + ' (' + send.hops + ' salti)'
-              : 'Nessuna colonia con scafo + equipaggio in grado di raggiungere il sito');
-        const colAttr = (send && send.capable) ? (' data-col="' + escapeHtml(send.colony.systemId + ':' + send.colony.bodyKey) + '"') : '';
+          : inboundTransit.length ? 'Una flotta è già in viaggio verso questo sito'
+          : !hasShipyard ? 'Serve una colonia con Cantiere navale per costruire la flotta'
+          : 'Apri il pannello Crea flotta con destinazione e missione "Estrai" pre-compilate';
         const bodyAttr = s.bodyKey ? (' data-body="' + escapeHtml(s.bodyKey) + '"') : '';
-        return '<li class="econ-item' + (s.harvesting ? ' is-harvesting' : '') + '">' +
+        const inboundBadge = (!s.harvesting && inboundTransit.length)
+          ? '<span class="econ-item__live econ-item__live--enroute" title="Flotta in viaggio verso il sito">✈ in viaggio</span>'
+          : '';
+        const kindIcon = anomalyKindIcon(s.kind);
+        return '<li class="econ-item econ-item--' + escapeHtml(s.kind) + (s.harvesting ? ' is-harvesting' : (inboundTransit.length ? ' is-enroute' : '')) + '">' +
+          '<span class="econ-item__glyph" aria-hidden="true">' + kindIcon + '</span>' +
           '<div class="econ-item__main">' +
             '<div class="econ-item__head">' +
               '<span class="econ-item__kind">' + meta.label + '</span>' +
               (bodyName ? '<span class="econ-item__body">' + bodyName + '</span>' : '') +
               (s.harvesting ? '<span class="econ-item__live" title="Flotta presente">✦ in raccolta</span>' : '') +
+              inboundBadge +
             '</div>' +
             '<div class="econ-item__chips">' +
               '<span class="econ-chip" title="Stato del sito">' + stateTxt + '</span>' +
               harvestTxt +
             '</div>' +
           '</div>' +
-          '<button class="btn btn--mini btn--primary econ-item__send" data-action="econ-anom-send" data-sys="' + s.sysId + '" data-kind="' + s.kind + '"' + bodyAttr + colAttr + ' type="button"' +
-            (canSend ? '' : ' disabled') + ' title="' + escapeHtml(sendTitle) + '">Invia flotta</button>' +
+          '<button class="econ-item__send" data-action="econ-anom-send" data-sys="' + s.sysId + '" data-kind="' + s.kind + '"' + bodyAttr + ' type="button"' +
+            (canSend ? '' : ' disabled') + ' title="' + escapeHtml(sendTitle) + '">' +
+            '<span class="ui-icon" aria-hidden="true">' + ((ORION.icon && ORION.icon('send')) || '→') + '</span>' +
+            '<span class="econ-item__send-lbl">Invia</span>' +
+          '</button>' +
         '</li>';
       }).join('') + '</ul>');
       return '<section class="econ-group' + (collapsed ? ' is-collapsed' : '') + '">' + head + items + '</section>';
     }).join('') + '</div>';
   }
-  return summary + chips + body;
+  return summary + byColonyHtml + chips + body;
 }
 
 /* Sezione Scambi con le AI (export rifiuti). Read + chiusura contratto; i
@@ -6449,19 +6444,34 @@ function renderEconAnomaliesView(stage) {
     '<div class="fleet-view market-view economy-view">' +
       econViewHead('Anomalie &amp; sfruttamenti', 'Economia · §17.3') +
       economyAnomaliesHtml(g) +
-      '<p class="panel__note">Tutti i siti §17.3 noti della galassia, raggruppati per sistema. Inviare una flotta che ' +
-        '<strong>resta sul posto</strong> a drenare: parte dalla colonia idonea più vicina. Detriti/cinture→metalli, ' +
-        'nebulose/giganti gassosi→energia, reliquie→ricompensa una-tantum.</p>' +
+      '<p class="panel__note">Tutti i siti §17.3 noti della galassia, raggruppati per sistema. <strong>Invia</strong> apre ' +
+        'il pannello <em>Crea flotta</em> con destinazione e missione <em>Estrai</em> pre-compilate: scegli colonia di origine ' +
+        '(serve un cantiere navale) e composizione, poi conferma. La flotta <strong>resta sul posto</strong> a drenare; ' +
+        'il bottino viene depositato sulla <strong>colonia attiva più vicina al sito</strong> — usa le rotte commerciali ' +
+        'per ridistribuirlo. Detriti/cinture→metalli, nebulose/giganti gassosi→energia, reliquie→ricompensa una-tantum.</p>' +
     '</div>';
   stage.querySelectorAll('[data-action="econ-res-filter"]').forEach(function (b) {
     b.addEventListener('click', function () { ORION._econResFilter = b.dataset.res; renderEconAnomaliesView(stage); });
   });
   stage.querySelectorAll('[data-action="econ-anom-send"]').forEach(function (b) {
     b.addEventListener('click', function () {
-      const colKey = b.dataset.col;
-      const colony = colKey ? g.colonies[colKey] : null;
-      if (!colony) { showToast('Nessuna colonia disponibile per l\'invio'); return; }
-      openAnomalySurveyPicker(colony, Number(b.dataset.sys), b.dataset.kind, b.dataset.body || null);
+      /* Decisione utente 2026-06-20: unifichiamo TUTTI i flussi di invio
+         flotta su openFleetDetail (Fleet Wizard). Niente picker paralleli
+         che potrebbero materializzare spedizioni senza passare dalla
+         pipeline standard. Pre-compiliamo destinazione + missione
+         "extract"; la colonia d'origine la sceglie il Wizard fra le
+         eleggibili (cantiere navale). */
+      openFleetDetail(null, {
+        dest: {
+          sysId: Number(b.dataset.sys),
+          bodyKey: b.dataset.body || null,
+          /* Anomalie a livello sistema (nebulosa/detriti/reliquie) non hanno
+             bodyKey: passiamo il tipo così il Wizard pre-seleziona QUEL sito
+             nel selettore destinazione (feedback utente 2026-06-26). */
+          anomKind: b.dataset.body ? null : (b.dataset.kind || null)
+        },
+        mission: 'extract'
+      });
     });
   });
   stage.querySelectorAll('[data-action="econ-group-toggle"]').forEach(function (b) {
@@ -6812,6 +6822,141 @@ function dispatchRewardStr(m) {
   if (typeof r.reputation === 'number' && r.reputation) parts.push('rep +' + r.reputation);
   if (typeof r.disposition === 'number' && r.disposition && m.sourceCivId) parts.push('relazioni +' + r.disposition);
   return parts.join(' · ') || '—';
+}
+
+/* =====================================================================
+   M18 — Vista Stabilità galattica.
+   Layout: due colonne (ICG | Reputazione) con valore, fascia, top
+   fattori; sotto, sezione storico con le ultime 20 mutazioni discrete.
+   Nessuna interazione di gioco: è una pagina di lettura. La sorgente
+   dati è ORION.reputation.breakdown(game).
+   ===================================================================== */
+function stabilityLauncherSub() {
+  const g = ORION.game;
+  if (!g || !ORION.reputation) return '—';
+  const rp = ORION.reputation.getRep(g);
+  const ic = ORION.reputation.getICG(g);
+  return 'ICG ' + ic + ' · Rep ' + rp;
+}
+
+function renderStabilityView(stage) {
+  if (!stage) return;
+  const g = ORION.game;
+  if (!g || !ORION.reputation) {
+    stage.innerHTML = '<div class="viewport__placeholder"><p class="viewport__caption">STABILITÀ</p>' +
+      '<p class="viewport__hint">Modulo M18 non disponibile.</p></div>';
+    return;
+  }
+  if (ORION.tutorial) ORION.tutorial.fire('reputation-icg');
+  ORION.reputation.ensure(g);
+  const data = ORION.reputation.breakdown(g);
+
+  function bandStripHtml(d, thresholds, bandLabels, tones, polarity) {
+    /* Barra orizzontale 0..100 con le N+1 fasce colorate e marker
+       sul valore corrente. polarity='good-low' (ICG: 0 buono) o
+       'good-high' (Rep: 100 buono). */
+    const segs = [];
+    const pts = [0].concat(thresholds, [100]);
+    for (let i = 0; i < pts.length - 1; i++) {
+      const from = pts[i], to = pts[i + 1];
+      segs.push('<span class="stab-strip__seg stab-strip__seg--' + tones[i] +
+        '" style="left:' + from + '%; width:' + (to - from) + '%" title="' +
+        escapeHtml(bandLabels[i] || '') + ' (' + from + '–' + to + ')"></span>');
+    }
+    const pct = Math.max(0, Math.min(100, d.value));
+    return '<div class="stab-strip" role="img" aria-label="' + escapeHtml(d.bandLabel) +
+        ' (' + d.value + '/100)">' +
+      segs.join('') +
+      '<span class="stab-strip__marker" style="left:' + pct + '%"></span>' +
+      '<span class="stab-strip__scale"><span>0</span>' +
+      thresholds.map(function (t) { return '<span style="left:' + t + '%">' + t + '</span>'; }).join('') +
+      '<span style="left:100%">100</span></span>' +
+    '</div>';
+  }
+
+  function factorListHtml(factors) {
+    if (!factors.length) {
+      return '<p class="lp-empty">Nessun fattore rilevante al momento.</p>';
+    }
+    return '<ul class="stab-factors">' + factors.map(function (f) {
+      const arrow = f.sign > 0 ? '▲' : '▼';
+      const tone = f.sign > 0 ? 'bad' : 'ok';
+      return '<li class="stab-factor stab-factor--' + tone + '">' +
+        '<span class="stab-factor__arrow">' + arrow + '</span>' +
+        '<span class="stab-factor__body">' +
+          '<strong>' + escapeHtml(f.label) + '</strong>' +
+          '<span class="stab-factor__detail">' + escapeHtml(f.detail || '') + '</span>' +
+        '</span>' +
+        '<span class="stab-factor__weight">' + (f.weight || 0) + '</span>' +
+      '</li>';
+    }).join('') + '</ul>';
+  }
+
+  function panelHtml(kind, d, polarity) {
+    const thresholds = (kind === 'icg') ? ORION.reputation.ICG_THRESHOLDS : ORION.reputation.REP_THRESHOLDS;
+    const bandLabels = (kind === 'icg') ? ORION.reputation.ICG_BAND_LABEL : ORION.reputation.REP_BAND_LABEL;
+    const tones      = (kind === 'icg') ? ORION.reputation.ICG_BAND_TONE  : ORION.reputation.REP_BAND_TONE;
+    const title = (kind === 'icg') ? 'Indice di Corruzione Galattica' : 'Reputazione globale';
+    const sub   = (kind === 'icg')
+      ? 'Più alto è peggio. Misura la pressione di entropia/corruzione nella galassia.'
+      : 'Più alta è meglio. Riflette come le altre civiltà vedono il tuo impero.';
+    return '<section class="stab-panel stab-panel--' + kind + '">' +
+      '<header class="stab-panel__head">' +
+        '<h3 class="stab-panel__title">' + escapeHtml(title) + '</h3>' +
+        '<p class="stab-panel__sub">' + escapeHtml(sub) + '</p>' +
+      '</header>' +
+      '<div class="stab-panel__value">' +
+        '<span class="stab-panel__num stab-panel__num--' + d.tone + '">' + d.value + '</span>' +
+        '<span class="stab-panel__band stab-panel__band--' + d.tone + '">' + escapeHtml(d.bandLabel) + '</span>' +
+      '</div>' +
+      bandStripHtml(d, thresholds, bandLabels, tones, polarity) +
+      '<div class="stab-panel__factors">' +
+        '<h4 class="stab-panel__h4">Fattori attuali</h4>' +
+        factorListHtml(d.factors) +
+      '</div>' +
+    '</section>';
+  }
+
+  function historyHtml(recent) {
+    if (!recent.length) {
+      return '<p class="lp-empty">Nessuna mutazione registrata. Le scelte significative (dispacci, crisi, diplomazia) compariranno qui.</p>';
+    }
+    return '<ol class="stab-history">' + recent.map(function (e) {
+      const sign = e.delta > 0 ? '+' : '';
+      const tone = (e.kind === 'icg')
+        ? (e.delta > 0 ? 'bad' : 'ok')
+        : (e.delta > 0 ? 'ok' : 'bad');
+      const kindLbl = (e.kind === 'icg') ? 'ICG' : 'Rep';
+      const ds = 'Ι ' + (e.ds | 0);
+      return '<li class="stab-history__item stab-history__item--' + tone + '">' +
+        '<span class="stab-history__ds">' + escapeHtml(String(ds)) + '</span>' +
+        '<span class="stab-history__kind stab-history__kind--' + e.kind + '">' + kindLbl + '</span>' +
+        '<span class="stab-history__delta">' + sign + Math.round(e.delta) + '</span>' +
+        '<span class="stab-history__values">' + e.before + ' → ' + e.after + '</span>' +
+        '<span class="stab-history__label">' + escapeHtml(e.label || e.source || '—') + '</span>' +
+      '</li>';
+    }).join('') + '</ol>';
+  }
+
+  const html =
+    '<div class="stab-view">' +
+      '<header class="stab-view__head">' +
+        '<h2 class="stab-view__title">Stabilità galattica</h2>' +
+        '<p class="stab-view__sub">Due metriche misurano la salute strategica della galassia. ' +
+        'L\'<strong>ICG</strong> sale quando l\'entropia avanza (civiltà maligne in espansione, crisi non gestite, hazard ignorati) e diventa una sconfitta progressiva oltre 80. ' +
+        'La <strong>Reputazione</strong> riflette il giudizio delle altre civiltà sul tuo operato e modula prezzi commerciali (§15.3) e disposizione delle AI.</p>' +
+      '</header>' +
+      '<div class="stab-grid">' +
+        panelHtml('icg', data.icg, 'good-low') +
+        panelHtml('rep', data.rep, 'good-high') +
+      '</div>' +
+      '<section class="stab-history-wrap">' +
+        '<h3 class="stab-view__h3">Storico recente (ultimi ' + ORION.reputation.HISTORY_CAP + ' eventi)</h3>' +
+        historyHtml(data.recent) +
+      '</section>' +
+    '</div>';
+
+  stage.innerHTML = html;
 }
 
 function renderDispatchView(stage) {
@@ -7513,6 +7658,22 @@ function renderFleetView(stage) {
   stage.querySelectorAll('[data-action="war-recall"]').forEach(function (b) {
     b.addEventListener('click', function () { openRecallOverlay(stage); });
   });
+  /* Click su un'incursione in arrivo → mappa gruppo stellare col sistema
+     bersaglio al centro e zoom di gruppo (richiesta utente: rendere esplicita
+     la destinazione e raggiungerla senza navigare la mappa a mano). */
+  stage.querySelectorAll('[data-action="incursion-focus"]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const sid = Number(b.dataset.sys);
+      if (!Number.isFinite(sid) || sid < 0) return;
+      const fid = b.dataset.fleet || null;
+      if (ORION.game && ORION.game.state) ORION.game.state.selectedId = sid;
+      navigateView('group');
+      /* Raider mirato a una flotta → centra sulla flotta stessa (è il
+         bersaglio reale); altrimenti centra sul sistema del corpo assediato. */
+      if (fid && ORION.map && ORION.map.focusFleet) ORION.map.focusFleet(fid);
+      else if (ORION.map && ORION.map.focusSystemCentered) ORION.map.focusSystemCentered(sid);
+    });
+  });
 }
 
 /* Roster "Comandanti dell'Impero" (decisione utente 2026-06-11): i
@@ -7600,8 +7761,29 @@ function buildWarSection(g) {
   if (incursions.length) {
     html += '<div class="war-incursions"><h4 class="war-h">Incursioni in arrivo</h4><ul>';
     incursions.forEach(function (inc) {
-      html += '<li>' + uiIcon('warning', 'gold') + ' Predoni verso ' + colonyNameFromKey(inc.targetColonyKey) +
-        ' · arrivo fra <strong>' + (inc.eta | 0) + ' ' + iU() + '</strong></li>';
+      const sysId = inc.targetSysId;
+      const hasSys = sysId != null && sysId >= 0;
+      /* Un raider può mirare a una FLOTTA precisa (kind 'pirate-raider'): in
+         tal caso quella flotta È il bersaglio reale e, se resta in orbita lì,
+         combatte all'arrivo (recovery-friendly #22: spostandola, svanisce). */
+      const fleetId = inc.targetFleetId || null;
+      /* bodyTagHtml = [REGIONE·Sistema]: rende esplicito SIA il bersaglio
+         (colonia/stazione/flotta) SIA il sistema in cui si trova, così il
+         giocatore sa subito cosa e dove senza aprire la mappa. */
+      const tag = hasSys ? bodyTagHtml(sysId) : '';
+      const body = uiIcon('warning', 'gold') + ' <span class="war-incursion-link__txt">Predoni verso ' +
+        incursionTargetLabel(inc) + tag + ' · arrivo fra <strong>' + (inc.eta | 0) + ' ' + iU() + '</strong></span>';
+      if (hasSys) {
+        const fAttr = fleetId ? ' data-fleet="' + escapeHtml(fleetId) + '"' : '';
+        const ttl = fleetId
+          ? 'La tua flotta È il bersaglio: mostrala sulla mappa · spostala per evitare lo scontro, o tienile accanto una scorta armata che la difenda'
+          : 'Mostra sulla mappa del gruppo stellare, sistema al centro';
+        html += '<li><button class="war-incursion-link" data-action="incursion-focus" data-sys="' + sysId + '"' + fAttr +
+          ' type="button" title="' + ttl + '">' +
+          body + uiIcon('chevronRight', 'soft') + '</button></li>';
+      } else {
+        html += '<li>' + body + '</li>';
+      }
     });
     html += '</ul></div>';
   }
@@ -7947,6 +8129,23 @@ function fleetWearHtml(fleet) {
     '</div>';
 }
 
+/* #69 follow-up (feedback utente 2026-06-29): riga costo viveri del pieno.
+   Mostra sulla STESSA riga quante risorse si imbarcano E quante resterebbero
+   nella colonia origine (così non si carica oltre il disponibile). `est` è il
+   risultato di ORION.fleet.viveriFillEstimate(...). Se la colonia non ha stock
+   noto (es. stazione orbitale) mostra solo l'imbarcato. */
+function viveriLoadCostHtml(est) {
+  if (!est) return '';
+  const order = [['met', '⛭'], ['en', '⚡'], ['food', '❖'], ['water', '≈']];
+  const load = order.map(function (p) { return p[1] + ' ' + Math.ceil(est.cost[p[0]] || 0); }).join(' · ');
+  let html = 'Imbarco <strong>' + load + '</strong>';
+  if (est.hasStock) {
+    const rem = order.map(function (p) { return p[1] + ' ' + (est.remaining[p[0]] != null ? est.remaining[p[0]] : '—'); }).join(' · ');
+    html += ' · <span class="vcap-rem">resta in colonia <strong>' + rem + '</strong></span>';
+  }
+  return html;
+}
+
 /* Decisione #69: gauge viveri di flotta. Autonomia in Ι (0..cap) con stato
    ok/low/crit colorato. La flotta a un porto amico è sempre rifornita. */
 function fleetViveriHtml(fleet) {
@@ -8021,7 +8220,10 @@ function fleetLocText(g, f) {
   if (!g || !f || !f.location) return '—';
   const loc = f.location;
   const eta = (f.etaImpulsi | 0);
-  const etaFrag = eta > 0 ? ' (' + eta + ' ' + iU() + ')' : '';
+  /* Plain-text helper: i chiamanti (sidebar/dettaglio) passano l'output
+     attraverso escapeHtml, quindi qui niente HTML (no iU() → SVG span,
+     che verrebbe escapato a "<span…" visibile). Glifo unicode diretto. */
+  const etaFrag = eta > 0 ? ' (' + eta + ' Ι)' : '';
   if (loc.status === 'in-transit' && loc.intra) {
     const sId = loc.intra.systemId;
     const bn = _flBodyNm(g, sId, loc.intra.toBodyKey);
@@ -8440,20 +8642,23 @@ function renderCivView(stage) {
   /* Tutorial: concetti sulle civiltà alla prima apertura della vista. */
   if (ORION.tutorial) ORION.tutorial.fire('civilizations');
 
+  const ALIGN_LABEL = { bene: 'Bene', male: 'Male', neutrale: 'Neutrale' };
+  const KNOWLEDGE = ORION.ai.KNOWLEDGE || { unknown:0, spotted:1, contacted:2, known:3, familiar:4 };
   /* Modalità DETTAGLIO a tutta schermata (richiesta utente 2026-06-20): se è
      selezionata una civ (click sul nome), mostra il dossier completo invece
      della lista. */
   if (ORION._civDetailId) {
     const dc = (g.civs || []).filter(function (c) { return c.id === ORION._civDetailId; })[0];
     const dcRank = dc && ORION.ai.knowledgeRank ? ORION.ai.knowledgeRank(dc) : 0;
-    if (dc && (dcRank >= 1 || dc.faction)) { renderCivDetail(stage, dc); return; }
-    ORION._civDetailId = null; // non più valido (caduta/sconosciuta)
+    /* Apri il dettaglio per qualunque civ visibile (avvistata+) o per le 4
+       Costanti. Il livello intel reale (ricavato da intelProgress) regola
+       quali campi si vedono dentro renderCivDetail — niente più "Completo"
+       fantasma né blocchi all'accesso. */
+    if (dc && (dcRank >= KNOWLEDGE.spotted || dc.faction)) { renderCivDetail(stage, dc); return; }
+    ORION._civDetailId = null; // non più valido (caduta / sconosciuta)
   }
   /* Breadcrumb striscia: lista = solo "Diplomazia" (corrente). */
   setViewCrumbs('<span class="crumb is-current">Diplomazia</span>');
-
-  const ALIGN_LABEL = { bene: 'Bene', male: 'Male', neutrale: 'Neutrale' };
-  const KNOWLEDGE = ORION.ai.KNOWLEDGE || { unknown:0, spotted:1, contacted:2, known:3, familiar:4 };
   /* M10 Fase B punto 2 (decisione #52 §13.10): scoperta progressiva a 5 gradi.
      `visibleCivs` ritorna tutte le civiltà ≥ avvistate (esclude le sconosciute).
      Le **4 Costanti** sono sempre visibili nella loro sezione fissa anche se
@@ -8477,7 +8682,9 @@ function renderCivView(stage) {
     /* Header sempre presente: nome, swatch colore, eventuale chip grado.
        4 Costanti: ruolo SEMPRE noto anche in unknown. */
     /* Nome cliccabile → schermata di dettaglio piena (richiesta utente
-       2026-06-20). Cliccabile da avvistata in su (e per le Costanti). */
+       2026-06-20). Cliccabile da avvistata in su (e per le Costanti):
+       il dettaglio adatta i campi al vero livello intel (frammentario a
+       0 progresso → quasi tutto "?"), non blocca l'accesso. */
     const nameClickable = (rank >= KNOWLEDGE.spotted) || !!factionDef;
     const nameEl = nameClickable
       ? '<button type="button" class="civ-card__name civ-card__name--link" data-civ-detail="' + escapeHtml(c.id) + '" title="Apri il dossier dettagliato">' + escapeHtml(c.name) + '</button>'
@@ -8515,10 +8722,14 @@ function renderCivView(stage) {
     }
     /* CONTACTED+ — dossier base. Il grado di intel (fragmentary/partial/
        complete) attenua i dettagli per chi è stato contattato con una
-       flotta esile. Default 'complete' per backward compat con civ
-       contattate prima dell'introduzione del meccanismo. */
+       flotta esile. Fallback ricavato da intelProgress (bugfix 2026-06-20:
+       prima era 'complete' come backward-compat e rivelava tutto a civ
+       contattate per battaglia, dove intelLevel non viene scritto). */
     if (rank >= KNOWLEDGE.contacted) {
-      const intelLvl = c.intelLevel || 'complete';
+      /* Auto-promote (2026-06-26) — vedi renderCivDetail. */
+      if (ORION.ai.reconcileIntelLevel) ORION.ai.reconcileIntelLevel(c);
+      const intelLvl = c.intelLevel ||
+        (ORION.ai.intelLevelFromProgress ? ORION.ai.intelLevelFromProgress(c.intelProgress || 0) : 'fragmentary');
       const intelRank = ORION.ai.intelLevelRank ? ORION.ai.intelLevelRank(intelLvl) : 3;
       const disp = Math.round(c.disposition || 0);
       const dispLabel = ORION.ai.dispositionLabel(disp);
@@ -8558,8 +8769,10 @@ function renderCivView(stage) {
         ? '<span class="civ-chip civ-chip--' + c.alignment + '">' + (ALIGN_LABEL[c.alignment] || c.alignment) + '</span>'
         : '<span class="civ-chip civ-chip--unknown" title="Intel insufficiente: manda una flotta più potente">Allineamento ?</span>';
 
-      /* Chip intel: indicatore visivo del grado di dossier ottenuto. */
-      const INTEL_LABEL = { fragmentary: 'Frammentario', partial: 'Parziale', complete: 'Completo' };
+      /* Chip intel: indicatore visivo del grado di dossier ottenuto.
+         4 livelli (decisione 2026-06-26): aggiunto Approfondito tra Completo
+         e Infiltrato (Infiltrato non è un livello ma il flag deepIntel). */
+      const INTEL_LABEL = { fragmentary: 'Frammentario', partial: 'Parziale', complete: 'Completo', deep: 'Approfondito' };
       const intelChip = '<span class="civ-intel civ-intel--' + intelLvl +
         '" title="Dossier ' + escapeHtml(INTEL_LABEL[intelLvl] || intelLvl) +
         '. Aumenta la presenza nel loro sistema con una flotta più potente per affinarlo.">' +
@@ -8635,8 +8848,8 @@ function renderCivView(stage) {
          Se una tua flotta è nel loro sistema → ETA in Ι (raccolta ATTIVA);
          altrimenti progresso statico (raccolta ferma). */
       const iprog = c.intelProgress || 0;
-      const inextAt = iprog < 3 ? 3 : (iprog < 6 ? 6 : null);
-      const inextLbl = inextAt === 3 ? 'parziale' : 'completo';
+      const inextAt = iprog < 3 ? 3 : (iprog < 6 ? 6 : (iprog < 10 ? 10 : null));
+      const inextLbl = inextAt === 3 ? 'parziale' : (inextAt === 6 ? 'completo' : 'approfondito');
       let reconF = null;
       const csys = c.systems || [];
       (g.fleets || []).forEach(function (f) {
@@ -8644,12 +8857,26 @@ function renderCivView(stage) {
         if (csys.indexOf(f.location.systemId) >= 0) reconF = f;
       });
       const iio = (reconF && ORION.ai.intelOutlook) ? ORION.ai.intelOutlook(g, reconF, reconF.location.systemId) : null;
+      /* Cap composizione: se il livello successivo richiede una flotta più
+         "grossa" di quella che hai mai portato lì, la raccolta è ferma a
+         metà strada. Lo dichiariamo esplicito, evita il dubbio "sto guadagnando?". */
+      const intelMax = c.intelMaxScore || 0;
+      const capStuck = (inextAt === 6 && intelMax < 3) || (inextAt === 10 && intelMax < 5);
+      const reqShip = (inextAt === 6) ? 'fregata (score ≥ 3)' : (inextAt === 10 ? 'incrociatore (score ≥ 5) o Infiltrazione M19' : '');
       let intelProgTxt;
-      if (inextAt == null) intelProgTxt = 'dossier completo';
-      else if (iio && !iio.complete && iio.id === c.id) intelProgTxt = '🛰 raccolta in corso · ~' + iio.etaToNext + ' Ι al livello ' + inextLbl;
-      else intelProgTxt = iprog.toFixed(1) + '/' + inextAt + ' al livello ' + inextLbl + ' · avvicina una flotta per raccogliere';
+      if (inextAt == null) intelProgTxt = 'massimo (approfondito) raggiunto';
+      else if (capStuck) intelProgTxt = iprog.toFixed(1) + '/' + inextAt + ' al livello ' + inextLbl + ' · serve ' + reqShip;
+      else if (iio && !iio.complete && iio.id === c.id) intelProgTxt = '🛰 raccolta in corso · ~' + iio.etaToNext + ' Ι al livello ' + inextLbl + (reqShip ? ' · servirà ' + reqShip : '');
+      else intelProgTxt = iprog.toFixed(1) + '/' + inextAt + ' al livello ' + inextLbl + ' · avvicina ' + reqShip;
+      /* Forza Impero (decisione 2026-06-26): range stimato che si stringe coi
+         livelli. A frammentario "≈ 8–32"; a deep "≈ 18–20"; con deepIntel
+         "= 19" (esatto) eventualmente con marker "vecchio di N Ι". */
+      const fr = ORION.ai.forceEstimateRange ? ORION.ai.forceEstimateRange(g, c, intelRank) : null;
+      const forceTxt = fr
+        ? (fr.exact ? ('<strong>' + fr.lo + '</strong>') : (fr.lo + '–' + fr.hi))
+        : '—';
       const estBlock = '<div class="civ-card__est">' +
-        '<div class="civ-card__row"><span class="civ-card__k">Potenza percepita</span><span class="civ-power civ-power--' + estPower + '">' + escapeHtml(estPower) + '</span>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Forza Impero</span><span class="civ-power civ-power--' + estPower + '" title="Tier qualitativo · valore stimato a finestra che si stringe coi livelli intel">' + escapeHtml(estPower) + ' · ≈ ' + forceTxt + '</span>' +
           '<span class="civ-card__k">Sistemi noti</span><span>' + estKnown + '</span></div>' +
         '<div class="civ-card__row"><span class="civ-card__k">Sede</span><span>' + escapeHtml(seatGrp.name || (seat && seat.name) || '—') + '</span>' +
           '<span class="civ-card__k">Struttura stimata</span><span>tra ' + estLo + ' e ' + estHi + ' insediamenti</span></div>' +
@@ -8676,25 +8903,40 @@ function renderCivView(stage) {
     /* KNOWN+ — vocazione + tratto + intel forza. Vincolato a intel
        'complete': anche se le interazioni promuovono a known, i dettagli
        interni richiedono una buona presenza di flotta. */
-    const intelRankForExtras = ORION.ai.intelLevelRank ? ORION.ai.intelLevelRank(c.intelLevel || 'complete') : 3;
+    const intelLvlForExtras = c.intelLevel ||
+      (ORION.ai.intelLevelFromProgress ? ORION.ai.intelLevelFromProgress(c.intelProgress || 0) : 'fragmentary');
+    const intelRankForExtras = ORION.ai.intelLevelRank ? ORION.ai.intelLevelRank(intelLvlForExtras) : 1;
     if (rank >= KNOWLEDGE.known && intelRankForExtras >= 3) {
       const vocLabel = (ORION.ai.VOCATIONS && c.vocation && ORION.ai.VOCATIONS[c.vocation]) ? ORION.ai.VOCATIONS[c.vocation].label : '—';
       const affLabel = (ORION.ai.AFFINITIES && c.affinity && ORION.ai.AFFINITIES[c.affinity]) ? ORION.ai.AFFINITIES[c.affinity].label : '—';
-      const force = ORION.ai.forceEstimate ? ORION.ai.forceEstimate(g, c) : 0;
+      /* "Forza stimata" qui è il dato di approfondimento (Conosciuta + intel
+         alto). Mostra il valore esatto solo a Approfondito/Infiltrato; a
+         Completo resta il range stretto (±15%). */
+      const frX = ORION.ai.forceEstimateRange ? ORION.ai.forceEstimateRange(g, c, intelRankForExtras) : null;
+      const force = frX ? (frX.exact ? ('= ' + frX.lo + ' Forza') : ('≈ ' + frX.lo + '–' + frX.hi + ' Forza')) : '—';
       /* M10 Fase B-2: livello tecnologico + nota sul contrappeso
-         (qualità ≠ quantità). */
+         (qualità ≠ quantità). Rev 2026-06-26: a Completo (rank 3) il tier
+         è dato a fascia (es. "Avanzata / Superiore"), a Approfondito
+         (rank 4) o Infiltrato → tier esatto + nota. */
       const techTier = ORION.ai.techTierIndex ? ORION.ai.techTierIndex(g, c) : 1;
-      const techLbl = ORION.ai.techTierLabel ? ORION.ai.techTierLabel(g, c) : '—';
-      const techNote = techTier >= 3
-        ? ' <span class="civ-tech__note">(unità più toste, ma in numero contenuto)</span>'
-        : (techTier === 0 ? ' <span class="civ-tech__note">(armamenti datati)</span>' : '');
+      const techExact = ORION.ai.techTierLabel ? ORION.ai.techTierLabel(g, c) : '—';
+      const techLabels = ORION.ai.TECH_TIER_LABEL || ['Arretrata', 'Standard', 'Avanzata', 'Superiore', "All'avanguardia"];
+      const techDeep = (intelRankForExtras >= 4) || !!c.deepIntel;
+      const techLbl = techDeep
+        ? techExact
+        : (techLabels[Math.max(0, techTier - 1)] || '?') + ' / ' + (techLabels[Math.min(techLabels.length - 1, techTier + 1)] || '?');
+      const techNote = techDeep
+        ? (techTier >= 3
+            ? ' <span class="civ-tech__note">(unità più toste, ma in numero contenuto)</span>'
+            : (techTier === 0 ? ' <span class="civ-tech__note">(armamenti datati)</span>' : ''))
+        : ' <span class="civ-tech__note">(stima ±1 tier — porta il dossier ad Approfondito)</span>';
       /* Potenza/Sistemi noti vivono già nella Stima impero (estBlock): qui
          solo i dettagli più profondi (vocazione/affinità/tratto/forza). */
       const extras =
         '<div class="civ-card__row"><span class="civ-card__k">Vocazione</span><span class="civ-voc">' + escapeHtml(vocLabel) + '</span>' +
           '<span class="civ-card__k">Affinità</span><span>' + escapeHtml(affLabel) + '</span></div>' +
         '<div class="civ-card__row"><span class="civ-card__k">Tratto</span><span>' + escapeHtml(c.traitLabel || '—') + '</span>' +
-          '<span class="civ-card__k">Forza stimata</span><span>≈ ' + force + ' unità</span></div>' +
+          '<span class="civ-card__k">Forza stimata</span><span>' + escapeHtml(force) + '</span></div>' +
         '<div class="civ-card__row"><span class="civ-card__k">Tecnologia</span><span class="civ-tech civ-tech--t' + techTier + '">' + escapeHtml(techLbl) + '</span>' + techNote + '</div>';
       /* Inserisci extras DOPO i chip + sede e PRIMA della barra disposizione. */
       body = body.replace('<div class="civ-disp">', extras + '<div class="civ-disp">');
@@ -8854,6 +9096,27 @@ function renderCivView(stage) {
     '</div>';
   }
 
+  /* Card "Te" — confronto onesto della tua Forza Impero con quella delle
+     altre civ visibili (decisione 2026-06-26): le civ AI mostrano un range
+     stimato sulla stessa scala (civ.power), quindi anche tu vedi il tuo
+     numero così sai cosa significa "Forte" o "≈ 80–100" sull'avversario. */
+  const myForce = ORION.ai.playerEmpireForce ? ORION.ai.playerEmpireForce(g) : 0;
+  const myTier = ORION.ai.powerTier ? ORION.ai.powerTier(myForce) : '—';
+  const myColCount = (function () { var n = 0; var cs = g.colonies || {}; Object.keys(cs).forEach(function (k) { if (cs[k] && cs[k].colonized) n++; }); return n; })();
+  const selfCardHtml =
+    '<div class="civ-card civ-card--self" data-civ-id="__self">' +
+      '<div class="civ-card__head">' +
+        '<span class="civ-card__swatch" aria-hidden="true" style="background:#5fa8ff"></span>' +
+        '<span class="civ-card__name">Tu (Impero giocatore)</span>' +
+        '<span class="civ-grade civ-grade--familiar">Tu</span>' +
+      '</div>' +
+      '<div class="civ-card__est">' +
+        '<div class="civ-card__row"><span class="civ-card__k">Forza Impero</span><span class="civ-power civ-power--' + myTier + '" title="Stessa scala mostrata per le altre civ (8 per colonia + ramp da scontri).">' + escapeHtml(myTier) + ' · = ' + myForce + '</span>' +
+          '<span class="civ-card__k">Colonie</span><span>' + myColCount + '</span></div>' +
+      '</div>' +
+      '<p class="panel__note civ-card__hint">Confronto onesto: la Forza Impero qui è la stessa scala mostrata sulle altre civ. Sotto trovi le AI con stima a finestra (più stretta col salire del dossier).</p>' +
+    '</div>';
+
   stage.innerHTML =
     '<div class="civ-view">' +
       '<header class="fleet-view__head">' +
@@ -8865,6 +9128,7 @@ function renderCivView(stage) {
           '<span class="civ-index" title="Pressione nemica (M09): sale con le sconfitte, attira più attacchi">Pressione <strong>' + pressure + '</strong></span>' +
         '</div>' +
       '</header>' +
+      selfCardHtml +
       '<p class="panel__note">Le civiltà vivono in <strong>background</strong> (espandono, si fanno guerra, cadono e ' +
         'nascono). Dossier <strong>combat-aware</strong> con <strong>stato diplomatico</strong>: puoi <strong>dichiarare guerra</strong>, ' +
         '<strong>proporre pace</strong> o <strong>alleanza</strong> (non-aggressione) — l\'esito dipende da disposizione, ' +
@@ -9015,10 +9279,17 @@ function renderCivDetail(stage, c) {
   const DIP = ORION.diplomacy;
   const KN = AI.KNOWLEDGE || { unknown: 0, spotted: 1, contacted: 2, known: 3, familiar: 4 };
   const rank = AI.knowledgeRank ? AI.knowledgeRank(c) : 0;
-  const intelLvl = c.intelLevel || 'complete';
-  const intelRank = AI.intelLevelRank ? AI.intelLevelRank(intelLvl) : 3;
+  /* Auto-promote (2026-06-26): se intelProgress ha superato la soglia del
+     livello successivo ma intelLevel non lo riflette (save vecchi infiltrati
+     prima delle nuove soglie), allinea. Idempotente. */
+  if (AI.reconcileIntelLevel) AI.reconcileIntelLevel(c);
+  /* Bugfix 2026-06-20: fallback da intelProgress, non 'complete'. Vedi
+     renderCivCard per il razionale. */
+  const intelLvl = c.intelLevel ||
+    (AI.intelLevelFromProgress ? AI.intelLevelFromProgress(c.intelProgress || 0) : 'fragmentary');
+  const intelRank = AI.intelLevelRank ? AI.intelLevelRank(intelLvl) : 1;
   const ALIGN_LABEL = { bene: 'Bene', male: 'Male', neutrale: 'Neutrale' };
-  const INTEL_LABEL = { fragmentary: 'Frammentario', partial: 'Parziale', complete: 'Completo' };
+  const INTEL_LABEL = { fragmentary: 'Frammentario', partial: 'Parziale', complete: 'Completo', deep: 'Approfondito' };
   const seat = (g.galaxy.groups || []).filter(function (gp) { return gp.id === c.homeGroupId; })[0] || {};
   const factionDef = (c.faction && ORION.factions && ORION.factions.byId) ? ORION.factions.byId(c.faction) : null;
   const D = (ORION.galaxy && ORION.galaxy.DISCOVERY) || { DETECTED: 1 };
@@ -9026,23 +9297,95 @@ function renderCivDetail(stage, c) {
 
   /* Progresso dossier (Ι al prossimo livello se una flotta sta raccogliendo). */
   const iprog = c.intelProgress || 0;
-  const inextAt = iprog < 3 ? 3 : (iprog < 6 ? 6 : null);
-  const inextLbl = inextAt === 3 ? 'parziale' : 'completo';
+  const inextAt = iprog < 3 ? 3 : (iprog < 6 ? 6 : (iprog < 10 ? 10 : null));
+  const inextLbl = inextAt === 3 ? 'parziale' : (inextAt === 6 ? 'completo' : 'approfondito');
   let reconF = null;
   (g.fleets || []).forEach(function (f) {
     if (reconF || !f || !f.location || f.location.status === 'in-transit') return;
     if ((c.systems || []).indexOf(f.location.systemId) >= 0) reconF = f;
   });
   const iio = (reconF && AI.intelOutlook) ? AI.intelOutlook(g, reconF, reconF.location.systemId) : null;
+  const intelMax = c.intelMaxScore || 0;
+  const capStuck = (inextAt === 6 && intelMax < 3) || (inextAt === 10 && intelMax < 5);
+  const reqShip = (inextAt === 6) ? 'fregata (score ≥ 3)' : (inextAt === 10 ? 'incrociatore (score ≥ 5) o Infiltrazione M19' : '');
   let progTxt;
-  if (inextAt == null) progTxt = 'dossier completo';
-  else if (iio && !iio.complete && iio.id === c.id) progTxt = '🛰 raccolta in corso · ~' + iio.etaToNext + ' Ι al livello ' + inextLbl;
-  else progTxt = iprog.toFixed(1) + '/' + inextAt + ' al livello ' + inextLbl + ' · avvicina una flotta per raccogliere';
+  if (inextAt == null) progTxt = 'massimo (approfondito) raggiunto';
+  else if (capStuck) progTxt = iprog.toFixed(1) + '/' + inextAt + ' al livello ' + inextLbl + ' · serve ' + reqShip;
+  else if (iio && !iio.complete && iio.id === c.id) progTxt = '🛰 raccolta in corso · ~' + iio.etaToNext + ' Ι al livello ' + inextLbl + (reqShip ? ' · servirà ' + reqShip : '');
+  else progTxt = iprog.toFixed(1) + '/' + inextAt + ' al livello ' + inextLbl + ' · avvicina ' + reqShip;
 
   const estPower = AI.powerTier ? AI.powerTier(c.power || 0) : '—';
   const estKnown = AI.knownSystemsCount ? AI.knownSystemsCount(g, c) : ((c.systems || []).length);
   const estLo = Math.max(1, estKnown), estHi = Math.max(estLo + 1, estKnown * 2);
-  const force = AI.forceEstimate ? AI.forceEstimate(g, c) : 0;
+  /* Forza Impero: range che si stringe coi livelli intel (frammentario → deep);
+     con deepIntel diventa esatto. Vedi ORION.ai.forceEstimateRange. */
+  const fr = AI.forceEstimateRange ? AI.forceEstimateRange(g, c, intelRank) : null;
+  const forceTxt = fr
+    ? (fr.exact ? ('= ' + fr.lo) : ('≈ ' + fr.lo + '–' + fr.hi))
+    : '—';
+  /* Capacità militare stimata in "unità" (squadre/flotte) — leggibile per
+     paragone con la tua roster: Forza Impero / 25 (= POWER_PER_PLANET * ~3).
+     Stesso range/precision di forceTxt. */
+  const unitsTxt = fr
+    ? (fr.exact ? ('≈ ' + Math.max(1, Math.round(fr.lo / 25)) + ' unità') : ('≈ ' + Math.max(1, Math.round(fr.lo / 25)) + '–' + Math.max(2, Math.round(fr.hi / 25)) + ' unità'))
+    : '—';
+
+  /* Potenza di fuoco aggregata delle aifleet (somma fp di tutte le loro flotte
+     vive) — a livelli bassi a fascia, a L4 esatto. */
+  const fleetTot = AI.civFleetTotals ? AI.civFleetTotals(g, c) : { fp: 0, count: 0, ships: 0 };
+  const fpPct = intelRank >= 4 ? 0 : (intelRank >= 3 ? 0.20 : (intelRank >= 2 ? 0.45 : 0.70));
+  const fpDeepReveal = (intelRank >= 4) || !!c.deepIntel;
+  const fpLo = Math.max(0, Math.round(fleetTot.fp * (1 - fpPct)));
+  const fpHi = Math.max(0, Math.round(fleetTot.fp * (1 + fpPct)));
+  const fpTxt = fpDeepReveal ? ('= ' + fleetTot.fp + ' FP · ' + fleetTot.count + ' flotte · ' + fleetTot.ships + ' scafi')
+                              : ('≈ ' + fpLo + '–' + fpHi + ' FP');
+
+  /* Difese statiche AI: il giocatore vuole capire quali colonie siano scoperte.
+     A L1-L2: solo totale impero a fascia larga; a L3: totale piu' stretto;
+     a L4: breakdown PER COLONIA (visibile sotto, nella sezione Colonie). */
+  const defTot = AI.civDefensesTotal ? AI.civDefensesTotal(c) : { total: 0 };
+  const defPct = intelRank >= 4 ? 0 : (intelRank >= 3 ? 0.20 : (intelRank >= 2 ? 0.45 : 0.70));
+  const defLo = Math.max(0, Math.round(defTot.total * (1 - defPct)));
+  const defHi = Math.max(0, Math.round(defTot.total * (1 + defPct)));
+  /* Presenza REALE di flotte AI ferme nel sistema di ogni colonia: somma
+     garrison.powerOf delle game.aiFleets della civ con systemId=sid e
+     status in {orbiting,docked} (in-transit non difende). A L3 ci serve il
+     TOTALE per impero (range), a L4 il dettaglio per-sistema.
+     NB: dichiarato PRIMA di defTxt perché questo lo usa (bugfix TDZ
+     2026-06-26: realFleetTotal era usato prima dell'inizializzazione). */
+  const fleetBySys = (function () {
+    const m = {};
+    const list = (g.aiFleets || []);
+    const GAR = ORION.garrison;
+    if (!GAR || !GAR.powerOf) return m;
+    for (let i = 0; i < list.length; i++) {
+      const af = list[i];
+      if (!af || af.civId !== c.id) continue;
+      if (af.status === 'in-transit') continue;
+      const p = GAR.powerOf(g, af);
+      if (p <= 0) continue;
+      const sid = af.systemId;
+      m[sid] = (m[sid] || 0) + Math.round(p);
+    }
+    return m;
+  })();
+  const realFleetTotal = Object.keys(fleetBySys).reduce(function (s, k) { return s + fleetBySys[k]; }, 0);
+  /* Presentazione: combiniamo le difese statiche (sintetiche) con la
+     presenza REALE di flotte AI ferme sui loro sistemi. La presenza reale è
+     un dato concreto (game.aiFleets), NON una stima: la mostriamo da L3 in
+     su come "+ N P in orbita". A L4 anche il breakdown per-colonia (sotto). */
+  const defTxt = fpDeepReveal
+    ? ('= ' + defTot.total + ' P difese statiche · + ' + realFleetTotal + ' P in orbita = ' + (defTot.total + realFleetTotal) + ' P totali')
+    : ('≈ ' + defLo + '–' + defHi + ' P difese statiche' + (intelRank >= 3 && realFleetTotal > 0 ? (' · + ' + realFleetTotal + ' P in orbita') : ''));
+  /* Per-colonia (solo L4): map planetKey → defense P, da iniettare nella lista colonie. */
+  const defByPlanet = (intelRank >= 4 && AI.civDefensePerColony)
+    ? (function () {
+        const arr = AI.civDefensePerColony(g, c);
+        const m = {};
+        arr.forEach(function (x) { m[x.planetKey] = x.defense; });
+        return m;
+      })()
+    : null;
   const vocLabel = (AI.VOCATIONS && c.vocation && AI.VOCATIONS[c.vocation]) ? AI.VOCATIONS[c.vocation].label : '—';
   const affLabel = (AI.AFFINITIES && c.affinity && AI.AFFINITIES[c.affinity]) ? AI.AFFINITIES[c.affinity].label : '—';
   const disp = Math.round(c.disposition || 0);
@@ -9051,10 +9394,19 @@ function renderCivDetail(stage, c) {
   const pct = Math.max(0, Math.min(100, (disp + 100) / 2));
   const descGated = intelRank >= 2;
 
-  /* COLONIE note: pianeti della civ; localizzate solo nei sistemi scoperti. */
+  /* COLONIE note (decisione 2026-06-26): una colonia è "localizzata" solo se
+     il suo sistema è stato EXPLORED (tua flotta dentro), non basta DETECTED
+     dai sensori. Eccezione: con dossier Approfondito (intelRank>=4) anche i
+     sistemi solo DETECTED rivelano le colonie — la rete di informatori del
+     dossier penetra dove non sei stato. */
+  const colDeepReveal = intelRank >= 4;
   const planets = (c.planets || []).map(function (pk) {
     const parts = String(pk).split(':'); const sid = Number(parts[0]); const bk = parts[1];
-    return { sid: sid, bk: bk, known: (disc[sid] != null && disc[sid] >= D.DETECTED) };
+    const dlvl = (disc[sid] != null) ? disc[sid] : 0;
+    const isExplored = dlvl >= (D.EXPLORED || 2);
+    const isDetected = dlvl >= (D.DETECTED || 1);
+    const known = isExplored || (colDeepReveal && isDetected);
+    return { sid: sid, bk: bk, known: known, viaDossier: known && !isExplored };
   });
   const colKnown = planets.filter(function (x) { return x.known; });
   let colHtml;
@@ -9062,23 +9414,65 @@ function renderCivDetail(stage, c) {
   else {
     const rows = colKnown.map(function (x) {
       const sysNm = _flSysNm(g, x.sid); const bodyNm = _flBodyNm(g, x.sid, x.bk);
+      const dossTag = x.viaDossier ? ' <span class="civ-detail__col-tag" title="Localizzata dal dossier Approfondito — non hai mai esplorato di persona">via dossier</span>' : '';
+      /* Difese per-colonia visibili solo a L4: utile per scegliere il
+         bersaglio piu' scoperto. Il valore e' deterministico (seed di gioco
+         + civ + planetKey), non cambia tra render dello stesso save. */
+      const planetKey = x.sid + ':' + x.bk;
+      /* Difese statiche stimate (solo L4 mostra il numero per-colonia). */
+      const defP = (defByPlanet && defByPlanet[planetKey] != null) ? defByPlanet[planetKey] : null;
+      const defTag = (defP != null)
+        ? ' <span class="civ-detail__col-tag" title="Difese statiche stimate · sintetiche (le AI non hanno strutture difensive modellate come te)">stimate P ' + defP + '</span>'
+        : '';
+      /* Presenza REALE: flotte AI ferme su questo sistema. Dato concreto,
+         visibile da L3 in su (informazione che varrebbe la pena raccogliere
+         con sensori se ti spingessi nel sistema). */
+      const fleetP = fleetBySys[x.sid] || 0;
+      const fleetTag = (intelRank >= 3 && fleetP > 0)
+        ? ' <span class="civ-detail__col-tag" style="color:#ffaa66;border-color:rgba(255,170,102,0.30);background:rgba(255,170,102,0.10)" title="Presenza reale: flotte AI ferme in orbita o al porto in questo sistema. NON è una stima.">⚡ in orbita P ' + fleetP + '</span>'
+        : '';
+      /* Stima CONTESTUALE "se attacchi questa colonia, cosa affronti?".
+         Combina la presenza reale (flotte in orbita) con la quota di unità
+         che la civ può materializzare LÌ, modulata da vocazione, fase,
+         relazione vs te, peso della colonia (capitale boost). A L3 range
+         ±20%, a L4 esatto. Vedi ORION.ai.aiCombatPowerAt. */
+      let attackTag = '';
+      if (intelRank >= 3 && AI.aiCombatPowerAt) {
+        const est = AI.aiCombatPowerAt(g, c, 'colony', planetKey);
+        if (est && est.total > 0) {
+          const exact = intelRank >= 4;
+          const lo = exact ? est.total : Math.max(1, Math.round(est.total * 0.80));
+          const hi = exact ? est.total : Math.round(est.total * 1.20);
+          const label = exact ? ('= ' + est.total) : ('≈ ' + lo + '–' + hi);
+          const tip = 'Forza che difenderebbe questa colonia se la attaccassi adesso: ' +
+            (est.real || 0) + ' P reali (flotte in orbita) + ' + est.mobilizable + ' P mobilizzabili (' +
+            (est.components && est.components.units ? est.components.units : 0) + ' unità × ' +
+            (est.components && est.components.pPerUnit ? est.components.pPerUnit : 0) + ' P/unità). ' +
+            (exact ? 'Valore esatto a Approfondito.' : 'Range a Completo, esatto a Approfondito.');
+          attackTag = ' <span class="civ-detail__col-tag" style="color:#ff7676;border-color:rgba(255,118,118,0.35);background:rgba(255,118,118,0.10)" title="' + escapeHtml(tip) + '">⚔ se attacchi P ' + label + '</span>';
+        }
+      }
       return '<li class="civ-detail__col" data-sys="' + x.sid + '"><span class="civ-detail__col-name">' +
-        escapeHtml(sysNm) + (bodyNm ? ' · ' + escapeHtml(bodyNm) : '') + '</span>' + systemTagHtml(x.sid) + '</li>';
+        escapeHtml(sysNm) + (bodyNm ? ' · ' + escapeHtml(bodyNm) : '') + '</span>' + systemTagHtml(x.sid) + dossTag + defTag + fleetTag + attackTag + '</li>';
     }).join('');
     const hiddenN = planets.length - colKnown.length;
     /* Conteggio colonie non localizzate = informazione di fog-of-war: rivelarlo
        esatto al primo contatto equivale a conoscere la dimensione totale
-       dell'impero. Gating per livello dossier (decisione utente 2026-06-19):
+       dell'impero. Gating per livello dossier (rev 2026-06-26):
        - frammentario (rank 1): solo accenno qualitativo, nessun numero;
        - parziale (rank 2): stima a fascia (~N), arrotondata;
-       - completo (rank 3): conteggio esatto. */
+       - completo (rank 3): conteggio esatto ma non localizzazione;
+       - approfondito (rank 4): qui non c'è "hiddenN" perché le colonie nei
+         sistemi DETECTED sono già state svelate sopra. */
     let hiddenHtml = '';
     if (hiddenN > 0) {
-      if (intelRank >= 3) {
-        hiddenHtml = '<p class="panel__note">+' + hiddenN + ' colonie in sistemi non ancora esplorati — esplora per localizzarle.</p>';
+      if (intelRank >= 4) {
+        hiddenHtml = '<p class="panel__note">+' + hiddenN + ' colonie in sistemi che non hai ancora rilevato — non li vedi nemmeno a radar.</p>';
+      } else if (intelRank >= 3) {
+        hiddenHtml = '<p class="panel__note">+' + hiddenN + ' colonie non localizzate — porta il dossier ad <strong>Approfondito</strong> (o infiltra) per posizionarle senza esplorare.</p>';
       } else if (intelRank >= 2) {
         const lo = Math.max(1, hiddenN - 1), hi = hiddenN + 1;
-        hiddenHtml = '<p class="panel__note">Altre ~' + lo + '–' + hi + ' colonie stimate in sistemi non ancora esplorati — approfondisci il dossier per il conteggio esatto.</p>';
+        hiddenHtml = '<p class="panel__note">Altre ~' + lo + '–' + hi + ' colonie stimate, non localizzate — approfondisci il dossier per il conteggio esatto.</p>';
       } else {
         hiddenHtml = '<p class="panel__note">Altri insediamenti probabili, non ancora localizzati — esplora i loro sistemi o raccogli più intel.</p>';
       }
@@ -9087,18 +9481,51 @@ function renderCivDetail(stage, c) {
       (hiddenHtml || (!colKnown.length ? '<p class="panel__note">Esplora i loro sistemi per localizzarne le colonie.</p>' : ''));
   }
 
-  /* FLOTTE identificate di recente (dallo strato flotte ambientali AI). */
-  const aifs = (g.aiFleets || []).filter(function (af) { return af && af.civId === c.id && (af.detected || af.everDetected || af.lastSeenI != null); });
+  /* FLOTTE identificate (dallo strato flotte ambientali AI).
+     - <L4: solo quelle viste dai tuoi sensori (detected/everDetected/lastSeenI).
+     - L4 Approfondito o Infiltrato: rivela TUTTE le flotte vive della civ
+       con composizione+missione (anche quelle mai avvistate) — taggate
+       "via dossier" per distinguerle dalle osservazioni dirette. */
+  const fleetDeepReveal = (intelRank >= 4) || !!c.deepIntel;
+  const aifsSeen = (g.aiFleets || []).filter(function (af) { return af && af.civId === c.id && (af.detected || af.everDetected || af.lastSeenI != null); });
+  const aifsAll = (g.aiFleets || []).filter(function (af) { return af && af.civId === c.id; });
+  const aifs = fleetDeepReveal ? aifsAll : aifsSeen;
   let fleetHtml;
   if (!aifs.length) fleetHtml = '<p class="panel__note">Nessuna flotta identificata di recente.</p>';
   else {
     fleetHtml = '<ul class="civ-detail__fleets">' + aifs.map(function (af) {
-      const comp = (ORION.aifleet && ORION.aifleet.composition) ? ORION.aifleet.composition(af) : { text: '—' };
+      const wasSeen = !!(af.detected || af.everDetected || af.lastSeenI != null);
+      /* A L4 forziamo composizione "piena" anche per flotte mai viste:
+         il dossier ti dice cosa hanno costruito, non i tuoi sensori. */
+      const ships = Array.isArray(af.ships) ? af.ships : [];
+      const compTxt = (fleetDeepReveal && !wasSeen)
+        ? (ships.length ? ships.map(function (s) { return s.kind; }).join(', ') : '—')
+        : ((ORION.aifleet && ORION.aifleet.composition) ? ORION.aifleet.composition(af).text : '—');
       const mission = (ORION.aifleet && ORION.aifleet.MISSIONS && ORION.aifleet.MISSIONS[af.mission]) ? ORION.aifleet.MISSIONS[af.mission].label : af.mission;
       const where = af.status === 'in-transit' ? 'in viaggio' : ('in ' + _flSysNm(g, af.systemId));
-      const seen = af.detected ? 'rilevata ora' : (af.lastSeenI != null ? ('vista ' + Math.max(0, (g.timeImpulsi || 0) - af.lastSeenI) + ' Ι fa') : '—');
-      return '<li class="civ-detail__fleet"><span class="civ-detail__fleet-mission">' + escapeHtml(mission) + '</span>' +
-        '<span class="civ-detail__fleet-comp">' + escapeHtml(comp.text) + '</span>' +
+      const seen = af.detected ? 'rilevata ora'
+                  : (af.lastSeenI != null ? ('vista ' + Math.max(0, (g.timeImpulsi || 0) - af.lastSeenI) + ' Ι fa') : 'mai avvistata');
+      const dossTag = (fleetDeepReveal && !wasSeen) ? ' <span class="civ-detail__col-tag" title="Conoscenza dal dossier Approfondito, non da avvistamento diretto">via dossier</span>' : '';
+      /* FP per-flotta: visibile da L3 (Completo) in su con range stretto;
+         a L4 / Infiltrato e' esatto. */
+      const afFp = af.fp || 0;
+      let fpStr = '';
+      if (intelRank >= 4 || c.deepIntel) fpStr = afFp + ' FP';
+      else if (intelRank >= 3) fpStr = '≈ ' + Math.max(0, Math.round(afFp * 0.85)) + '–' + Math.round(afFp * 1.15) + ' FP';
+      else if (intelRank >= 2) fpStr = '≈ ' + Math.max(0, Math.round(afFp * 0.6)) + '–' + Math.round(afFp * 1.4) + ' FP';
+      /* P di scontro (HP+FP·8) per la flotta — stessa scala di garrison.powerOf
+         e di forceFromMaterialized. Esatto a L4, range a L3. */
+      let pStr = '';
+      if ((intelRank >= 3 || c.deepIntel) && AI.aiCombatPowerAt) {
+        const est = AI.aiCombatPowerAt(g, c, 'fleet', af);
+        const p = est && est.total ? est.total : 0;
+        if (p > 0) {
+          const exact = (intelRank >= 4) || !!c.deepIntel;
+          pStr = exact ? ('P ' + p) : ('P ≈ ' + Math.max(0, Math.round(p * 0.85)) + '–' + Math.round(p * 1.15));
+        }
+      }
+      return '<li class="civ-detail__fleet"><span class="civ-detail__fleet-mission">' + escapeHtml(mission) + dossTag + '</span>' +
+        '<span class="civ-detail__fleet-comp">' + escapeHtml(compTxt) + (fpStr ? ' · ' + escapeHtml(fpStr) : '') + (pStr ? ' · ' + escapeHtml(pStr) : '') + '</span>' +
         '<span class="civ-detail__fleet-where">' + escapeHtml(where) + ' · ' + escapeHtml(seen) + '</span></li>';
     }).join('') + '</ul>';
   }
@@ -9112,6 +9539,54 @@ function renderCivDetail(stage, c) {
         escapeHtml(c.id) + '" data-dip-act="' + a + '"' + (onCd && !ev.unilateral ? ' disabled' : '') + '>' +
         escapeHtml(DIP.actionLabel(a)) + (ev.unilateral ? '' : ' <span class="dip-btn__odds">' + ev.likelihood + '</span>') + '</button>';
     }).join('') + '</div>';
+  }
+
+  /* M19 Fase A (spionaggio): blocco "Operazione coperta" (vuoto se non
+     contattata o senza modulo). */
+  const espHtml = civEspionageHtml(g, c);
+
+  /* Profilo commerciale derivato (decisione 2026-06-26): a L4 (o Infiltrato)
+     mostra una sintesi su come la civ si rapporta al commercio. Niente rotte
+     AI-AI persistite nello stato (non modellate in trade.js): qui derivo dal
+     CARATTERE (vocazione + affinità + relazione) cosa cerca / cosa rifiuta.
+     È intel di profondità, non un dato grezzo: serve per la diplomazia. */
+  const tradeProfileDeep = (intelRank >= 4) || !!c.deepIntel;
+  let tradeProfileHtml = '';
+  if (tradeProfileDeep) {
+    const voc = c.vocation || '';
+    const aff = c.affinity || '';
+    const TRADE_VOC = {
+      mercantili:    { lean: 'Aperto', note: 'Mercanti naturali: cercano accordi stabili e rotte multiple.' },
+      sedentari:     { lean: 'Aperto', note: 'Accettano accordi se la disposizione è almeno cordiale.' },
+      tecnocratici:  { lean: 'Selettivo', note: 'Preferiscono partner con alta reputazione e tech avanzata.' },
+      mistici:       { lean: 'Aperto', note: 'Trattano col baratto cerimoniale: ottime offerte se sei amichevole.' },
+      espansionisti: { lean: 'Tattico', note: 'Commercio come strumento: rompono accordi quando l\'espansione paga.' },
+      imperialisti:  { lean: 'Diffidente', note: 'Vedono il commercio come segno di debolezza. Tributo, non accordo.' },
+      predoni:       { lean: 'Chiuso', note: 'Preferiscono saccheggio o estorsione al commercio onesto.' },
+      isolazionisti: { lean: 'Chiuso', note: 'Confini chiusi: niente accordi con stranieri.' }
+    };
+    const TRADE_AFF = {
+      ferrigna:   'cerca metalli, offre energia',
+      biotica:    'cerca cibo/acqua, offre componenti biotici',
+      glaciale:   'cerca energia, offre materiali criogenici',
+      orbitale:   'cerca metalli per costruzioni, offre componenti orbitali',
+      ancestrale: 'cerca artefatti e crediti, offre energia stabile',
+      mixta:      'profilo bilanciato, nessuna preferenza marcata'
+    };
+    const tv = TRADE_VOC[voc] || { lean: '—', note: 'Profilo commerciale non definito.' };
+    const ta = TRADE_AFF[aff] || '—';
+    tradeProfileHtml =
+      '<section class="civ-detail__sec"><h3>Profilo commerciale <span class="civ-detail__col-tag">via dossier</span></h3>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Tendenza</span><span>' + escapeHtml(tv.lean) + '</span>' +
+          '<span class="civ-card__k">Domanda/offerta</span><span>' + escapeHtml(ta) + '</span></div>' +
+        '<p class="panel__note">' + escapeHtml(tv.note) + '</p>' +
+      '</section>';
+  }
+  /* Tutorial (#29): la lezione scatta quando un'operazione è davvero
+     disponibile (flotta sul posto) — il momento in cui serve capirla. */
+  if (espHtml && ORION.tutorial && ORION.tutorial.fire && ORION.espionage &&
+      ORION.espionage.canOperate && ORION.espionage.canOperate(g, c).ok) {
+    ORION.tutorial.fire('espionage');
   }
 
   /* Breadcrumb nella striscia unica in alto (decisione utente 2026-06-20):
@@ -9142,15 +9617,19 @@ function renderCivDetail(stage, c) {
         '<div class="civ-card__row"><span class="civ-card__k">Sede</span><span>' + escapeHtml(seat.name || '—') + '</span></div>' +
       '</section>' +
       '<section class="civ-detail__sec"><h3>Stima impero</h3>' +
-        '<div class="civ-card__row"><span class="civ-card__k">Potenza percepita</span><span class="civ-power civ-power--' + estPower + '">' + escapeHtml(estPower) + '</span>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Forza Impero</span><span class="civ-power civ-power--' + estPower + '" title="Tier qualitativo · valore stimato a finestra che si stringe coi livelli intel">' + escapeHtml(estPower) + ' · ' + escapeHtml(forceTxt) + '</span>' +
           '<span class="civ-card__k">Sistemi noti</span><span>' + estKnown + '</span></div>' +
-        '<div class="civ-card__row"><span class="civ-card__k">Struttura stimata</span><span>tra ' + estLo + ' e ' + estHi + ' insediamenti</span>' +
-          (intelRank >= 3 ? '<span class="civ-card__k">Forza stimata</span><span>≈ ' + force + ' unità</span>' : '') + '</div>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Capacità militare</span><span title="Conversione Forza Impero → squadre/flotte equivalenti (≈ Forza / 25)">' + escapeHtml(unitsTxt) + '</span>' +
+          '<span class="civ-card__k">Struttura stimata</span><span>tra ' + estLo + ' e ' + estHi + ' insediamenti</span></div>' +
+        '<div class="civ-card__row"><span class="civ-card__k">Potenza di fuoco flotte</span><span title="Somma fp di tutte le loro aifleet vive (somma classi navi)">' + escapeHtml(fpTxt) + '</span>' +
+          '<span class="civ-card__k">Difese planetarie</span><span title="Totale stimato delle difese statiche sulle loro colonie. A Approfondito vedi anche la ripartizione per colonia, per individuare quelle scoperte.">' + escapeHtml(defTxt) + '</span></div>' +
         (descGated ? '<div class="civ-disp"><div class="civ-disp__top"><span class="civ-card__k">Disposizione verso di te</span><span class="civ-disp__label civ-disp__label--' + dispCls + '">' + dispLabel + '</span></div><div class="civ-disp__bar"><span class="civ-disp__mid" aria-hidden="true"></span><span class="civ-disp__fill civ-disp__fill--' + dispCls + '" style="width:' + pct.toFixed(0) + '%"></span></div></div>' : '') +
       '</section>' +
       '<section class="civ-detail__sec"><h3>Colonie note <span class="civ-detail__count">' + colKnown.length + '</span></h3>' + colHtml + '</section>' +
       '<section class="civ-detail__sec"><h3>Flotte identificate <span class="civ-detail__count">' + aifs.length + '</span></h3>' + fleetHtml + '</section>' +
+      tradeProfileHtml +
       (dipHtml ? '<section class="civ-detail__sec"><h3>Diplomazia</h3>' + dipHtml + '</section>' : '') +
+      (espHtml ? '<section class="civ-detail__sec"><h3>Spionaggio</h3>' + espHtml + '</section>' : '') +
     '</div>';
 
   /* (Il "torna" della breadcrumb è agganciato sulla striscia, sopra.) */
@@ -9170,6 +9649,45 @@ function renderCivDetail(stage, c) {
       if (civ) runDiplomacyAction(civ, btn.dataset.dipAct);
     });
   });
+  /* M19 Fase A (spionaggio): arma/annulla operazione coperta, poi
+     ri-renderizza il dossier (lo stato vive in game.espionage). */
+  if (ORION.espionage) {
+    stage.querySelectorAll('[data-esp-op]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const civ = (g.civs || []).filter(function (x) { return x.id === btn.dataset.espCiv; })[0];
+        if (!civ) return;
+        const r = ORION.espionage.arm(g, civ, btn.dataset.espOp);
+        if (r.ok) {
+          persistGame(g);
+          showToast('Operazione coperta avviata · ' + civ.name + ' (mantieni la flotta sul posto)');
+        } else if (r.reason) { showToast(r.reason); }
+        renderCivDetail(stage, civ);
+      });
+    });
+    stage.querySelectorAll('[data-esp-abort]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const civ = (g.civs || []).filter(function (x) { return x.id === btn.dataset.espAbort; })[0];
+        ORION.espionage.abort(g, btn.dataset.espAbort);
+        persistGame(g);
+        if (civ) { showToast('Operazione richiamata · ' + civ.name); renderCivDetail(stage, civ); }
+      });
+    });
+  }
+  /* M19 (GDD §6e): acquisto intel grigia dai Mekhari (remoto, a pagamento). */
+  if (ORION.mekhari && ORION.mekhari.buyIntel) {
+    stage.querySelectorAll('[data-esp-mekhari]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const civ = (g.civs || []).filter(function (x) { return x.id === btn.dataset.espMekhari; })[0];
+        if (!civ) return;
+        const r = ORION.mekhari.buyIntel(g, civ.id);
+        if (r.ok) {
+          persistGame(g);
+          showToast('Intel grigia acquistata · ' + civ.name + ' (dossier parziale)');
+        } else if (r.reason) { showToast(r.reason); }
+        renderCivDetail(stage, civ);
+      });
+    });
+  }
 }
 
 /* M12 Fase A2 (#56 §15.3): blocco "Commercio" nella card civiltà. */
@@ -9199,6 +9717,70 @@ function civTradeHtml(g, civ) {
     inner += '<p class="panel__note agr-note">Il commercio richiede <strong>pace o alleanza</strong>.</p>';
   }
   return '<div class="civ-trade"><span class="civ-card__k">Commercio</span>' + inner + '</div>';
+}
+
+/* M19 Fase A (spionaggio): blocco "Operazione coperta" nel dossier civ.
+   Precondizione: contatto formale + una tua flotta da combattimento in un
+   loro sistema. L'operazione si risolve mantenendo la presenza. */
+function civEspionageHtml(g, c) {
+  const ESP = ORION.espionage;
+  if (!ESP) return '';
+  const AI = ORION.ai;
+  const rank = (AI && AI.knowledgeRank) ? AI.knowledgeRank(c) : 0;
+  const KN = (AI && AI.KNOWLEDGE) || { contacted: 2 };
+  if (rank < KN.contacted) return '';
+  let inner = '';
+  const op = ESP.opFor(g, c.id);
+  if (op) {
+    const left = Math.max(0, (op.armI + ESP.CFG.DURATION_I) - (g.timeImpulsi || 0));
+    inner = '<p class="panel__note">🕵 <strong>' + escapeHtml(ESP.OP_LABEL[op.type] || op.type) +
+      '</strong> in corso · ~' + left + ' ' + iU() + ' all\'esito · <strong>mantieni la flotta sul posto</strong>.</p>' +
+      '<button class="btn btn--mini btn--danger" type="button" data-esp-abort="' + escapeHtml(c.id) + '">Richiama agenti</button>';
+  } else {
+    const chk = ESP.canOperate(g, c);
+    if (!chk.ok) {
+      inner = '<p class="panel__note">' + escapeHtml(chk.reason) + '</p>';
+    } else {
+      const pInf = Math.round(ESP.successChance(g, c, 'infiltrate', chk.score) * 100);
+      const pSab = Math.round(ESP.successChance(g, c, 'sabotage', chk.score) * 100);
+      const pSte = Math.round(ESP.successChance(g, c, 'steal', chk.score) * 100);
+      inner = '<p class="panel__note">Flotta sul posto. L\'operazione si risolve restando <strong>' +
+        ESP.CFG.DURATION_I + ' ' + iU() + '</strong> in presenza. Il <strong>fallimento</strong> (scoperti) costa reputazione e alza l\'ICG.</p>' +
+        '<div class="dip-actions">' +
+        '<button class="btn btn--mini" type="button" data-esp-op="infiltrate" data-esp-civ="' + escapeHtml(c.id) + '" title="Dossier a completo + segreti">Infiltrazione <span class="dip-btn__odds">' + pInf + '%</span></button>' +
+        '<button class="btn btn--mini btn--danger" type="button" data-esp-op="sabotage" data-esp-civ="' + escapeHtml(c.id) + '" title="Colpo alla loro potenza">Sabotaggio <span class="dip-btn__odds">' + pSab + '%</span></button>' +
+        '<button class="btn btn--mini" type="button" data-esp-op="steal" data-esp-civ="' + escapeHtml(c.id) + '" title="Sottrai crediti al bersaglio">Furto <span class="dip-btn__odds">' + pSte + '%</span></button>' +
+        '</div>';
+    }
+  }
+  /* Intel grigia Mekhari (GDD §6e): canale REMOTO a pagamento, indipendente
+     dalla presenza flotta. Meno completo dello spionaggio (cap "parziale"). */
+  if (ORION.mekhari && ORION.mekhari.quoteIntel) {
+    const qg = ORION.mekhari.quoteIntel(g, c.id);
+    if (qg.ok) {
+      inner += '<p class="panel__note" style="margin-top:.5rem">⚖ <strong>Intel grigia (Mekhari)</strong> — remota, porta il dossier a <strong>parziale</strong>: ≈' +
+        qg.costCredits + ' crediti · −' + qg.repCost + ' reputazione.</p>' +
+        '<button class="btn btn--mini" type="button" data-esp-mekhari="' + escapeHtml(c.id) + '">Compra intel grigia</button>';
+    }
+  }
+  if (c.deepIntel) {
+    const di = c.deepIntel;
+    const btLbl = (di.betrayal && di.betrayal.label) ? di.betrayal.label : (di.betrayalRisk ? 'alto' : 'basso');
+    const btWarn = (di.betrayal && (di.betrayal.level === 'high' || di.betrayal.level === 'imminent')) ? '⚠ ' : '';
+    const btTitle = (di.betrayal && di.betrayal.reason) ? ' title="' + escapeHtml(di.betrayal.reason) + '"' : '';
+    /* Freshness: i dati infiltrati invecchiano. Sopra ~150 Ι li marciamo come
+       "vecchi" (opacità ridotta) per spingere a una nuova Infiltrazione.
+       Niente piu' "Forza Impero reale" qui (gia' nella Stima impero in alto:
+       evita doppia riga col valore identico). Resta solo il Rischio tradimento
+       che non e' visibile altrove. */
+    const ageI = Math.max(0, (g.timeImpulsi || 0) - (di.sinceI || 0));
+    const STALE_I = 150;
+    const staleCls = (ageI >= STALE_I) ? ' civ-deepintel-stale' : '';
+    const ageTxt = '<span class="panel__note">' + (ageI >= STALE_I ? 'vecchio · ' : 'rilevato ') + ageI + ' Ι fa' + (ageI >= STALE_I ? ' — rinnova l\'Infiltrazione' : '') + '</span>';
+    inner += '<div class="civ-card__row' + staleCls + '" style="margin-top:.4rem"><span class="civ-card__k">⚿ Rischio tradimento</span><span' + btTitle + '>' + btWarn + escapeHtml(btLbl) + '</span>' +
+      '<span class="civ-card__k">Aggiornamento</span><span>' + ageTxt + '</span></div>';
+  }
+  return inner;
 }
 
 /* #48 Fase 2b: blocco "Rifiuti" nella card civiltà (export rifiuti). */
@@ -9506,48 +10088,85 @@ function fleetShipIcon(kind) {
 }
 
 /* =====================================================================
-   NOMI FLOTTA AUTO-DERIVATI DALL'ORDINE (#88)
-   Il nome non si sceglie alla creazione: si adatta all'ordine impartito
-   (Esplorazione/Trasferimento/Attacco/…). Sovrascrive SOLO il default
-   neutro "Squadrone N" → un nome scelto a mano dall'utente non viene mai
-   toccato. Sempre rinominabile dal dettaglio flotta.
+   NOMI FLOTTA AUTO-DERIVATI (#88 → composition-first, richiesta utente
+   2026-06-26)
+   Il nome non si sceglie alla creazione: descrive *cosa è* la flotta.
+   Priorità (alto→basso):
+     1. Override funzionale per composizione (qualsiasi ordine):
+        estrattore a bordo → Estrattore · coloniale a bordo → Pioniere.
+        "Prevale lo scopo": una flotta con un estrattore È un estrattore,
+        anche se scortata da caccia.
+     2. Overlay di scopo per ordine caratterizzante: pattuglia/presidio →
+        Sentinella · esplora → Segugio. Si applica AL VOLO a ogni cambio
+        ordine (non solo alla nascita). L'attacco NON ribattezza (decisione
+        utente 2026-06-26): l'identità di composizione prevale — una flotta
+        di linea resta tale anche mentre attacca.
+     3. Identità per nave di punta (la più forte, fleet.leadKind) × TAGLIA
+        della flotta: il nome cresce da poche unità (Pattuglia) a moltitudine
+        e potenza (Armata, Titano). Copre il caso neutro `move`/`idle`.
+   Ribattezza SOLO nomi auto-derivati (default "Squadrone N", callsign
+   correnti e legacy) → un nome scelto a mano (es. "Pattuglia Alfa",
+   "Mia Flotta") non viene mai toccato. Sempre rinominabile dal dettaglio.
    ===================================================================== */
-/* Callsign per scopo (decisione utente 2026-06-15, sostituisce i nomi
-   descrittivi "Esplorazione → X"): un sostantivo militare/scenografico per
-   tipo di ordine + numero progressivo. L'identità resta stabile anche se la
-   flotta cambia ordine successivamente (callsign d'esordio). Sempre
-   rinominabile a mano dal dettaglio (✎). */
-const FLEET_CALLSIGNS = {
-  'explore': 'Segugio',
-  'move': 'Convoglio',
-  'attack': 'Lama',
-  'colonize': 'Pioniere',
+/* Identità per (nave di punta × taglia). Per ogni classe di punta una terna
+   [poche 1–3, diverse 4–7, molte 8+]: il nome cresce da "poche unità" a
+   "moltitudine + potenza". L'intercettore (veloce) ha una terna a parte
+   (Saetta/Falco) anche quando è la nave maggiore tra caccia minori. */
+const FLEET_COMP_TIERS = {
+  'explorer':     ['Segugio',   'Segugio',    'Segugio'],     // ricognizione (flat)
+  'caccia':       ['Pattuglia', 'Squadriglia', 'Stormo'],
+  'intercettore': ['Saetta',    'Falco',      'Stormo'],      // a parte (veloce)
+  'corvetta':     ['Compagnia', 'Battaglione', 'Brigata'],
+  'fregata':      ['Compagnia', 'Battaglione', 'Brigata'],
+  'incrociatore': ['Corazzata', 'Legione',    'Armata'],
+  'dreadnought':  ['Corazzata', 'Legione',    'Armata'],
+  'ammiraglia':   ['Titano',    'Titano',     'Titano'],      // apice (nave unica)
+  'estrattore':   ['Estrattore','Estrattore', 'Estrattore'],  // (anche via override #1)
+  'coloniale':    ['Pioniere',  'Pioniere',   'Pioniere']     // (anche via override #1)
+};
+/* Bucket di taglia dal numero di navi: 0=poche(1–3) · 1=diverse(4–7) · 2=molte(8+). */
+function fleetSizeBucket(fleet) {
+  const n = (fleet && Array.isArray(fleet.ships)) ? fleet.ships.length : 0;
+  if (n >= 8) return 2;
+  if (n >= 4) return 1;
+  return 0;
+}
+/* Overlay di scopo: ordini che caratterizzano la missione e prevalgono
+   sull'identità di composizione (ma NON sugli override funzionali §1).
+   L'attacco è volutamente assente: non ribattezza (decisione 2026-06-26). */
+const FLEET_ORDER_NAMES = {
   'patrol': 'Sentinella',
   'patrol-loop': 'Sentinella',
   'garrison': 'Sentinella',
-  'survey': 'Vedetta',
-  /* Decisione utente 2026-06-16: una flotta con scafo Estrattore in survey
-     d'anomalia è di funzione "estrazione", non ricognizione → callsign
-     dedicato. orderDerivedFleetName/suggestedRenameFor selezionano questa
-     chiave quando la flotta porta almeno un estrattore. */
-  'extract': 'Estrattore'
+  'explore': 'Segugio'
 };
-/* Pool secondario (decisione utente 2026-06-15): un secondo nome per scopo,
-   proposto come DEFAULT quando l'utente rinomina manualmente. Così è "guidato
-   a creare un nuovo nome+numero libero per quell'ordine" (ridefinizione
-   manuale tipica dopo un cambio missione). */
-const FLEET_CALLSIGNS_ALT = {
-  'explore': 'Pellegrino',
-  'move': 'Carovana',
-  'attack': 'Lupo',
-  'colonize': 'Avanguardia',
-  'patrol': 'Bastione',
-  'patrol-loop': 'Bastione',
-  'garrison': 'Bastione',
-  'survey': 'Bussola',
-  'extract': 'Minatrice'
+/* Pool secondario (sinonimi): proposto come DEFAULT quando l'utente rinomina
+   manualmente — un nome+numero alternativo libero. Stesse chiavi dei due
+   cataloghi sopra. */
+const FLEET_NAME_ALT = {
+  'Segugio': 'Pellegrino', 'Estrattore': 'Minatrice', 'Pattuglia': 'Ronda',
+  'Squadriglia': 'Nugolo', 'Stormo': 'Sciame', 'Saetta': 'Strale', 'Falco': 'Astore',
+  'Compagnia': 'Coorte', 'Battaglione': 'Reparto', 'Brigata': 'Schiera',
+  'Corazzata': 'Baluardo', 'Legione': 'Falange', 'Armata': 'Armada',
+  'Titano': 'Colosso', 'Pioniere': 'Avanguardia', 'Sentinella': 'Bastione'
 };
-/* Numero progressivo per quel callsign: max suffisso numerico tra le flotte
+/* Tutte le basi che generiamo noi (correnti + legacy): un nome che combacia
+   con "<base> <numero>" è considerato auto-derivato → rinominabile al volo.
+   Le basi legacy ("Convoglio", "Vedetta", "Carovana", …) restano qui così i
+   save vecchi migrano al primo cambio ordine, senza bump di schema. */
+const FLEET_AUTO_BASES = [
+  'Squadrone',
+  /* basi correnti (composizione × taglia + override + overlay) */
+  'Segugio', 'Estrattore', 'Pioniere', 'Sentinella',
+  'Pattuglia', 'Squadriglia', 'Stormo', 'Saetta', 'Falco',
+  'Compagnia', 'Battaglione', 'Brigata',
+  'Corazzata', 'Legione', 'Armata', 'Titano',
+  /* basi primarie storiche (versioni precedenti di questo branch): restano
+     qui così i nomi auto già assegnati migrano al primo cambio ordine. */
+  'Flottiglia', 'Squadra', 'Falange', 'Aquila', 'Leviatano', 'Lama',
+  'Convoglio', 'Vedetta'
+];
+/* Numero progressivo per quella base: max suffisso numerico tra le flotte
    esistenti col prefisso "<Base> ", +1. Robusto a rinomine manuali (chi
    ribattezza "Segugio 1" → "Mia Flotta" lascia un buco, la successiva sarà
    "Segugio N+1"). */
@@ -9560,53 +10179,69 @@ function nextProgressiveFor(g, base) {
   });
   return max + 1;
 }
-/* Decisione utente 2026-06-16: una flotta in `survey` con almeno uno scafo
-   Estrattore a bordo è funzionalmente in estrazione, non in ricognizione →
-   chiave callsign 'extract' anziché 'survey'. Restituisce la chiave effettiva
-   da usare per il pool di nomi. */
-function effectiveCallsignKey(fleet, order) {
-  if (!order || !order.type) return null;
-  if (order.type === 'survey' && fleet && Array.isArray(fleet.ships)) {
-    for (let i = 0; i < fleet.ships.length; i++) {
-      if (fleet.ships[i] && fleet.ships[i].kind === 'estrattore') return 'extract';
-    }
+/* Una flotta porta almeno una nave di questa classe? */
+function fleetCarries(fleet, kind) {
+  if (!fleet || !Array.isArray(fleet.ships)) return false;
+  for (let i = 0; i < fleet.ships.length; i++) {
+    if (fleet.ships[i] && fleet.ships[i].kind === kind) return true;
   }
-  return order.type;
+  return false;
 }
-function orderDerivedFleetName(g, order, fleet) {
-  if (!order || !order.type) return null;
-  let base = null;
-  if (order.type === 'move-route') {
-    /* esplora-ogni-tappa → Segugio; rotta cargo/movimento → Convoglio */
-    base = order.exploreEach ? 'Segugio' : 'Convoglio';
-  } else {
-    base = FLEET_CALLSIGNS[effectiveCallsignKey(fleet, order)] || null;
+/* Base auto-derivata per (composizione, ordine), senza numero. Implementa le
+   tre priorità descritte sopra. null = nessuna base sensata (flotta vuota o
+   ordine/composizione sconosciuti) → non ribattezzare. */
+function autoFleetBase(fleet, order) {
+  /* §1 — override funzionali per composizione (prevalgono su tutto). */
+  if (fleetCarries(fleet, 'estrattore')) return 'Estrattore';
+  if (fleetCarries(fleet, 'coloniale')) return 'Pioniere';
+  /* §2 — overlay di scopo dall'ordine caratterizzante. */
+  if (order && order.type) {
+    if (order.type === 'colonize') return 'Pioniere';
+    if (order.type === 'move-route' && order.exploreEach) return 'Segugio';
+    const ov = FLEET_ORDER_NAMES[order.type];
+    if (ov) return ov;
   }
-  if (!base) return null;   // 'return' e tipi sconosciuti → nessun ribattesimo
-  return base + ' ' + nextProgressiveFor(g, base);
+  /* §3 — identità per nave di punta × taglia (caso neutro: move/idle/cargo). */
+  const lead = (ORION.fleet && ORION.fleet.leadKind) ? ORION.fleet.leadKind(fleet) : null;
+  const tier = lead && FLEET_COMP_TIERS[lead];
+  return tier ? tier[fleetSizeBucket(fleet)] : null;
 }
-function isDefaultFleetName(name) { return /^Squadrone\s+\d+$/.test(name || ''); }
-function maybeAutoRenameFleet(g, fleet, order) {
-  if (!fleet || !isDefaultFleetName(fleet.name)) return;
-  const nm = orderDerivedFleetName(g, order, fleet);
-  if (nm) fleet.name = nm.slice(0, 40);
-}
-/* Suggerimento di rinomina manuale (decisione utente 2026-06-15): propone il
-   pool ALT del tipo di ordine corrente + primo numero libero. È solo un
-   default pre-popolato nell'input ✎ — l'utente è libero di modificare. Per
-   ordini idle/return o sconosciuti restituisce null (l'input resta sul nome
-   corrente). */
-function suggestedRenameFor(g, fleet) {
-  const order = fleet && fleet.orders;
-  if (!order || !order.type || order.type === 'idle' || order.type === 'return') return null;
-  let base = null;
-  if (order.type === 'move-route') {
-    base = order.exploreEach ? FLEET_CALLSIGNS_ALT['explore'] : FLEET_CALLSIGNS_ALT['move'];
-  } else {
-    base = FLEET_CALLSIGNS_ALT[effectiveCallsignKey(fleet, order)] || null;
-  }
+/* Compone base + numero. Se la flotta porta GIÀ un nome auto con la stessa
+   base, ne conserva il numero (niente renumber-churn a ogni cambio ordine). */
+function autoFleetName(g, fleet, order) {
+  const base = autoFleetBase(fleet, order);
   if (!base) return null;
+  const keep = new RegExp('^' + base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+\\d+$');
+  if (fleet && keep.test(fleet.name || '')) return fleet.name;
   return base + ' ' + nextProgressiveFor(g, base);
+}
+/* Un nome è auto-derivato (quindi ribattezzabile al volo) se combacia con
+   "<base nota> <numero>". Tutto il resto è considerato scelto a mano e
+   intoccabile. */
+function isAutoFleetName(name) {
+  name = name || '';
+  for (let i = 0; i < FLEET_AUTO_BASES.length; i++) {
+    const re = new RegExp('^' + FLEET_AUTO_BASES[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+\\d+$');
+    if (re.test(name)) return true;
+  }
+  return false;
+}
+function maybeAutoRenameFleet(g, fleet, order) {
+  /* Ribattezza al volo a ogni ordine, purché il nome sia ancora auto-derivato
+     (default o callsign): così "Lama"/"Sentinella" compaiono al cambio ordine
+     e i "Convoglio" legacy migrano alla nuova identità di composizione. */
+  if (!fleet || !isAutoFleetName(fleet.name)) return;
+  const nm = autoFleetName(g, fleet, order);
+  if (nm && nm !== fleet.name) fleet.name = nm.slice(0, 40);
+}
+/* Suggerimento di rinomina manuale: propone il sinonimo della base auto-derivata
+   corrente + primo numero libero. È solo un default pre-popolato nell'input ✎ —
+   l'utente è libero di modificare. null per flotte senza base sensata. */
+function suggestedRenameFor(g, fleet) {
+  const base = autoFleetBase(fleet, fleet && fleet.orders);
+  if (!base) return null;
+  const alt = FLEET_NAME_ALT[base] || base;
+  return alt + ' ' + nextProgressiveFor(g, alt);
 }
 
 /* =====================================================================
@@ -9822,7 +10457,7 @@ function openFleetDetail(fleetId, opts) {
     creating: !fleet,
     /* Stadio 3: destinazione/missione pre-compilate da mappa (ingresso
        destination-first). null → renderNew sceglie il default. */
-    dest: opts.dest ? { sysId: opts.dest.sysId, bodyKey: opts.dest.bodyKey || null } : null,
+    dest: opts.dest ? { sysId: opts.dest.sysId, bodyKey: opts.dest.bodyKey || null, anomKind: opts.dest.anomKind || null } : null,
     mission: opts.mission || null,
     renaming: false,
     ordOpen: !!opts.orders,
@@ -9995,11 +10630,19 @@ function openFleetDetail(fleetId, opts) {
       if (ha !== hb) return ha - hb;
       return sysDist(capId, a) - sysDist(capId, b);
     });
-    if (!D.dest) D.dest = { sysId: null, bodyKey: null };
+    if (!D.dest) D.dest = { sysId: null, bodyKey: null, anomKind: null };
     if (D.dest.sysId == null || (disc[D.dest.sysId] || 0) < DISC.DETECTED) {
       const nonCap = knownSys.filter(function (s) { return s !== capId; });
       D.dest.sysId = nonCap.length ? nonCap[0] : (knownSys.length ? knownSys[0] : capId);
       D.dest.bodyKey = null;
+      D.dest.anomKind = null;
+    }
+    /* Registra i siti §17.3 del sistema di destinazione (idempotente, una
+       volta per sessione) così le anomalie a livello sistema sono note a
+       fleetTarget.describe → l'azione Estrai diventa disponibile e la
+       nebulosa/detriti/reliquia compaiono fra gli oggetti selezionabili. */
+    if (ORION.anomaly && ORION.anomaly.ensureSites && D.dest.sysId != null) {
+      ORION.anomaly.ensureSites(g, D.dest.sysId);
     }
 
     if (!D.newColonyKey || elig.indexOf(D.newColonyKey) < 0) {
@@ -10165,16 +10808,38 @@ function openFleetDetail(fleetId, opts) {
     let destBodyHtml = '';
     const destExplored = (disc[D.dest.sysId] || 0) >= DISC.EXPLORED;
     if (destExplored && ORION.system && ORION.system.generate) {
-      let dbodies = [];
-      try { const dsys = ORION.system.generate(g.galaxy, D.dest.sysId); dbodies = (dsys && dsys.bodies) || []; } catch (e) { dbodies = []; }
-      if (dbodies.length) {
-        let bopts = '<option value="">— orbita generica —</option>';
+      let dsys = null;
+      try { dsys = ORION.system.generate(g.galaxy, D.dest.sysId); } catch (e) { dsys = null; }
+      const dbodies = (dsys && dsys.bodies) || [];
+      /* Anomalie a livello sistema (detriti/nebulosa/reliquie): non sono
+         "corpi" ma sono bersagli M2 sfruttabili (Estrai). Senza questo non
+         comparivano fra gli oggetti selezionabili del sistema, pur essendo
+         siti d'energia/metalli noti (feedback utente 2026-06-26). Le anomalie
+         body-tied (cintura/gassoso) restano fra i corpi. Dedup per tipo. */
+      const sysAnoms = [];
+      const seenAnomKind = {};
+      ((dsys && dsys.anomalies) || []).forEach(function (a) {
+        if (!a || !a.kind || seenAnomKind[a.kind]) return;
+        const def = ORION.anomaly && ORION.anomaly.KINDS ? ORION.anomaly.KINDS[a.kind] : null;
+        if (!def || def.perBody) return;
+        seenAnomKind[a.kind] = true;
+        sysAnoms.push(a.kind);
+      });
+      if (dbodies.length || sysAnoms.length) {
+        const generic = !D.dest.bodyKey && !D.dest.anomKind;
+        let bopts = '<option value=""' + (generic ? ' selected' : '') + '>— orbita generica —</option>';
         dbodies.forEach(function (b) {
           if (!b || !b.key) return;
           bopts += bodyOption(b, false);
           (b.moons || []).forEach(function (m) { if (m && m.key) bopts += bodyOption(m, true); });
         });
-        destBodyHtml = '<select class="fdetail__select" data-bind="dest-body" aria-label="Corpo di destinazione">' + bopts + '</select>';
+        sysAnoms.forEach(function (kind) {
+          const meta = anomalyKindMeta(kind);
+          const lbl = meta.label + (meta.res ? ' · ' + meta.res : '');
+          bopts += '<option value="anom:' + escapeHtml(kind) + '"' +
+            (D.dest.anomKind === kind ? ' selected' : '') + '>✦ ' + escapeHtml(lbl) + '</option>';
+        });
+        destBodyHtml = '<select class="fdetail__select" data-bind="dest-body" aria-label="Corpo o anomalia di destinazione">' + bopts + '</select>';
       }
     } else if (!destExplored) {
       destBodyHtml = '<span class="fdest__hint">' + uiIcon('info', 'soft') + ' Sistema non esplorato: corpo non selezionabile.</span>';
@@ -10221,14 +10886,26 @@ function openFleetDetail(fleetId, opts) {
     const selectableIds = misOpts.filter(function (a) {
       return a.available && !a.future && MISSION_META[a.id];
     }).map(function (a) { return a.id; });
-    if (!D.mission || selectableIds.indexOf(D.mission) < 0) {
+    /* Missioni "intenzionabili": presenti nel target anche se non ancora
+       disponibili (es. extract senza estrattore in flotta). Servono a
+       preservare l'intent passato da fuori (es. econ-anom-send con
+       mission='extract'): il chip resta selezionato e disabilitato finché
+       l'utente non aggiunge il tipo di nave richiesto. */
+    const intentIds = misOpts.filter(function (a) {
+      return !a.future && MISSION_META[a.id];
+    }).map(function (a) { return a.id; });
+    if (!D.mission || (selectableIds.indexOf(D.mission) < 0 && intentIds.indexOf(D.mission) < 0)) {
       /* Default suggerito: Colonizza se possibile, altrimenti solo spostamento. */
       D.mission = selectableIds.indexOf('colonize') >= 0 ? 'colonize' : 'move';
     }
     const misChips = misOpts.map(function (a) {
       const meta = MISSION_META[a.id]; if (!meta) return '';
       const disabled = !a.available || a.future;
-      const sel = (D.mission === a.id) && !disabled;
+      /* Sel resta truthy anche se "disabled" quando l'intent arriva da
+         fuori (es. econ-anom-send mission='extract' senza estrattore): il
+         chip mostra l'intenzione, e il footer "Crea e parti" resta
+         disabilitato finché la flotta non soddisfa il gate. */
+      const sel = (D.mission === a.id);
       const gateTxt = (!a.available && a.gate) ? (GATE_LABEL[a.gate] || a.gate) : '';
       const title = gateTxt ? 'Serve: ' + gateTxt : meta.arr;
       const sfx = gateTxt ? ' <span class="fdetail__chip-note">' + escapeHtml(gateTxt) + '</span>' : '';
@@ -10248,7 +10925,9 @@ function openFleetDetail(fleetId, opts) {
     /* ===== Riepilogo viaggio (sticky, Stadio 2.5) — live su ogni render. ===== */
     const sumSysName = (g.galaxy.systems[D.dest.sysId] || {}).name || ('Sistema ' + D.dest.sysId);
     let sumBodyName = '';
-    if (D.dest.bodyKey) {
+    if (D.dest.anomKind) {
+      sumBodyName = ' · ' + anomalyKindMeta(D.dest.anomKind).label;
+    } else if (D.dest.bodyKey) {
       try { const ds = ORION.system.generate(g.galaxy, D.dest.sysId); const b = ORION.system.findBody(ds, D.dest.bodyKey); if (b) sumBodyName = ' · ' + (b.name || b.key); } catch (e) { /* */ }
     }
     const sumMisLab = MISSION_META[D.mission] ? MISSION_META[D.mission].lab : 'Sposta';
@@ -10261,7 +10940,13 @@ function openFleetDetail(fleetId, opts) {
         sumEta = p ? (ORION.fleet.routeImpulsi(g.galaxy, draftFleet, p) + ' Ι') : 'irraggiungibile';
       }
     }
-    const sumVcap = (D.draft.viveriCap != null) ? D.draft.viveriCap : (ORION.fleet.VIVERI_CAP || 250);
+    let sumVcap = (D.draft.viveriCap != null) ? D.draft.viveriCap : (ORION.fleet.VIVERI_CAP || 250);
+    /* Riflette il tetto imposto dallo stock della colonia origine (#69 follow-up). */
+    if (nShips > 0 && ORION.fleet.viveriFillEstimate) {
+      const colS = g.colonies && g.colonies[D.newColonyKey];
+      const massS = ORION.fleet.dockWeightOfFleet ? ORION.fleet.dockWeightOfFleet(draftFleet) : 1;
+      sumVcap = Math.min(sumVcap, ORION.fleet.viveriFillEstimate(colS, crewReq, massS, 0, sumVcap).maxCap);
+    }
     const riepilogo = '<div class="fdetail__summary">' +
       '<span class="fsum__chip">' + uiIcon('pin', 'cyan') + ' ' + escapeHtml(sumSysName) + escapeHtml(sumBodyName) + '</span>' +
       '<span class="fsum__chip">' + uiIcon('send', 'cyan') + ' ' + escapeHtml(sumMisLab) + '</span>' +
@@ -10346,22 +11031,42 @@ function openFleetDetail(fleetId, opts) {
     const def = F.VIVERI_CAP || 250;
     const cap = (D.draft.viveriCap != null) ? D.draft.viveriCap : def;
     const crew = Math.max(1, crewReq | 0);
+    /* Stazza della bozza (per il costo ENERGIA, 2026-06-27: scala sulla
+       stazza, non sull'equipaggio). */
+    let mass = 0;
+    const dships = (D.draft && D.draft.ships) ? D.draft.ships : {};
+    Object.keys(dships).forEach(function (k) {
+      mass += (dships[k] || 0) * (F.dockWeightOf ? F.dockWeightOf(k) : 1);
+    });
+    mass = Math.max(1, mass);
     const rate = {
       food: F.VIVERI_RATE_FOOD || 0.07, water: F.VIVERI_RATE_WATER || 0.05,
-      met: F.VIVERI_RATE_MET || 0.04, en: F.VIVERI_RATE_EN || 0.025
+      met: F.VIVERI_RATE_MET || 0.04, en: F.VIVERI_RATE_EN || 0.12
     };
-    const m = Math.ceil(crew * rate.met * cap);
-    const e = Math.ceil(crew * rate.en * cap);
-    const f = Math.ceil(crew * rate.food * cap);
-    const w = Math.ceil(crew * rate.water * cap);
-    const costStr = '⛭ ' + m + ' · ⚡ ' + e + ' · ❖ ' + f + ' · ≈ ' + w;
-    const hint = 'Capienza serbatoio: scegli quanta autonomia caricare al pieno alla partenza. Costo proporzionale a equipaggio (' + crew + ') × Ι caricati.';
+    /* Stima del pieno dallo stock della colonia origine: blocca lo slider al
+       cap che esaurisce la prima risorsa e mostra il residuo per risorsa
+       (feedback utente 2026-06-29). Origine = colonia bozza (D.newColonyKey). */
+    const colony = g.colonies && g.colonies[D.newColonyKey];
+    const est0 = F.viveriFillEstimate
+      ? F.viveriFillEstimate(colony, crew, mass, 0, cap)
+      : { maxCap: max, cost: { met: Math.ceil(crew * rate.met * cap), en: Math.ceil(mass * rate.en * cap), food: Math.ceil(crew * rate.food * cap), water: Math.ceil(crew * rate.water * cap) }, remaining: { met: null, en: null, food: null, water: null }, limiting: null, hasStock: false };
+    /* Tetto effettivo dello slider: mai oltre quanto la colonia può fornire. */
+    const capMax = Math.min(max, est0.maxCap);
+    const effMin = Math.min(min, capMax);
+    const effCap = Math.max(effMin, Math.min(cap, capMax));
+    const est = (effCap !== cap && F.viveriFillEstimate)
+      ? F.viveriFillEstimate(colony, crew, mass, 0, effCap) : est0;
+    const RES_LBL = { met: 'metallo', en: 'energia', food: 'cibo', water: 'acqua' };
+    const limitNote = (est0.hasStock && est0.maxCap < max && est0.limiting)
+      ? ' · <span class="vcap-limit">max ' + est0.maxCap + ' Ι (' + RES_LBL[est0.limiting] + ' in esaurimento)</span>'
+      : '';
+    const hint = 'Capienza serbatoio: scegli quanta autonomia caricare al pieno alla partenza. Cibo/acqua/metalli ∝ equipaggio (' + crew + '); energia ∝ stazza (' + mass + ') × Ι caricati. La barra è limitata da quanto la colonia origine può fornire.';
     return '<div class="fdetail__sec fdetail__sec--supply' + (dis ? ' is-locked' : '') + '">' +
       secHead('forces', 'amber', 'Viveri alla partenza', dis ? 'aggiungi una nave' : '') +
       '<div class="fleet-viveri-cap" title="' + escapeHtml(hint) + '">' +
-        '<label class="fleet-viveri-cap__lbl">Capienza serbatoio · <strong data-bind="vcap-val">' + cap + '</strong> Ι</label>' +
-        '<input type="range" min="' + min + '" max="' + max + '" step="10" value="' + cap + '" data-bind="vcap-slider"' + (dis ? ' disabled' : '') + '>' +
-        '<div class="fleet-viveri-cap__cost">Pieno completo: <span data-bind="vcap-cost">' + costStr + '</span></div>' +
+        '<label class="fleet-viveri-cap__lbl">Capienza serbatoio · <strong data-bind="vcap-val">' + effCap + '</strong> Ι' + limitNote + '</label>' +
+        '<input type="range" min="' + effMin + '" max="' + capMax + '" step="10" value="' + effCap + '" data-bind="vcap-slider"' + (dis ? ' disabled' : '') + '>' +
+        '<div class="fleet-viveri-cap__cost"><span data-bind="vcap-cost">' + viveriLoadCostHtml(est) + '</span></div>' +
       '</div>' +
     '</div>';
   }
@@ -10402,7 +11107,7 @@ function openFleetDetail(fleetId, opts) {
     const suggest = suggestedRenameFor(g, fleet);
     const initial = suggest || fleet.name;
     const hint = suggest
-      ? '<p class="fdetail__hint fdetail__rename-hint">Suggerito per l’ordine corrente — modifica liberamente.</p>'
+      ? '<p class="fdetail__hint fdetail__rename-hint">Suggerito per questa flotta — modifica liberamente.</p>'
       : '';
     return '<div class="fdetail__sec fdetail__rename">' +
       '<input class="fdetail__input" type="text" data-bind="rename-input" value="' + escapeHtml(initial) + '" maxlength="40" aria-label="Nome flotta">' +
@@ -10626,9 +11331,11 @@ function openFleetDetail(fleetId, opts) {
     if (m === 'attack') return { type: 'attack', toSysId: sys, bodyKey: bk };
     if (m === 'recon') return { type: 'recon', toSysId: sys, bodyKey: bk };
     if (m === 'extract') {
-      /* anomalyKind: giacimento del corpo (cintura/gassoso) o anomalia fluttuante. */
-      let kind = null;
-      if (bk && ORION.system && ORION.system.generate && ORION.system.findBody && ORION.anomaly && ORION.anomaly.bodyGiacimento) {
+      /* anomalyKind: anomalia a livello sistema scelta esplicitamente
+         (D.dest.anomKind, es. nebulosa → bodyKey null), oppure giacimento del
+         corpo (cintura/gassoso), oppure ricavata dal target. */
+      let kind = D.dest.anomKind || null;
+      if (!kind && bk && ORION.system && ORION.system.generate && ORION.system.findBody && ORION.anomaly && ORION.anomaly.bodyGiacimento) {
         try {
           const ds = ORION.system.generate(g.galaxy, sys);
           const b = ORION.system.findBody(ds, bk);
@@ -10860,23 +11567,25 @@ function openFleetDetail(fleetId, opts) {
       const min = F.VIVERI_CAP_MIN || 50;
       const max = F.VIVERI_CAP_MAX || 1500;
       const crew = (F.fleetCrewRequired ? F.fleetCrewRequired(fleet) : 0) || 1;
+      const mass = Math.max(1, (F.dockWeightOfFleet ? F.dockWeightOfFleet(fleet) : 1));
       const editable = atFriendlyPort;
-      /* Stima costo PIENO completo (Ι caricati = cap, crew totale × rate). */
+      /* Stima costo PIENO completo (Ι caricati = cap). Cibo/acqua/metalli ∝
+         equipaggio; energia ∝ stazza (2026-06-27). */
       const rate = {
         food: F.VIVERI_RATE_FOOD || 0.07, water: F.VIVERI_RATE_WATER || 0.05,
-        met: F.VIVERI_RATE_MET || 0.04, en: F.VIVERI_RATE_EN || 0.025
+        met: F.VIVERI_RATE_MET || 0.04, en: F.VIVERI_RATE_EN || 0.12
       };
-      const cost = {
-        food: Math.ceil(crew * rate.food * cap),
-        water: Math.ceil(crew * rate.water * cap),
-        met: Math.ceil(crew * rate.met * cap),
-        en: Math.ceil(crew * rate.en * cap)
-      };
-      const costStr = '⛭ ' + cost.met + ' · ⚡ ' + cost.en + ' · ❖ ' + cost.food + ' · ≈ ' + cost.water;
+      /* Costo del pieno + residuo nella colonia origine (#69 follow-up
+         2026-06-29). Lo stock è noto solo se la flotta è a una TUA colonia
+         (porto amico): in tal caso mostriamo quanto resterebbe. */
+      const colony = (editable && F.ownColonyAt) ? F.ownColonyAt(g, fleet.location.systemId) : null;
+      const est = F.viveriFillEstimate
+        ? F.viveriFillEstimate(colony, crew, mass, 0, cap)
+        : { cost: { met: Math.ceil(crew * rate.met * cap), en: Math.ceil(mass * rate.en * cap), food: Math.ceil(crew * rate.food * cap), water: Math.ceil(crew * rate.water * cap) }, remaining: { met: null, en: null, food: null, water: null }, hasStock: false };
       const editAttr = editable ? '' : ' disabled';
       const inTransit = fleet.location && fleet.location.status === 'in-transit';
       const hintTxt = editable
-        ? 'Capienza serbatoio: scegli quanta autonomia caricare alla prossima sosta al porto. Costo proporzionale a equipaggio (' + crew + ') × Ι caricati.'
+        ? 'Capienza serbatoio: scegli quanta autonomia caricare alla prossima sosta al porto. Cibo/acqua/metalli ∝ equipaggio (' + crew + '); energia ∝ stazza (' + mass + ') × Ι caricati.'
         : inTransit
           ? 'In viaggio: capienza non modificabile fino al ritorno al porto.'
           : 'Modifica capienza disponibile solo al porto amico (tua colonia, tua stazione, alleato).';
@@ -10884,7 +11593,7 @@ function openFleetDetail(fleetId, opts) {
         '<div class="fleet-viveri-cap" title="' + escapeHtml(hintTxt) + '">' +
           '<label class="fleet-viveri-cap__lbl">Capienza serbatoio · <strong data-bind="vcap-val">' + cap + '</strong> Ι</label>' +
           '<input type="range" min="' + min + '" max="' + max + '" step="10" value="' + cap + '" data-bind="vcap-slider"' + editAttr + '>' +
-          '<div class="fleet-viveri-cap__cost">Pieno completo: <span data-bind="vcap-cost">' + costStr + '</span></div>' +
+          '<div class="fleet-viveri-cap__cost">Pieno completo: <span data-bind="vcap-cost">' + viveriLoadCostHtml(est) + '</span></div>' +
         '</div>';
     }
     /* Decisione utente 2026-06-16: pillola usura accanto ai viveri nel
@@ -10903,13 +11612,18 @@ function openFleetDetail(fleetId, opts) {
     /* Destinazione (Stadio 2.3a): sistema + corpo. */
     const destSysSel = host.querySelector('[data-bind="dest-system"]');
     if (destSysSel) destSysSel.addEventListener('change', function () {
-      if (!D.dest) D.dest = { sysId: null, bodyKey: null };
-      D.dest.sysId = Number(destSysSel.value); D.dest.bodyKey = null; render();
+      if (!D.dest) D.dest = { sysId: null, bodyKey: null, anomKind: null };
+      D.dest.sysId = Number(destSysSel.value); D.dest.bodyKey = null; D.dest.anomKind = null; render();
     });
     const destBodySel = host.querySelector('[data-bind="dest-body"]');
     if (destBodySel) destBodySel.addEventListener('change', function () {
-      if (!D.dest) D.dest = { sysId: null, bodyKey: null };
-      D.dest.bodyKey = destBodySel.value || null; render();
+      if (!D.dest) D.dest = { sysId: null, bodyKey: null, anomKind: null };
+      const v = destBodySel.value || '';
+      /* Le anomalie a livello sistema usano il valore sentinella "anom:<kind>"
+         (niente bodyKey); i corpi reali usano il loro key. */
+      if (v.indexOf('anom:') === 0) { D.dest.anomKind = v.slice(5); D.dest.bodyKey = null; }
+      else { D.dest.bodyKey = v || null; D.dest.anomKind = null; }
+      render();
     });
     /* Picker missione (Stadio 2.4). */
     host.querySelectorAll('[data-mission]').forEach(function (b) {
@@ -10981,8 +11695,43 @@ function openFleetDetail(fleetId, opts) {
       const nf = r.fleet;
       if (D.draft.viveriCap != null && ORION.fleet.setViveriCap) {
         ORION.fleet.setViveriCap(nf, D.draft.viveriCap);
-        nf.viveri = nf.viveriCap;
       }
+      /* Decisione utente 2026-06-27: la prima provvista NON è gratis. Serbatoio
+         a 0 finché non viene addebitato allo stock della colonia, e solo qui
+         alla conferma "Crea e parti" (vedi chargeProvision più sotto) — dopo
+         che navi+equipaggio sono assegnati, così crew e stazza sono note. */
+      nf.viveri = 0;
+      /* Addebita la prima provvista (cibo/acqua/metalli su equipaggio + energia
+         su stazza) allo stock della colonia origine. Recovery-friendly: se a
+         corto, carica parziale (la flotta parte con meno autonomia). Va chiamata
+         SOLO sui rami di successo (dopo ordine/colonize confermati) per non
+         lasciare un addebito orfano se la creazione fa rollback (#22). */
+      const chargeProvision = function () {
+        if (!ORION.fleet.loadViveriAtPort) return;
+        const col = g.colonies[colKey];
+        /* Safeguard (feedback utente 2026-06-29): ora che navi+equipaggio sono
+           assegnati, blocca il cap a quanto la colonia può davvero fornire —
+           così viveriCap == carico effettivo e la flotta non parte con capacità
+           "fantasma" che la lascia subito a secco. Recovery-friendly: mai sotto
+           il floor di setViveriCap. */
+        if (col && ORION.fleet.viveriFillEstimate && ORION.fleet.setViveriCap && ORION.fleet.viveriCapOf) {
+          const crewN = ORION.fleet.fleetCrewRequired ? ORION.fleet.fleetCrewRequired(nf) : 1;
+          const massN = ORION.fleet.dockWeightOfFleet ? ORION.fleet.dockWeightOfFleet(nf) : 1;
+          const capN = ORION.fleet.viveriCapOf(nf);
+          const estN = ORION.fleet.viveriFillEstimate(col, crewN, massN, 0, capN);
+          if (estN.hasStock && estN.maxCap < capN) ORION.fleet.setViveriCap(nf, estN.maxCap);
+        }
+        const before = (col && col.stock) ? Object.assign({}, col.stock) : null;
+        ORION.fleet.loadViveriAtPort(g, nf);
+        if (!before || !col.stock) return;
+        const lab = { food: 'cibo', water: 'acqua', met: 'metallo', en: 'energia' };
+        const parts = [];
+        Object.keys(lab).forEach(function (k) {
+          const d = Math.round((before[k] || 0) - (col.stock[k] || 0));
+          if (d > 0) parts.push('−' + d + ' ' + lab[k]);
+        });
+        if (parts.length) showToast('Provvista flotta: ' + parts.join(' · '));
+      };
       let failed = null;
       Object.keys(draft.ships).forEach(function (k) {
         if (failed) return; const n = draft.ships[k] || 0; if (n <= 0) return;
@@ -11002,6 +11751,7 @@ function openFleetDetail(fleetId, opts) {
         if (!planet) { ORION.fleet.dissolveFleet(g, nf); showToast('Pianeta non valido'); return; }
         doColonize(planet, nf, 0);   // mostra il toast in caso di costo/ordine ko
         if (!nf.orders || nf.orders.type !== 'colonize') { ORION.fleet.dissolveFleet(g, nf); return; }
+        chargeProvision();
         persistGame(g);
         fleet = nf; D.creating = false;
         D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: false, exploreEach: false } };
@@ -11021,6 +11771,7 @@ function openFleetDetail(fleetId, opts) {
       }
       /* Nuova flotta formata dal giocatore: niente entry — la flotta
          compare in tab Flotte e il toast/UI sono il feedback. */
+      chargeProvision();
       persistGame(g);
       fleet = nf;
       D.creating = false;
@@ -11075,19 +11826,49 @@ function openFleetDetail(fleetId, opts) {
       const valEl = host.querySelector('[data-bind="vcap-val"]');
       const costEl = host.querySelector('[data-bind="vcap-cost"]');
       const F = ORION.fleet;
-      const crew = (F.fleetCrewRequired ? F.fleetCrewRequired(fleet) : 0) || 1;
+      /* crew + stazza per il preview live. In creazione `fleet` è null: si
+         derivano dalla bozza (D.draft.ships). Energia ∝ stazza (2026-06-27). */
+      let crew, mass;
+      if (D.creating) {
+        crew = 0; mass = 0;
+        const dships = (D.draft && D.draft.ships) ? D.draft.ships : {};
+        Object.keys(dships).forEach(function (k) {
+          const n = dships[k] || 0;
+          const cls = F.getClass ? F.getClass(k) : null;
+          crew += n * (cls && cls.crew ? cls.crew : 0);
+          mass += n * (F.dockWeightOf ? F.dockWeightOf(k) : 1);
+        });
+        crew = Math.max(1, crew); mass = Math.max(1, mass);
+      } else {
+        crew = (F.fleetCrewRequired ? F.fleetCrewRequired(fleet) : 0) || 1;
+        mass = Math.max(1, (F.dockWeightOfFleet ? F.dockWeightOfFleet(fleet) : 1));
+      }
       const rate = {
         food: F.VIVERI_RATE_FOOD || 0.07, water: F.VIVERI_RATE_WATER || 0.05,
-        met: F.VIVERI_RATE_MET || 0.04, en: F.VIVERI_RATE_EN || 0.025
+        met: F.VIVERI_RATE_MET || 0.04, en: F.VIVERI_RATE_EN || 0.12
       };
+      /* Colonia origine + autonomia già a bordo, per il residuo live (#69
+         follow-up 2026-06-29). In creazione la flotta non esiste ancora →
+         colonia bozza, serbatoio a 0. */
+      let viveriColony;
+      if (D.creating) {
+        viveriColony = g.colonies && g.colonies[D.newColonyKey];
+      } else {
+        const atPortNow = !!(F.fleetAtFriendlyPort && F.fleetAtFriendlyPort(g, fleet));
+        viveriColony = (atPortNow && F.ownColonyAt && fleet.location) ? F.ownColonyAt(g, fleet.location.systemId) : null;
+      }
       function updatePreview(val) {
         if (valEl) valEl.textContent = val;
         if (costEl) {
-          const m = Math.ceil(crew * rate.met * val);
-          const e = Math.ceil(crew * rate.en * val);
-          const f = Math.ceil(crew * rate.food * val);
-          const w = Math.ceil(crew * rate.water * val);
-          costEl.textContent = '⛭ ' + m + ' · ⚡ ' + e + ' · ❖ ' + f + ' · ≈ ' + w;
+          if (F.viveriFillEstimate) {
+            costEl.innerHTML = viveriLoadCostHtml(F.viveriFillEstimate(viveriColony, crew, mass, 0, val));
+          } else {
+            const m = Math.ceil(crew * rate.met * val);
+            const e = Math.ceil(mass * rate.en * val);
+            const f = Math.ceil(crew * rate.food * val);
+            const w = Math.ceil(crew * rate.water * val);
+            costEl.textContent = '⛭ ' + m + ' · ⚡ ' + e + ' · ❖ ' + f + ' · ≈ ' + w;
+          }
         }
       }
       vcapSlider.addEventListener('input', function () {
@@ -11470,6 +12251,18 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
     targetHtml = '<p class="panel__note panel__note--target">Vocazione a regime: ' + targetBits + '</p>';
   }
 
+  /* Riga "Sovraffollamento" esplicita: prima il giocatore vedeva la causa
+     solo nel tooltip `(dettagli)` del morale. Adesso, quando attivo, esce
+     una riga warn dedicata col cap abitativo e il modificatore — coerente
+     col badge sulla tab Popolazione e con la cronaca `pop-crowd`. */
+  let crowdRow = '';
+  if (crowd > CFG.POP_CROWD_START) {
+    const crowdPct = Math.round(crowd * 100);
+    const crowdMul = Math.max(0.05, 1 - (crowd - CFG.POP_CROWD_START) * CFG.POP_CROWD_SLOPE);
+    crowdRow = row('Sovraffollamento',
+      '<span class="rate rate--neg">' + crowdPct + '% del cap abitativo (' + (total | 0) + ' / ' + (housingCap | 0) +
+      ' livelli) · morale ×' + crowdMul.toFixed(2) + ' · espandi Centro Abitativo</span>');
+  }
   host.innerHTML =
     '<div class="sysinfo">' +
       '<dl class="sysinfo__list">' +
@@ -11478,6 +12271,7 @@ function renderPlanetPopolazioneTab(host, planet, colony) {
             ' <span class="pop-limit">(limite: ' + limitRes + ')</span>') +
         row('Morale', morale.toFixed(2) + ' / ' + CFG.POP_MORALE_MAX.toFixed(2) +
             ' <span class="rate-aux" title="' + escapeHtml(moraleParts.join(' · ')) + '">(dettagli)</span>') +
+        crowdRow +
         row('Crescita', '<span class="rate ' + (canGrow ? 'rate--pos' : 'rate--neg') + '">' + growthStr + '</span>') +
       '</dl>' +
       '<p class="sysinfo__sub">Classi funzionali</p>' +
@@ -11530,6 +12324,17 @@ function rateGrid(rates, upkeep, colony) {
   const F = ORION.fleet;
   const shipMet = (F && F.portMaintenance) ? F.portMaintenance(ORION.game, colony) : 0;
   const shipEn  = (F && F.portMaintenanceEn) ? F.portMaintenanceEn(ORION.game, colony) : 0;
+  /* Surplus estrattivo da anomalie/cinture/nebulose (richiesta utente
+     2026-06-20): le flotte in raccolta versano il bottino sulla colonia
+     attiva più vicina al sito (anomaly.depositColonyKey). Lo aggiungiamo
+     al saldo del riepilogo dx come fattore esplicito ("anomalia"), come
+     facciamo già nella Plancia di Colonia (colony-deck). Senza, l'utente
+     mandava estrattori e il saldo non sembrava cambiare. */
+  const anomFlow = (ORION.anomaly && ORION.anomaly.harvestByColony)
+    ? (ORION.anomaly.harvestByColony(ORION.game)[colony.systemId + ':' + colony.bodyKey] || null)
+    : null;
+  const anomMet = anomFlow ? anomFlow.met : 0;
+  const anomEn  = anomFlow ? anomFlow.en  : 0;
   const items = [];
   ['met', 'en', 'food', 'water'].forEach(function (k) {
     const r = (rates[k] || 0) * pf.prodMul; const u = upkeep[k] || 0;
@@ -11541,14 +12346,16 @@ function rateGrid(rates, upkeep, colony) {
     const crewDrain = k === 'food' ? (pf.crewFood || 0) : k === 'water' ? (pf.crewWater || 0) : 0;
     const shipDrain = k === 'met' ? shipMet : k === 'en' ? shipEn : 0;
     const trade = tradeNet[k] || 0;   // + entrata, − uscita
-    const net = r - u - popDrain - crewDrain - shipDrain + trade;
-    if (!(r || u || popDrain || crewDrain || shipDrain || trade)) return;
+    const anom = k === 'met' ? anomMet : k === 'en' ? anomEn : 0;   // + entrata
+    const net = r - u - popDrain - crewDrain - shipDrain + trade + anom;
+    if (!(r || u || popDrain || crewDrain || shipDrain || trade || anom)) return;
     let aux = '+' + fmtAbs(r) + ' prod / −' + fmtAbs(u) + ' uso';
     if (popDrain > 0) aux += ' / −' + fmtAbs(popDrain) + ' pop';
     if (crewDrain > 0) aux += ' / −' + fmtAbs(crewDrain) + ' razioni';
     if (shipDrain > 0) aux += ' / −' + fmtAbs(shipDrain) + ' flotta';
     if (trade > 0) aux += ' / +' + fmtAbs(trade) + ' commercio';
     else if (trade < 0) aux += ' / −' + fmtAbs(trade) + ' commercio';
+    if (anom > 0) aux += ' / +' + fmtAbs(anom) + ' anomalia';
     items.push(row(resLabel(k), '<span class="rate ' + (net >= 0 ? 'rate--pos' : 'rate--neg') + '">' + fmtNet(net) + '</span> / ' + iU() + ' <span class="rate-aux">(' + aux + ')</span>'));
   });
   if (rates.research) items.push(row('Ricerca', '<span class="rate rate--pos">+' + (Math.round(rates.research * 100) / 100) + '</span> / ' + iU()));
@@ -11888,6 +12695,14 @@ const PLAY_LS_PAUSES = 'orion.autopause';
 const DEFAULT_AUTOPAUSE = {
   'build-done': true, 'demolish-done': true, 'downgrade-done': true, 'colony-done': true, 'scan-done': true,
   'scarcity': true, 'scarcity-recover': true, 'pop-loss': true,
+  /* Sovraffollamento (decisione #37bis, reso esplicito 2026-06-20):
+     l'entrata in sovraffollamento è un nudge — non blocca, ma vale far
+     vedere all'utente che la crescita pop sta venendo schiacciata. Default
+     OFF (non interrompe il tempo); compare in cronaca e badge tab. Solo
+     per colonie "che vogliono crescere" (mondi-giardino o con Centro
+     Abitativo costruito), per non spammare sui mondi-fabbrica. Il rientro
+     è buona notizia → OFF anche lui. */
+  'pop-crowd': false, 'pop-crowd-recover': false,
   /* Decisione #48 (Fase 0): la saturazione rifiuti (saturo/critico) merita
      una pausa — è il nudge per agire prima del deperimento. Il rientro è
      buona notizia, non interrompe. */
@@ -11919,6 +12734,9 @@ const DEFAULT_AUTOPAUSE = {
      congedo sono atmosferici (OFF). */
   'council-constituted': true, 'luminary-emerged': false,
   'council-succession': false, 'figure-retired': false,
+  /* M18 bridge: figura persa con colonia (notevole), congedo onorato
+     (atmosferico). Entrambi influenzano reputazione (−3/+2). */
+  'figure-lost': true, 'figure-retired-honored': false,
   /* M08 Fase A (decisione #42): arrivo flotta + rotta completata + scoperta
      fortuita auto-pausano (esiti notevoli). Il launch è azione utente,
      non sorpresa. Hop intermedi mai. */
@@ -11952,9 +12770,15 @@ const DEFAULT_AUTOPAUSE = {
      (showAnomalyRecapModal in runAdvance), quindi OFF qui per non duplicare
      l'overlay generico. Giacimento esausto = atmosferico (OFF). */
   'crisis-raised': true, 'crisis-lapsed': true, 'anomaly-relic-found': false, 'anomaly-depleted': false,
+  /* M18: soglie di stabilità — attraversare un livello peggiore di ICG
+     (Crisi/Collasso) auto-pausa (decisione utente: l'utente deve sapere);
+     soglie di Reputazione no (è un'informazione, non un'emergenza). */
+  'icg-threshold': true, 'rep-threshold': false,
   /* FSP §17.7: contatto/scansione/controllo atmosferici (OFF); rivelazione
      dell'effetto è la commit significativa (ON). */
   'fsp-contact': false, 'fsp-scanned': false, 'fsp-revealed': true, 'fsp-claimed': false, 'fsp-lost': true,
+  /* Campo di prossimità (richiesta utente 2026-06-29): nudge ambientale, minore → OFF. */
+  'fsp-ambient': false,
   /* Fase B (decisione #46): tappa intermedia raggiunta. Default OFF —
      non interrompiamo a ogni waypoint, può essere una rotta lunga. L'arrivo
      finale e la `route-complete` continuano a fermare il tempo. */
@@ -11978,6 +12802,7 @@ const DEFAULT_AUTOPAUSE = {
   'civ-spotted': true,
   'civ-contact': true,
   'civ-intel-upgraded': true,
+  'espionage-result': true,
   'pirate-nest-recon': false,
   'civ-fallen': true,
   'civ-emerged': true,
@@ -12398,6 +13223,8 @@ function showEventOverlay(events) {
     'waste': 'Rifiuti: saturazione',
     'waste-recover': 'Rifiuti: rientrata',
     'pop-loss': 'Calo popolazione',
+    'pop-crowd': 'Sovraffollamento',
+    'pop-crowd-recover': 'Sovraffollamento rientrato',
     'victory': 'Pista chiusa',
     'settle-stage': 'Fase Insediamento',
     'settle-done': 'Insediamento completato',
@@ -12422,6 +13249,8 @@ function showEventOverlay(events) {
     'luminary-emerged': 'Nuovo Luminare',
     'council-succession': 'Consiglio: avvicendamento',
     'figure-retired': 'Figura in congedo',
+    'figure-retired-honored': 'Figura: congedo onorato',
+    'figure-lost': 'Figura persa in servizio',
     'fleet-arrived': 'Flotta arrivata',
     'fleet-route-complete': 'Flotta: rotta completata',
     'fleet-discovery': 'Flotta: sistema esplorato',
@@ -12445,6 +13274,8 @@ function showEventOverlay(events) {
     'mekhari-contract-done': 'Cacciatori Mekhari: covo sgominato',
     'crisis-raised': 'Crisi galattica: decisione richiesta',
     'crisis-lapsed': 'Crisi ignorata',
+    'icg-threshold': 'Stabilità: ICG ha cambiato fascia',
+    'rep-threshold': 'Reputazione: nuova fascia raggiunta',
     'anomaly-relic-found': 'Reliquia antica esplorata',
     'anomaly-depleted': 'Giacimento quasi esausto',
     'fsp-contact': 'Fenomeno di Spazio Profondo rilevato',
@@ -12452,6 +13283,7 @@ function showEventOverlay(events) {
     'fsp-revealed': 'Fenomeno investigato',
     'fsp-claimed': 'Fenomeno sotto controllo',
     'fsp-lost': 'Fenomeno perduto',
+    'fsp-ambient': 'Corrente anomala sulle rotte',
     'fleet-leg-hop': 'Flotta: hop intermedio',
     'fleet-waypoint-reached': 'Flotta: tappa raggiunta',
     'garrison-threat-detected': 'Garrison: minaccia rilevata',
@@ -12466,6 +13298,7 @@ function showEventOverlay(events) {
     'civ-spotted': 'Civiltà avvistata',
     'civ-contact': 'Primo contatto con una civiltà',
     'civ-intel-upgraded': 'Dossier civiltà aggiornato',
+    'espionage-result': 'Operazione coperta',
     'pirate-nest-recon': 'Ricognizione covo pirata',
     'civ-expand': 'Civiltà AI: espansione',
     'civ-war': 'Guerra tra civiltà',
@@ -12744,6 +13577,13 @@ function _chronicleEventBody(ev) {
     pushChronicle(ds + ' — ' + pname + ptag + ': saturazione rifiuti <strong>rientrata</strong>.', 'system');
   } else if (ev.kind === 'pop-loss') {
     pushChronicle(ds + ' — ' + pname + ptag + ': la popolazione cala per la carestia prolungata.', 'system');
+  } else if (ev.kind === 'pop-crowd') {
+    const crowdPct = Math.round((ev.crowd || 0) * 100);
+    const mul = (ev.penalty != null) ? ev.penalty.toFixed(2) : '—';
+    pushChronicle(ds + ' — ' + pname + ptag + ': <strong>sovraffollamento</strong> (' + crowdPct +
+      '% del cap abitativo, morale ×' + mul + '). Espandi il Centro Abitativo per riprendere la crescita.', 'system');
+  } else if (ev.kind === 'pop-crowd-recover') {
+    pushChronicle(ds + ' — ' + pname + ptag + ': sovraffollamento <strong>rientrato</strong>.', 'system');
   } else if (ev.kind === 'victory') {
     const label = (ORION.victory && ORION.victory.TRACK_LABELS[ev.track]) || ev.track;
     pushChronicle(ds + ' — <strong>Pista chiusa</strong>: ' + label + '.', 'explore');
@@ -12883,6 +13723,10 @@ function _chronicleEventBody(ev) {
   } else if (ev.kind === 'figure-retired') {
     const where = ev.scope === 'colony' ? 'amministrativo' : 'di flotta';
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.name) + '</strong> (' + escapeHtml(ev.roleLabel || where) + ') si congeda dopo un lungo servizio.', 'figure');
+  } else if (ev.kind === 'figure-retired-honored') {
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.name) + '</strong> (' + escapeHtml(ev.roleLabel || '') + ') si congeda al culmine della carriera: <strong>+2 reputazione</strong>.', 'figure');
+  } else if (ev.kind === 'figure-lost') {
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.name) + '</strong> (' + escapeHtml(ev.roleLabel || '') + ') è <strong>perso/a in servizio</strong> con la caduta della colonia: <strong>−3 reputazione</strong>.', 'figure');
   } else if (ev.kind === 'expedition-arrived') {
     const sys = ORION.game.galaxy.systems[ev.systemId];
     const tag = ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
@@ -12966,13 +13810,13 @@ function _chronicleEventBody(ev) {
   } else if (ev.kind === 'fleet-colonize-failed') {
     const fname = ev.fleetName || '—';
     const sys = ORION.game.galaxy.systems[ev.systemId];
-    /* Decisione #66 estensione (P0): mostra coloni salvati in scialuppa. */
-    const saved = ev.popSaved || 0;
-    const savedTxt = saved > 0
-      ? ' · <strong>' + saved + ' livell' + (saved === 1 ? 'o' : 'i') + '</strong> di pionieri tornati in scialuppa'
+    /* Decisione utente 2026-06-26: i coloni a bordo cadono con la nave. */
+    const lost = ev.popLost || 0;
+    const lostTxt = lost > 0
+      ? ' · <strong>' + lost + ' livell' + (lost === 1 ? 'o' : 'i') + '</strong> di pionieri perduti con la nave'
       : '';
     pushChronicle(ds + ' — <strong>' + escapeHtml(fname) + '</strong>: fondazione annullata presso <strong>' +
-      (sys ? sys.name : '—') + '</strong> · motivo: ' + escapeHtml(ev.reason || '—') + savedTxt + '.', 'planet');
+      (sys ? sys.name : '—') + '</strong> · motivo: ' + escapeHtml(ev.reason || '—') + lostTxt + '.', 'planet');
   } else if (ev.kind === 'fleet-waypoint-reached') {
     /* Fase B (decisione #46): cronaca breve per ogni tappa. La voce è
        silenziata dal log se si chiude la prima tappa di un singolo move
@@ -13088,7 +13932,7 @@ function _chronicleEventBody(ev) {
     const why = ev.reason === 'noroute' ? 'nessuna rotta verso il contatto' : 'il contatto si è dileguato';
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName || 'La tua flotta') + '</strong> ha perso il contatto inseguito (' + why + ') · <span class="chronicle__hint">flotta in attesa di nuovi ordini</span>.', 'civ');
   } else if (ev.kind === 'civ-intel-upgraded') {
-    const INTEL_LABEL = { fragmentary: 'frammentario', partial: 'parziale', complete: 'completo' };
+    const INTEL_LABEL = { fragmentary: 'frammentario', partial: 'parziale', complete: 'completo', deep: 'approfondito' };
     /* Recap "cosa di nuovo" a questo livello (gating della vista Civiltà ⬡). */
     const REVEAL = {
       partial: 'allineamento, disposizione e stato delle relazioni',
@@ -13098,6 +13942,24 @@ function _chronicleEventBody(ev) {
     pushChronicle(ds + ' — 🛰 Ricognizione su <strong>' + escapeHtml(ev.civName) + '</strong>: dossier <strong>' +
       escapeHtml(INTEL_LABEL[ev.to] || ev.to) + '</strong> (era ' + escapeHtml(INTEL_LABEL[ev.from] || ev.from || '—') + ')' +
       newFrag + '.', 'civ');
+  } else if (ev.kind === 'espionage-result') {
+    const opLbl = (ORION.espionage && ORION.espionage.OP_LABEL[ev.op]) || 'Operazione coperta';
+    const civNm = '<strong>' + escapeHtml(ev.civName || '—') + '</strong>';
+    if (ev.ok && ev.op === 'infiltrate') {
+      const betrayHint = (ev.reveal && ev.reveal.betrayalRisk)
+        ? ' · <span class="chronicle__hint">⚠ tradimento ' + escapeHtml((ev.reveal.betrayal && ev.reveal.betrayal.level === 'imminent') ? 'imminente' : 'probabile') + '</span>'
+        : '';
+      pushChronicle(ds + ' — 🕵 Infiltrazione riuscita su ' + civNm +
+        ': dossier <strong>completo</strong> e segreti svelati' + betrayHint + '.', 'civ');
+    } else if (ev.ok && ev.op === 'sabotage') {
+      pushChronicle(ds + ' — 🕵 Sabotaggio riuscito su ' + civNm + ': la loro potenza ne esce colpita.', 'civ');
+    } else if (ev.ok && ev.op === 'steal') {
+      const loot = (ev.loot != null) ? (' · <strong>' + ev.loot + '</strong> crediti sottratti') : '';
+      pushChronicle(ds + ' — 🕵 Furto riuscito ai danni di ' + civNm + loot + '.', 'civ');
+    } else {
+      pushChronicle(ds + ' — 🕵 ' + escapeHtml(opLbl) + ' <strong>scoperta</strong> ai danni di ' + civNm +
+        ': reputazione intaccata e diffidenza in aumento.', 'civ');
+    }
   } else if (ev.kind === 'pirate-nest-recon') {
     const INTEL_LABEL = { fragmentary: 'parziale', partial: 'parziale', complete: 'completa' };
     pushChronicle(ds + ' — Ricognizione <strong>' + escapeHtml(INTEL_LABEL[ev.to] || ev.to) + '</strong> di un covo pirata nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">forza e livello stimati nella vista Civiltà ⬡</span>.', 'civ');
@@ -13326,7 +14188,12 @@ function _chronicleEventBody(ev) {
     const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
     const verb = ev.playerWon ? 'respinge i predoni' : 'subisce l\'attacco predone';
     const losses = ev.lost > 0 ? ' · ' + ev.lost + ' nave/i perdute' : ' · nessuna perdita';
-    pushChronicle(ds + ' — Flotta <strong>' + escapeHtml(ev.fleetName || '—') + '</strong> ' + verb + stag + losses + '.', 'system');
+    /* Scorta da battaglia accorsa in difesa (modello presenza nel sistema). */
+    const allies = Array.isArray(ev.allies) && ev.allies.length
+      ? ' (con ' + ev.allies.map(function (n) { return '<strong>' + escapeHtml(n) + '</strong>'; }).join(', ') + ')'
+      : '';
+    const crewLoss = ev.crewLost > 0 ? ' · <strong>' + ev.crewLost + ' equipaggi persi</strong>' : '';
+    pushChronicle(ds + ' — Flotta <strong>' + escapeHtml(ev.fleetName || '—') + '</strong>' + allies + ' ' + verb + stag + losses + crewLoss + '.', 'system');
     if (ORION.tutorial) ORION.tutorial.fire('pirates');
   } else if (ev.kind === 'raider-fizzle') {
     /* preda fuggita: voce leggera, niente spam */
@@ -13337,6 +14204,7 @@ function _chronicleEventBody(ev) {
     const stag = ev.systemId != null && ev.systemId >= 0 ? systemTagHtml(ev.systemId) : '';
     const verb = ev.playerWon ? 'respinge il nemico' : 'è costretta alla ritirata';
     const losses = ev.lost > 0 ? ' · ' + ev.lost + ' nave/i perdute' : ' · nessuna perdita';
+    const crewLoss = ev.crewLost > 0 ? ' · <strong>' + ev.crewLost + ' equipaggi persi</strong>' : '';
     /* Fase B: se lo scontro ha arretrato il confine di una civiltà AI. */
     let rollback = '';
     if (ev.report && ev.report.rolledBackSystem != null) {
@@ -13344,8 +14212,20 @@ function _chronicleEventBody(ev) {
         ? ' · <strong>sistema liberato</strong> (reputazione luminosa)'
         : ' · <strong>sistema strappato</strong> (reputazione oscura)';
     }
+    /* Decisione 2026-06-26: se l'attacco MIRATO a un loro pianeta lo ha
+       razziato, chiariamo che il corpo NON è occupato — torna libero e va
+       colonizzato ex-novo se lo vuoi tenere (niente passaggio automatico di
+       popolazione/strutture). */
+    let razed = '';
+    if (ev.report && ev.report.bodyRazed) {
+      const bodyNm = (ev.systemId != null && ev.report.bodyLost)
+        ? _flBodyNm(ORION.game, ev.systemId, ev.report.bodyLost) : null;
+      const where = bodyNm ? ('<strong>' + escapeHtml(bodyNm) + '</strong>') : 'la colonia nemica colpita';
+      razed = ' · ' + where + ' <strong>razziata</strong>: il corpo torna <strong>libero</strong> (non occupato) — ' +
+        '<span class="chronicle__hint">coloniza ex-novo per insediartici</span>';
+    }
     pushChronicle(ds + ' — Scontro presso <strong>' + (sys ? sys.name : '—') + '</strong>' + stag + ': <strong>' +
-      escapeHtml(ev.fleetName) + '</strong> ' + verb + losses + rollback + '.', ev.playerWon ? 'explore' : 'system');
+      escapeHtml(ev.fleetName) + '</strong> ' + verb + losses + crewLoss + rollback + razed + '.', ev.playerWon ? 'explore' : 'system');
     ORION.lastBattle = ev.report || null;
     if (ORION.tutorial) ORION.tutorial.fire('combat');
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
@@ -13380,8 +14260,10 @@ function _chronicleEventBody(ev) {
     if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
   } else if (ev.kind === 'siege-round') {
     const cn = siegeTargetName(ev);
+    const crewLoss = ev.crewLost > 0 ? ' · <strong>' + ev.crewLost + ' equipaggi persi</strong>' : '';
+    const popLoss = ev.colonistsLost > 0 ? ' · <strong>' + ev.colonistsLost + ' coloni persi</strong>' : '';
     pushChronicle(ds + ' — Assedio di ' + cn + ' · round ' + ev.round + ' — difese ' + Math.round(ev.def) +
-      ' / attaccante ' + Math.round(ev.atk) + '.', 'system');
+      ' / attaccante ' + Math.round(ev.atk) + crewLoss + popLoss + '.', 'system');
   } else if (ev.kind === 'siege-end') {
     const cn = siegeTargetName(ev);
     const tag = ev.systemId >= 0 ? bodyTagHtml(ev.systemId) : '';
@@ -13476,6 +14358,12 @@ function _chronicleEventBody(ev) {
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.name || 'Fenomeno') + '</strong> ora sotto il tuo controllo (presidio).', 'system');
   } else if (ev.kind === 'fsp-lost') {
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.name || 'Fenomeno') + '</strong> presso ' + escapeHtml(ev.sysName || '—') + ' è stato sottratto da ' + escapeHtml(ev.faction || 'una fazione rivale') + ': lasciato indifeso. Puoi tornare a rivendicarlo.', 'crit');
+  } else if (ev.kind === 'fsp-ambient') {
+    /* Nudge "si impara giocando" (§17.7.1): la flotta sente un campo anomalo
+       attraversando lo spazio profondo presso un sistema. Testo OPACO (niente
+       numeri/segno): spinge solo a scansionare/investigare il Fenomeno. */
+    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName || 'Una flotta') + '</strong> avverte una corrente anomala nei pressi di <strong>' + escapeHtml(ev.sysName || '—') + '</strong>: un Fenomeno di Spazio Profondo influenza i viaggi nei dintorni. Scansionalo per capirne la natura.', 'system');
+    if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('fenomeni');
   } else if (ev.kind === 'empire-fallen') {
     if (ev.hard) {
       pushChronicle(ds + ' — <strong>La tua civiltà è caduta.</strong> Senza più colonie, l\'impero si dissolve negli annali galattici.', 'system');
@@ -13631,6 +14519,32 @@ function siegeTargetName(ev) {
   return colonyNameFromKey(ev.colonyKey);
 }
 
+/* Nome esplicito del bersaglio di un'incursione in arrivo (flotta, colonia o
+   stazione). Garantisce sempre una destinazione leggibile — mai "—":
+   - raider mirato (kind 'pirate-raider') → "la flotta <nome>" (la flotta È il
+     bersaglio reale: se resta lì combatte, se la sposti il raider svanisce);
+   - colonia/stazione → nome del corpo;
+   - fallback → nome del sistema. */
+function incursionTargetLabel(inc) {
+  if (!inc) return '—';
+  if (inc.targetFleetId) {
+    const g = ORION.game;
+    const f = g && (g.fleets || []).filter(function (x) { return x && x.id === inc.targetFleetId; })[0];
+    return f && f.name
+      ? ('la flotta <strong>' + escapeHtml(f.name) + '</strong>')
+      : '<strong>una tua flotta</strong>';
+  }
+  const name = siegeTargetName({
+    stationId: inc.targetStationId,
+    systemId: inc.targetSysId,
+    colonyKey: inc.targetColonyKey
+  });
+  if (name && name !== '—') return name;
+  const g = ORION.game;
+  const sys = (g && inc.targetSysId != null && g.galaxy.systems[inc.targetSysId]) ? g.galaxy.systems[inc.targetSysId] : null;
+  return sys ? ('<strong>' + escapeHtml(sys.name) + '</strong>') : 'Sistema ' + inc.targetSysId;
+}
+
 /* Aggiorna solo il chip delta accanto a "⏭ Evento": il resto del bottone
    è ridisegnato da renderTimeControls(). Mostra il delta nel formato
    durata del Calendario del Faro (#30): es. "+1Κ·10Ι" invece di "+60 I". */
@@ -13777,6 +14691,13 @@ function buildEmpireState() {
     const Fdash = ORION.fleet;
     const shipMet = (Fdash && Fdash.portMaintenance) ? Fdash.portMaintenance(g, c) : 0;
     const shipEn  = (Fdash && Fdash.portMaintenanceEn) ? Fdash.portMaintenanceEn(g, c) : 0;
+    /* Surplus anomalie: come per rateGrid e colony-deck, conteggia il
+       deposito previsto dal sito più vicino (decisione utente 2026-06-20). */
+    const anomFlowCard = (ORION.anomaly && ORION.anomaly.harvestByColony)
+      ? (ORION.anomaly.harvestByColony(g)[k] || null)
+      : null;
+    const anomCardMet = anomFlowCard ? anomFlowCard.met : 0;
+    const anomCardEn  = anomFlowCard ? anomFlowCard.en  : 0;
     let stockTotal = 0, stockNet = 0;
     ['met', 'en', 'food', 'water'].forEach(function (rk) {
       stockTotal += (c.stock[rk] || 0);
@@ -13787,7 +14708,8 @@ function buildEmpireState() {
         rk === 'en'    ? (pf.popEn   || 0) : 0;
       const crewDrain = rk === 'food' ? (pf.crewFood || 0) : rk === 'water' ? (pf.crewWater || 0) : 0;
       const shipDrain = rk === 'met' ? shipMet : rk === 'en' ? shipEn : 0;
-      stockNet += (out.rates[rk] || 0) * pf.prodMul - (out.upkeep[rk] || 0) - popDrain - crewDrain - shipDrain;
+      const anomBonus = rk === 'met' ? anomCardMet : rk === 'en' ? anomCardEn : 0;
+      stockNet += (out.rates[rk] || 0) * pf.prodMul - (out.upkeep[rk] || 0) - popDrain - crewDrain - shipDrain + anomBonus;
     });
 
     const tel = (ORION._empireTel && ORION._empireTel[k]) || { pop: [], morale: [], stock: [] };
@@ -14144,6 +15066,11 @@ function renderLeftPanel() {
       '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('dispatch') + '</span>' +
       '<span>Dispacci</span>' +
       '<span class="lp-launcher__sub">' + dispatchLauncherSub() + '</span>' +
+    '</button>' +
+    '<button class="lp-launcher__btn' + (currentView === 'stability' ? ' is-active' : '') + '" data-view="stability" type="button" title="Indice di Corruzione Galattica + Reputazione: valori, fattori, storico">' +
+      '<span class="lp-launcher__glyph ui-icon" aria-hidden="true">' + launcherIcon('warning') + '</span>' +
+      '<span>Stabilità</span>' +
+      '<span class="lp-launcher__sub">' + stabilityLauncherSub() + '</span>' +
     '</button>';
 
   /* ----- Cronaca (collassabile) -----
@@ -14711,14 +15638,15 @@ function renderDxPanel() {
      (currentPlanet null a livello galassia → crash, o colonia sbagliata). */
   rebind('[data-build-ship]', function () { tryBuildShip(); });
   rebind('[data-build-crew]', function () { tryBuildCrew(); });
-  /* Dropdown classe nave: la scelta va scritta sulla colonia dx, non su
+  /* Picker classe nave: la scelta va scritta sulla colonia dx, non su
      quella navigata al centro. */
-  content.querySelectorAll('[data-ship-kind]').forEach(function (sel) {
-    const nb = sel.cloneNode(true);
-    sel.parentNode.replaceChild(nb, sel);
-    nb.addEventListener('change', withDxScope(function () {
+  content.querySelectorAll('[data-ship-pick]').forEach(function (btn) {
+    const nb = btn.cloneNode(true);
+    btn.parentNode.replaceChild(nb, btn);
+    nb.addEventListener('click', withDxScope(function () {
+      if (nb.disabled) return;
       if (!ORION.cantieriPickedKind) ORION.cantieriPickedKind = {};
-      ORION.cantieriPickedKind[dxKey] = nb.value;
+      ORION.cantieriPickedKind[dxKey] = nb.dataset.shipPick;
       renderDxPanel();
     }));
   });
@@ -14892,6 +15820,20 @@ function renderContextActionBar(ctx) {
             chips.push('<span class="bodyinfo__chip" title="Popolazione massima sostenibile (unità)">' +
               '<span class="bodyinfo__chip-k">Pop max</span>' +
               '<span class="bodyinfo__chip-v">' + planet.popCap + '</span></span>');
+          }
+          /* Vocazione del mondo (M14 ext): dedotta dai potentials, determina
+             il ruolo della figura amministrativa che emergerà. */
+          if (ORION.colonyFigure && ORION.colonyFigure.vocationOf && planet.potentials) {
+            const VOC_INFO = {
+              estrattiva: { label: 'Estrattiva',  cls: 'is-warn',   role: 'Capomastro estrattivo',  tip: 'Vocazione dedotta dai potenziali del mondo: la figura amministrativa che emergerà sarà un Capomastro estrattivo (+yield met/en). Pipeline accelerata ×1.30.' },
+              civica:     { label: 'Civica',      cls: 'is-ok',     role: 'Prefetto civile',        tip: 'Vocazione dedotta dai potenziali del mondo: la figura amministrativa che emergerà sarà un Prefetto civile (+morale, +crescita pop). Pipeline accelerata ×1.30.' },
+              frontiera:  { label: 'Frontiera',   cls: 'is-mute',   role: 'Logista',                tip: 'Vocazione mista: la figura amministrativa che emergerà sarà un Logista (+cargo rotte). Pipeline a velocità base.' }
+            };
+            const voc = ORION.colonyFigure.vocationOf({ planet: planet });
+            const info = VOC_INFO[voc] || VOC_INFO.frontiera;
+            chips.push('<span class="bodyinfo__chip ' + info.cls + '" title="' + info.tip + '">' +
+              '<span class="bodyinfo__chip-k">Vocazione</span>' +
+              '<span class="bodyinfo__chip-v">' + info.label + '</span></span>');
           }
         } else {
           chips.push('<span class="bodyinfo__chip is-mute" title="' + (isBelt ? 'Cintura asteroidale: solo estrazione orbitale' : 'Gigante gassoso: solo estrazione orbitale') + '">' +
@@ -15803,15 +16745,28 @@ function openFleetInfoPopup(fleetId, screenX, screenY) {
   node.setAttribute('role', 'dialog');
   node.setAttribute('aria-label', 'Informazioni flotta ' + fleet.name);
 
-  /* Composizione navi */
+  /* Composizione navi — icone SVG di classe (non più glifi) + ×n, e totali
+     di flotta (richiesta utente 2026-06-26): potenza di fuoco complessiva,
+     numero scafi, corazza totale. */
   const F = ORION.fleet;
   const byKind = {};
-  (fleet.ships || []).forEach(function (s) { byKind[s.kind] = (byKind[s.kind] || 0) + 1; });
+  let fpTotal = 0, hpTotal = 0, shipsN = 0;
+  (fleet.ships || []).forEach(function (s) {
+    byKind[s.kind] = (byKind[s.kind] || 0) + 1;
+    const c = F && F.getClass ? F.getClass(s.kind) : null;
+    if (c) { fpTotal += c.fp || 0; hpTotal += c.hp || 0; }
+    shipsN++;
+  });
   const shipsHtml = Object.keys(byKind).map(function (k) {
     const c = F && F.getClass ? F.getClass(k) : null;
-    const glyph = c ? c.glyph : '?';
-    return '<span title="' + escapeHtml(c ? c.name : k) + '">' + glyph + '×' + byKind[k] + '</span>';
-  }).join(' ');
+    const vis = SHIP_VIS[k] || { tone: 'soft' };
+    const svg = (vis.icon && ORION.icon && ORION.icon(vis.icon)) || '';
+    const ico = svg
+      ? '<span class="ui-icon ui-icon--' + vis.tone + '" aria-hidden="true">' + svg + '</span>'
+      : '<span class="fleet-info-ship__glyph" aria-hidden="true">' + (c ? c.glyph : '?') + '</span>';
+    return '<span class="fleet-info-ship" title="' + escapeHtml(c ? c.name : k) + '">' +
+      ico + '<span class="fleet-info-ship__n">×' + byKind[k] + '</span></span>';
+  }).join('');
   /* Equipaggio + xp medio */
   const crewN = (fleet.crew || []).length;
   const xpAvg = crewN ? ((fleet.crew.reduce(function (a, c) { return a + (c.xp || 0); }, 0)) / crewN) : 0;
@@ -15831,18 +16786,22 @@ function openFleetInfoPopup(fleetId, screenX, screenY) {
     '</header>' +
     '<dl class="fleet-info-popup__meta">' +
       '<div><dt>Posizione</dt><dd>' + escapeHtml(posSys ? posSys.name : '—') + ' · ' + posStatus + '</dd></div>' +
-      '<div><dt>Navi</dt><dd>' + (shipsHtml || '<em>nessuna</em>') + '</dd></div>' +
+      '<div><dt>Navi</dt><dd class="fleet-info-popup__ships">' + (shipsHtml || '<em>nessuna</em>') + '</dd></div>' +
+      '<div><dt>Forza</dt><dd>' +
+        '<span class="fleet-info-fp" title="Potenza di fuoco complessiva della flotta"><span class="ship-stat__ico" aria-hidden="true">' + ((ORION.icon && ORION.icon('firepower')) || '⚔') + '</span>' + fpTotal + '</span>' +
+        (shipsN ? '<span class="fleet-info-fp__sub"> · ' + shipsN + ' navi · <span class="ship-stat__ico" aria-hidden="true">' + ((ORION.icon && ORION.icon('armor')) || '♥') + '</span>' + hpTotal + '</span>' : '') +
+      '</dd></div>' +
       '<div><dt>Equipaggio</dt><dd>' + crewN + (crewN ? ' (xp medio ' + xpAvg.toFixed(1) + ')' : '') + '</dd></div>' +
       '<div><dt>Ordine</dt><dd>' + orderInfo.label + '</dd></div>' +
       (orderInfo.targetSummary ? '<div><dt>Rotta</dt><dd>' + orderInfo.targetSummary + '</dd></div>' : '') +
       (orderInfo.eta != null ? '<div><dt>Arrivo in</dt><dd>' + orderInfo.eta + ' Ι</dd></div>' : '') +
     '</dl>' +
-    '<div class="fleet-info-popup__actions">' +
-      '<button class="btn btn--mini btn--primary btn--with-icon" data-action="fleet-info-detail" type="button">' + uiIcon('settings', 'cyan') + ' Dettaglio</button>' +
-      '<button class="btn btn--mini btn--with-icon" data-action="fleet-info-wizard" type="button">' + uiIcon('fleet', 'cyan') + ' Ordini</button>' +
-      '<button class="btn btn--mini btn--with-icon" data-action="fleet-info-pick" type="button">' + uiIcon('pin', 'cyan') + ' Rotta da mappa</button>' +
+    '<div class="fleet-info-popup__actions fleet-info-popup__actions--row">' +
+      '<button class="btn btn--mini btn--primary btn--with-icon" data-action="fleet-info-detail" type="button" title="Apri il dettaglio completo della flotta">' + uiIcon('settings', 'cyan') + ' Dettaglio</button>' +
+      '<button class="btn btn--mini btn--with-icon" data-action="fleet-info-wizard" type="button" title="Imposta gli ordini della flotta">' + uiIcon('fleet', 'cyan') + ' Ordini</button>' +
+      '<button class="btn btn--mini btn--with-icon" data-action="fleet-info-pick" type="button" title="Traccia la rotta cliccando sulla mappa">' + uiIcon('pin', 'cyan') + ' Rotta</button>' +
       ((ORION.aifleet && ORION.aifleet.detectedFleets(g).length)
-        ? '<button class="btn btn--mini btn--with-icon" data-action="fleet-info-follow" type="button">' + uiIcon('spy', 'pink') + ' Segui contatto</button>'
+        ? '<button class="btn btn--mini btn--with-icon" data-action="fleet-info-follow" type="button" title="Segui un contatto AI rilevato">' + uiIcon('spy', 'pink') + ' Segui</button>'
         : '') +
     '</div>';
 
@@ -16066,12 +17025,12 @@ function openFollowContactChooser(fleetId) {
    modal flotta e vista Civiltà). io = ORION.ai.intelOutlook(...). */
 function dossierLineHtml(io) {
   if (!io) return '';
-  const LV = { fragmentary: 'frammentario', partial: 'parziale', complete: 'completo' };
+  const LV = { fragmentary: 'frammentario', partial: 'parziale', complete: 'completo', deep: 'approfondito' };
   const lvl = LV[io.level] || io.level;
   const spy = (ORION.icon && ORION.icon('spy')) || '';
   let prog;
-  if (io.complete) prog = '<strong>dossier completo</strong>';
-  else prog = '~<strong>' + io.etaToNext + '</strong> Ι al livello ' + (io.nextAt === 3 ? 'parziale' : 'completo');
+  if (io.complete) prog = '<strong>dossier approfondito</strong>';
+  else prog = '~<strong>' + io.etaToNext + '</strong> Ι al livello ' + (io.nextAt === 3 ? 'parziale' : (io.nextAt === 6 ? 'completo' : 'approfondito'));
   return '<div class="fdest__ai fdossier"><span class="ui-icon ui-icon--violet" aria-hidden="true">' + spy +
     '</span> Dossier ' + escapeHtml(io.name) + ': <strong>' + escapeHtml(lvl) + '</strong> · ' + prog + '</div>';
 }
@@ -16184,13 +17143,18 @@ function openFleetReorder(fleetId, opts) {
   for (let i = 0; i < g.galaxy.systems.length; i++) if ((disc[i] || 0) >= DISC.DETECTED) knownSys.push(i);
   const hopsMap = {}; knownSys.forEach(function (s) { hopsMap[s] = hops(s); });
   knownSys.sort(function (a, b) { const ha = hopsMap[a] == null ? 1e9 : hopsMap[a], hb = hopsMap[b] == null ? 1e9 : hopsMap[b]; return ha - hb; });
-  const R = { dest: { sysId: null, bodyKey: null }, mission: null };
+  const R = { dest: { sysId: null, bodyKey: null, anomKind: null }, mission: null };
   if (opts.dest && opts.dest.sysId != null) {
     /* Destinazione pre-compilata (es. "Manda flotta qui" da mappa). */
-    R.dest.sysId = opts.dest.sysId; R.dest.bodyKey = opts.dest.bodyKey || null;
+    R.dest.sysId = opts.dest.sysId; R.dest.bodyKey = opts.dest.bodyKey || null; R.dest.anomKind = opts.dest.anomKind || null;
   } else {
     const cur = fleet.orders && fleet.orders.toSysId;
-    if (cur != null && (disc[cur] || 0) >= DISC.DETECTED) { R.dest.sysId = cur; R.dest.bodyKey = fleet.orders.bodyKey || null; }
+    if (cur != null && (disc[cur] || 0) >= DISC.DETECTED) {
+      R.dest.sysId = cur; R.dest.bodyKey = fleet.orders.bodyKey || null;
+      /* Riapre conservando il bersaglio: anomalia a livello sistema (survey
+         senza bodyKey) → ripristina anomKind così resta pre-selezionata. */
+      if (!R.dest.bodyKey && fleet.orders.type === 'survey' && fleet.orders.anomalyKind) R.dest.anomKind = fleet.orders.anomalyKind;
+    }
     else { const nh = knownSys.filter(function (s) { return s !== fromSys; }); R.dest.sysId = nh.length ? nh[0] : (knownSys[0] != null ? knownSys[0] : fromSys); }
   }
 
@@ -16203,8 +17167,8 @@ function openFleetReorder(fleetId, opts) {
     if (m === 'attack') return { type: 'attack', toSysId: sys, bodyKey: bk };
     if (m === 'recon') return { type: 'recon', toSysId: sys, bodyKey: bk };
     if (m === 'extract') {
-      let kind = null;
-      if (bk && ORION.system && ORION.anomaly && ORION.anomaly.bodyGiacimento) {
+      let kind = R.dest.anomKind || null;
+      if (!kind && bk && ORION.system && ORION.anomaly && ORION.anomaly.bodyGiacimento) {
         try { const ds = ORION.system.generate(g.galaxy, sys); const b = ORION.system.findBody(ds, bk); const gi = b && ORION.anomaly.bodyGiacimento(b); if (gi) kind = gi.kind; } catch (e) { /* */ }
       }
       if (!kind && ORION.fleetTarget) kind = ORION.fleetTarget.describe(g, sys, bk).anomalyKind;
@@ -16214,6 +17178,9 @@ function openFleetReorder(fleetId, opts) {
     return { type: 'move', toSysId: sys, bodyKey: bk };
   }
   function render() {
+    /* Registra i siti §17.3 del sistema corrente (idempotente) così le
+       anomalie a livello sistema sono note a fleetTarget → Estrai disponibile. */
+    if (ORION.anomaly && ORION.anomaly.ensureSites && R.dest.sysId != null) ORION.anomaly.ensureSites(g, R.dest.sysId);
     const sysOpts = knownSys.map(function (s) {
       const nm = sysName2(s); const h = hopsMap[s]; const hop = h === 0 ? 'qui' : (h != null ? h + ' salti' : 'irr.');
       const cn = knownCivs(s).length;
@@ -16222,15 +17189,31 @@ function openFleetReorder(fleetId, opts) {
     let bodyHtml = '';
     const explored = (disc[R.dest.sysId] || 0) >= DISC.EXPLORED;
     if (explored && ORION.system && ORION.system.generate) {
-      let bodies = []; try { const ds = ORION.system.generate(g.galaxy, R.dest.sysId); bodies = (ds && ds.bodies) || []; } catch (e) { bodies = []; }
-      if (bodies.length) {
-        let bopts = '<option value="">— orbita generica —</option>';
+      let ds0 = null; try { ds0 = ORION.system.generate(g.galaxy, R.dest.sysId); } catch (e) { ds0 = null; }
+      const bodies = (ds0 && ds0.bodies) || [];
+      /* Anomalie a livello sistema (detriti/nebulosa/reliquie) come bersagli
+         selezionabili (Estrai) — non sono "corpi". Dedup per tipo. */
+      const sysAnoms = []; const seenAK = {};
+      ((ds0 && ds0.anomalies) || []).forEach(function (a) {
+        if (!a || !a.kind || seenAK[a.kind]) return;
+        const def = ORION.anomaly && ORION.anomaly.KINDS ? ORION.anomaly.KINDS[a.kind] : null;
+        if (!def || def.perBody) return;
+        seenAK[a.kind] = true; sysAnoms.push(a.kind);
+      });
+      if (bodies.length || sysAnoms.length) {
+        const generic = !R.dest.bodyKey && !R.dest.anomKind;
+        let bopts = '<option value=""' + (generic ? ' selected' : '') + '>— orbita generica —</option>';
         bodies.forEach(function (b) {
           if (!b || !b.key) return;
           bopts += '<option value="' + escapeHtml(b.key) + '"' + (String(R.dest.bodyKey || '') === String(b.key) ? ' selected' : '') + '>' + bodyGlyph(b.type) + ' ' + escapeHtml(b.name || b.key) + ' · ' + escapeHtml(bodyTypeLabel(b.type)) + '</option>';
           (b.moons || []).forEach(function (m) { if (m && m.key) bopts += '<option value="' + escapeHtml(m.key) + '"' + (String(R.dest.bodyKey || '') === String(m.key) ? ' selected' : '') + '>  ' + bodyGlyph(m.type) + ' ' + escapeHtml(m.name || m.key) + ' · ' + escapeHtml(bodyTypeLabel(m.type)) + '</option>'; });
         });
-        bodyHtml = '<select class="fdetail__select" data-bind="ro-body" aria-label="Corpo di destinazione">' + bopts + '</select>';
+        sysAnoms.forEach(function (kind) {
+          const meta = anomalyKindMeta(kind);
+          const lbl = meta.label + (meta.res ? ' · ' + meta.res : '');
+          bopts += '<option value="anom:' + escapeHtml(kind) + '"' + (R.dest.anomKind === kind ? ' selected' : '') + '>✦ ' + escapeHtml(lbl) + '</option>';
+        });
+        bodyHtml = '<select class="fdetail__select" data-bind="ro-body" aria-label="Corpo o anomalia di destinazione">' + bopts + '</select>';
       }
     } else if (!explored) {
       bodyHtml = '<span class="fdest__hint">' + uiIcon('info', 'soft') + ' Sistema non esplorato: corpo non selezionabile.</span>';
@@ -16284,9 +17267,14 @@ function openFleetReorder(fleetId, opts) {
   function bindRO() {
     host.querySelectorAll('[data-ro-close]').forEach(function (b) { b.addEventListener('click', closeFleetOverlay); });
     const ss = host.querySelector('[data-bind="ro-system"]');
-    if (ss) ss.addEventListener('change', function () { R.dest.sysId = Number(ss.value); R.dest.bodyKey = null; render(); });
+    if (ss) ss.addEventListener('change', function () { R.dest.sysId = Number(ss.value); R.dest.bodyKey = null; R.dest.anomKind = null; render(); });
     const bs = host.querySelector('[data-bind="ro-body"]');
-    if (bs) bs.addEventListener('change', function () { R.dest.bodyKey = bs.value || null; render(); });
+    if (bs) bs.addEventListener('change', function () {
+      const v = bs.value || '';
+      if (v.indexOf('anom:') === 0) { R.dest.anomKind = v.slice(5); R.dest.bodyKey = null; }
+      else { R.dest.bodyKey = v || null; R.dest.anomKind = null; }
+      render();
+    });
     host.querySelectorAll('[data-ro-mission]').forEach(function (b) { if (b.disabled) return; b.addEventListener('click', function () { R.mission = b.dataset.roMission; render(); }); });
     const cf = host.querySelector('[data-ro-confirm]');
     if (cf) cf.addEventListener('click', doConfirmRO);
@@ -16411,6 +17399,9 @@ function _renderPhenomenonPopup(id, screenX, screenY) {
             ? 'Prendi il <strong>controllo</strong> (flotta nel sistema d\'aggancio) per <strong>aprire il varco</strong> alle tue rotte.'
             : 'Puoi prenderne il <strong>controllo</strong> presidiandolo con una flotta nel sistema d\'aggancio.') + '</p>' : '');
   }
+  /* Campo di prossimità (richiesta utente 2026-06-29): cenno OPACO sempre
+     presente — la zona influenza i viaggi nei dintorni. Niente numeri/segno. */
+  body += '<p class="fleet-info-popup__hint">Proietta un debole <strong>campo</strong> sui viaggi nei dintorni (sistema d\'aggancio e a un salto): le rotte vicine possono risentirne.</p>';
 
   let actions = '';
   if (disc === D.CONTATTO) { const c = PH.canScan(g, id); actions += _phenBtn('phen-scan', 'spy', 'cyan', 'Scansiona', c.ok, c.reason); }
@@ -16778,8 +17769,8 @@ function refreshForeignDeck() {
   });
   const io = (reconFleet && ORION.ai.intelOutlook) ? ORION.ai.intelOutlook(g, reconFleet, sysId) : null;
   if (io) {
-    const LV = { fragmentary: 'frammentario', partial: 'parziale', complete: 'completo' };
-    const prog = io.complete ? 'dossier completo' : ('~' + io.etaToNext + ' Ι al livello ' + (io.nextAt === 3 ? 'parziale' : 'completo'));
+    const LV = { fragmentary: 'frammentario', partial: 'parziale', complete: 'completo', deep: 'approfondito' };
+    const prog = io.complete ? 'dossier approfondito' : ('~' + io.etaToNext + ' Ι al livello ' + (io.nextAt === 3 ? 'parziale' : (io.nextAt === 6 ? 'completo' : 'approfondito')));
     reconHtml = '<div class="deck-foreign__row"><span class="deck-foreign__k">🛰 Ricognizione in corso</span>' +
       '<span class="deck-foreign__v">' + escapeHtml(LV[io.level] || io.level) + ' · ' + escapeHtml(prog) + '</span></div>';
   }
@@ -18069,6 +19060,7 @@ function boot() {
     openPlanet: function (sysId, bodyKey) { openPlanet(sysId, bodyKey); }
   });
   initMobileNav();
+  initStabilityHudChips();
   initMainMenu();
   showMainMenu('home');
   /* Cloud sync (decisione di sessione): reconciliation autosave al boot,

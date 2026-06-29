@@ -84,14 +84,19 @@
      `id` stabile per il save (persistito su civ.vocation).
      ------------------------------------------------------------------ */
   const VOCATIONS = {
-    sedentari:     { weight: 0.25, expandMul: 0.20, warMul: 0.40, diplomatMul: 1.4, label: 'Sedentari',     desc: 'Si tengono 2-4 pianeti. Reattivi solo se attaccati.' },
-    mercantili:    { weight: 0.15, expandMul: 0.60, warMul: 0.50, diplomatMul: 1.6, label: 'Mercantili',    desc: 'Espansione lenta + alleanze + rotte.' },
-    espansionisti: { weight: 0.15, expandMul: 1.50, warMul: 1.30, diplomatMul: 0.8, label: 'Espansionisti', desc: 'Crescita territoriale attiva. Guerre offensive.' },
-    isolazionisti: { weight: 0.12, expandMul: 0.10, warMul: 0.90, diplomatMul: 0.4, label: 'Isolazionisti', desc: 'Chiudono confini, attaccano gli intrusi.' },
-    predoni:       { weight: 0.10, expandMul: 0.30, warMul: 1.40, diplomatMul: 0.3, label: 'Predoni',       desc: 'Razzie sui vicini, taglie e bottino.' },
-    mistici:       { weight: 0.10, expandMul: 0.40, warMul: 0.20, diplomatMul: 1.8, label: 'Mistici',       desc: 'Convertono i vicini con dispacci. Non militari.' },
-    tecnocratici:  { weight: 0.08, expandMul: 0.50, warMul: 0.30, diplomatMul: 1.2, label: 'Tecnocratici',  desc: 'Focus tech, alleati di chi ha alta Reputazione.' },
-    imperialisti:  { weight: 0.05, expandMul: 1.80, warMul: 1.60, diplomatMul: 0.6, label: 'Imperialisti',  desc: 'Variante aggressiva. Rari ma pericolosi.' }
+    /* hpMul/fpMul/massMul (2026-06-26, opzione A): varianza delle statistiche
+       di combattimento per CARATTERE. Spezzano il "tutto multiplo di 182":
+       una civ militarista schiera unità più toste e numerose, una pacifica
+       più fragili e poche. Composti con i moltiplicatori tech (techCombatMul)
+       in materialize() e in aiCombatPowerAt. Centrati su 1.0 = unità "media" (182 P). */
+    sedentari:     { weight: 0.25, expandMul: 0.20, warMul: 0.40, diplomatMul: 1.4, hpMul: 1.05, fpMul: 0.85, massMul: 0.85, label: 'Sedentari',     desc: 'Si tengono 2-4 pianeti. Reattivi solo se attaccati.' },
+    mercantili:    { weight: 0.15, expandMul: 0.60, warMul: 0.50, diplomatMul: 1.6, hpMul: 0.90, fpMul: 0.80, massMul: 0.90, label: 'Mercantili',    desc: 'Espansione lenta + alleanze + rotte.' },
+    espansionisti: { weight: 0.15, expandMul: 1.50, warMul: 1.30, diplomatMul: 0.8, hpMul: 1.05, fpMul: 1.10, massMul: 1.15, label: 'Espansionisti', desc: 'Crescita territoriale attiva. Guerre offensive.' },
+    isolazionisti: { weight: 0.12, expandMul: 0.10, warMul: 0.90, diplomatMul: 0.4, hpMul: 1.25, fpMul: 0.95, massMul: 0.90, label: 'Isolazionisti', desc: 'Chiudono confini, attaccano gli intrusi.' },
+    predoni:       { weight: 0.10, expandMul: 0.30, warMul: 1.40, diplomatMul: 0.3, hpMul: 0.85, fpMul: 1.25, massMul: 1.10, label: 'Predoni',       desc: 'Razzie sui vicini, taglie e bottino.' },
+    mistici:       { weight: 0.10, expandMul: 0.40, warMul: 0.20, diplomatMul: 1.8, hpMul: 0.80, fpMul: 0.70, massMul: 0.80, label: 'Mistici',       desc: 'Convertono i vicini con dispacci. Non militari.' },
+    tecnocratici:  { weight: 0.08, expandMul: 0.50, warMul: 0.30, diplomatMul: 1.2, hpMul: 1.15, fpMul: 1.15, massMul: 0.80, label: 'Tecnocratici',  desc: 'Focus tech, alleati di chi ha alta Reputazione.' },
+    imperialisti:  { weight: 0.05, expandMul: 1.80, warMul: 1.60, diplomatMul: 0.6, hpMul: 1.20, fpMul: 1.20, massMul: 1.15, label: 'Imperialisti',  desc: 'Variante aggressiva. Rari ma pericolosi.' }
   };
   const VOCATION_IDS = Object.keys(VOCATIONS);
 
@@ -207,7 +212,23 @@
        completo ≥6. Persistenza paga: il FLOOR garantisce un guadagno minimo
        a ogni visita → grindabile con flotta minima. (Tunabile in M20.) */
     INTEL_RATE: 0.2,
-    INTEL_FLOOR: 0.1
+    INTEL_FLOOR: 0.1,
+
+    /* MOBILITAZIONE (2026-06-26): coefficienti contestuali per stimare la
+       forza che una civ schiera SU UN PUNTO PRECISO (colonia/sistema), non
+       in astratto. Tutto vive qui — niente magic numbers nei display. */
+    MOB: {
+      /* Modulatori per stato della relazione vs giocatore. */
+      REL: { alliance: 0.0, peace: 0.40, truce: 0.60, war: 1.00, hostile: 0.85 },
+      /* Boost mobilitazione per la capitale (planets[0]); altre colonie 1.0. */
+      CAPITAL_WEIGHT: 1.5,
+      /* Ogni incursione AI inbound già in corso "impegna" N unità che NON
+         difendono casa. Penalty espressa in unità (sottratte dal totale). */
+      INCURSION_UNIT_COST: 1,
+      /* Civ reduce dopo una sconfitta recente: −15% per Ι, con decadimento. */
+      LAST_BATTLE_LOSS_PENALTY: 0.85,
+      LAST_BATTLE_RECENCY_I: 200
+    }
   };
 
   /* ------------------------------------------------------------------
@@ -263,8 +284,8 @@
     incrociatore: 5, dreadnought: 6, ammiraglia: 7,
     coloniale: 0, estrattore: 0
   };
-  const INTEL_LEVEL = { fragmentary: 1, partial: 2, complete: 3 };
-  const INTEL_LEVEL_INV = [null, 'fragmentary', 'partial', 'complete'];
+  const INTEL_LEVEL = { fragmentary: 1, partial: 2, complete: 3, deep: 4 };
+  const INTEL_LEVEL_INV = [null, 'fragmentary', 'partial', 'complete', 'deep'];
   function fleetIntelScore(fleet) {
     if (!fleet || !Array.isArray(fleet.ships)) return 0;
     let s = 0;
@@ -275,17 +296,38 @@
     return s;
   }
   function intelLevelFromScore(score) {
+    if (score >= 10) return 'deep';
     if (score >= 6) return 'complete';
     if (score >= 3) return 'partial';
     return 'fragmentary';
   }
-  /* Stadio 1 — livello dal progresso cumulativo (vedi CFG.INTEL_RATE/FLOOR). */
+  /* Stadio 1 — livello dal progresso cumulativo (vedi CFG.INTEL_RATE/FLOOR).
+     Quattro livelli (2026-06-26): aggiunto 'deep' (Approfondito) raggiungibile
+     per ricognizione prolungata oppure via Infiltrazione M19. */
   function intelLevelFromProgress(p) {
+    if (p >= 10) return 'deep';
     if (p >= 6) return 'complete';
     if (p >= 3) return 'partial';
     return 'fragmentary';
   }
+  /* Soglia di score sostenuto richiesta per superare un livello. Sotto la
+     soglia, intelProgress viene cappato al limite inferiore del livello
+     successivo (un esploratore da solo non chiude "Completo"). */
+  const INTEL_SCORE_GATE = { partial: 0, complete: 3, deep: 5 };
+  const INTEL_PROGRESS_CAP = { fragmentary: 2.9, partial: 5.9, complete: 9.9 };
   function intelLevelRank(level) { return INTEL_LEVEL[level] || 0; }
+  /* Auto-promote: se intelProgress ha superato la soglia del livello successivo
+     ma intelLevel non lo riflette (es. infiltrazione vecchia che metteva 6 e
+     ora vale per "deep"), allinea senza generare evento. Idempotente. */
+  function reconcileIntelLevel(civ) {
+    if (!civ) return false;
+    const derived = intelLevelFromProgress(civ.intelProgress || 0);
+    if (intelLevelRank(derived) > intelLevelRank(civ.intelLevel)) {
+      civ.intelLevel = derived;
+      return true;
+    }
+    return false;
+  }
 
   /* Tracciamento permanenza flotte player in sistemi rilevanti. Vive su
      game._presence (lazy, non serializzato — campo derivato).
@@ -338,9 +380,22 @@
       }
       /* Accumulo cumulativo (Stadio 1): ogni Ι di presenza aggiunge intel,
          con rate = velocità per composizione, FLOOR = guadagno minimo per
-         persistenza. Persiste su civ.intelProgress (additivo, lazy). */
+         persistenza. Persiste su civ.intelProgress (additivo, lazy).
+         Permanenza cumulata (per L4): civ.intelPresenceI conta gli Ι totali
+         in cui hai stazionato in un loro sistema. intelMaxScore = miglior
+         score di flotta che hai portato lì (gate composizione per L3/L4). */
       civ.intelProgress = (civ.intelProgress || 0) +
         Math.max(CFG.INTEL_FLOOR, bestScore * CFG.INTEL_RATE);
+      civ.intelPresenceI = (civ.intelPresenceI || 0) + 1;
+      civ.intelMaxScore = Math.max(civ.intelMaxScore || 0, bestScore);
+      /* Cap di progresso per composizione: per superare ogni soglia serve
+         almeno una volta una flotta con score adeguato. Esempio: con un solo
+         esploratore (score 0.5) il progresso si ferma a 5.9 → resta a Parziale. */
+      if (civ.intelMaxScore < INTEL_SCORE_GATE.complete && civ.intelProgress > INTEL_PROGRESS_CAP.partial) {
+        civ.intelProgress = INTEL_PROGRESS_CAP.partial;
+      } else if (civ.intelMaxScore < INTEL_SCORE_GATE.deep && civ.intelProgress > INTEL_PROGRESS_CAP.complete) {
+        civ.intelProgress = INTEL_PROGRESS_CAP.complete;
+      }
       const newLevel = intelLevelFromProgress(civ.intelProgress);
       const newRank = intelLevelRank(newLevel);
       const curRank = intelLevelRank(civ.intelLevel);
@@ -426,8 +481,12 @@
     const level = intelLevelFromProgress(progress);
     const score = fleetIntelScore(fleet);
     const rate = Math.max(CFG.INTEL_FLOOR, score * CFG.INTEL_RATE);
+    /* Quattro livelli (2026-06-26): 3 / 6 / 10. Il "complete" del payload
+       resta vero solo a livello 'deep' raggiunto (non più solo dopo i 6). */
     let nextAt = null;
-    if (progress < 3) nextAt = 3; else if (progress < 6) nextAt = 6;
+    if (progress < 3) nextAt = 3;
+    else if (progress < 6) nextAt = 6;
+    else if (progress < 10) nextAt = 10;
     const etaToNext = (nextAt != null && rate > 0) ? Math.ceil((nextAt - progress) / rate) : 0;
     return {
       kind: kind, name: name, id: id, sysId: sysId,
@@ -1111,10 +1170,15 @@
     maybePirateIncursion(game, grng, events);
     maybeAiIncursion(game, grng, events);
 
-    /* --- ICG: applica + decadimento dolce. --- */
+    /* --- ICG: applica + decadimento dolce. ---
+       M18 bridge: ogni figura Integerrimo a rango Console in servizio
+       potenzia il decadimento verso il basale (+0.005/figura), narrativamente
+       "amministratore incorruttibile contrasta la corruzione galattica". */
     if (game.icg == null) game.icg = 20;
     game.icg += icgDelta;
-    game.icg += (20 - game.icg) * CFG.ICG_DECAY;
+    const CF = ORION.colonyFigure;
+    const icgDecayBonus = (CF && CF.icgDecayBonusFromFigures) ? CF.icgDecayBonusFromFigures(game) : 0;
+    game.icg += (20 - game.icg) * (CFG.ICG_DECAY + icgDecayBonus);
     game.icg = Math.max(0, Math.min(100, game.icg));
 
     /* --- Fase B (decisione #52 §13.6 §13.8): coesione di sistema +
@@ -1714,15 +1778,22 @@
   function materialize(game, civ, sysId) {
     if (!civ) return null;
     /* M10 Fase B-2: il tech-tier ridistribuisce la forza (qualità ≠
-       quantità) — unità più toste ma in numero ridotto. */
+       quantità) — unità più toste ma in numero ridotto.
+       Decisione 2026-06-26 (opzione A): compongo con la VOCAZIONE
+       (voc.hpMul/fpMul/massMul). Spezza la rigida uniformità "tutte le
+       unità AI hanno P=182": Mistici fragili, Imperialisti pesanti. */
     const tech = techCombatMul(game, civ);
+    const voc = VOCATIONS[civ.vocation] || VOCATIONS.sedentari;
+    const vHp = voc.hpMul != null ? voc.hpMul : 1;
+    const vFp = voc.fpMul != null ? voc.fpMul : 1;
+    const vMass = voc.massMul != null ? voc.massMul : 1;
     const rawUnits = (civ.power || 0) / 25;
-    const units = Math.max(1, Math.round(rawUnits * tech.massMul));
+    const units = Math.max(1, Math.round(rawUnits * tech.massMul * vMass));
     return {
       civId: civ.id, civName: civ.name, alignment: civ.alignment,
       color: civ.color, atSystem: sysId,
       units: units, power: civ.power || 0, ships: [],
-      fpMul: tech.fpMul, hpMul: tech.hpMul,
+      fpMul: tech.fpMul * vFp, hpMul: tech.hpMul * vHp,
       techTier: techTierIndex(game, civ)
     };
   }
@@ -1744,10 +1815,286 @@
     };
     /* M10 Fase B punto 2 (decisione #52 §13.10): uno scontro vero è un atto
        diretto → contatto formale + interazione che conta per "Conosciuta". */
+    /* Bugfix 2026-06-20: il contatto per battaglia non scriveva intelLevel,
+       e il fallback UI ('complete') faceva passare le civ contattate via
+       scontro come a dossier pieno. Inizializza coerentemente dal progresso
+       cumulato (di solito 'fragmentary' se non c'era ricognizione attiva). */
+    if (!civ.intelLevel) civ.intelLevel = intelLevelFromProgress(civ.intelProgress || 0);
     markContact(game, civ, null, 'battle');
   }
   function forceEstimate(game, civ) {
     return Math.max(1, Math.round((civ.power || 0) / 25));
+  }
+  /* Range di forza stimata in funzione del livello di dossier (decisione
+     2026-06-26): a livelli bassi la stima è larga, a livelli alti si stringe;
+     con deepIntel diventa il numero esatto.
+       L1 frammentario : ± 60% → fascia molto larga
+       L2 parziale     : ± 35%
+       L3 completo     : ± 15%
+       L4 approfondito : ±  5%
+       L5 infiltrato   : esatto (deepIntel.power)
+     Restituisce { lo, hi, mid, exact } in unità Forza Impero (≈ power). */
+  function forceEstimateRange(game, civ, intelRank) {
+    const exact = Math.max(1, Math.round((civ.power || 0)));
+    if (civ.deepIntel && civ.deepIntel.power != null) {
+      const di = Math.round(civ.deepIntel.power);
+      return { lo: di, hi: di, mid: di, exact: true };
+    }
+    let pct = 0.60;
+    if (intelRank >= 4) pct = 0.05;
+    else if (intelRank >= 3) pct = 0.15;
+    else if (intelRank >= 2) pct = 0.35;
+    const span = Math.max(2, Math.round(exact * pct));
+    return { lo: Math.max(1, exact - span), hi: exact + span, mid: exact, exact: false };
+  }
+  /* Forza Impero del giocatore, sulla stessa scala di civ.power per consentire
+     un confronto onesto nella vista Civiltà. Punteggio narrativo: 8 per
+     colonia (POWER_PER_PLANET) + ramp da battaglie vinte/perse (lazy, vive
+     su game.playerForce additivo). */
+  /* Aggrega la potenza di fuoco (fp) e l'integrità (hp) delle aifleet vive
+     di una civ. Niente gating: l'helper torna i numeri grezzi, sta al
+     chiamante decidere se mostrarli esatti o a range coi livelli intel. */
+  function civFleetTotals(game, civ) {
+    let count = 0, fp = 0, hp = 0, ships = 0;
+    const list = (game && game.aiFleets) || [];
+    for (let i = 0; i < list.length; i++) {
+      const af = list[i];
+      if (!af || af.civId !== civ.id) continue;
+      count++;
+      fp += (af.fp || 0);
+      hp += (af.hp || 0);
+      ships += Array.isArray(af.ships) ? af.ships.length : 0;
+    }
+    return { count: count, fp: Math.round(fp), hp: Math.round(hp), ships: ships };
+  }
+  /* Difese statiche delle colonie AI: non sono modellate (le AI non hanno
+     `colony.structures` come il giocatore). Sintetizziamo una stima ONESTA
+     a partire da civ.power: ~40% della Forza Impero è "infrastruttura" sul
+     terreno, ripartito tra le colonie con peso deterministico per-pianeta.
+     Esposto come totale + per-colonia (a L4 vedi quali sono scoperte). */
+  function civDefensesTotal(civ) {
+    const total = Math.max(0, Math.round((civ.power || 0) * 0.40));
+    const n = Math.max(1, (civ.planets || []).length);
+    return { total: total, perColonyAvg: Math.round(total / n) };
+  }
+  function civDefensePerColony(game, civ) {
+    const planets = (civ.planets || []);
+    const n = planets.length;
+    if (!n) return [];
+    const total = Math.max(0, Math.round((civ.power || 0) * 0.40));
+    /* Pesi deterministici da seed di gioco + civId + planetKey, in [0.5, 1.5].
+       Capitale (planets[0]) ha boost x1.5 fisso (sede meglio difesa). */
+    const seed = (game && game.seed) || 0;
+    const rng = ORION.rng && ORION.rng.makeRng ? ORION.rng.makeRng(seed + ':civdef:' + civ.id) : null;
+    const weights = planets.map(function (pk, idx) {
+      const base = rng ? (0.5 + rng.float()) : 1.0;
+      return idx === 0 ? base * 1.5 : base;
+    });
+    const wsum = weights.reduce(function (a, b) { return a + b; }, 0) || 1;
+    return planets.map(function (pk, idx) {
+      const share = total * weights[idx] / wsum;
+      return { planetKey: pk, defense: Math.max(0, Math.round(share)) };
+    });
+  }
+
+  /* ------------------------------------------------------------------
+     STIMA CONTESTUALE DI FORZA DI COMBATTIMENTO (decisione 2026-06-26).
+
+     Risponde alla domanda: "se attacco QUESTO oggetto adesso, cosa
+     affronto?". Stessa scala P = HP + FP*8 usata per la tua flotta
+     (garrison.powerOf) e per le tue difese (combat.forceFromDefenses).
+
+       aiCombatPowerAt(game, civ, targetKind, targetRef) →
+         { real, mobilizable, total, components, range }
+
+       - targetKind: 'fleet' | 'colony' | 'station' | 'system'
+       - targetRef:
+           fleet  → aifleet object o af.id
+           colony → planetKey 'sid:bk'
+           station→ station object o station.id
+           system → sysId numerico
+
+     Tutto deriva da costanti già nel modello:
+       - combat.CFG.AI_UNIT_HP / AI_UNIT_FP  (statistiche unità)
+       - garrison.CFG.FP_WEIGHT              (peso FP nella P)
+       - techCombatMul(civ)                  (mod tecnologia)
+       - VOCATIONS[voc].hpMul/fpMul/massMul  (mod carattere)
+       - VOCATIONS[voc].warMul × PHASES[ph].warMul × MOB.REL[rel]
+         × CAPITAL_WEIGHT / colony-weight    (mod mobilitazione)
+     Niente magic number.
+     ------------------------------------------------------------------ */
+
+  /* P di una "unità AI" tipica per quella civ, con composizione tech+voc. */
+  function aiPowerPerUnit(game, civ) {
+    const tech = techCombatMul(game, civ);
+    const voc = VOCATIONS[civ.vocation] || VOCATIONS.sedentari;
+    const vHp = voc.hpMul != null ? voc.hpMul : 1;
+    const vFp = voc.fpMul != null ? voc.fpMul : 1;
+    const C = (root.ORION && root.ORION.combat && root.ORION.combat.CFG) || { AI_UNIT_HP: 70, AI_UNIT_FP: 14 };
+    const GAR = (root.ORION && root.ORION.garrison && root.ORION.garrison.CFG) || { FP_WEIGHT: 8 };
+    const uHp = Math.round(C.AI_UNIT_HP * tech.hpMul * vHp);
+    const uFp = Math.round(C.AI_UNIT_FP * tech.fpMul * vFp);
+    return uHp + uFp * GAR.FP_WEIGHT;
+  }
+
+  /* Unità "totali" che la civ potrebbe materializzare ovunque. */
+  function aiTotalMobUnits(game, civ) {
+    const tech = techCombatMul(game, civ);
+    const voc = VOCATIONS[civ.vocation] || VOCATIONS.sedentari;
+    const vMass = voc.massMul != null ? voc.massMul : 1;
+    return Math.max(1, Math.round((civ.power || 0) / 25 * tech.massMul * vMass));
+  }
+
+  /* Moltiplicatore di mobilitazione (0..N) per UN PUNTO PRECISO, modulato da
+     vocazione (warMul), fase (warMul), relazione vs giocatore, penalità per
+     sconfitta recente. */
+  function aiMobMul(game, civ) {
+    const voc = VOCATIONS[civ.vocation] || VOCATIONS.sedentari;
+    const phase = PHASES[civ.phase] || PHASES.growth;
+    let rel = (root.ORION.diplomacy && root.ORION.diplomacy.effectiveRelation)
+      ? root.ORION.diplomacy.effectiveRelation(game, civ)
+      : (civ.relation || 'peace');
+    /* effectiveRelation può tornare anche 'hostile'/'cordial'/'friendly'; per
+       la mobilitazione li mappo su disposizione: ostile≈war-like, gli altri
+       come pace. */
+    if (rel === 'cordial' || rel === 'friendly') rel = 'peace';
+    const relMul = (CFG.MOB.REL[rel] != null) ? CFG.MOB.REL[rel] : CFG.MOB.REL.peace;
+    let mul = (voc.warMul || 1) * (phase.warMul || 1) * relMul;
+    if (civ.lastBattle && civ.lastBattle.result === 'loss') {
+      const dt = (game.timeImpulsi || 0) - (civ.lastBattle.impulso || 0);
+      if (dt >= 0 && dt < CFG.MOB.LAST_BATTLE_RECENCY_I) mul *= CFG.MOB.LAST_BATTLE_LOSS_PENALTY;
+    }
+    return Math.max(0, mul);
+  }
+
+  /* Penalità "truppe già impegnate altrove": ogni incursione AI inbound già
+     in corso da QUESTA civ sottrae N unità (default 1 per incursione). */
+  function aiEngagementCost(game, civ) {
+    if (!game || !Array.isArray(game.incursions)) return 0;
+    let n = 0;
+    for (let i = 0; i < game.incursions.length; i++) {
+      const inc = game.incursions[i];
+      if (inc && inc.kind === 'ai' && inc.civId === civ.id) n++;
+    }
+    return n * (CFG.MOB.INCURSION_UNIT_COST || 0);
+  }
+
+  /* Pesi delle colonie per la distribuzione mobilitazione: capitale boost
+     fisso (CFG.MOB.CAPITAL_WEIGHT), altre seed-deterministiche in [0.7, 1.2]. */
+  function aiColonyWeights(game, civ) {
+    const planets = civ.planets || [];
+    if (!planets.length) return { weights: [], sum: 0 };
+    const seed = (game && game.seed) || 0;
+    const rng = root.ORION.rng && root.ORION.rng.makeRng
+      ? root.ORION.rng.makeRng(seed + ':aimob:' + civ.id)
+      : null;
+    const weights = planets.map(function (pk, idx) {
+      if (idx === 0) return CFG.MOB.CAPITAL_WEIGHT || 1.5;
+      const r = rng ? rng.float() : 0.5;
+      return 0.7 + r * 0.5;
+    });
+    const sum = weights.reduce(function (a, b) { return a + b; }, 0) || 1;
+    return { weights: weights, sum: sum };
+  }
+
+  /* Presenza reale di flotte AI ferme in un sistema (orbiting/docked) per
+     quella civ. Dato concreto (NON una stima). */
+  function realFleetPowerAtSystem(game, civId, sysId) {
+    const GAR = root.ORION && root.ORION.garrison;
+    if (!GAR || !GAR.powerOf) return 0;
+    let p = 0;
+    const list = (game && game.aiFleets) || [];
+    for (let i = 0; i < list.length; i++) {
+      const af = list[i];
+      if (!af || af.civId !== civId || af.systemId !== sysId) continue;
+      if (af.status === 'in-transit') continue;
+      p += GAR.powerOf(game, af);
+    }
+    return Math.round(p);
+  }
+
+  function aiCombatPowerAt(game, civ, targetKind, targetRef) {
+    if (!civ) return null;
+
+    if (targetKind === 'fleet') {
+      const GAR = root.ORION && root.ORION.garrison;
+      let af = targetRef;
+      if (typeof targetRef === 'string') {
+        af = ((game && game.aiFleets) || []).filter(function (x) { return x && x.id === targetRef; })[0];
+      }
+      const p = (af && GAR && GAR.powerOf) ? Math.round(GAR.powerOf(game, af)) : 0;
+      return { real: p, mobilizable: 0, total: p, components: { fleet: p } };
+    }
+
+    if (targetKind === 'station') {
+      let st = targetRef;
+      const stMod = root.ORION && root.ORION.station;
+      if (typeof targetRef === 'string' && stMod && stMod.stationById) {
+        st = stMod.stationById(game, targetRef);
+      }
+      const sid = st && st.systemId;
+      const fleetP = (sid != null) ? realFleetPowerAtSystem(game, civ.id, sid) : 0;
+      /* Le strutture stazione hanno difese modellate ma il calcolo è
+         specifico di station.js; espongo solo il presidio reale qui. */
+      return { real: fleetP, mobilizable: 0, total: fleetP, components: { presidio: fleetP } };
+    }
+
+    const pPerUnit = aiPowerPerUnit(game, civ);
+    const totalUnits = aiTotalMobUnits(game, civ);
+    const mobMul = aiMobMul(game, civ);
+    const engagement = aiEngagementCost(game, civ);
+    const availableUnits = Math.max(0, totalUnits * mobMul - engagement);
+
+    if (targetKind === 'colony') {
+      const planetKey = String(targetRef);
+      const parts = planetKey.split(':');
+      const sid = Number(parts[0]);
+      const planets = civ.planets || [];
+      const idx = planets.indexOf(planetKey);
+      const ws = aiColonyWeights(game, civ);
+      let colonyShare = 0;
+      if (idx >= 0 && ws.sum > 0) colonyShare = ws.weights[idx] / ws.sum;
+      const colonyUnits = Math.max(0, Math.round(availableUnits * colonyShare));
+      const mobilizable = colonyUnits * pPerUnit;
+      const real = realFleetPowerAtSystem(game, civ.id, sid);
+      return {
+        real: real, mobilizable: mobilizable, total: real + mobilizable,
+        components: { fleetInOrbit: real, mobilizable: mobilizable, units: colonyUnits, pPerUnit: pPerUnit }
+      };
+    }
+
+    if (targetKind === 'system') {
+      const sid = Number(targetRef);
+      const planets = civ.planets || [];
+      const ws = aiColonyWeights(game, civ);
+      let sumShare = 0;
+      for (let i = 0; i < planets.length; i++) {
+        const parts = planets[i].split(':');
+        if (Number(parts[0]) === sid && ws.sum > 0) sumShare += ws.weights[i] / ws.sum;
+      }
+      const sysUnits = Math.max(0, Math.round(availableUnits * sumShare));
+      const mobilizable = sysUnits * pPerUnit;
+      const real = realFleetPowerAtSystem(game, civ.id, sid);
+      return {
+        real: real, mobilizable: mobilizable, total: real + mobilizable,
+        components: { fleetInOrbit: real, mobilizable: mobilizable, units: sysUnits, pPerUnit: pPerUnit }
+      };
+    }
+
+    return null;
+  }
+
+  function playerEmpireForce(game) {
+    if (!game) return 0;
+    let n = 0;
+    const cols = game.colonies || {};
+    Object.keys(cols).forEach(function (k) {
+      const c = cols[k];
+      if (c && c.colonized) n++;
+    });
+    const base = n * CFG.POWER_PER_PLANET;
+    const bonus = (game.playerForceBonus || 0);
+    return Math.max(0, Math.round(base + bonus));
   }
   function dispositionReason(game, civ) {
     const deeds = game.alignmentDeeds || { light: 0, dark: 0 };
@@ -1825,11 +2172,20 @@
     intelLevelFromProgress: intelLevelFromProgress,
     intelOutlook: intelOutlook,
     intelLevelRank: intelLevelRank,
+    reconcileIntelLevel: reconcileIntelLevel,
     visibleCivs: visibleCivs,
     materialize: materialize,
     demobilize: demobilize,
     recordBattle: recordBattle,
     forceEstimate: forceEstimate,
+    forceEstimateRange: forceEstimateRange,
+    playerEmpireForce: playerEmpireForce,
+    civFleetTotals: civFleetTotals,
+    civDefensesTotal: civDefensesTotal,
+    civDefensePerColony: civDefensePerColony,
+    aiCombatPowerAt: aiCombatPowerAt,
+    aiPowerPerUnit: aiPowerPerUnit,
+    INTEL_LEVEL_INV: INTEL_LEVEL_INV,
     dispositionReason: dispositionReason,
     knownNests: knownNests,
     /* esposto per factions.js */

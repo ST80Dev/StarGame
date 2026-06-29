@@ -116,6 +116,26 @@
       this._tooltip = tip;
       this._chipHits = [];
 
+      /* Pulsanti zoom +/- (richiesta utente 2026-06-26): colonna laterale a dx,
+         per touch dove manca la rotella. Nascosti su desktop via CSS. Riusa la
+         classe .gmap-zoom della mappa galassia per stile coerente. */
+      var sv = this;
+      var zoomCol = document.createElement('div');
+      zoomCol.className = 'gmap-zoom';
+      [['+', 'Ingrandisci', 1.25], ['−', 'Riduci', 1 / 1.25]].forEach(function (spec) {
+        var b = document.createElement('button');
+        b.className = 'gmap-zoom-btn';
+        b.type = 'button';
+        b.textContent = spec[0];
+        b.setAttribute('aria-label', spec[1]);
+        b.addEventListener('click', function () {
+          sv._zoomAt(sv.cssW / 2, sv.cssH / 2, spec[2]);
+        });
+        zoomCol.appendChild(b);
+      });
+      container.appendChild(zoomCol);
+      this._zoomCol = zoomCol;
+
       this.canvas = canvas;
       this.ctx = canvas.getContext('2d');
 
@@ -330,25 +350,30 @@
       }
     }
 
-    /* Hit-test dei marker flotta (posizioni memorizzate in _drawFleets). */
+    /* Hit-test dei marker flotta (posizioni memorizzate in _drawFleets).
+       Raggio di hit derivato dalla dimensione corrente del marker (auto-zoom,
+       decisione 2026-06-20) + margine fisso, così cliccare resta affidabile
+       a qualunque livello di zoom. */
     pickFleet(sx, sy) {
       const hits = this._fleetHit || [];
-      let best = null, bestD = 12 * 12;
+      let best = null, bestD = Infinity;
       for (let i = 0; i < hits.length; i++) {
         const dx = hits[i].x - sx, dy = hits[i].y - sy;
         const d = dx * dx + dy * dy;
-        if (d < bestD) { bestD = d; best = hits[i].id; }
+        const hr = (hits[i].r || 7) + 6;   // marker + alone di tolleranza
+        if (d < hr * hr && d < bestD) { bestD = d; best = hits[i].id; }
       }
       return best;
     }
     /* Hit-test dei marker flotta AI (posizioni memorizzate in _drawAiFleets). */
     pickAiFleet(sx, sy) {
       const hits = this._aiFleetHit || [];
-      let best = null, bestD = 13 * 13;
+      let best = null, bestD = Infinity;
       for (let i = 0; i < hits.length; i++) {
         const dx = hits[i].x - sx, dy = hits[i].y - sy;
         const d = dx * dx + dy * dy;
-        if (d < bestD) { bestD = d; best = hits[i].id; }
+        const hr = (hits[i].r || 8) + 6;
+        if (d < hr * hr && d < bestD) { bestD = d; best = hits[i].id; }
       }
       return best;
     }
@@ -847,18 +872,49 @@
         this._fleetPos[f.id] = { x: mx, y: my };
         const st = f.location.status;
         const col = (st === 'in-transit') ? '#7fd0f0' : (st === 'docked') ? '#9fd0a8' : '#f0d670';
+        /* Vista sistema (richiesta utente 2026-06-26): la flotta è SEMPRE
+           scomposta in icone per tipo + numero (le navi della classe del
+           catalogo, rasterizzate da icons.js). Le icone crescono con lo
+           zoom come gli altri elementi (this.scale). Alone nel colore di
+           stato dietro, etichetta nome sotto. */
+        const cell = clamp(this.scale * 0.03, 14, 30);
+        const fontPx = Math.round(clamp(this.scale * 0.016, 10, 16));
+        const FM = root.ORION && root.ORION.fleetMarker;
+        /* alone di stato (movimento) dietro la composizione */
         ctx.save();
-        ctx.fillStyle = col;
-        ctx.strokeStyle = 'rgba(8,12,24,0.85)'; ctx.lineWidth = 1.5;
-        const r = 5;
-        ctx.beginPath();
-        ctx.moveTo(mx, my - r); ctx.lineTo(mx + r, my);
-        ctx.lineTo(mx, my + r); ctx.lineTo(mx - r, my); ctx.closePath();
-        ctx.fill(); ctx.stroke();
-        ctx.fillStyle = 'rgba(222,236,255,0.92)';
-        ctx.font = '10px system-ui, sans-serif';
-        ctx.textBaseline = 'middle';
-        ctx.fillText((f.name || '').slice(0, 14), mx + r + 3, my);
+        const haloR = cell * 0.95;
+        const glow = ctx.createRadialGradient(mx, my, 0, mx, my, haloR);
+        glow.addColorStop(0, hexA(col, 0.50));
+        glow.addColorStop(0.5, hexA(col, 0.16));
+        glow.addColorStop(1, hexA(col, 0));
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(mx, my, haloR, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        let box = { w: cell, h: cell };
+        if (FM) {
+          box = FM.composition(ctx, mx, my, cell, f,
+            this._fmReady || (this._fmReady = this.requestRender.bind(this)),
+            { max: 5 }) || box;
+        } else {
+          this._drawFleetGlow(ctx, mx, my, cell * 0.5, col);
+        }
+        /* hit-test: raggio che copre l'ingombro (ora verticale) della
+           composizione — considera l'altezza dell'elenco. */
+        this._fleetHit[this._fleetHit.length - 1].r =
+          Math.max(cell, (box.h || cell) / 2, (box.w || cell) / 2);
+        /* etichetta nome, centrata SOTTO la composizione (con stroke per
+           leggibilità su nebulose/polvere). */
+        ctx.save();
+        ctx.font = '600 ' + fontPx + 'px "JetBrains Mono", ui-monospace, monospace';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2, fontPx / 4);
+        ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+        const lbl = (f.name || '').slice(0, 18);
+        /* sotto l'elenco verticale: usa l'altezza reale della composizione. */
+        const ly = my + (box.h || cell) / 2 + 3;
+        ctx.strokeText(lbl, mx, ly);
+        ctx.fillStyle = 'rgba(222,236,255,0.96)';
+        ctx.fillText(lbl, mx, ly);
         ctx.restore();
       }
     }
@@ -903,33 +959,92 @@
         this._aiFleetHit.push({ id: af.id, x: mx, y: my });
         const color = af.civColor || '#d0d0d0';
         const known = (af.intel || 0) >= PARTIAL;
-        const r = 6.5;   // un filo più grande dei marker del giocatore (5)
+        const FM = root.ORION && root.ORION.fleetMarker;
+        /* Icona del contatto (richiesta utente 2026-06-26): intel < PARTIAL →
+           icona nave GENERICA; intel ≥ PARTIAL → silhouette della nave MAGGIORE;
+           composizione completa solo nel popup a FULL. Sempre colore civ. */
+        const showLead = (af.intel || 0) >= PARTIAL && Array.isArray(af.ships) && af.ships.length;
+        const r = clamp(this.scale * 0.024, 8, 18);
+        const fontPx = Math.round(clamp(this.scale * 0.017, 11, 17));
+        this._aiFleetHit[this._aiFleetHit.length - 1].r = r;
         ctx.save();
-        ctx.globalAlpha = known ? 1 : 0.78;
-        ctx.fillStyle = color;
-        ctx.strokeStyle = 'rgba(8,12,24,0.85)'; ctx.lineWidth = 1.6;
-        ctx.beginPath();
-        ctx.moveTo(mx, my - r); ctx.lineTo(mx + r, my);
-        ctx.lineTo(mx, my + r); ctx.lineTo(mx - r, my); ctx.closePath();
-        ctx.fill(); ctx.stroke();
-        if (!known) {
-          ctx.fillStyle = 'rgba(255,255,255,0.92)';
-          ctx.font = '700 10px monospace';
-          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          ctx.fillText('?', mx, my + 0.5);
+        if (!known) ctx.globalAlpha = 0.78;
+        if (FM) {
+          const cell = clamp(this.scale * 0.03, 14, 30);
+          const haloR = cell * 0.95;
+          const glow = ctx.createRadialGradient(mx, my, 0, mx, my, haloR);
+          glow.addColorStop(0, hexA(color, 0.50));
+          glow.addColorStop(0.5, hexA(color, 0.16));
+          glow.addColorStop(1, hexA(color, 0));
+          ctx.fillStyle = glow;
+          ctx.beginPath(); ctx.arc(mx, my, haloR, 0, Math.PI * 2); ctx.fill();
+          const onReady = this._fmReady || (this._fmReady = this.requestRender.bind(this));
+          if (showLead) FM.lead(ctx, mx, my, cell, af, onReady, color);
+          else FM.genericShip(ctx, mx, my, cell, onReady, color);
+          this._aiFleetHit[this._aiFleetHit.length - 1].r = Math.max(r, cell * 0.6);
+        } else {
+          this._drawFleetGlow(ctx, mx, my, r, color, { hostile: true });
+          if (!known) {
+            ctx.fillStyle = 'rgba(255,255,255,0.96)';
+            ctx.font = '700 ' + Math.max(10, Math.round(r * 0.85)) + 'px monospace';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText('?', mx, my + 0.5);
+          }
         }
         /* Solo l'identificazione, niente missione/ETA (coerente con la mappa). */
         let lbl = (root.ORION.aifleet && root.ORION.aifleet.nameLabel) ? root.ORION.aifleet.nameLabel(game, af) : 'Contatto';
         if (lbl.length > 20) lbl = lbl.slice(0, 19) + '…';
-        ctx.font = '600 11px "JetBrains Mono", ui-monospace, monospace';
+        ctx.font = '600 ' + fontPx + 'px "JetBrains Mono", ui-monospace, monospace';
         ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-        ctx.lineJoin = 'round'; ctx.lineWidth = 2.6;
+        ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2, fontPx / 4);
         ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-        ctx.strokeText(lbl, mx + r + 4, my);
+        ctx.strokeText(lbl, mx + r + 5, my);
         ctx.fillStyle = color;
-        ctx.fillText(lbl, mx + r + 4, my);
+        ctx.fillText(lbl, mx + r + 5, my);
         ctx.restore();
       }
+    }
+
+    /* Helper condiviso: icona "glow" della flotta (halo radiale + scafo a
+       rombo allungato + highlight chiaro al centro). Coerente con la
+       resa NASA/Visions del sistema (UI_GUIDE §1) — più riconoscibile del
+       semplice rombo. `hostile:true` rende il rombo più appuntito (silhouette
+       militare) e l'halo più aggressivo. */
+    _drawFleetGlow(ctx, x, y, r, color, opts) {
+      opts = opts || {};
+      const hostile = !!opts.hostile;
+      ctx.save();
+      /* halo esterno radiale */
+      const haloA = hostile ? 0.62 : 0.55;
+      const glow = ctx.createRadialGradient(x, y, 0, x, y, r * 3);
+      glow.addColorStop(0, hexA(color, haloA));
+      glow.addColorStop(0.45, hexA(color, haloA * 0.36));
+      glow.addColorStop(1, hexA(color, 0));
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(x, y, r * 3, 0, Math.PI * 2); ctx.fill();
+      /* scafo a rombo allungato in verticale */
+      ctx.translate(x, y);
+      const top  = -r * (hostile ? 1.30 : 1.15);
+      const bot  =  r * (hostile ? 1.00 : 0.85);
+      const side =  r * (hostile ? 0.60 : 0.70);
+      ctx.beginPath();
+      ctx.moveTo(0, top);
+      ctx.lineTo(side, r * 0.5);
+      ctx.lineTo(0, bot);
+      ctx.lineTo(-side, r * 0.5);
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(8,12,24,0.92)';
+      ctx.lineWidth = Math.max(1, r * 0.12);
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+      /* highlight bianco al centro (riflesso) */
+      ctx.beginPath();
+      ctx.arc(0, -r * 0.10, r * 0.26, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.fill();
+      ctx.restore();
     }
 
     _drawDust(ctx) {

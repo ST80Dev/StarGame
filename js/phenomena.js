@@ -822,6 +822,172 @@
     return { ok: true, marked: st.marked };
   }
 
+  /* ==================================================================
+     CAMPO DI PROSSIMITÀ (richiesta utente 2026-06-29) — estende §17.7.4.
+     Oltre all'effetto ONE-SHOT dell'investigazione (resolveEffect: hazard
+     usura/perdita) e al passivo del nodo POSSEDUTO, ogni FSP proietta un
+     debole CAMPO AMBIENTALE PERMANENTE sul suo sistema d'aggancio (nearSys)
+     e sui sistemi entro 1 hop. Una flotta che percorre un leg toccando quella
+     zona ne risente in CONTINUO finché vi transita:
+       - drag → la traversata RALLENTA (malus) o ACCELERA (boon: faro/varco);
+       - wear → le navi si USURANO di più (malus) o di meno (boon: riparo).
+     Così la presenza del corpo speciale è strategica e perenne (una "zona da
+     evitare" — o da cercare) senza serbare il valore alla sola investigazione.
+
+     Tarature (in codice = OPACO by design §20: nessun numero al giocatore):
+     leggere e cappate (§17.7.1 "non game-winner"). Si SENTONO ma non affossano
+     chi nasce adiacente — caso peggiore (un grav a piena intensità sul tuo
+     sistema): leg ~+13%, drip usura ~+30%; su un leg da ~60 Ι ≈ +0.9% wear.
+     Tenore di default BILANCIATO: alcune classi danno malus, altre boon.
+
+     Determinismo (#5): tutto STRUTTURALE dal seed (classe/intensità/unicità +
+     segno wildcard stabile per istanza). Nessun RNG nel tick (il segno
+     temporale è cached sull'istanza immutabile, rigenerata col seed).
+     Recovery-friendly (#22): nessun fail-state; non transitare è una scelta,
+     e l'effetto è sempre lieve.
+     ================================================================== */
+  const AMBIENT = {
+    /* Coefficienti grezzi per classe a intensità piena, PRIMA dello scaling.
+       Due canali confermati (risposta utente 2026-06-29): VIAGGIO + USURA.
+       Ogni classe ha però una FIRMA distinta (peso/segno diverso), così
+       oggetti diversi si comportano in modo diverso senza esporre i numeri.
+         drag>0 = rallenta il viaggio · wear>0 = usura di più gli scafi.
+       I boon hanno segno negativo. Allineati ai `tenor` di catalogo (§17.7.3).
+
+       TIPO di effetto diverso per classe (risposta utente 2026-06-29 "classi
+       diverse → effetti diversi"): oltre a drag/wear, i GRAVITAZIONALI hanno un
+       canale `incident` (>0) = aumentano il rischio di incidente di viaggio
+       lungo la rotta ("viaggi deformati", §17.7.3). Le altre classi non ce
+       l'hanno (incident assente = 0). È un effetto di ROTTA (non per-leg): vedi
+       routeIncident. Recovery-friendly: gli incidenti non sono mai letali. */
+    BY_CLASS: {
+      grav:  { drag:  0.9, wear:  0.5, incident: 0.9 }, // pozzo di marea: deforma i viaggi (rischio incidente)
+      bio:   { drag:  0.2, wear:  0.7 },                 // spore/corrosione: logorio degli scafi
+      emis:  { drag: -0.7, wear:  0.4 },                 // pulsar/faro: rotta più spedita, ma radiazioni
+      relic: { drag: -0.1, wear: -0.7 },                 // struttura dormiente: acque calme, meno usura
+      temp:  { drag:  0.0, wear:  0.0 }                  // wildcard: segno per-istanza (vedi ambientRaw)
+    },
+    TEMP_MAG: 0.5,         // ampiezza del wildcard temporale (segno dal seed)
+    DRAG_PER_FSP: 0.15,    // tetto |Δ| durata leg per singolo FSP a pieno regime
+    WEAR_PER_FSP: 0.6,     // tetto |Δ| sul drip di usura per singolo FSP
+    INCIDENT_PER_FSP: 0.10,// +prob. incidente per singolo grav a pieno regime
+    UNIQUE_MULT: 1.3,      // gli unici pesano un filo di più (sempre cappati)
+    DRAG_CAP: 0.20,        // |Δ| max aggregato durata leg (overlap di più FSP)
+    WEAR_CAP_UP: 0.8,      // +80% max sul drip di usura (aggregato)
+    WEAR_CAP_DOWN: 0.6,    // −60% max sul drip di usura (aggregato)
+    INCIDENT_CAP: 0.15,    // +15pp max al rischio incidente dalle zone (aggregato)
+    FELT_MIN: 0.04         // soglia |drag|+|wear| sotto cui non si emette il nudge
+  };
+
+  /* Contributo ambientale grezzo (segnato) di UN FSP, scalato per intensità e
+     unicità. Per la classe temporale i segni sono wildcard ma STABILI per
+     istanza (cached sull'oggetto immutabile → nessun RNG ripetuto nel tick). */
+  function ambientRaw(ph) {
+    const base = AMBIENT.BY_CLASS[ph.cls] || AMBIENT.BY_CLASS.temp;
+    let drag = base.drag, wear = base.wear;
+    if (ph.cls === 'temp') {
+      if (!ph._ambSign) {
+        const r = ORION.rng.makeRng(ph.effectSeed + ':ambient');
+        ph._ambSign = { d: r.chance(0.5) ? 1 : -1, w: r.chance(0.5) ? 1 : -1 };
+      }
+      drag = ph._ambSign.d * AMBIENT.TEMP_MAG;
+      wear = ph._ambSign.w * AMBIENT.TEMP_MAG;
+    }
+    const inten = ph.intensity != null ? ph.intensity : 0.5;
+    const um = ph.unique ? AMBIENT.UNIQUE_MULT : 1;
+    return {
+      drag: drag * inten * um * AMBIENT.DRAG_PER_FSP,
+      wear: wear * inten * um * AMBIENT.WEAR_PER_FSP,
+      incident: (base.incident || 0) * inten * um * AMBIENT.INCIDENT_PER_FSP
+    };
+  }
+
+  /* sysId è entro 1 hop dal sistema d'aggangio `nearSys`? (cioè nearSys
+     stesso o un suo vicino diretto sui link di galassia). */
+  function within1Hop(galaxy, sysId, nearSys) {
+    if (sysId == null || nearSys == null) return false;
+    if (sysId === nearSys) return true;
+    const s = galaxy.systems && galaxy.systems[nearSys];
+    return !!(s && Array.isArray(s.links) && s.links.indexOf(sysId) >= 0);
+  }
+  /* Il leg from→to attraversa la zona dell'FSP (una delle due estremità è
+     entro 1 hop dal nearSys)? */
+  function legTouchesZone(galaxy, fromSys, toSys, nearSys) {
+    return within1Hop(galaxy, fromSys, nearSys) || within1Hop(galaxy, toSys, nearSys);
+  }
+
+  /* Campo ambientale combinato sul leg from→to: somma i contributi di tutti
+     gli FSP la cui zona lo tocca, poi CAPPA l'aggregato. Puramente strutturale
+     (galaxy + lista immutabile): non legge lo stato di scoperta, così l'effetto
+     è perenne e "si impara giocando" (§17.7.1). Ritorna i moltiplicatori per
+     durata leg e drip di usura + gli id degli FSP coinvolti (per il nudge). */
+  function legField(galaxy, fromSys, toSys) {
+    const out = { dragMul: 1, wearMul: 1, drag: 0, wear: 0, ids: [] };
+    if (!galaxy || !galaxy.systems) return out;
+    const items = forGalaxy(galaxy);
+    let sumDrag = 0, sumWear = 0;
+    for (let i = 0; i < items.length; i++) {
+      const ph = items[i];
+      if (!legTouchesZone(galaxy, fromSys, toSys, ph.nearSys)) continue;
+      const raw = ambientRaw(ph);
+      sumDrag += raw.drag;
+      sumWear += raw.wear;
+      out.ids.push(ph.id);
+    }
+    if (!out.ids.length) return out;
+    sumDrag = clamp(sumDrag, -AMBIENT.DRAG_CAP, AMBIENT.DRAG_CAP);
+    sumWear = clamp(sumWear, -AMBIENT.WEAR_CAP_DOWN, AMBIENT.WEAR_CAP_UP);
+    out.drag = sumDrag; out.wear = sumWear;
+    out.dragMul = 1 + sumDrag;
+    out.wearMul = 1 + sumWear;
+    return out;
+  }
+
+  /* Delta additivo al RISCHIO INCIDENTE di viaggio dell'INTERA rotta (richiesta
+     utente 2026-06-29): i Fenomeni gravitazionali lungo il cammino deformano i
+     viaggi. Aggregato per ROTTA — un FSP conta UNA volta anche se più leg
+     toccano la sua zona — poi cappato a INCIDENT_CAP. Solo la classe grav ha
+     incident>0; le altre non contribuiscono. Strutturale/deterministico. */
+  function routeIncident(galaxy, route) {
+    if (!galaxy || !galaxy.systems || !Array.isArray(route) || route.length < 2) return 0;
+    const items = forGalaxy(galaxy);
+    let sum = 0;
+    for (let i = 0; i < items.length; i++) {
+      const ph = items[i];
+      const inc = ambientRaw(ph).incident;
+      if (!inc) continue;
+      let touched = false;
+      for (let k = 1; k < route.length && !touched; k++) {
+        if (legTouchesZone(galaxy, route[k - 1], route[k], ph.nearSys)) touched = true;
+      }
+      if (touched) sum += inc;
+    }
+    return clamp(sum, 0, AMBIENT.INCIDENT_CAP);
+  }
+
+  /* Nudge "si impara giocando": quando una flotta del giocatore transita per
+     la prima volta in un campo ambientale NON ancora classificato e l'effetto
+     è percepibile, emette UNA voce di Cronaca opaca (niente numeri) e marca
+     l'istanza come `_felt` (delta additivo, idempotente, persistito). Spinge
+     a scansionare/investigare l'FSP per capirne la natura. */
+  function noteAmbientFelt(game, fleet, fromSys, toSys, events) {
+    if (!game || !game.galaxy || !events || !fleet) return;
+    const f = legField(game.galaxy, fromSys, toSys);
+    if (!f.ids.length) return;
+    if (Math.abs(f.drag) + Math.abs(f.wear) < AMBIENT.FELT_MIN) return;
+    for (let i = 0; i < f.ids.length; i++) {
+      const id = f.ids[i];
+      const st = ensureState(game, id);
+      if ((st.d || 0) >= DISCOVERY.CLASSIFICATO || st._felt) continue;
+      st._felt = true;
+      const ph = byId(game.galaxy, id);
+      const sys = ph && game.galaxy.systems[ph.nearSys];
+      events.push({ kind: 'fsp-ambient', id: id, fleetId: fleet.id, fleetName: fleet.name,
+        sysId: ph ? ph.nearSys : null, sysName: sys ? sys.name : '—',
+        impulso: game.timeImpulsi || 0 });
+    }
+  }
+
   /* ------------------------------------------------------------------
      TICK — scoperta di prossimità + passivo dei nodi posseduti.
      ------------------------------------------------------------------ */
@@ -904,6 +1070,11 @@
     canInvestigate: canInvestigate, investigate: investigate,
     canExploit: canExploit, exploit: exploit,
     toggleMark: toggleMark,
+    AMBIENT: AMBIENT,
+    legField: legField,
+    routeIncident: routeIncident,
+    within1Hop: within1Hop,
+    noteAmbientFelt: noteAmbientFelt,
     varchiEdges: varchiEdges,
     applyVarchiLinks: applyVarchiLinks,
     playerFleetAtSystem: playerFleetAtSystem,

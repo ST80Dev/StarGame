@@ -99,6 +99,7 @@
         '<strong>Scansiona</strong> (flotta o colonia nel sistema d\'aggancio) per conoscerne la classe. ' +
         '<strong>Investiga</strong> con una flotta per scoprirne l\'effetto — può aiutarti poco o molto, o essere un rischio. ' +
         'Alcuni puoi <strong>Controllarli</strong> (presidio) per un beneficio continuo; altri conviene <strong>Evitarli</strong>.</p>' +
+        '<p>Anche senza investigarli, i Fenomeni proiettano un <strong>debole campo sui dintorni</strong> — il sistema d\'aggancio e quelli a <strong>un salto</strong>. Le flotte che vi <strong>transitano vicino</strong> possono procedere più <strong>lente o più spedite</strong> e <strong>usurarsi</strong> di più o di meno. Ogni classe ha la sua indole: un buon motivo per <strong>scegliere le rotte</strong> (o marcare una zona da evitare).</p>' +
         '<p class="tut-hint">Non sono mai vincitori di partita: aiutano in base alla tua strategia, e chi li possiede può perderli.</p>'
     },
     {
@@ -416,6 +417,29 @@
         '<p>L\'aiuto non è scontato: il banner ti indica chiaramente quanto costa prima di decidere.</p>'
     },
     {
+      id: 'espionage',
+      tag: 'Civiltà · Spionaggio',
+      title: 'Spionaggio: operazioni coperte',
+      body:
+        '<p>Una tua <strong>flotta da combattimento</strong> in un sistema di una civiltà <strong>contattata</strong> abilita ' +
+        'un\'<strong>Operazione coperta</strong> (sezione Spionaggio del dossier ⬡). L\'operazione si <strong>risolve restando ' +
+        'sul posto</strong> per alcuni Impulsi: se ritiri la flotta prima, si annulla <em>senza penalità</em>.</p>' +
+        '<p>Tre azioni: <strong>Infiltrazione</strong> porta il dossier a <em>completo</em> e svela i <strong>segreti</strong> ' +
+        '(potenza reale, e soprattutto il <strong>preavviso indiretto di tradimento</strong> di un alleato maligno, prima che ' +
+        'esploda) · <strong>Sabotaggio</strong> colpisce la loro potenza · <strong>Furto</strong> ti frutta crediti.</p>' +
+        '<p>Il <strong>peso morale</strong> dipende da <em>cosa</em> fai e <em>a chi</em>, non dal verbo in sé. ' +
+        'L\'<strong>Infiltrazione</strong> è <strong>neutra</strong>: conoscere un rivale ostile è autodifesa, non un\'ombra — ' +
+        'lo diventa solo se spii un <strong>amico o un alleato</strong> (tradisci la fiducia). <strong>Sabotaggio</strong> e ' +
+        '<strong>Furto</strong> sono invece atti d\'<strong>ombra</strong> sempre: pesano di più contro gli <strong>innocenti</strong>, ' +
+        'meno (ma mai zero) contro un maligno o chi ti aggredisce. Così la pista <strong>Tiranno</strong> resta percorribile in ' +
+        'ogni caso. Solo gli atti <strong>riusciti</strong> spostano il tuo karma.</p>' +
+        '<p>Indipendentemente dall\'esito morale, il <strong>successo</strong> alza un po\' l\'<strong>ICG</strong>; ' +
+        'il <strong>fallimento</strong> (vieni scoperto) costa <strong>reputazione</strong>, alza l\'ICG e raffredda la ' +
+        'disposizione del bersaglio — ma <em>non</em> il karma: essere beccato non rende l\'atto più malvagio.</p>' +
+        '<p>Alternativa senza flotta e senza rischio: l\'<strong>Intel grigia dei Mekhari</strong> — compri informazioni a ' +
+        'pagamento, ma è <em>meno completa</em> (arriva solo a dossier <strong>parziale</strong>) e costa crediti e un po\' di reputazione.</p>'
+    },
+    {
       id: 'ai-vocations',
       tag: 'Civiltà · Vocazioni',
       title: 'Le 8 vocazioni delle civiltà',
@@ -517,8 +541,11 @@
         'compaiono sulla mappa con un teschio ☠ e nella lista <em>Minacce pirata</em> della vista Civiltà.</p>' +
         '<p>Sono <strong>bersagli raidabili</strong>: manda una <strong>flotta armata</strong> sul loro sistema — lo scontro si risolve ' +
         'da solo. Sgominare un covo frutta una <strong>taglia</strong> in risorse e <strong>riduce le razzie</strong> della zona.</p>' +
-        '<p>Attenzione al rovescio: i predoni possono <strong>colpire le tue flotte esposte</strong> (in orbita lontano dalle colonie). ' +
-        'Tieni le flotte vicino a casa o pronte a combattere. Taglie formali, covi-boss e contratti arriveranno con gli <strong>Eventi</strong> (M17).</p>'
+        '<p>Attenzione al rovescio: i predoni possono <strong>colpire le tue flotte esposte</strong> (in orbita lontano dalle colonie) — ' +
+        'p.es. un estrattore fermo su un\'anomalia. La minaccia compare in <em>Incursioni in arrivo</em> col nome della flotta presa di mira. ' +
+        'Hai due vie d\'uscita: <strong>spostarla</strong> prima dell\'arrivo (il raider va a vuoto), oppure tenerle accanto una ' +
+        '<strong>flotta armata</strong>: tutte le tue flotte armate <strong>presenti nello stesso sistema</strong> scendono a difenderla. ' +
+        'Taglie formali, covi-boss e contratti arriveranno con gli <strong>Eventi</strong> (M17).</p>'
     },
     {
       id: 'combat',
@@ -531,6 +558,14 @@
         '<p><strong>Veteranità (§12.3):</strong> le navi che <strong>sopravvivono</strong> salgono di grado ' +
         '(Verde→Veterana→Elite→Leggendaria, +5% fuoco/grado). Tienile vive: una flotta esperta vale doppio. Le Leggendarie ' +
         'prendono un <strong>nome proprio</strong>.</p>' +
+        '<p><strong>Ordine di caduta:</strong> le <strong>navi da guerra</strong> fanno da scorta e cadono per prime, grosso ' +
+        'modo dalla più piccola alla più grande (caccia → intercettore → corvetta → … → capitali), con un po\' di varianza. ' +
+        'I <strong>non-combattenti</strong> (Pioniere, esploratore, estrattore) stanno dietro la linea e muoiono solo quando ' +
+        'la scorta è esaurita: tienili sempre protetti da navi armate.</p>' +
+        '<p><strong>Perdite d\'equipaggio e coloni:</strong> una nave <strong>distrutta in battaglia</strong> si porta dietro il suo ' +
+        '<strong>equipaggio</strong> (e i <strong>coloni</strong> se è un Pioniere) — a differenza della rottamazione al porto ' +
+        'per usura, dove l\'equipaggio si salva. La perdita d\'equipaggio è pesata verso i <em>meno esperti</em>: i veterani ' +
+        'tendono a cavarsela, le reclute meno. Un\'altra ragione per non gettare via le flotte.</p>' +
         '<p><strong>Formazione:</strong> imposta la soglia di ritirata — <em>Aggressiva</em> (combatti fino alla fine), ' +
         '<em>Bilanciata</em> (ritirata al 30%), <em>Difensiva</em> (al 50%). Gli scontri nello spazio si risolvono in un Impulso.</p>'
     },
@@ -553,6 +588,22 @@
         '<p>Se le difese cadono la colonia viene <strong>saccheggiata</strong> (risorse, danni alle strutture, pop) — mai distrutta ' +
         'in un colpo. Ma una <strong>catena di sconfitte</strong> abbassa il <strong>morale d\'impero</strong> (produzione in calo) e ' +
         'alza la <strong>pressione</strong> nemica: reagisci con scelte oculate o rischi una spirale.</p>'
+    },
+    {
+      id: 'colony-defense',
+      tag: 'Guerra · Difesa colonia',
+      title: 'Difesa della colonia',
+      body:
+        '<p>La scheda <strong>Colonia</strong> riassume quanto regge il mondo sotto la voce <strong>Difesa</strong>. ' +
+        'Due numeri contano: <strong>Corazza</strong> (gli scafi/le strutture che il nemico deve abbattere) e ' +
+        '<strong>Fuoco</strong> (il danno che infliggi per round). La <strong>Potenza</strong> ' +
+        '(<span class="ds-unit">P</span> = corazza + fuoco×8) li riassume in un colpo d\'occhio.</p>' +
+        '<p>Concorrono due fonti: le <strong>Strutture</strong> difensive (<em>Batteria di difesa ⊕</em>, <em>Scudo ◈</em>) ' +
+        'e le tue <strong>flotte in orbita o in porto</strong> nel sistema. Lasciare una flotta armata sopra una colonia ' +
+        'ne alza la difesa all\'istante; toglierla la espone.</p>' +
+        '<p>Il <strong>verdetto</strong> confronta la tua Potenza con la <strong>razzia pirata peggiore che conosci</strong> ' +
+        '(serve aver scoperto il covo): <em>Regge una razzia</em>, <em>Battaglia incerta</em> o <em>Difesa insufficiente</em>. ' +
+        'Usalo per decidere se costruire un\'altra Batteria o spostare una flotta prima di un\'incursione.</p>'
     },
     {
       id: 'decline',
@@ -944,21 +995,32 @@
         'i bonus si attivano solo quando sono al comando. Servendo in battaglia salgono di <strong>rango</strong> ' +
         '(Tenente → Capitano → Commodoro → Ammiraglio) e i loro bonus crescono.</p>'
     },
-    /* M14 Fase B1 (#77) — figure di colonia. */
+    /* M14 Fase B1 (#77) — figure di colonia + riforma vocazione + bridge M18. */
     {
       id: 'colony-figure', tag: 'Colonia · ⬡', title: 'Una figura di colonia emerge',
       body:
-        '<p>Come le figure di flotta, anche quelle <strong>di colonia</strong> non si costruiscono: <strong>emergono</strong> ' +
-        'quando una colonia raggiunge la <strong>maturità amministrativa</strong> (gioca, la barra cresce nella tab Colonia).</p>' +
-        '<p>Il <strong>ruolo</strong> dipende dal carattere della colonia:</p>' +
+        '<p>Le figure <strong>di colonia</strong> non si costruiscono: <strong>emergono</strong> quando una colonia raggiunge ' +
+        'la <strong>maturità amministrativa</strong> (barra nella tab Colonia). Il <strong>ruolo</strong> riflette la ' +
+        '<strong>vocazione del mondo</strong> (badge sulla scheda pianeta):</p>' +
         '<ul>' +
-          '<li><strong>Governatore di sector</strong> — emerge se hai un <em>Governatore</em> attivo (#59): rende le deleghe più rapide, ' +
-          'sblocca le deleghe anche con poche colonie e mantiene autonomamente uno scafo esploratore di scorta.</li>' +
-          '<li><strong>Ingegnere capo</strong> — emerge altrimenti: <strong>riduce il tempo di assemblaggio</strong> di scafi ed equipaggi (oltre ai tecnici).</li>' +
+          '<li><strong>Vocazione estrattiva</strong> (vulcanico/desertico) → <strong>Capomastro estrattivo</strong> ⛏ — ' +
+            '+8/12/16% yield metalli ed energia.</li>' +
+          '<li><strong>Vocazione civica</strong> (terrestre/forestale/oceanico) → <strong>Prefetto civile</strong> ⌂ — ' +
+            '+morale e +crescita popolazione.</li>' +
+          '<li><strong>Vocazione frontiera</strong> (ghiacciato/luna/mondi misti) → <strong>Logista</strong> ⊞ — ' +
+            '+10/15/20% cargo rotte commerciali in uscita.</li>' +
+          '<li>Se hai un <strong>Governatore #59 attivo</strong>, emerge invece il <strong>Governatore di sector</strong> ⬡ ' +
+            '(amplifica deleghe + autonomia estesa) — prevale sulla vocazione.</li>' +
         '</ul>' +
+        '<p><strong>Velocità di emergenza</strong>: la pipeline accelera con popolazione, vocazione netta del mondo (×1.30), ' +
+        'status di capitale (×1.50) e <strong>reputazione galattica</strong> (fino a ±15%). Una capitale matura può far emergere ' +
+        'una figura ogni ~5-7 Φ; un piccolo outpost minerario ogni ~12-15 Φ.</p>' +
         '<p>Le figure vivono nel <strong>pool d\'Impero</strong> e si <strong>assegnano a una colonia</strong> (una per colonia) dalla sezione ' +
-        '"Figura di colonia". Servendo salgono di rango (Funzionario → Prefetto → Console) e i bonus crescono. ' +
-        'Puoi <strong>spostarle</strong> dove servono di più.</p>'
+        '"Figura di colonia". Servendo salgono di rango <em>Funzionario → Prefetto → Console</em> e i bonus crescono. ' +
+        'Puoi <strong>spostarle</strong> dove servono di più.</p>' +
+        '<p><strong>Loop reputazione</strong>: Prefetti civili e Logisti in servizio fanno lentamente salire la reputazione galattica ' +
+        '(×1.5 a rango Console). Una figura che si <strong>congeda a Console</strong> dopo carriera piena dà <strong>+2 reputazione</strong>; ' +
+        'una colonia <strong>persa con figura assegnata</strong> costa <strong>−3 reputazione</strong>: scegli con cura dove mandare i tuoi migliori.</p>'
     },
     /* M14 Fase B2 (#78) — Consiglio della Civiltà. */
     {
@@ -1189,6 +1251,25 @@
         'se non scegli entro il tempo, prevale l\'inazione. Più a lungo sopravvivi, più dure si fanno le ondate.</p>'
     },
     {
+      id: 'reputation-icg',
+      tag: 'M18 · Stabilità',
+      title: 'Reputazione & ICG',
+      body:
+        '<p>Due metriche, sempre visibili nell\'HUD in alto, raccontano la salute strategica della galassia.</p>' +
+        '<p>L\'<strong>Indice di Corruzione Galattica (ICG)</strong> va da 0 a 100 — più alto è peggio. Sale quando le ' +
+        '<strong>civiltà maligne</strong> conquistano sistemi, le <strong>crisi</strong> non vengono gestite, gli <strong>hazard</strong> ' +
+        'biologici/temporali vengono ignorati. Sopra <strong>40</strong> aumentano le tensioni, sopra <strong>60</strong> scoppia la ' +
+        'crisi galattica, sopra <strong>80</strong> il collasso diventa imminente.</p>' +
+        '<p>La <strong>Reputazione</strong> riflette come ti vedono le altre civiltà: si muove con i tuoi <strong>verbi morali</strong> ' +
+        '(aiutare un alleato in distress, accettare la pace, tradire un\'alleanza, sottomettere un vicino). Modula i <strong>prezzi ' +
+        'commerciali</strong> (§15.3) e la <strong>disposizione</strong> di partenza delle AI verso di te.</p>' +
+        '<p><strong>Click sui chip ICG / Rep</strong> in HUD (o "<strong>Stabilità</strong>" nel launcher Sale e moduli) per la vista ' +
+        'completa: valore, fascia, fattori istantanei (cosa sta spingendo i numeri ora) e <strong>storico delle ultime 20 mutazioni</strong> ' +
+        'discrete con la sorgente.</p>' +
+        '<p class="tut-hint">I drift passivi (decay, drift verso target morale) non finiscono nello storico: lì compaiono solo le scelte ' +
+        'che il giocatore fa (dispacci, crisi, diplomazia).</p>'
+    },
+    {
       id: 'anomalies',
       tag: 'M17 · Anomalie',
       title: 'Anomalie spaziali',
@@ -1244,10 +1325,13 @@
         '</ul>' +
         '<p>Travel e Foundation sono <strong>indipendenti</strong>: mondi grandi richiedono più Foundation, mondi lontani più ' +
         'Travel. Intra-sistema resta veloce (~110 Ι totali).</p>' +
-        '<p>Puoi <strong>scortare</strong> il Pioniere con altre navi nella stessa flotta. Senza scorta è esposto: se ' +
-        'intercettato e distrutto, refund <strong>50%</strong> di costo nave + colonizzazione, e <strong>50% dei coloni ' +
-        'a bordo</strong> torna alla colonia origine in <em>scialuppa di salvataggio</em> (recovery-friendly). ' +
-        'L\'equipaggio si salva sempre.</p>' +
+        '<p>Puoi <strong>scortare</strong> il Pioniere con altre navi nella stessa flotta. In battaglia le <strong>navi da ' +
+        'guerra fanno da scudo</strong> e cadono per prime (caccia → intercettore → corvetta → … verso le capitali, con un po\' ' +
+        'di varianza); i non-combattenti come il Pioniere muoiono solo a <em>scorta esaurita</em>. Senza scorta il Pioniere è il ' +
+        'primo bersaglio: se distrutto, resta il refund <strong>50%</strong> di costo nave + colonizzazione (recovery-friendly), ' +
+        'ma i <strong>coloni a bordo</strong> e l\'<strong>equipaggio</strong> cadono con lo scafo (l\'equipaggio con estrazione ' +
+        'pesata: i veterani si salvano più spesso). Si salva sempre solo nella <em>rottamazione al porto</em> per usura/avaria, ' +
+        'non nello scontro.</p>' +
         '<p><strong>Trasferimento colony-to-colony:</strong> stesso meccanismo embark/sbark dalla scheda <em>Gestisci ' +
         'navi/eq.</em> della flotta — quando il Pioniere è in orbita di una qualunque tua colonia operativa puoi <strong>imbarcare ' +
         'o sbarcare livelli</strong> per bilanciare carenze (cibo, rifiuti) tra mondi maturi. Diaspora attiva ogni volta che ' +

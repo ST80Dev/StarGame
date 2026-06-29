@@ -241,7 +241,7 @@
     economy:         { icon: 'market',     metric: 'Riserve metalli+energia', hint: 'Specializza i mondi-fabbrica e apri rotte commerciali per accumulare scorte.' },
     tech:            { icon: 'research',   metric: 'Ricerca d’impero', hint: 'Costruisci laboratori e osservatori per accumulare ricerca (M13).' },
     reputationLight: { icon: 'diplomacy',  metric: 'Atti di luce',       hint: 'Libera sistemi dai tiranni, onora i trattati, aiuta gli alleati.' },
-    reputationDark:  { icon: 'fleet',      metric: 'Atti d’ombra',  hint: 'Aggredisci, saccheggia, sottometti: la galassia ti temerà.' },
+    reputationDark:  { icon: 'fleet',      metric: 'Atti d’ombra',  hint: 'Sabota, saccheggia, sottometti — e colpisci gli innocenti: domina con la paura. Il segno dipende da chi subisce, non solo dall’atto.' },
     survival:        { icon: 'settings',   metric: 'Crisi superata',     hint: 'Resisti alla grande crisi (M17): la pista si attiva quando arriva.' }
   };
 

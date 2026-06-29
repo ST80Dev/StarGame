@@ -536,29 +536,18 @@
      Recovery-friendly (#22): il giocatore non perde tutto, può rimettersi
      in piedi. Le risorse vengono restituite alla colonia origine (payerKey
      salvato in fleet._colonizePaidCost al setOrder). */
-  function handleColonialLost(game, fleet, events) {
+  function handleColonialLost(game, fleet, events, popLost) {
     const memo = fleet._colonizePaidCost;
     if (!memo) return;
     const payer = game.colonies && game.colonies[memo.payerKey];
-    /* Decisione #66 estensione (P0 sessione 2026-06-09):
-       50% dei coloni a bordo si salva in scialuppa di salvataggio e
-       torna alla colonia origine (recovery-friendly #22, analogo al
-       crew M07 esploratore #39). Capped al popCap della destinazione.
-       Quel che eccede è perso. */
-    let popSaved = 0;
-    if (payer && fleet.popOnboard > 0) {
-      popSaved = Math.floor((fleet.popOnboard || 0) / 2);
-      if (popSaved > 0 && payer.pop) {
-        const cap = payer.pop.cap || 0;
-        const popNow = payer.pop.total || 0;
-        const room = Math.max(0, cap - popNow);
-        const added = Math.min(popSaved, room);
-        payer.pop.total = popNow + added;
-        if (added < popSaved) popSaved = added;  /* overflow scartato (no spazio) */
-        if (added > 0) addToBestClass(payer, added);
-      }
-      fleet.popOnboard = 0;
-    }
+    /* Decisione utente 2026-06-26: i coloni a bordo NON si salvano più in
+       scialuppa — cadono con la nave coloniale distrutta (la morte è già
+       applicata nel writeback di combat.js → fleet.popOnboard ridotto). Qui
+       resta la leva recovery-friendly (#22): refund 50% di costo nave +
+       colonizzazione. Azzeriamo per sicurezza i coloni residui (nessun
+       vettore superstite). */
+    const colonistsLost = popLost || 0;
+    fleet.popOnboard = 0;
     if (payer && payer.stock) {
       const refund = {};
       ['met', 'en', 'food', 'water'].forEach(function (k) {
@@ -574,7 +563,7 @@
         bodyKey: fleet.orders && fleet.orders.bodyKey,
         reason: 'coloniale-lost',
         refund: refund,
-        popSaved: popSaved,
+        popLost: colonistsLost,
         payerKey: memo.payerKey,
         impulso: game.timeImpulsi
       });
@@ -686,9 +675,12 @@
     const E = root.ORION && root.ORION.expedition;
     const crewPort = (E && E.crewPortConsumption && colony.phase !== 'settling')
       ? E.crewPortConsumption(game, colony) : { food: 0, water: 0 };
+    const CF_yield = root.ORION && root.ORION.colonyFigure;
+    const yieldM = (CF_yield && CF_yield.yieldMul) ? CF_yield.yieldMul(colony) : 1;
     const net = {};
     ['met', 'en', 'food', 'water'].forEach(function (k) {
-      const r = (out.rates[k] || 0) * malus * wMalus * warM * settling;
+      let r = (out.rates[k] || 0) * malus * wMalus * warM * settling;
+      if ((k === 'met' || k === 'en') && yieldM !== 1) r *= yieldM;
       const u = out.upkeep[k] || 0;
       let n = r - u;
       if (k === 'met')   n -= shipMetMaint + shipRepairMet + popMetDemand;
@@ -798,6 +790,28 @@
     scar.famineI = famish ? scar.famineI + 1 : 0;
   }
 
+  /* Capacità abitativa + sovraffollamento — funzione PURA riusata sia da
+     `colonyMorale` (calcolo penalità), sia dalla UI (badge tab Popolazione,
+     riga esplicita nel pannello, cronaca con isteresi). Estratta per
+     evitare duplicazione tra time.js e main.js (single source). */
+  function colonyHousing(_game, colony) {
+    if (!colony) return { cap: 0, total: 0, crowd: 0, penalty: 1, over: false };
+    const structures = colony.structures || {};
+    const pop = colony.pop || { total: 0 };
+    const habit = (structures['centro-abitativo'] && structures['centro-abitativo'].level) || 0;
+    const hosp = (structures['ospedale'] && structures['ospedale'].level) || 0;
+    const Sm = root.ORION.structures;
+    const cap = CFG.POP_HOUSING_BASE
+      + (habit > 0 ? Sm.moduleSum(habit) : 0) * CFG.POP_HOUSING_PER_LEVEL
+      + (hosp > 0 ? Sm.moduleSum(hosp) : 0) * CFG.POP_HOSPITAL_HOUSING;
+    const total = pop.total || 0;
+    const crowd = cap > 0 ? total / cap : 99;
+    const penalty = crowd > CFG.POP_CROWD_START
+      ? Math.max(0.05, 1 - (crowd - CFG.POP_CROWD_START) * CFG.POP_CROWD_SLOPE)
+      : 1;
+    return { cap: cap, total: total, crowd: crowd, penalty: penalty, over: crowd > CFG.POP_CROWD_START };
+  }
+
   /* Morale di colonia §9.3 — funzione PURA (nessuna scrittura sullo stato),
      single source of truth riusata sia dal loop crescita popolazione sia
      dalla Dashboard Impero (M07.3, decisione #62). Replica esatta del
@@ -809,7 +823,6 @@
   function colonyMorale(game, colony) {
     if (!colony) return 1;
     const scar = colony._scar || { food: { state: 'ok' }, water: { state: 'ok' } };
-    const pop = colony.pop || { total: 0 };
     const structures = colony.structures || {};
     let morale = 1.0;
     if (colony.isHomeBase) morale += CFG.POP_MORALE_HOMEBASE;
@@ -826,16 +839,9 @@
     }
     // penalità "allerta" su cibo/acqua
     if (scar.food.state === 'low' || scar.water.state === 'low') morale *= 0.6;
-    // sovraffollamento (cancello strutturale implicito, decisione #37bis)
-    const hosp = (structures['ospedale'] && structures['ospedale'].level) || 0;
-    const Sm = root.ORION.structures;
-    const housingCap = CFG.POP_HOUSING_BASE
-      + (habit > 0 ? Sm.moduleSum(habit) : 0) * CFG.POP_HOUSING_PER_LEVEL
-      + (hosp > 0 ? Sm.moduleSum(hosp) : 0) * CFG.POP_HOSPITAL_HOUSING;
-    const crowd = housingCap > 0 ? (pop.total || 0) / housingCap : 99;
-    if (crowd > CFG.POP_CROWD_START) {
-      morale *= Math.max(0.05, 1 - (crowd - CFG.POP_CROWD_START) * CFG.POP_CROWD_SLOPE);
-    }
+    // sovraffollamento (cancello strutturale implicito, decisione #37bis):
+    // moltiplica per la penalità calcolata da colonyHousing (single source).
+    morale *= colonyHousing(game, colony).penalty;
     return morale;
   }
 
@@ -884,10 +890,13 @@
       if (colony.moraleMalus && game.timeImpulsi >= colony.moraleMalus.expiresAt) {
         colony.moraleMalus = null;
       }
-      const morale = colonyMorale(game, colony);
+      let morale = colonyMorale(game, colony);
+      const CF_civ = root.ORION && root.ORION.colonyFigure;
+      if (CF_civ && CF_civ.moraleBonus) morale += CF_civ.moraleBonus(colony);
 
       let growth = CFG.POP_GROWTH_BASE * morale;
       if (colony.structures['ospedale']) growth *= (1 + CFG.POP_GROWTH_HOSPITAL);
+      if (CF_civ && CF_civ.popGrowthMul) growth *= CF_civ.popGrowthMul(colony);
 
       /* Decisione #66 estensione (sessione 2026-06-09): Bonus Diaspora —
          dopo un imbarco di coloni, la colonia sorgente ha crescita ×2 per
@@ -954,6 +963,49 @@
     // Shift lento del mix di classi verso il "target" suggerito dalle
     // strutture costruite. Non sposta più di POP_CLASS_SHIFT/Impulso.
     shiftClassMix(colony);
+
+    /* Cronaca sovraffollamento con isteresi (entra ≥ 0.85, esce ≤ 0.78) —
+       solo per colonie dove il giocatore *vorrebbe* far crescere la pop:
+       mondi-giardino (decisione #38) o colonia con Centro Abitativo costruito
+       (segno deliberato di investimento sulla popolazione). Sulle altre il
+       sovraffollamento è accettato implicitamente (colonie estrattive) e
+       non genera rumore. Stato persistito in `colony.crowdAlert` (additivo,
+       lazy-init: undefined → false, niente bump schema). */
+    const h = colonyHousing(game, colony);
+    const wantsGrowth = isGrowthColony(colony, planet);
+    if (wantsGrowth) {
+      const wasAlert = !!colony.crowdAlert;
+      if (!wasAlert && h.crowd >= CROWD_ALERT_ENTER) {
+        colony.crowdAlert = true;
+        events.push({
+          kind: 'pop-crowd', colony: colony, planet: planet, impulso: game.timeImpulsi,
+          crowd: h.crowd, penalty: h.penalty, cap: h.cap, total: h.total
+        });
+      } else if (wasAlert && h.crowd <= CROWD_ALERT_EXIT) {
+        colony.crowdAlert = false;
+        events.push({
+          kind: 'pop-crowd-recover', colony: colony, planet: planet, impulso: game.timeImpulsi
+        });
+      }
+    } else if (colony.crowdAlert) {
+      // Smette di voler crescere (es. centro abitativo smantellato su mondo non-giardino)
+      // → spegni l'allerta senza generare evento di "rientro".
+      colony.crowdAlert = false;
+    }
+  }
+
+  /* Soglie isteresi sovraffollamento — separate per evitare ping-pong.
+     Entra ≥ 0.85 (pop > 85% del cap → penalità già ~−12%); esce ≤ 0.78
+     (sotto la soglia POP_CROWD_START 0.80, con un margine). */
+  const CROWD_ALERT_ENTER = 0.85;
+  const CROWD_ALERT_EXIT  = 0.78;
+
+  /* Mondo-giardino o colonia con investimento abitativo deliberato? */
+  function isGrowthColony(colony, planet) {
+    if (!colony || !planet) return false;
+    if (planet.type === 'terrestre' || planet.type === 'oceanico' || planet.type === 'forestale') return true;
+    const habit = colony.structures && colony.structures['centro-abitativo'];
+    return !!(habit && habit.level > 0);
   }
 
   function targetClassWeights(colony) {
@@ -1394,7 +1446,7 @@
       // Decisione #66: refund 50% se la coloniale è stata persa nel scontro.
       if (hadColonial) {
         const stillColonial = fleet.ships && fleet.ships.some(function (s) { return s.kind === 'coloniale'; });
-        if (!stillColonial) handleColonialLost(game, fleet, events);
+        if (!stillColonial) handleColonialLost(game, fleet, events, fleetOutcome.colonistsLost);
       }
 
       // M16 Fase B (#81): riconquista riuscita → la stazione torna tua
@@ -1428,35 +1480,24 @@
            (ALIGNMENT_IMPACT #23): liberare un sistema da una civiltà MALIGNA
            è "light"; aggredire una buona/neutrale è "dark". */
         if (playerWon && civ.systems.indexOf(sysId) >= 0) {
-          /* M13 B-2 (decisione #93): rimossa la "occupazione di sistema" di
-             M11 Fase A — incoerente col modello multi-proprietà per body
-             (#52). La perdita è MIRATA al body attaccato (`attackBodyKey`,
-             se noto) o al primo pianeta della civ nel sistema. La presenza
-             militare sul sistema si dichiara col PRESIDIO (ORION.garrison),
-             non si subisce automaticamente.
+          /* M13 B-2 (decisione #93): la perdita è MIRATA al body attaccato.
+             Decisione 2026-06-26 (feedback utente): la perdita di un pianeta
+             scatta SOLO se il giocatore ha ESPLICITAMENTE attaccato un BODY
+             preciso — ossia esiste un ordine d'attacco su QUESTO sistema
+             (`civAttacked`) CON `attackBodyKey`. Una scaramuccia incidentale
+             con una flotta ostile nel sistema NON deve più radere un pianeta
+             "a caso" (rimosso il fallback al primo pianeta). La presenza
+             militare sul sistema si dichiara col PRESIDIO (ORION.garrison).
              Verbo morale (#23): liberare un body da una civ maligna è
              "light"; aggredire una buona/neutrale è "dark". */
-          const targetBodyKey = fleet.attackBodyKey || null;
+          const deliberate = !!(civAttacked && fleet.attackBodyKey);
+          const targetBodyKey = deliberate ? fleet.attackBodyKey : null;
           let removedAny = false;
-          if (root.ORION.ai && root.ORION.ai.removePlanet && targetBodyKey) {
+          if (deliberate && root.ORION.ai && root.ORION.ai.removePlanet) {
             const planetKey = sysId + ':' + targetBodyKey;
             if ((civ.planets || []).indexOf(planetKey) >= 0) {
               root.ORION.ai.removePlanet(civ, planetKey);
               removedAny = true;
-            }
-          }
-          /* Fallback: nessun body specifico → rimuovi il primo pianeta che
-             la civ possiede in questo sistema. */
-          if (!removedAny && Array.isArray(civ.planets)) {
-            for (let pp = 0; pp < civ.planets.length; pp++) {
-              const pk = civ.planets[pp];
-              if (pk && pk.indexOf(sysId + ':') === 0) {
-                if (root.ORION.ai && root.ORION.ai.removePlanet) {
-                  root.ORION.ai.removePlanet(civ, pk);
-                }
-                removedAny = true;
-                break;
-              }
             }
           }
           if (removedAny) {
@@ -1467,7 +1508,10 @@
             }
             if (impact === 'light') bumpIcg(game, -1); else bumpIcg(game, 2);
             report.alignmentImpact = impact;
-            report.bodyLost = targetBodyKey || null;
+            report.bodyLost = targetBodyKey;
+            /* La colonia nemica viene RAZZIATA, non occupata: il corpo torna
+               libero (vergine). Il flag alimenta la cronaca esplicativa. */
+            report.bodyRazed = true;
           }
           if ((civ.planets || []).length === 0) {
             civ.alive = false;
@@ -1477,7 +1521,7 @@
              maggiore se il vittorioso ha raidato un body specifico (più
              vicino ai laboratori); altrimenti scaramuccia spaziale. */
           if (root.ORION.research && root.ORION.research.tryCaptureTech) {
-            const captureKind = (removedAny && targetBodyKey) ? 'raid' : 'skirmish';
+            const captureKind = removedAny ? 'raid' : 'skirmish';
             root.ORION.research.tryCaptureTech(game, civ, captureKind, events);
           }
         }
@@ -1509,6 +1553,7 @@
         kind: 'battle-skirmish', report: report,
         fleetId: fleet.id, fleetName: fleet.name,
         playerWon: playerWon, lost: fleetOutcome.lost, promoted: fleetOutcome.promoted,
+        crewLost: fleetOutcome.crewLost,
         systemId: sysId, impulso: game.timeImpulsi
       });
     }
@@ -1654,7 +1699,7 @@
       const r = C.resolveRound(rng, atk, def);
       // scrivi gli esiti del difensore sullo stato vivo
       const survivorsDef = def.combatants;     // post-purge
-      const wb = C.applyDefenderWriteback(colony, survivorsDef, r.destroyedB);
+      const wb = C.applyDefenderWriteback(game, colony, survivorsDef, r.destroyedB);
       if (wb.shipsLost > 0) warRegisterLoss(game, wb.shipsLost * CFG.WAR_MORALE_PER_SHIP, wb.shipsLost * CFG.WAR_PRESSURE_PER_LOSS);
       // l'attaccante hp residuo è già persistito (stesso array di oggetti)
 
@@ -1665,6 +1710,7 @@
         colonyKey: colonyKey, systemId: battle.systemId,
         atk: C.totalHp(atk), def: C.totalHp(def),
         lostDef: r.destroyedB.length, lostAtk: r.destroyedA.length,
+        crewLost: wb.crewLost, colonistsLost: wb.colonistsLost,
         impulso: game.timeImpulsi });
 
       // fine assedio?
@@ -1789,7 +1835,12 @@
 
   /* M10 Fase E: risoluzione di un RAIDER pirata contro una flotta del
      giocatore (scaramuccia lampo all'arrivo). Se la preda non è più in orbita
-     nel sistema bersaglio, il raider svanisce (recovery-friendly #22). */
+     nel sistema bersaglio, il raider svanisce (recovery-friendly #22).
+
+     Partecipazione "per presenza nel sistema" (docs/FLEET_FLOW §Combattimento):
+     a difendere il bersaglio scendono in campo ANCHE le altre tue flotte ARMATE
+     presenti nel sistema (una scorta da battaglia protegge l'estrattore preso
+     di mira). Le flotte disarmate non vengono trascinate nello scontro (#22). */
   function resolvePirateRaider(game, inc, events) {
     const C = root.ORION.combat;
     if (!C) return;
@@ -1801,35 +1852,71 @@
       events.push({ kind: 'raider-fizzle', targetSysId: inc.targetSysId, impulso: game.timeImpulsi });
       return;
     }
+    // Difensori = bersaglio + altre flotte armate presenti nel sistema.
+    const participants = [fleet];
+    const present = fleetsPresentAt(game, inc.targetSysId);
+    for (let i = 0; i < present.length; i++) {
+      const f = present[i];
+      if (f === fleet || !fleetHasGuns(f)) continue;
+      participants.push(f);
+    }
     const raider = C.forceFromPirateNest({ level: inc.level || 1 });
     raider.side = 'A'; raider.formation = 'balanced';
-    const B = C.forceFromFleet(game, fleet, 'B');
+    /* Forza difensiva combinata: i bonus (comandante/ammiraglia/tech) sono già
+       cotti per-nave da forceFromFleet, quindi basta concatenare i combattenti;
+       il writeback per-flotta resta corretto perché gli id nave sono univoci.
+       firstStrike = il miglior Stratega fra le flotte schierate. */
+    const combatants = [];
+    let firstStrike = 0;
+    for (let i = 0; i < participants.length; i++) {
+      const ff = C.forceFromFleet(game, participants[i], 'B');
+      firstStrike = Math.max(firstStrike, ff.firstStrike || 0);
+      for (let j = 0; j < ff.combatants.length; j++) combatants.push(ff.combatants[j]);
+    }
+    const B = {
+      side: 'B', name: fleet.name, color: '#5fa8ff', immobile: false,
+      formation: fleet.formation || 'balanced', firstStrike: firstStrike,
+      combatants: combatants
+    };
     const battleId = 'raider:' + inc.id;
     const report = C.resolve(game, battleId, raider, B);
     report.kind = 'raider'; report.systemId = inc.targetSysId; report.enemyKind = 'pirate';
-    const outcome = C.applyOutcomeToFleet(game, fleet, B);
     const playerWon = (report.winner === 'B');
-    /* Servizio (decisione utente 2026-06-11): raider respinto → +1 xp crew. */
-    if (playerWon && root.ORION.fleet && root.ORION.fleet.awardCrewXp) {
-      root.ORION.fleet.awardCrewXp(game, fleet, 1, events, 'combat');
+    /* Esito su OGNI flotta partecipante (writeback per-nave via id univoci). */
+    let totalLost = 0; let totalCrewLost = 0; const promoted = []; const allies = [];
+    for (let i = 0; i < participants.length; i++) {
+      const pf = participants[i];
+      const oc = C.applyOutcomeToFleet(game, pf, B);
+      totalLost += oc.lost;
+      totalCrewLost += (oc.crewLost || 0);
+      for (let j = 0; j < oc.promoted.length; j++) promoted.push(oc.promoted[j]);
+      /* Servizio (decisione utente 2026-06-11): raider respinto → +1 xp crew,
+         a tutte le flotte che hanno difeso e sono sopravvissute. */
+      if (playerWon && pf.ships.length) {
+        if (root.ORION.fleet && root.ORION.fleet.awardCrewXp) root.ORION.fleet.awardCrewXp(game, pf, 1, events, 'combat');
+        if (root.ORION.commander && root.ORION.commander.grantFleetXp) root.ORION.commander.grantFleetXp(game, pf, 1, events);
+      }
+      if (pf !== fleet) allies.push(pf.name);
     }
-    if (playerWon && root.ORION.commander && root.ORION.commander.grantFleetXp) {
-      root.ORION.commander.grantFleetXp(game, fleet, 1, events);
-    }
-    if (outcome.lost > 0) warRegisterLoss(game, outcome.lost * CFG.WAR_MORALE_PER_SHIP, outcome.lost * CFG.WAR_PRESSURE_PER_LOSS);
+    if (totalLost > 0) warRegisterLoss(game, totalLost * CFG.WAR_MORALE_PER_SHIP, totalLost * CFG.WAR_PRESSURE_PER_LOSS);
     if (playerWon) warRegisterWin(game);
     else warRegisterLoss(game, CFG.WAR_MORALE_PER_DEFEAT, CFG.WAR_PRESSURE_PER_LOSS);
-    // flotta annientata → figure in salvo, rimuovi
-    if (fleet.ships.length === 0) {
-      if (root.ORION.commander && root.ORION.commander.releaseAllFromFleet) {
-        root.ORION.commander.releaseAllFromFleet(game, fleet);
+    // flotte annientate → figure in salvo, rimuovi
+    for (let i = 0; i < participants.length; i++) {
+      const pf = participants[i];
+      if (pf.ships.length === 0) {
+        if (root.ORION.commander && root.ORION.commander.releaseAllFromFleet) {
+          root.ORION.commander.releaseAllFromFleet(game, pf);
+        }
+        game.fleets = game.fleets.filter(function (x) { return x !== pf; });
       }
-      game.fleets = game.fleets.filter(function (f) { return f !== fleet; });
     }
     events.push({
       kind: 'raider-hit', report: report,
       fleetId: fleet.id, fleetName: fleet.name,
-      playerWon: playerWon, lost: outcome.lost, promoted: outcome.promoted,
+      allies: allies.length ? allies : null,
+      playerWon: playerWon, lost: totalLost, promoted: promoted,
+      crewLost: totalCrewLost,
       systemId: inc.targetSysId, impulso: game.timeImpulsi
     });
   }
@@ -1852,7 +1939,7 @@
       // morale crollo (catena della spirale C): doppio + extra se capitale
       warRegisterLoss(game, CFG.WAR_MORALE_PER_LOOT * 2 + (wasCapital ? 0.10 : 0), CFG.WAR_PRESSURE_PER_LOSS * 1.5);
       if (raze) {
-        removeColony(game, colonyKey);
+        removeColony(game, colonyKey, events);
         bumpIcg(game, 3);
         events.push({ kind: 'colony-razed', colonyKey: colonyKey, systemId: sysId,
           civName: civ ? civ.name : battle.attacker.name, wasCapital: wasCapital, impulso: game.timeImpulsi });
@@ -1870,7 +1957,7 @@
         }
         civ.power += 15;
       }
-      removeColony(game, colonyKey);
+      removeColony(game, colonyKey, events);
       bumpIcg(game, 4);
       events.push({ kind: 'colony-conquered', colonyKey: colonyKey, systemId: sysId,
         civName: civ ? civ.name : battle.attacker.name, wasCapital: wasCapital, impulso: game.timeImpulsi });
@@ -1926,7 +2013,7 @@
       const c = def.combatants[i];
       if (c.src && c.src.type === 'station') { stationAlive = true; st.hp = Math.max(1, Math.round(c.hp)); }
     }
-    const wb = C.applyDefenderWriteback(null,
+    const wb = C.applyDefenderWriteback(game, null,
       def.combatants.filter(function (c) { return c.src && c.src.type === 'ship'; }),
       r.destroyedB.filter(function (c) { return c.src && c.src.type === 'ship'; }));
     if (wb.shipsLost > 0) warRegisterLoss(game, wb.shipsLost * CFG.WAR_MORALE_PER_SHIP, wb.shipsLost * CFG.WAR_PRESSURE_PER_LOSS);
@@ -1935,7 +2022,8 @@
       atkHp: Math.round(C.totalHp(atk)), defHp: Math.round(C.totalHp(def)) });
     events.push({ kind: 'siege-round', battleId: battle.id, round: battle.round,
       stationId: st.id, systemId: battle.systemId, atk: C.totalHp(atk), def: C.totalHp(def),
-      lostDef: r.destroyedB.length, lostAtk: r.destroyedA.length, impulso: game.timeImpulsi });
+      lostDef: r.destroyedB.length, lostAtk: r.destroyedA.length, crewLost: wb.crewLost,
+      colonistsLost: wb.colonistsLost, impulso: game.timeImpulsi });
 
     // la PIATTAFORMA è caduta → la stazione cade (le flotte presenti restano)
     if (!stationAlive) {
@@ -2001,8 +2089,15 @@
   /* Rimozione di una colonia dal gioco (conquista/rasa/evacuazione).
      Pulisce il mapping capitale e le incursioni/assedi che la puntavano.
      Recovery-friendly: le flotte NON vengono distrutte (restano operative,
-     orfane della base). */
-  function removeColony(game, colonyKey) {
+     orfane della base).
+     M18 bridge: se la colonia aveva una figura assegnata, emette evento
+     cronaca 'figure-lost' e applica −3 reputazione (la figura "muore in
+     servizio"). La figura non rientra nel pool d'Impero. */
+  function removeColony(game, colonyKey, events) {
+    if (game.colonies && game.colonies[colonyKey] && game.colonies[colonyKey].figure) {
+      const CF = root.ORION && root.ORION.colonyFigure;
+      if (CF && CF.onColonyLost) CF.onColonyLost(game, game.colonies[colonyKey], colonyKey, events);
+    }
     if (game.capitals) {
       Object.keys(game.capitals).forEach(function (gid) {
         if (game.capitals[gid] === colonyKey) delete game.capitals[gid];
@@ -2341,6 +2436,12 @@
        passo AI_EVERY_I) perché 3-4 Ι è la finestra desiderata. */
     if (root.ORION.ai && root.ORION.ai.processPresence) {
       root.ORION.ai.processPresence(game, events);
+    }
+    /* M19 Fase A (spionaggio): risolve le operazioni coperte armate quando
+       la flotta-vettore ha mantenuto la presenza per CFG.DURATION_I Ι.
+       Gira subito dopo processPresence così la presenza è aggiornata. */
+    if (root.ORION.espionage && root.ORION.espionage.process) {
+      root.ORION.espionage.process(game, events);
     }
     /* M10 Fase A (decisione #47): civiltà AI in background. Simulazione
        AGGREGATA a cadenza interna (ogni AI_EVERY_I Impulsi, dopo il warm-up):
@@ -2706,6 +2807,7 @@
     nextCrewId: nextCrewId,
     targetClassWeights: targetClassWeights,
     colonyMorale: colonyMorale,
+    colonyHousing: colonyHousing,
     productionFactors: productionFactors,
     ensureScarcity: ensureScarcity,
     /* Decisione #48 — gestione rifiuti (Fase 0) */
