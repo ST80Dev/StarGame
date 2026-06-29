@@ -625,7 +625,7 @@
         harvestRateGross: grossRate,
         harvesting: harvesting,
         /* Redesign lune: metadati paniere per la UI. */
-        basket: !!s.basket, mix: s.mix || null,
+        basket: !!s.basket, mix: s.mix || null, exoticW: s.exoticW || 0,
         advRevealed: !!s.advRevealed, advIds: s.advIds || [],
         bySource: station ? 'station' : (fleet ? 'fleet' : null)
       };

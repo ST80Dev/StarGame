@@ -5107,7 +5107,21 @@ function anomalyKindMeta(kind) {
   if (kind === 'reliquie') return { label: 'Reliquia antica',       res: null };
   if (kind === 'cintura')  return { label: 'Cintura asteroidale',   res: 'metalli' };
   if (kind === 'gassoso')  return { label: 'Gigante gassoso',       res: 'energia' };
+  if (kind === 'luna')     return { label: 'Luna',                  res: 'paniere' };
   return { label: kind, res: null };
+}
+
+/* Quote met/en attribuite a un sito in raccolta (gestisce il PANIERE lunare:
+   ripartisce il rate sui pesi del mix; le altre basi/avanzate non entrano nel
+   colpo d'occhio met/en ma confluiscono comunque nello stock). */
+function siteMetEnRate(s) {
+  const rate = s.harvestRate != null ? s.harvestRate : 0.6;
+  if (!s.basket) return { met: s.res === 'met' ? rate : 0, en: s.res === 'en' ? rate : 0 };
+  const mix = s.mix; if (!mix) return { met: 0, en: 0 };
+  let tot = (mix.met || 0) + (mix.en || 0) + (mix.food || 0) + (mix.water || 0);
+  if (s.advRevealed && s.exoticW > 0) tot += s.exoticW;
+  if (tot <= 0) return { met: 0, en: 0 };
+  return { met: rate * (mix.met || 0) / tot, en: rate * (mix.en || 0) / tot };
 }
 
 /* Icona + tinta canoniche per tipo di anomalia/giacimento.
@@ -5120,6 +5134,7 @@ function anomalyKindIcon(kind) {
   if (kind === 'nebulosa') return uiIcon('fspBio', 'amber');   /* nube concentrica */
   if (kind === 'gassoso')  return uiIcon('fspGrav', 'amber');  /* orbita gravitazionale */
   if (kind === 'reliquie') return uiIcon('fspRelic', 'violet');/* esagono reliquia */
+  if (kind === 'luna')     return uiIcon('dotCircle', 'violet');/* luna — paniere (viola: strato avanzato) */
   return uiIcon('star', 'soft');
 }
 
@@ -6188,9 +6203,9 @@ function economyAnomaliesHtml(g) {
   allSites.forEach(function (s) {
     if (s.kind === 'reliquie') { if (s.harvesting) relicProg++; return; }
     if (s.harvesting) {
-      const rate = s.harvestRate != null ? s.harvestRate : 0.6;
-      if (s.res === 'met') { sumMet += rate; activeMet++; }
-      else if (s.res === 'en') { sumEn += rate; activeEn++; }
+      const sr = siteMetEnRate(s);
+      if (sr.met > 0) { sumMet += sr.met; activeMet++; }
+      if (sr.en > 0) { sumEn += sr.en; activeEn++; }
     }
   });
   const totalActive = activeMet + activeEn + relicProg;
@@ -6255,8 +6270,8 @@ function economyAnomaliesHtml(g) {
       let sysMet = 0, sysEn = 0;
       list.forEach(function (s) {
         if (!s.harvesting || s.kind === 'reliquie') return;
-        const r = s.harvestRate != null ? s.harvestRate : 0.6;
-        if (s.res === 'met') sysMet += r; else if (s.res === 'en') sysEn += r;
+        const sr = siteMetEnRate(s);
+        sysMet += sr.met; sysEn += sr.en;
       });
       const tag = systemTagHtml(sid);
       const collapsed = !!ORION._econGroupCollapsed[sid];
@@ -6291,7 +6306,7 @@ function economyAnomaliesHtml(g) {
         if (s.kind !== 'reliquie') {
           const got = +(s.harvested || 0).toFixed(1);
           const rate = s.harvestRate != null ? s.harvestRate : 0.6;
-          const resLbl = resShortLabel(s.res);
+          const resLbl = s.basket ? 'paniere' : resShortLabel(s.res);
           /* Quando il sito è quasi esaurito il ritmo effettivo scende alla
              rigenerazione sostenibile, sotto la capacità della flotta: lo
              spieghiamo nel tooltip (capacità lorda vs ritmo effettivo). */
@@ -6313,6 +6328,13 @@ function economyAnomaliesHtml(g) {
           ? '<span class="econ-item__live econ-item__live--enroute" title="Flotta in viaggio verso il sito">✈ in viaggio</span>'
           : '';
         const kindIcon = anomalyKindIcon(s.kind);
+        /* Luna: stato dello strato avanzato (esotici), gated dallo scan Osservatorio. */
+        let advChip = '';
+        if (s.basket) {
+          advChip = s.advRevealed
+            ? '<span class="econ-chip" title="Strato avanzato (esotici) rivelato: viene estratto nel paniere. Un Osservatorio è in raggio.">✦ avanzate attive</span>'
+            : '<span class="econ-chip" title="Costruisci un Osservatorio entro ' + ((ORION.anomaly.CFG && ORION.anomaly.CFG.OBS_SCAN_RANGE) || 3) + ' salti per rivelare ed estrarre lo strato avanzato (esotici).">avanzate: scan Osservatorio</span>';
+        }
         return '<li class="econ-item econ-item--' + escapeHtml(s.kind) + (s.harvesting ? ' is-harvesting' : (inboundTransit.length ? ' is-enroute' : '')) + '">' +
           '<span class="econ-item__glyph" aria-hidden="true">' + kindIcon + '</span>' +
           '<div class="econ-item__main">' +
@@ -6324,6 +6346,7 @@ function economyAnomaliesHtml(g) {
             '</div>' +
             '<div class="econ-item__chips">' +
               '<span class="econ-chip" title="Stato del sito">' + stateTxt + '</span>' +
+              advChip +
               harvestTxt +
             '</div>' +
           '</div>' +
