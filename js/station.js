@@ -170,8 +170,35 @@
     for (var k in cost) colony.stock[k] = Math.max(0, (colony.stock[k] || 0) - cost[k]);
   }
 
-  /* Può la colonia `colonyKey` fondare una stazione nel sistema target? */
-  function canBuild(game, colonyKey, targetSysId) {
+  /* Una luna è ancorabile? (redesign lune): solo i corpi a giacimento PANIERE
+     (lune) ospitano l'ancoraggio della stazione → estrazione di default. */
+  function isAnchorableBody(game, sysId, bodyKey) {
+    if (bodyKey == null) return false;
+    if (!(ORION.system && ORION.system.generate && ORION.system.findBody &&
+          ORION.anomaly && ORION.anomaly.bodyGiacimento)) return false;
+    try {
+      var sys = ORION.system.generate(game.galaxy, sysId);
+      var b = ORION.system.findBody(sys, bodyKey);
+      var gi = b && ORION.anomaly.bodyGiacimento(b);
+      return !!(gi && gi.basket);
+    } catch (e) { return false; }
+  }
+
+  /* Stazione del giocatore ANCORATA a (sysId, bodyKey) e operativa? Usata per la
+     mutua esclusione con l'estrattore (fleet-target). */
+  function stationAnchoredAt(game, sysId, bodyKey) {
+    if (bodyKey == null) return null;
+    var st = stationAt(game, sysId);
+    if (!st || !isPlayerStation(st)) return null;
+    if (st.bodyKey == null || String(st.bodyKey) !== String(bodyKey)) return null;
+    if (st.phase === 'building' || (st.level || 0) < 1) return null;
+    return st;
+  }
+
+  /* Può la colonia `colonyKey` fondare una stazione nel sistema target?
+     `bodyKey` (opzionale) = luna a cui ancorare la stazione (estrazione a
+     paniere di default). Va validato come corpo a paniere del sistema target. */
+  function canBuild(game, colonyKey, targetSysId, bodyKey) {
     var colony = game.colonies && game.colonies[colonyKey];
     if (!colony || !colony.colonized) return { ok: false, reason: 'Colonia non valida' };
     if (colony.phase === 'settling') return { ok: false, reason: 'Colonia in insediamento' };
@@ -179,6 +206,9 @@
     if (stationAt(game, targetSysId)) return { ok: false, reason: 'Stazione già presente nel sistema' };
     var hops = hopsBetween(game.galaxy, colony.systemId, targetSysId);
     if (hops > CFG.BUILD_RANGE) return { ok: false, reason: 'Fuori raggio (' + hops + ' salti, max ' + CFG.BUILD_RANGE + ')' };
+    if (bodyKey != null && !isAnchorableBody(game, targetSysId, bodyKey)) {
+      return { ok: false, reason: 'Ancoraggio valido solo su una luna del sistema' };
+    }
     var cost = stepCost(1);
     if (!colonyCanPay(colony, cost)) return { ok: false, reason: 'Risorse insufficienti' };
     return { ok: true, cost: cost, time: stepTime(1), hops: hops };
@@ -191,9 +221,11 @@
     return 'station-' + game.idSeq.station;
   }
 
-  /* Fonda una stazione: paga dalla colonia, entra in fase 'building'. */
-  function build(game, colonyKey, targetSysId, name) {
-    var chk = canBuild(game, colonyKey, targetSysId);
+  /* Fonda una stazione: paga dalla colonia, entra in fase 'building'.
+     `bodyKey` (opzionale) ancora la stazione a una luna del sistema → estrazione
+     a paniere di default a costruzione finita (vedi anomaly.tick). */
+  function build(game, colonyKey, targetSysId, name, bodyKey) {
+    var chk = canBuild(game, colonyKey, targetSysId, bodyKey);
     if (!chk.ok) return chk;
     var colony = game.colonies[colonyKey];
     colonyPay(colony, chk.cost);
@@ -202,6 +234,7 @@
       id: nextId(game),
       name: name || ('Stazione ' + (game.stations.length + 1)),
       systemId: targetSysId,
+      bodyKey: (bodyKey != null) ? bodyKey : null,   // luna ancorata (o null = orbita il sistema)
       ownerColonyKey: colonyKey,
       level: 0,                 // diventa 1 a fine costruzione
       phase: 'building',
@@ -635,6 +668,7 @@
     stationAt: stationAt, stationById: stationById, listOf: listOf,
     isPlayerStation: isPlayerStation, playerStationAt: playerStationAt, capturedStationAt: capturedStationAt,
     captureStation: captureStation, retakeStation: retakeStation,
+    isAnchorableBody: isAnchorableBody, stationAnchoredAt: stationAnchoredAt,
     canBuild: canBuild, build: build, canUpgrade: canUpgrade, upgrade: upgrade,
     demolish: demolish, cancelBuild: cancelBuild,
     isOperationalPort: isOperationalPort, refuelCapacity: refuelCapacity, drawRefuel: drawRefuel,

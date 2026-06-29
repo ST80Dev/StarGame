@@ -100,6 +100,13 @@
     /* Giacimento sfruttabile (non sulla mia colonia). */
     if (body && ORION.anomaly && ORION.anomaly.bodyGiacimento) {
       out.giacimento = !out.ownColony && !!ORION.anomaly.bodyGiacimento(body);
+      /* Mutua esclusione (redesign lune): se una STAZIONE è ancorata a questa
+         luna, estrae lei di default → non si manda anche un estrattore. */
+      if (out.giacimento && bk != null && ORION.station && ORION.station.stationAnchoredAt &&
+          ORION.station.stationAnchoredAt(game, sysId, bk)) {
+        out.giacimento = false;
+        out.stationAnchored = true;
+      }
     }
 
     out.anomalyKind = anomalyKindAt(game, sysId, bk);

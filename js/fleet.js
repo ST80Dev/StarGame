@@ -1433,6 +1433,18 @@
       const to = order.toSysId;
       const bodyKey = order.bodyKey;
       if (to == null || bodyKey == null) return { ok: false, reason: 'Destinazione assente' };
+      /* Gate difensivo (redesign lune 2026): i corpi NON abitabili — lune
+         incluse — non sono colonizzabili, solo estraibili. L'UI già non offre
+         Colonizza (BODY_TYPES habitable:false), ma un comando in coda potrebbe
+         arrivare qui: degradiamo con grazia invece di fondare una colonia-luna. */
+      if (ORION.system && ORION.system.generate && ORION.system.findBody && ORION.system.BODY_TYPES) {
+        try {
+          const _sys = ORION.system.generate(game.galaxy, to);
+          const _b = ORION.system.findBody(_sys, bodyKey);
+          const _def = _b && ORION.system.BODY_TYPES[_b.type];
+          if (_def && !_def.habitable) return { ok: false, reason: 'Corpo non abitabile — solo estrazione' };
+        } catch (_) { /* permissivo: se non riesco a risolvere il corpo, non blocco */ }
+      }
       if (!fleetHasColonial(fleet)) return { ok: false, reason: 'Nessuna nave coloniale in flotta' };
       const foundationI = Math.max(20, order.foundationI || 60);
       const orbitI = (typeof order.orbitI === 'number') ? Math.max(0, order.orbitI) : COLONIZE_ORBIT_DURATION;

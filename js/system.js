@@ -79,9 +79,19 @@
       vantaggi: 'Elio-3, gas rari', svantaggi: 'Non abitabile, solo estrazione orbitale',
       palette: { bands: true }   // colore scelto per-corpo (varianti sotto)
     },
+    /* Redesign lune 2026 (richiesta utente): la luna NON è più colonizzabile.
+       Competeva male coi pianeti (14 slot, pop cap 3) ed era una brutta copia
+       di un mondo vero. Ora è un GIACIMENTO A PANIERE non abitabile — si estrae
+       (flotta estrattore o stazione ancorata) un paniere proporzionale a tutti
+       i suoi potenziali, più uno strato di risorse avanzate sbloccato dallo
+       scan dell'Osservatorio. `habitable:false` è lo switch unico: disattiva
+       il bottone Colonizza (main.js), il flag colonizable (fleet-target.js) e
+       mostra il badge "Non abitabile". L'estrazione passa da anomaly.js
+       (BODY_GIACIMENTO.luna). I corpi prime d'origine restano rocky-only
+       (galaxy.pickBestHabitableBody), quindi nessun impatto su home/AI. */
     luna: {
-      label: 'Luna', cat: 'moon', habitable: true,
-      vantaggi: 'Varia, compatta', svantaggi: 'Gravità bassa, capacità ridotta',
+      label: 'Luna', cat: 'moon', habitable: false,
+      vantaggi: 'Estrazione a paniere (tutte le risorse in proporzione)', svantaggi: 'Non colonizzabile, gravità bassa',
       palette: { sea: '#7c8290', land: '#9aa0ad', accent: '#c2c8d2', craters: true }
     },
     cintura: {
