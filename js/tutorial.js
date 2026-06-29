@@ -1457,9 +1457,11 @@
         'bersagli da sorvegliare, promemoria diplomatici e di ricerca.</p>' +
         '<p>Da un <strong>sistema</strong>, un <strong>pianeta</strong>, una <strong>flotta</strong> o una <strong>civiltà</strong> ' +
         'usa il bottone <strong>📌 Appunta</strong> nella barra contestuale: scegli una categoria, una priorità e (se vuoi) ' +
-        'una nota breve. Lo trovi nella linguetta <strong>Diario</strong> della Plancia d\'Impero.</p>' +
-        '<p>Filtra per categoria con i chip in alto; <strong>✓</strong> archivia un appunto risolto, ' +
-        '<strong>✕</strong> lo elimina. Niente scadenze, niente cronaca: solo tu e la tua lista.</p>'
+        'una nota breve. Lo trovi nella linguetta <strong>Hub d\'Impero</strong> della Plancia d\'Impero, ' +
+        'sezione <strong>Diario strategico</strong> sotto le colonie attive.</p>' +
+        '<p>Filtra per categoria con i chip in alto; <strong>✎</strong> modifica nota/priorità, ' +
+        '<strong>✓</strong> archivia un appunto risolto, <strong>✕</strong> lo elimina. ' +
+        'Niente scadenze, niente cronaca: solo tu e la tua lista.</p>'
     }
   ];
 

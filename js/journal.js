@@ -150,9 +150,10 @@
     if (i < 0) return false;
     var p = game.journal.pins[i];
     if (!patch || typeof patch !== 'object') return false;
+    /* Integrità: cat/ref/refLabel sono strutturali, non patchabili.
+       Per cambiarli l'utente cancella e ricrea il pin. */
     if (typeof patch.note === 'string') p.note = clampNote(patch.note);
     if (patch.tags) p.tags = normalizeTags(p.cat, Object.assign({}, p.tags, patch.tags));
-    if (typeof patch.refLabel === 'string') p.refLabel = patch.refLabel;
     return true;
   }
 
