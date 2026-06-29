@@ -187,8 +187,17 @@
     return fp;
   }
   function legEta(game, fromId, toId, minSpeed) {
-    if (ORION.fleet && ORION.fleet.tempoLeg) return ORION.fleet.tempoLeg(game.galaxy, fromId, toId, minSpeed);
-    return 50;
+    let t = (ORION.fleet && ORION.fleet.tempoLeg)
+      ? ORION.fleet.tempoLeg(game.galaxy, fromId, toId, minSpeed) : 50;
+    /* Campo di prossimità FSP (richiesta utente 2026-06-29, §17.7.4): il
+       rallentamento/accelerazione vale anche per le flottiglie ambientali AI
+       ("legge fisica" simmetrica). Usura/viveri non sono modellati per queste
+       flotte leggere → applichiamo solo il canale di viaggio (drag). */
+    if (ORION.phenomena && ORION.phenomena.legField) {
+      const fld = ORION.phenomena.legField(game.galaxy, fromId, toId);
+      if (fld && fld.dragMul && fld.dragMul !== 1) t = Math.max(1, Math.round(t * fld.dragMul));
+    }
+    return t;
   }
   function path(game, fromId, toId) {
     if (ORION.fleet && ORION.fleet.computePath) return ORION.fleet.computePath(game.galaxy, fromId, toId);
