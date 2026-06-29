@@ -467,6 +467,9 @@ function loadUiPrefs() {
     }
     if (d.empireDeckOpen != null) ORION.empireDeckOpen = !!d.empireDeckOpen;
     if (typeof d.lpTab === 'string') ORION.lpTab = d.lpTab;
+    /* Compat: la tab autonoma 'journal' è stata fusa sotto 'roster'
+       (Hub d'Impero). Vecchie prefs salvate vengono normalizzate. */
+    if (ORION.lpTab === 'journal') ORION.lpTab = 'roster';
     if (d.fleetGroupCollapsed && typeof d.fleetGroupCollapsed === 'object') {
       ORION.fleetGroupCollapsed = d.fleetGroupCollapsed;
     }
@@ -15269,7 +15272,7 @@ function renderLeftPanel() {
   }
 
   const lpTabs = [
-    { id: 'roster',    iconName: 'roster',    tone: 'cyan',   label: 'Roster',        alert: rosterAlert },
+    { id: 'roster',    iconName: 'roster',    tone: 'cyan',   label: 'Hub d\'Impero',  alert: rosterAlert },
     { id: 'fleet',     iconName: 'fleet',     tone: 'cyan',   label: 'Flotte',        alert: warThreats ? 'bad' : null },
     { id: 'crews',     iconName: 'forces',    tone: 'amber',  label: 'Equipaggi',     alert: crewAlert },
     { id: 'launcher',  iconName: 'settings',  tone: 'gold',   label: 'Sale e moduli', alert: (typeof dispatchPending === 'function' && dispatchPending()) ? 'info' : null },
@@ -15282,8 +15285,6 @@ function renderLeftPanel() {
      eventi importanti non visti (e la tab Cronaca non è quella attiva). */
   const chronUnreadAny = !!((ORION.chronicleUnread && (ORION.chronicleUnread.galaxy || ORION.chronicleUnread.colony)));
   lpTabs.push({ id: 'chronicle', iconName: 'chronicle', tone: 'green', label: 'Cronaca', alert: chronUnreadAny ? 'info' : null });
-  /* M-journal: Diario Strategico — appunti del giocatore. */
-  lpTabs.push({ id: 'journal',   iconName: 'pin',       tone: 'amber', label: 'Diario',  alert: null });
 
   /* Linguetta attiva: se 'council' ma il Consiglio non è costituito, fallback. */
   let activeLp = ORION.lpTab;
@@ -15304,7 +15305,17 @@ function renderLeftPanel() {
   /* Corpo della sola sezione attiva. */
   let bodyHtml = '';
   if (activeLp === 'roster') {
-    bodyHtml = '<div class="lp-tab-body"><div class="lp-tab-body__count">' + rosterCount + '</div>' + rosterBody + '</div>';
+    /* M-journal (Hub d'Impero): Roster + Diario strategico in sequenza,
+       senza accordion. Divider sottile tra i due sotto-blocchi. */
+    const journalBlock =
+      '<div class="lp-hub-journal" data-bind="journal-host">' +
+        '<div class="lp-hub-journal__head">' +
+          '<span class="ui-icon ui-icon--amber" aria-hidden="true">' + ((ORION.icon && ORION.icon('pin')) || '📌') + '</span>' +
+          '<strong>Diario strategico</strong>' +
+        '</div>' +
+        journalSidebarHtml() +
+      '</div>';
+    bodyHtml = '<div class="lp-tab-body"><div class="lp-tab-body__count">' + rosterCount + '</div>' + rosterBody + journalBlock + '</div>';
   } else if (activeLp === 'fleet') {
     bodyHtml = '<div class="lp-tab-body">' + fleetTabBody + '</div>';
   } else if (activeLp === 'crews') {
@@ -15320,8 +15331,6 @@ function renderLeftPanel() {
     bodyHtml = '<div class="lp-tab-body">' + councilBody + '</div>';
   } else if (activeLp === 'chronicle') {
     bodyHtml = '<div class="lp-tab-body lp-tab-body--chron" data-bind="chronicle-host">' + cronHtml + '</div>';
-  } else if (activeLp === 'journal') {
-    bodyHtml = '<div class="lp-tab-body lp-tab-body--journal" data-bind="journal-host">' + journalSidebarHtml() + '</div>';
   }
 
   host.innerHTML = '<div class="lp-stickyhead">' + empHtml + navHorizontalHtml + tabsHtml + '</div>' + bodyHtml;
@@ -15382,8 +15391,8 @@ function renderLeftPanel() {
   const empBtn = host.querySelector('[data-action="empire-edit"]');
   if (empBtn) empBtn.addEventListener('click', openEmpireEditor);
 
-  /* M-journal: bind handlers Diario (se la tab è attiva). */
-  if (activeLp === 'journal') bindJournalSidebar(host);
+  /* M-journal: bind handlers Diario (vive sotto la tab "Hub d'Impero"). */
+  if (activeLp === 'roster') bindJournalSidebar(host);
 
   /* Bind handlers — linguette: cambia ORION.lpTab e ridisegna.
      Aprendo la tab Cronaca azzeriamo l'aura della sezione attualmente
@@ -16412,6 +16421,7 @@ function journalSidebarHtml() {
           '</span>' +
         '</button>' +
         '<div class="lp-journal__ops">' +
+          '<button class="btn btn--mini" type="button" data-jaction="edit" data-jid="' + escapeHtml(p.id) + '" title="Modifica appunto" aria-label="Modifica">✎</button>' +
           (p.status === 'active'
             ? '<button class="btn btn--mini" type="button" data-jaction="resolve" data-jid="' + escapeHtml(p.id) + '" title="Segna come risolto">✓</button>'
             : '<button class="btn btn--mini" type="button" data-jaction="reopen" data-jid="' + escapeHtml(p.id) + '" title="Riapri">↺</button>') +
@@ -16461,6 +16471,15 @@ function bindJournalSidebar(host) {
       ORION.journal.setStatus(g, b.dataset.jid, 'active');
       persistGame(g);
       renderLeftPanel();
+    });
+  });
+  host.querySelectorAll('[data-jaction="edit"]').forEach(function (b) {
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      const id = b.dataset.jid;
+      const pin = (g.journal && g.journal.pins || []).find(function (p) { return p && p.id === id; });
+      if (!pin) return;
+      openJournalPinModal({ editId: id, pin: pin });
     });
   });
   host.querySelectorAll('[data-jaction="delete"]').forEach(function (b) {
@@ -16518,30 +16537,46 @@ function openJournalPinModal(seed) {
   ORION.journal.ensure(g);
   seed = seed || {};
 
+  /* Modalità: 'create' (default) o 'edit' se passato seed.editId+seed.pin.
+     In edit, categoria e ref sono bloccati (sono strutturali). */
+  const editPin = (seed.editId && seed.pin) ? seed.pin : null;
+  const mode = editPin ? 'edit' : 'create';
+
   /* Deduzioni dal contesto. */
-  let initKind = seed.kind || null;
+  let initKind = null;
   let initId = null;
   let initLabel = '';
-  if (initKind === 'system' && seed.sysId != null) {
-    initId = seed.sysId;
-    initLabel = journalRefLabel(g, 'system', seed.sysId);
-  } else if (initKind === 'planet' && seed.sysId != null && seed.bodyKey) {
-    initId = seed.sysId + ':' + seed.bodyKey;
-    initLabel = journalRefLabel(g, 'planet', initId);
-  } else if (initKind === 'fleet' && seed.fleetId) {
-    initId = seed.fleetId;
-    initLabel = journalRefLabel(g, 'fleet', initId);
-  } else if (initKind === 'civ' && seed.civId) {
-    initId = seed.civId;
-    initLabel = journalRefLabel(g, 'civ', initId);
-  } else if (initKind === 'tech' && seed.techId) {
-    initId = seed.techId;
-    initLabel = journalRefLabel(g, 'tech', initId);
+  if (editPin) {
+    if (editPin.ref && editPin.ref.kind) {
+      initKind = editPin.ref.kind;
+      initId = editPin.ref.id;
+    }
+    initLabel = editPin.refLabel || (editPin.ref ? journalRefLabel(g, editPin.ref.kind, editPin.ref.id) : '');
+  } else {
+    initKind = seed.kind || null;
+    if (initKind === 'system' && seed.sysId != null) {
+      initId = seed.sysId;
+      initLabel = journalRefLabel(g, 'system', seed.sysId);
+    } else if (initKind === 'planet' && seed.sysId != null && seed.bodyKey) {
+      initId = seed.sysId + ':' + seed.bodyKey;
+      initLabel = journalRefLabel(g, 'planet', initId);
+    } else if (initKind === 'fleet' && seed.fleetId) {
+      initId = seed.fleetId;
+      initLabel = journalRefLabel(g, 'fleet', initId);
+    } else if (initKind === 'civ' && seed.civId) {
+      initId = seed.civId;
+      initLabel = journalRefLabel(g, 'civ', initId);
+    } else if (initKind === 'tech' && seed.techId) {
+      initId = seed.techId;
+      initLabel = journalRefLabel(g, 'tech', initId);
+    }
   }
 
   /* Categoria di default sensata: planet → colonize, civ → diplo, tech → tech. */
   let defaultCat = 'note';
-  if (initKind === 'planet') defaultCat = 'colonize';
+  if (editPin) {
+    defaultCat = editPin.cat || 'note';
+  } else if (initKind === 'planet') defaultCat = 'colonize';
   else if (initKind === 'system') defaultCat = 'presidio';
   else if (initKind === 'civ') defaultCat = 'diplo';
   else if (initKind === 'tech') defaultCat = 'tech';
@@ -16549,10 +16584,10 @@ function openJournalPinModal(seed) {
 
   const state = {
     cat: defaultCat,
-    priority: 'med',
-    role: '',
-    reason: '',
-    note: ''
+    priority: (editPin && editPin.tags && editPin.tags.priority) ? editPin.tags.priority : 'med',
+    role: (editPin && editPin.tags && editPin.tags.role) ? editPin.tags.role : '',
+    reason: (editPin && editPin.tags && editPin.tags.reason) ? editPin.tags.reason : '',
+    note: editPin ? (editPin.note || '') : ''
   };
 
   function render() {
@@ -16560,7 +16595,11 @@ function openJournalPinModal(seed) {
     const catBtns = J.CATS.map(function (c) {
       const tint = journalCatTintClass(c.tint);
       const isAct = (c.key === state.cat);
-      return '<button class="journal-modal__cat' + (isAct ? ' is-active' : '') + '" type="button" data-jcat="' + c.key + '">' +
+      /* In edit, la categoria è strutturale: mostra solo quella attiva, disabilitando il resto. */
+      const isLocked = (mode === 'edit');
+      if (isLocked && !isAct) return '';
+      const dis = isLocked ? ' disabled aria-disabled="true" title="Categoria non modificabile — elimina e ricrea per cambiarla"' : '';
+      return '<button class="journal-modal__cat' + (isAct ? ' is-active' : '') + (isLocked ? ' is-locked' : '') + '" type="button" data-jcat="' + c.key + '"' + dis + '>' +
         '<span class="ui-icon ui-icon--' + tint + '" aria-hidden="true">' + ((ORION.icon && ORION.icon(c.iconName)) || '') + '</span>' +
         '<span>' + escapeHtml(c.label) + '</span>' +
       '</button>';
@@ -16597,7 +16636,7 @@ function openJournalPinModal(seed) {
         '<header class="journal-modal__head">' +
           '<h3 class="journal-modal__title">' +
             '<span class="ui-icon ui-icon--amber" aria-hidden="true">' + ((ORION.icon && ORION.icon('pin')) || '📌') + '</span> ' +
-            'Nuovo appunto' +
+            (mode === 'edit' ? 'Modifica appunto' : 'Nuovo appunto') +
           '</h3>' +
           '<button class="btn btn--mini btn--icon-only" type="button" data-jclose aria-label="Chiudi">' +
             ((ORION.icon && ORION.icon('close')) || '✕') +
@@ -16618,7 +16657,7 @@ function openJournalPinModal(seed) {
         '</div>' +
         '<footer class="journal-modal__foot">' +
           '<button class="btn" type="button" data-jclose>Annulla</button>' +
-          '<button class="btn btn--primary" type="button" data-jsave>Appunta</button>' +
+          '<button class="btn btn--primary" type="button" data-jsave>' + (mode === 'edit' ? 'Salva' : 'Appunta') + '</button>' +
         '</footer>' +
       '</div>';
     host.hidden = false;
@@ -16662,22 +16701,31 @@ function openJournalPinModal(seed) {
       const tags = { priority: state.priority };
       if (state.cat === 'presidio' && state.role) tags.role = state.role;
       if (state.cat === 'colonize' && state.reason) tags.reason = state.reason;
-      const ref = (initKind && initId != null) ? { kind: initKind, id: initId } : null;
-      const ds = (ORION.time && ORION.time.currentDS) ? ORION.time.currentDS(g) : '';
-      ORION.journal.addPin(g, {
-        cat: state.cat,
-        ref: ref,
-        refLabel: initLabel || '',
-        tags: tags,
-        note: state.note,
-        createdAt: ds
-      });
-      persistGame(g);
-      if (typeof showToast === 'function') showToast('Appunto aggiunto al Diario');
-      if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('journal');
+      if (mode === 'edit' && editPin) {
+        ORION.journal.updatePin(g, editPin.id, {
+          tags: tags,
+          note: state.note
+        });
+        persistGame(g);
+        if (typeof showToast === 'function') showToast('Appunto aggiornato');
+      } else {
+        const ref = (initKind && initId != null) ? { kind: initKind, id: initId } : null;
+        const ds = (ORION.time && ORION.time.currentDS) ? ORION.time.currentDS(g) : '';
+        ORION.journal.addPin(g, {
+          cat: state.cat,
+          ref: ref,
+          refLabel: initLabel || '',
+          tags: tags,
+          note: state.note,
+          createdAt: ds
+        });
+        persistGame(g);
+        if (typeof showToast === 'function') showToast('Appunto aggiunto al Diario');
+        if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('journal');
+      }
       close();
-      /* Aggiorna sidebar se la tab Diario è aperta. */
-      if (ORION.lpTab === 'journal') renderLeftPanel();
+      /* Aggiorna sidebar se l'Hub d'Impero (che ospita il Diario) è aperto. */
+      if (ORION.lpTab === 'roster') renderLeftPanel();
     });
     host.addEventListener('click', function (e) {
       const scrim = host.querySelector('.journal-modal__scrim');

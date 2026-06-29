@@ -9479,6 +9479,14 @@ select.main-menu__input { cursor: pointer; }
    M-journal — Diario Strategico
    ===================================================================== */
 .lp-journal { display: flex; flex-direction: column; gap: 8px; padding: 4px; }
+.lp-hub-journal { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--c-border-soft); }
+.lp-hub-journal__head {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.82rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--c-text-soft);
+  padding: 2px 4px 6px;
+}
+.journal-modal__cat.is-locked { opacity: 1; cursor: default; }
 .lp-journal__chips {
   display: flex; flex-wrap: wrap; gap: 4px;
   padding-bottom: 6px;
