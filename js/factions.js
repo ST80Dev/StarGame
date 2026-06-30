@@ -34,7 +34,10 @@
       vocation: 'mercantili',
       affinity: 'mixta',
       color: '#d96bd0',
-      sizeRange: [4, 6],
+      sizeRange: [6, 9],        // rete capillare (richiesta utente 2026-06-30):
+                                // più hub sparsi → più facile incrociarne uno e
+                                // aprire il canale del fixer. Cap effettivo =
+                                // n. di cluster non-home disponibili.
       distribution: 'sparse',   // 1 hub per cluster
       expandMul: 0.20,          // ~1 nodo ogni ~4000-8000 Ι
       traitLabel: 'Fixer del mercato grigio · spread basso nei cluster'

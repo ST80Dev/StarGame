@@ -40,8 +40,11 @@
     /* Movimento ambientale attivo molto presto (NON gated dal warm-up 500
        delle incursioni): basta che la galassia/civiltà esistano. */
     START_I: 24,
-    GLOBAL_CAP: 9,          // max flottiglie ambientali simultanee
+    GLOBAL_CAP: 11,         // max flottiglie ambientali simultanee (alzato per
+                            // dare spazio al traffico Mekhari, 2026-06-30)
     PER_CIV_CAP: 2,
+    PER_CIV_CAP_MEKHARI: 3, // i Mekhari (corrieri del mercato grigio) viaggiano
+                            // più di chiunque → più carovane simultanee
     SPAWN_PER_TICK: 2,      // max spawn per decisione (anti-burst)
     SPAWN_CHANCE: 0.18,     // per civ idonea per decisione
     SPAWN_RAMP_I: 1500,     // sotto: chance scalata (decollo dolce, non rigido)
@@ -389,11 +392,16 @@
       if (game.aiFleets.length >= CFG.GLOBAL_CAP) break;
       const civ = order[i];
       if (!civ.systems || !civ.systems.length) continue;
-      if (countCivFleets(game, civ.id) >= CFG.PER_CIV_CAP) continue;
+      /* I Mekhari (fixer mercantile) tengono più carovane in viaggio degli
+         altri → cap per-civ più alto, così li incroci più spesso (richiesta
+         utente 2026-06-30). */
+      const perCivCap = civ.faction === 'mekhari' ? CFG.PER_CIV_CAP_MEKHARI : CFG.PER_CIV_CAP;
+      if (countCivFleets(game, civ.id) >= perCivCap) continue;
       const crng = rng(game, 'spawn:' + civ.id + ':' + I);
       let chance = CFG.SPAWN_CHANCE * ramp;
       /* Le pacifiste/isolazioniste muovono meno; predoni/espansionisti di più. */
-      if (civ.vocation === 'isolazionisti' || civ.faction) chance *= 0.5;
+      if (civ.faction === 'mekhari') chance *= 1.6;            // corrieri ovunque
+      else if (civ.vocation === 'isolazionisti' || civ.faction) chance *= 0.5;
       if (civ.vocation === 'espansionisti' || civ.vocation === 'predoni' || civ.vocation === 'imperialisti') chance *= 1.4;
       if (!crng.chance(chance)) continue;
       if (spawnOne(game, civ, crng, events)) spawned++;
@@ -655,7 +663,7 @@
        pavimento generoso anche al bordo): ora il bordo rampa lentissimo e
        solo la copertura forte (colonie / pedinamento) porta a FULL in fretta. */
     af.intel = Math.min(1, af.intel + CFG.INTEL_GAIN * best);
-    markCivFlagSeen(game, af);
+    markCivFlagSeen(game, af, events);
 
     /* Vicino a una colonia? (nodo presenza è un tuo sistema colonia o adiacente). */
     let nearColony = false;
@@ -777,10 +785,19 @@
      dossier mirato dei Mekhari (mekhari.js): pedinare/identificare una flotta
      ORA serve a qualcosa sul piano della civiltà (chiude il silo flotta↔civ).
      Idempotente, additivo, persiste wholesale dentro game.civs (nessun bump). */
-  function markCivFlagSeen(game, af) {
+  function markCivFlagSeen(game, af, events) {
     if (!af || (af.intel || 0) < CFG.INTEL_FULL) return;
     const civ = civById(game, af.civId);
-    if (!civ || civ.flagSeen) return;
+    if (!civ) return;
+    /* Mekhari = fixer galattico (richiesta utente 2026-06-30): identificare una
+       loro flotta apre SUBITO un canale → promozione a "contattato" (sblocca
+       diplomazia + mercato grigio + intel). Idempotente in markContact. */
+    if (civ.faction === 'mekhari' && ORION.ai && ORION.ai.markContact) {
+      const KN = ORION.ai.KNOWLEDGE || { contacted: 2 };
+      const rank = ORION.ai.knowledgeRank ? ORION.ai.knowledgeRank(civ) : 0;
+      if (rank < KN.contacted) ORION.ai.markContact(game, civ, events || null, 'mekhari-network');
+    }
+    if (civ.flagSeen) return;
     civ.flagSeen = true;
     civ.flagSeenI = game.timeImpulsi || 0;
     civ.flagSeenSysId = af.lastSeenSysId != null ? af.lastSeenSysId : af.systemId;
@@ -814,7 +831,7 @@
         af.lastSeenI = I;
         af.lastSeenSysId = pf.location.systemId; // visto incrociando: ultima posizione nota
         af.intel = Math.min(1, (af.intel || 0) + CFG.CROSS_INTEL_BUMP);
-        markCivFlagSeen(game, af);
+        markCivFlagSeen(game, af, events);
         /* Incrocio con una flotta OSTILE che NON è stata ingaggiata (la tua
            non è aggressiva): è il "momento per decidere" — evento con
            auto-pausa, niente danno (richiesta utente 2026-06-19). Le altre
@@ -981,7 +998,7 @@
       af.lastSeenI = I;
       af.lastSeenSysId = playerSys; // pedinata da co-locato: ultima posizione nota
       af.intel = Math.min(1, (af.intel || 0) + CFG.FOLLOW_INTEL_GAIN);
-      markCivFlagSeen(game, af);
+      markCivFlagSeen(game, af, events);
       af.shadowedBy = pf.id;
       /* Sosta col bersaglio: ferma la flotta (non vagare). */
       if (pf.orders && pf.orders.type !== 'idle' && pf.location.status === 'orbiting') {
