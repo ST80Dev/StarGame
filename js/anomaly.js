@@ -686,8 +686,12 @@
       const s = game.anomalies[k];
       if (!s || s.kind === 'reliquie' || !(s.reserve > 0)) return;
       const station = s.basket ? anchoredStation(game, s) : null;
-      const fleet = station ? null : fleetSurveyingSite(game, s.sysId, s.kind, s.bodyKey);
-      if (!station && !fleet) return;
+      /* Estrazione da STAZIONE ancorata: auto-alimenta il magazzino della
+         stazione (solo l'eccedenza ×L arriva alla colonia, variabile) → NON la
+         contiamo nel surplus diretto per colonia. Qui solo l'estrattore-flotta. */
+      if (station) return;
+      const fleet = fleetSurveyingSite(game, s.sysId, s.kind, s.bodyKey);
+      if (!fleet) return;
       const colKey = depositColonyKey(game, fleet, s);
       if (!colKey) return;
       const rate = Math.min(station ? stationExtractRate(station) : harvestRateFor(game, fleet), s.reserve);

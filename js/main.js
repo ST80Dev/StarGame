@@ -6661,6 +6661,7 @@ function renderStationsView(stage) {
           '<div class="station-actions">' + upgBtn +
             '<button class="btn btn--mini btn--danger" data-action="station-demolish" data-id="' + st.id + '" type="button">Smantella</button>' +
           '</div>' +
+          stationSupplierHtml(g, st) +
           stationYardHtml(st);
       }
 
@@ -6710,7 +6711,7 @@ function renderStationsView(stage) {
       '<button class="btn btn--enter station-view__new" data-action="station-new" type="button"' + (canFound ? '' : ' disabled') + '>' +
         '+ Costruisci stazione</button>' +
       listHtml +
-      '<p class="panel__note">Una stazione si costruisce <em>a distanza</em> da una tua colonia (max ' + ST.CFG.BUILD_RANGE + ' salti) e cresce di livello come una struttura: ogni modulo aggiunge corazza, fuoco difensivo e capacità del serbatoio. La <em>linea di rifornimento</em> dalla colonia riempie il serbatoio; se isolata le funzioni degradano (mai distrutta da sé). Le flotte si riforniscono qui in territorio profondo.</p>' +
+      '<p class="panel__note">Una stazione si costruisce <em>a distanza</em> da una tua colonia (fino a ' + ST.CFG.MAX_RANGE + ' salti) e cresce di livello come una struttura: ogni modulo aggiunge corazza, fuoco difensivo e capacità del magazzino. Una colonia <em>rifornitrice</em> (scegliibile e riassegnabile) riempie il magazzino delle 4 risorse; oltre i ' + ST.CFG.COMFORT_RANGE + ' salti l\'efficienza logistica cala con la distanza (più lenta a rifornire/riparare), ma la potenza di fuoco resta piena. Le flotte si riforniscono qui in territorio profondo.</p>' +
     '</div>';
 
   const newBtn = stage.querySelector('[data-action="station-new"]');
@@ -6732,6 +6733,9 @@ function renderStationsView(stage) {
       persistGame(g); renderStationsView(stage); updateGlobalResourceHud();
     });
   });
+  stage.querySelectorAll('[data-action="station-supplier"]').forEach(function (b) {
+    b.addEventListener('click', function () { openStationSupplierPicker(stage, b.dataset.id); });
+  });
   stage.querySelectorAll('[data-action="station-cancel"]').forEach(function (b) {
     b.addEventListener('click', function () {
       ST.cancelBuild(g, b.dataset.id);
@@ -6750,6 +6754,73 @@ function renderStationsView(stage) {
       persistGame(g); renderStationsView(stage);
     });
   });
+}
+
+/* Riga "Rifornitrice" della card stazione (redesign logistica 2026): colonia
+   che la rifornisce + distanza/efficienza logistica L + bottone Riassegna. */
+function stationSupplierHtml(g, st) {
+  const ST = ORION.station;
+  if (!ST || !ST.supplierColonyFor || !ST.isPlayerStation(st) || st.phase === 'building') return '';
+  const sup = ST.supplierColonyFor(g, st);
+  const reassign = '<button class="btn btn--mini" data-action="station-supplier" data-id="' + st.id + '" type="button">Riassegna</button>';
+  if (!sup) {
+    return '<div class="station-supplier is-crit">⚠ Nessuna rifornitrice entro ' + ST.CFG.MAX_RANGE +
+      ' salti — magazzino non si ricarica ' + reassign + '</div>';
+  }
+  const Lpct = Math.round(sup.L * 100);
+  const effHtml = sup.L >= 1
+    ? '<span class="is-ok">piena</span>'
+    : '<span class="is-warn">' + Lpct + '% (distanza)</span>';
+  return '<div class="station-supplier">' +
+    '<span class="station-supplier__lbl">Rifornitrice</span> <strong>' + escapeHtml(colonyNameFromKey(sup.key)) + '</strong>' +
+    ' · ' + sup.hops + ' salti · efficienza ' + effHtml + ' ' + reassign +
+  '</div>';
+}
+
+/* Picker di riassegnazione della rifornitrice: colonie proprie operative entro
+   MAX_RANGE, con distanza/L. Libera e istantanea (scelta utente). */
+function openStationSupplierPicker(stage, stationId) {
+  const g = ORION.game, ST = ORION.station;
+  if (!g || !ST) return;
+  const st = ST.stationById(g, stationId);
+  if (!st) return;
+  const opts = ST.eligibleSuppliers ? ST.eligibleSuppliers(g, st) : [];
+  const ov = document.createElement('div');
+  ov.className = 'fleet-create-overlay';
+  function close() { ov.remove(); document.removeEventListener('keydown', onKey); }
+  function onKey(e) { if (e.key === 'Escape') close(); }
+  let rows;
+  if (opts.length) {
+    rows = '<ul class="station-cand-list">' + opts.map(function (o) {
+      const Lpct = Math.round(o.L * 100);
+      const cur = (st.supplierColonyKey === o.key) ? ' <em>(attuale)</em>' : '';
+      const eff = o.L >= 1 ? 'efficienza piena' : ('efficienza ' + Lpct + '% · distanza');
+      return '<li class="station-cand">' +
+        '<span class="station-cand__name">' + escapeHtml(colonyNameFromKey(o.key)) + cur + '</span>' +
+        '<span class="station-cand__hops">' + o.hops + ' salti · ' + eff + '</span>' +
+        '<button class="btn btn--mini btn--enter" data-pick="' + escapeHtml(o.key) + '" type="button">Scegli</button>' +
+      '</li>';
+    }).join('') + '</ul>';
+  } else {
+    rows = '<p class="panel__note">Nessuna tua colonia operativa entro ' + ST.CFG.MAX_RANGE + ' salti da questa stazione.</p>';
+  }
+  ov.innerHTML =
+    '<div class="fleet-create-overlay__panel">' +
+      '<header class="fleet-create-overlay__head"><h3>Rifornitrice della stazione</h3>' +
+        '<button class="btn btn--mini" data-close type="button">✕</button></header>' +
+      '<p class="sysinfo__sub">Oltre i 4 salti l\'efficienza logistica cala (rifornimento/riparazione/estrazione più lenti), ma la potenza di fuoco resta piena.</p>' +
+      rows +
+    '</div>';
+  ov.querySelector('[data-close]').addEventListener('click', close);
+  ov.querySelectorAll('[data-pick]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const r = ST.assignSupplier(g, st, b.dataset.pick);
+      if (!r.ok) { showToast(r.reason || 'Riassegnazione rifiutata'); return; }
+      persistGame(g); close(); renderStationsView(stage); updateGlobalResourceHud();
+    });
+  });
+  document.addEventListener('keydown', onKey);
+  (document.body || document.documentElement).appendChild(ov);
 }
 
 /* Pannello "Cantiere leggero/medio" di una stazione operativa: riserva
