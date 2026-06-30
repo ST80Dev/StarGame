@@ -38,8 +38,16 @@
   /* ------------------------------------------------------------------ */
   var CFG = {
     MAX_LEVEL: 4,
-    BUILD_RANGE: 4,          // hop massimi dalla colonia fondatrice
-    SUPPLY_RANGE: 4,         // hop massimi entro cui una colonia rifornisce
+    /* Redesign logistica 2026: niente più muro netto a 4 hop. Costruzione e
+       rifornitura sono ammesse fino a MAX_RANGE hop; entro COMFORT_RANGE
+       l'efficienza logistica è piena, poi cala col gradiente L fino a L_FLOOR
+       a MAX_RANGE. BUILD_RANGE/SUPPLY_RANGE restano (= MAX_RANGE) per i
+       chiamanti esistenti. */
+    COMFORT_RANGE: 4,        // hop entro cui L = 1.0 (pieno regime)
+    MAX_RANGE: 8,            // hop massimi (costruzione + rifornitura); oltre → isolated
+    L_FLOOR: 0.50,           // efficienza logistica minima a MAX_RANGE
+    BUILD_RANGE: 8,          // alias storico = MAX_RANGE
+    SUPPLY_RANGE: 8,         // alias storico = MAX_RANGE
 
     /* Costo/tempo di FONDAZIONE (livello 1). Gli upgrade scalano ×livello
        (stepCost/stepTime, come le strutture #38). */
@@ -50,39 +58,38 @@
     /* Capacità per livello (× moduleSum: rendimento crescente, #38). */
     HP_BASE: 180,            // corazza per modulo
     DEF_FP_BASE: 10,         // fuoco difensivo per modulo
-    SUPPLY_CAP_BASE: 300,    // serbatoio per modulo
 
-    /* Linea di rifornimento (upkeep morbido). */
-    REFILL_RATE: 2.0,        // unità di serbatoio/Ι riempite × livello
-    REFILL_COST: { met: 0.4, food: 0.3, water: 0.3 }, // risorse/unità riempita
-    UPKEEP: 0.4,             // serbatoio drenato/Ι × livello (esercizio)
+    /* MAGAZZINO TIPIZZATO UNICO (redesign 2026): sostituisce il serbatoio
+       astratto + la riserva metalli. Tiene le 4 risorse base, quasi come lo
+       stock di una colonia; da qui escono rifornimento flotte (4 risorse, come
+       a colonia), metallo del cantiere, upkeep e gating riparazione. Cap
+       per-risorsa × livello. Energia capiente: è la voce dominante del
+       rifornimento (propulsione su stazza). */
+    STORE_CAP_BASE: { food: 200, water: 200, met: 250, en: 600 },
 
-    REPAIR_RATE: 1.2,        // hp/Ι × livello (passiva, se supply ok e non sotto attacco)
+    /* Rifornimento dalla colonia: trasferimento 1:1 PER-RISORSA dallo stock,
+       cap di ritmo per Ι × livello (poi × L per distanza). */
+    REFILL_RATE: { food: 3, water: 3, met: 5, en: 9 },
 
-    /* Rifornimento flotte: serbatoio consumato per equipaggio per Ι di
-       autonomia restituita (#69). */
-    REFUEL_COST: 0.08,
+    /* Upkeep: sostentamento del personale di stazione (food/water) × livello. */
+    UPKEEP: { food: 0.2, water: 0.2 },
 
-    /* Soglie di stato del serbatoio (frazione del cap). */
+    REPAIR_RATE: 1.2,        // hp/Ι × livello × L (se non isolata e non sotto attacco)
+
+    /* Soglia "magazzino scarso" (frazione del cap totale). */
     LOW_FRAC: 0.25,
 
     /* ----------------------------------------------------------------
-       CANTIERE LEGGERO/MEDIO (decisione utente 2026-06-18). La Stazione
-       NON è una colonia: non produce risorse, ma può ASSEMBLARE navi
-       leggere/medie (fino alla Fregata) da una RISERVA DI METALLI dedicata,
-       riempita dalla stessa linea di rifornimento del serbatoio. Le navi
-       grandi (Incrociatore/Dread/Ammiraglia) restano esclusiva delle
-       colonie (Hangar+Bacino). Recovery-friendly (#22): se la riserva si
-       svuota la costruzione si METTE IN PAUSA, non fallisce.
+       CANTIERE LEGGERO/MEDIO (decisione utente 2026-06-18). Assembla navi
+       leggere/medie (≤ Fregata) consumando METALLO dal magazzino unico
+       (niente più riserva dedicata). Recovery-friendly (#22): se il metallo
+       si esaurisce la costruzione si METTE IN PAUSA, non fallisce.
        ---------------------------------------------------------------- */
-    /* Classi assemblabili alla stazione (≤ Fregata, niente capitali né
-       coloniale: la colonizzazione resta legata alle colonie). */
     SHIPYARD_CLASSES: ['explorer', 'estrattore', 'caccia', 'intercettore', 'corvetta', 'fregata'],
     /* Slip (cantieri paralleli) per livello stazione. idx = level (1..4). */
-    BUILD_SLOTS_BY_LEVEL: [0, 1, 1, 2, 2],
-    MET_RESERVE_CAP_BASE: 250,   // tetto riserva metalli per modulo (× livello)
-    MET_REFILL_RATE: 8           // metallo/Ι versato dalla linea (× livello, 1:1 dallo stock colono)
+    BUILD_SLOTS_BY_LEVEL: [0, 1, 1, 2, 2]
   };
+  var STORE_RES = ['food', 'water', 'met', 'en'];
 
   /* ------------------------------------------------------------------ */
   function msum(level) {
@@ -91,7 +98,66 @@
   }
   function maxHp(level) { return Math.round(CFG.HP_BASE * msum(level)); }
   function defenseFp(level) { return Math.round(CFG.DEF_FP_BASE * msum(level)); }
-  function supplyCap(level) { return Math.round(CFG.SUPPLY_CAP_BASE * level); }
+
+  /* ------------------------------------------------------------------
+     MAGAZZINO TIPIZZATO (redesign 2026). Cap per-risorsa × livello, helper
+     di totale (per le soglie/UI), e migrazione lazy dai vecchi campi
+     `supply` (astratto) + `metReserve` → `store` tipizzato.
+     ------------------------------------------------------------------ */
+  function storeCap(level) {
+    var lvl = Math.max(1, level || 1), out = {};
+    for (var i = 0; i < STORE_RES.length; i++) out[STORE_RES[i]] = Math.round(CFG.STORE_CAP_BASE[STORE_RES[i]] * lvl);
+    return out;
+  }
+  function storeCapTotal(level) {
+    var c = storeCap(level), t = 0;
+    for (var i = 0; i < STORE_RES.length; i++) t += c[STORE_RES[i]];
+    return t;
+  }
+  function storeTotal(st) {
+    var s = st && st.store, t = 0;
+    if (!s) return 0;
+    for (var i = 0; i < STORE_RES.length; i++) t += (s[STORE_RES[i]] || 0);
+    return t;
+  }
+  /* Lazy: assicura st.store, migrando dai vecchi campi se presenti (save < redesign).
+     `supply` astratto → ripartito sui 4 (proporzioni del costo di rifornimento
+     storico met/food/water + energia stimata); `metReserve` → store.met.
+     Idempotente: una volta creato lo store, non rifa la migrazione. */
+  function ensureStore(st) {
+    if (!st) return null;
+    if (st.store && typeof st.store === 'object') return st.store;
+    var store = { food: 0, water: 0, met: 0, en: 0 };
+    var legacy = st.supply;
+    if (typeof legacy === 'number' && legacy > 0) {
+      /* Vecchio serbatoio astratto: ripartizione plausibile (food/water/met/en). */
+      store.food = legacy * 0.25; store.water = legacy * 0.25;
+      store.met = legacy * 0.20;  store.en = legacy * 0.30;
+    }
+    if (typeof st.metReserve === 'number' && st.metReserve > 0) store.met += st.metReserve;
+    /* Cap allo store del livello corrente (non sforare dopo la migrazione). */
+    var cap = storeCap(Math.max(1, st.level || 1));
+    for (var i = 0; i < STORE_RES.length; i++) {
+      var k = STORE_RES[i];
+      if (store[k] > cap[k]) store[k] = cap[k];
+    }
+    st.store = store;
+    delete st.supply; delete st.metReserve;
+    return store;
+  }
+
+  /* Efficienza logistica L ∈ [L_FLOOR, 1] in funzione della distanza-hop dalla
+     colonia rifornitrice: piena entro COMFORT_RANGE, poi lineare fino a L_FLOOR
+     a MAX_RANGE. Scala SOLO i ritmi (rifornimento, riparazione, consegna
+     estratto), mai la potenza ferma (fuoco/corazza). h Infinity → 0. */
+  function logisticsLForHops(hops) {
+    if (!isFinite(hops)) return 0;
+    if (hops <= CFG.COMFORT_RANGE) return 1;
+    if (hops > CFG.MAX_RANGE) return 0;
+    var span = Math.max(1, CFG.MAX_RANGE - CFG.COMFORT_RANGE);
+    var over = hops - CFG.COMFORT_RANGE;
+    return Math.max(CFG.L_FLOOR, 1 - (1 - CFG.L_FLOOR) * (over / span));
+  }
 
   /* Costo/tempo del PROSSIMO modulo (fondazione = livello 1). */
   function stepCost(toLevel) {
@@ -241,12 +307,14 @@
       buildLeft: chk.time,
       buildTotal: chk.time,
       hp: 0,
-      supply: 0,
+      /* Magazzino tipizzato unico (redesign 2026). */
+      store: { food: 0, water: 0, met: 0, en: 0 },
       supplyState: 'ok',
+      /* Colonia rifornitrice esplicita (riassegnabile). Default = fondatrice. */
+      supplierColonyKey: colonyKey,
       owner: null,               // null = giocatore; <civId> = catturata (#81 Fase B)
-      /* Cantiere leggero/medio (2026-06-18): riserva metalli + coda build +
-         flotta-cantiere dove confluiscono gli scafi assemblati. Additivi/lazy. */
-      metReserve: 0,
+      /* Cantiere leggero/medio: coda build + flotta-cantiere. Il metallo esce
+         dal magazzino unico (store.met), niente più riserva dedicata. */
       buildQueue: [],
       yardFleetId: null
     };
@@ -330,15 +398,17 @@
     return (st && !isPlayerStation(st)) ? st : null;
   }
   function isOperationalPort(station) {
-    return station && isPlayerStation(station) && station.phase !== 'building' && station.level >= 1 &&
-           station.supplyState !== 'isolated' && (station.supply || 0) > 0;
+    if (!station || !isPlayerStation(station) || station.phase === 'building' || station.level < 1) return false;
+    ensureStore(station);   // tollerante ai save vecchi caricati prima del primo tick
+    return station.supplyState !== 'isolated' && storeTotal(station) > 0;
   }
-  /* Cattura/riconquista. La cattura abbassa il serbatoio (saccheggiato) e
-     marca l'owner; la riconquista azzera owner e riporta hp a una frazione
-     (danneggiata ma recuperata). Recovery-friendly: mai persa per sempre. */
+  /* Cattura/riconquista. La cattura saccheggia il magazzino e marca l'owner;
+     la riconquista azzera owner e riporta hp a una frazione (danneggiata ma
+     recuperata). Recovery-friendly: mai persa per sempre. */
   function captureStation(station, civId) {
     station.owner = civId;
-    station.supply = Math.round((station.supply || 0) * 0.25);
+    var s = ensureStore(station);
+    for (var i = 0; i < STORE_RES.length; i++) s[STORE_RES[i]] = Math.round((s[STORE_RES[i]] || 0) * 0.25);
     station.supplyState = 'isolated';
     station._sieged = false;
   }
@@ -347,19 +417,28 @@
     station.hp = Math.max(1, Math.round(maxHp(Math.max(1, station.level)) * 0.4));
     station._sieged = false;
   }
-  /* Quanti Ι di autonomia può fornire per `crew` equipaggi, dato `wantI`. */
-  function refuelCapacity(station, crew, wantI) {
-    if (!isOperationalPort(station)) return 0;
-    var per = Math.max(1, crew) * CFG.REFUEL_COST;
-    if (per <= 0) return wantI;
-    var affordable = Math.floor((station.supply || 0) / per);
-    return Math.min(wantI, affordable);
+  /* Rifornimento flotte (#69) dal MAGAZZINO TIPIZZATO. Coerente col meccanismo
+     a colonia: il chiamante (fleet.js, unica sorgente dei tassi viveri) passa
+     il costo PER Ι nelle 4 risorse (`costPerI`); qui calcoliamo quanti Ι sono
+     coperti (limitati dalla risorsa più scarsa) e debitiamo lo store. */
+  function refuelAffordableI(station, costPerI, wantI) {
+    if (!isOperationalPort(station) || !costPerI) return 0;
+    var s = ensureStore(station), frac = 1;
+    for (var i = 0; i < STORE_RES.length; i++) {
+      var k = STORE_RES[i], per = costPerI[k] || 0;
+      if (per > 0) frac = Math.min(frac, (s[k] || 0) / (per * Math.max(1, wantI)));
+    }
+    var giveI = Math.floor(wantI * Math.min(1, frac));
+    return Math.max(0, giveI);
   }
-  /* Esegue il rifornimento: debita il serbatoio, ritorna gli Ι forniti. */
-  function drawRefuel(game, station, crew, wantI) {
-    var giveI = refuelCapacity(station, crew, wantI);
+  function drawRefuelTyped(game, station, costPerI, wantI) {
+    var giveI = refuelAffordableI(station, costPerI, wantI);
     if (giveI <= 0) return 0;
-    station.supply = Math.max(0, (station.supply || 0) - Math.max(1, crew) * CFG.REFUEL_COST * giveI);
+    var s = ensureStore(station);
+    for (var i = 0; i < STORE_RES.length; i++) {
+      var k = STORE_RES[i];
+      s[k] = Math.max(0, (s[k] || 0) - (costPerI[k] || 0) * giveI);
+    }
     return giveI;
   }
 
@@ -378,7 +457,6 @@
     var lvl = Math.max(0, Math.min(station.level | 0, CFG.BUILD_SLOTS_BY_LEVEL.length - 1));
     return CFG.BUILD_SLOTS_BY_LEVEL[lvl] || 0;
   }
-  function metReserveCap(level) { return Math.round(CFG.MET_RESERVE_CAP_BASE * Math.max(1, level)); }
   function canBuildClass(kind) { return CFG.SHIPYARD_CLASSES.indexOf(kind) >= 0; }
   function shipMetCost(kind) {
     var F = ORION.fleet, cls = F && F.getClass && F.getClass(kind);
@@ -468,13 +546,14 @@
   function tickShipyard(game, station, events) {
     if (!Array.isArray(station.buildQueue) || !station.buildQueue.length) return;
     var slots = buildSlotsFor(station);
+    var store = ensureStore(station);
     var built = [];
     for (var i = 0; i < station.buildQueue.length && i < slots; i++) {
       var job = station.buildQueue[i];
       var total = Math.max(1, job.total || 1);
       var perI = (job.metCost || 0) / total;
-      if ((station.metReserve || 0) < perI) continue;          // a secco → pausa
-      station.metReserve = Math.max(0, (station.metReserve || 0) - perI);
+      if ((store.met || 0) < perI) continue;          // metallo a secco → pausa
+      store.met = Math.max(0, (store.met || 0) - perI);
       job.left = (job.left || 0) - 1;
       if (job.left <= 0) built.push(job);
     }
@@ -518,6 +597,7 @@
     for (var i = 0; i < list.length; i++) {
       var st = list[i];
       if (!st) continue;
+      ensureStore(st);   // migrazione lazy magazzino (save < redesign 2026)
 
       // 1) Costruzione/upgrade in corso
       if (st.phase === 'building') {
@@ -528,9 +608,13 @@
           st.phase = 'operational';
           st.buildLeft = 0;
           var hpNow = maxHp(st.level);
-          // alla fondazione parte con hp pieno; agli upgrade aumenta il tetto
-          if (was === 0) { st.hp = hpNow; st.supply = Math.round(supplyCap(st.level) * 0.5); }
-          else { st.hp = Math.min(hpNow, (st.hp || 0) + (hpNow - maxHp(was))); }
+          // alla fondazione parte con hp pieno + magazzino a metà cap; agli
+          // upgrade aumenta il tetto corazza.
+          if (was === 0) {
+            st.hp = hpNow;
+            var seed = storeCap(st.level), sst = ensureStore(st);
+            for (var sk = 0; sk < STORE_RES.length; sk++) sst[STORE_RES[sk]] = Math.round(seed[STORE_RES[sk]] * 0.5);
+          } else { st.hp = Math.min(hpNow, (st.hp || 0) + (hpNow - maxHp(was))); }
           st._upgrading = false;
           if (events) events.push({
             kind: was === 0 ? 'station-built' : 'station-upgraded',
@@ -546,36 +630,38 @@
       // né riparazione del giocatore. Resta come husk difensivo riconquistabile.
       if (!isPlayerStation(st)) continue;
 
-      // 2) Linea di rifornimento: la colonia fondatrice (o la più vicina
-      //    propria entro raggio) riempie il serbatoio pagando risorse.
-      var cap = supplyCap(st.level);
-      var supplier = supplyColonyFor(game, st);
-      var refilled = 0;
-      if (supplier && (st.supply || 0) < cap) {
-        var want = Math.min(CFG.REFILL_RATE * st.level, cap - (st.supply || 0));
-        refilled = refillFrom(supplier, st, want);
-      }
-
-      // 2b) Riserva metalli del cantiere (decisione 2026-06-18): la stessa
-      //     colonia rifornitrice versa metallo (1:1) fino al tetto del livello.
-      var metCap = metReserveCap(st.level);
-      if (supplier && supplier.stock && (st.metReserve || 0) < metCap) {
-        var wantMet = Math.min(CFG.MET_REFILL_RATE * st.level, metCap - (st.metReserve || 0), supplier.stock.met || 0);
-        if (wantMet > 0) {
-          supplier.stock.met = Math.max(0, (supplier.stock.met || 0) - wantMet);
-          st.metReserve = (st.metReserve || 0) + wantMet;
+      // 2) Rifornimento dal MAGAZZINO TIPIZZATO: la colonia rifornitrice
+      //    (esplicita, riassegnabile) versa per-risorsa 1:1, a ritmo × L
+      //    (gradiente di distanza). Se la rifornitrice scelta è persa/fuori
+      //    raggio, auto-fallback alla valida più vicina ≤ MAX_RANGE.
+      var store = ensureStore(st);
+      var cap = storeCap(st.level);
+      var sup = supplierColonyFor(game, st);
+      if (sup && sup.fellBack) st.supplierColonyKey = sup.key;   // auto-riassegnazione
+      var L = sup ? sup.L : 0;
+      if (sup && sup.colony && sup.colony.stock) {
+        for (var ri = 0; ri < STORE_RES.length; ri++) {
+          var rk = STORE_RES[ri];
+          var room = cap[rk] - (store[rk] || 0);
+          if (room <= 0) continue;
+          var rate = CFG.REFILL_RATE[rk] * st.level * L;
+          var take = Math.min(rate, room, sup.colony.stock[rk] || 0);
+          if (take > 0) { sup.colony.stock[rk] = Math.max(0, (sup.colony.stock[rk] || 0) - take); store[rk] = (store[rk] || 0) + take; }
         }
       }
 
-      // 3) Upkeep: esercizio drena il serbatoio
-      var drain = CFG.UPKEEP * st.level;
-      st.supply = Math.max(0, (st.supply || 0) - drain);
+      // 3) Upkeep: sostentamento del personale (food/water) × livello.
+      store.food = Math.max(0, (store.food || 0) - CFG.UPKEEP.food * st.level);
+      store.water = Math.max(0, (store.water || 0) - CFG.UPKEEP.water * st.level);
 
-      // 4) Stato del serbatoio (per UI + degrado funzioni)
+      // 4) Stato logistico (per UI + degrado funzioni): basato sul riempimento
+      //    totale del magazzino + raggiungibilità di una rifornitrice.
+      var total = storeTotal(st), capTot = storeCapTotal(st.level);
       var prev = st.supplyState;
-      if (!supplier && (st.supply || 0) <= 0) st.supplyState = 'isolated';
-      else if ((st.supply || 0) < cap * CFG.LOW_FRAC) st.supplyState = 'low';
+      if (!sup && total <= 0) st.supplyState = 'isolated';
+      else if (total < capTot * CFG.LOW_FRAC) st.supplyState = 'low';
       else st.supplyState = 'ok';
+      st._logL = L;   // efficienza logistica corrente (UI: distanza/tier)
       if (events && prev !== st.supplyState && (st.supplyState === 'isolated' || (prev === 'isolated'))) {
         events.push({
           kind: st.supplyState === 'isolated' ? 'station-isolated' : 'station-resupplied',
@@ -583,10 +669,12 @@
         });
       }
 
-      // 5) Riparazione passiva (se rifornita e non sotto attacco)
+      // 5) Riparazione passiva × L (recupero scala con la distanza: una base
+      //    lontana ripara più lenta perché i rifornimenti arrivano meno/piano —
+      //    la potenza ferma resta piena). Niente se isolata o sotto attacco.
       var hpCap = maxHp(st.level);
-      if (st.supplyState !== 'isolated' && !st._underAttack && (st.hp || 0) < hpCap) {
-        st.hp = Math.min(hpCap, (st.hp || 0) + CFG.REPAIR_RATE * st.level);
+      if (st.supplyState !== 'isolated' && L > 0 && !st._underAttack && (st.hp || 0) < hpCap) {
+        st.hp = Math.min(hpCap, (st.hp || 0) + CFG.REPAIR_RATE * st.level * L);
       }
       st._underAttack = false; // reset per il prossimo tick (settato da combat)
 
@@ -607,38 +695,60 @@
     }
   }
 
-  /* Colonia che rifornisce: la fondatrice se viva ed entro raggio,
-     altrimenti la propria più vicina entro SUPPLY_RANGE. */
-  function supplyColonyFor(game, st) {
+  /* Colonia rifornitrice (redesign 2026): ESPLICITA e riassegnabile. Si usa
+     `st.supplierColonyKey` (default = fondatrice) se valida (colonizzata,
+     operativa) ed entro MAX_RANGE; altrimenti FALLBACK alla valida più vicina
+     ≤ MAX_RANGE (e si segnala `fellBack` → il tick riassegna). Ritorna
+     { key, colony, hops, L, fellBack } o null se nessuna ≤ MAX_RANGE (isolata).
+     `L` = efficienza logistica dalla distanza (gradiente). */
+  function supplierColonyFor(game, st) {
     var cols = game.colonies || {};
-    var owner = cols[st.ownerColonyKey];
-    if (owner && owner.colonized && owner.phase !== 'settling') {
-      if (hopsBetween(game.galaxy, owner.systemId, st.systemId) <= CFG.SUPPLY_RANGE) return owner;
+    function valid(key) { var c = cols[key]; return (c && c.colonized && c.phase !== 'settling') ? c : null; }
+    var exKey = st.supplierColonyKey || st.ownerColonyKey;
+    var ex = valid(exKey);
+    if (ex) {
+      var h = hopsBetween(game.galaxy, ex.systemId, st.systemId);
+      if (h <= CFG.MAX_RANGE) return { key: exKey, colony: ex, hops: h, L: logisticsLForHops(h), fellBack: false };
     }
-    var best = null, bestH = Infinity;
+    var bestK = null, best = null, bestH = Infinity;
+    for (var k in cols) {
+      var c = valid(k); if (!c) continue;
+      var hh = hopsBetween(game.galaxy, c.systemId, st.systemId);
+      if (hh <= CFG.MAX_RANGE && hh < bestH) { bestH = hh; bestK = k; best = c; }
+    }
+    if (best) return { key: bestK, colony: best, hops: bestH, L: logisticsLForHops(bestH), fellBack: (bestK !== exKey) };
+    return null;
+  }
+  /* Compat: vecchi chiamanti che volevano solo la colonia. */
+  function supplyColonyFor(game, st) { var r = supplierColonyFor(game, st); return r ? r.colony : null; }
+
+  /* Riassegna manualmente la rifornitrice (azione del giocatore). Vincolo:
+     colonia propria operativa entro MAX_RANGE. Libera e istantanea. */
+  function canAssignSupplier(game, st, colonyKey) {
+    var c = game.colonies && game.colonies[colonyKey];
+    if (!c || !c.colonized || c.phase === 'settling') return { ok: false, reason: 'Colonia non valida' };
+    var h = hopsBetween(game.galaxy, c.systemId, st.systemId);
+    if (h > CFG.MAX_RANGE) return { ok: false, reason: 'Fuori raggio (' + h + ' salti, max ' + CFG.MAX_RANGE + ')' };
+    return { ok: true, hops: h, L: logisticsLForHops(h) };
+  }
+  function assignSupplier(game, st, colonyKey) {
+    var chk = canAssignSupplier(game, st, colonyKey);
+    if (!chk.ok) return chk;
+    st.supplierColonyKey = colonyKey;
+    return { ok: true, hops: chk.hops, L: chk.L };
+  }
+  /* Colonie eleggibili come rifornitrici per una stazione (proprie, operative,
+     ≤ MAX_RANGE), con distanza/L — per la UI di riassegnazione. */
+  function eligibleSuppliers(game, st) {
+    var cols = game.colonies || {}, out = [];
     for (var k in cols) {
       var c = cols[k];
       if (!c || !c.colonized || c.phase === 'settling') continue;
       var h = hopsBetween(game.galaxy, c.systemId, st.systemId);
-      if (h <= CFG.SUPPLY_RANGE && h < bestH) { bestH = h; best = c; }
+      if (h <= CFG.MAX_RANGE) out.push({ key: k, hops: h, L: logisticsLForHops(h) });
     }
-    return best;
-  }
-
-  /* Riempie il serbatoio di `want` unità pagando dallo stock del colono.
-     Limitato dalla risorsa più scarsa (parziale, recovery-friendly). */
-  function refillFrom(colony, st, want) {
-    if (!colony.stock || want <= 0) return 0;
-    var rate = CFG.REFILL_COST, frac = 1;
-    for (var k in rate) {
-      var need = rate[k] * want, have = colony.stock[k] || 0;
-      if (need > have && rate[k] > 0) frac = Math.min(frac, have / need);
-    }
-    var fill = want * frac;
-    if (fill <= 0) return 0;
-    for (var k2 in rate) colony.stock[k2] = Math.max(0, (colony.stock[k2] || 0) - rate[k2] * fill);
-    st.supply = Math.min(supplyCap(st.level), (st.supply || 0) + fill);
-    return fill;
+    out.sort(function (a, b) { return a.hops - b.hops; });
+    return out;
   }
 
   /* Tempo al prossimo evento-stazione (costruzione in corso) per
@@ -663,7 +773,10 @@
   /* ------------------------------------------------------------------ */
   ORION.station = {
     CFG: CFG,
-    msum: msum, maxHp: maxHp, defenseFp: defenseFp, supplyCap: supplyCap,
+    msum: msum, maxHp: maxHp, defenseFp: defenseFp,
+    /* Magazzino tipizzato (redesign 2026). */
+    storeCap: storeCap, storeCapTotal: storeCapTotal, storeTotal: storeTotal, ensureStore: ensureStore,
+    STORE_RES: STORE_RES, logisticsLForHops: logisticsLForHops,
     stepCost: stepCost, stepTime: stepTime, hopsBetween: hopsBetween,
     stationAt: stationAt, stationById: stationById, listOf: listOf,
     isPlayerStation: isPlayerStation, playerStationAt: playerStationAt, capturedStationAt: capturedStationAt,
@@ -671,10 +784,13 @@
     isAnchorableBody: isAnchorableBody, stationAnchoredAt: stationAnchoredAt,
     canBuild: canBuild, build: build, canUpgrade: canUpgrade, upgrade: upgrade,
     demolish: demolish, cancelBuild: cancelBuild,
-    isOperationalPort: isOperationalPort, refuelCapacity: refuelCapacity, drawRefuel: drawRefuel,
-    defenseStats: defenseStats, supplyColonyFor: supplyColonyFor,
+    isOperationalPort: isOperationalPort,
+    refuelAffordableI: refuelAffordableI, drawRefuelTyped: drawRefuelTyped,
+    defenseStats: defenseStats,
+    supplyColonyFor: supplyColonyFor, supplierColonyFor: supplierColonyFor,
+    canAssignSupplier: canAssignSupplier, assignSupplier: assignSupplier, eligibleSuppliers: eligibleSuppliers,
     /* Cantiere leggero/medio (M16, 2026-06-18). */
-    buildSlotsFor: buildSlotsFor, metReserveCap: metReserveCap,
+    buildSlotsFor: buildSlotsFor,
     canBuildClass: canBuildClass, shipMetCost: shipMetCost, shipBuildTime: shipBuildTime,
     activeShipyardBuilds: activeShipyardBuilds, canBuildShipAt: canBuildShipAt,
     startShipBuild: startShipBuild, cancelShipBuild: cancelShipBuild,

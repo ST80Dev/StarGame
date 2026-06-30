@@ -8967,6 +8967,15 @@ select.main-menu__input { cursor: pointer; }
   border-left: 2px solid var(--c-good);
 }
 .station-cand__anchor { margin: 0 6px; max-width: 220px; }
+/* Redesign logistica: riga del magazzino tipizzato (4 risorse) sulla card. */
+.station-store { display: flex; gap: 12px; flex-wrap: wrap; margin: 2px 0 6px; font-family: var(--font-data); font-size: 0.76rem; color: var(--c-text-dim); }
+.station-store__r { display: inline-flex; align-items: center; gap: 3px; }
+/* Riga rifornitrice della stazione (supplier esplicito + efficienza logistica). */
+.station-supplier { font-size: 0.78rem; line-height: 1.5; margin: 4px 0; color: var(--c-text-dim); }
+.station-supplier__lbl { color: var(--c-text-dim); text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.04em; }
+.station-supplier.is-crit { color: var(--c-bad); }
+.station-supplier .is-ok { color: var(--c-good); }
+.station-supplier .is-warn { color: #f0d670; }
 .station-stat__val.is-warn { color: #f0c050; }
 .station-stat__val.is-crit { color: #ff7a5a; }
 /* Picker di costruzione: lista candidati */

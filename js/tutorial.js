@@ -1179,8 +1179,9 @@
       title: 'Stazioni spaziali: avamposti avanzati',
       body:
         '<p>Una <strong>stazione spaziale ⬡</strong> è un avamposto logistico-militare che costruisci in un <strong>sistema ' +
-        'esplorato qualsiasi</strong> — anche dove non hai colonie. Si fonda <em>a distanza</em> da una tua colonia (max ' +
-        '4 salti): la colonia paga, la stazione cresce sul posto.</p>' +
+        'esplorato qualsiasi</strong> — anche dove non hai colonie. Si fonda <em>a distanza</em> da una tua colonia (fino a ' +
+        '<strong>8 salti</strong>): la colonia paga, la stazione cresce sul posto. Entro 4 salti l\'efficienza logistica è ' +
+        'piena; oltre, cala con la distanza (vedi sotto).</p>' +
         '<p>A cosa serve (Fase A):</p>' +
         '<ul>' +
           '<li><strong>Rifornimento flotte</strong> — è un <em>porto amico avanzato</em>: le flotte ci ricaricano i viveri in ' +
@@ -1191,16 +1192,50 @@
           'interne (oltre i Mercati planetari).</li>' +
           '<li><strong>Attracchi</strong> — la stazione ricovera le flotte (posti d\'attracco propri): un appoggio per la flotta ' +
           'dove non hai colonie. Le navi attraccate si riforniscono e riparano.</li>' +
-          '<li><strong>Cantiere leggero/medio</strong> — assembla navi <strong>fino alla Fregata</strong> da una <em>riserva di ' +
-          'metalli</em> (riempita dalla linea di rifornimento; costo in solo metallo). Se la riserva è a secco la build va in ' +
-          '<em>pausa</em>. Le <strong>navi grandi</strong> restano esclusiva delle colonie (Hangar + Bacino).</li>' +
+          '<li><strong>Cantiere leggero/medio</strong> — assembla navi <strong>fino alla Fregata</strong>; il metallo esce dal ' +
+          '<em>magazzino unico</em> della stazione. Se il metallo è a secco la build va in <em>pausa</em>. Le <strong>navi ' +
+          'grandi</strong> restano esclusiva delle colonie (Hangar + Bacino).</li>' +
+          '<li><strong>Estrazione luna</strong> — se <em>ancorata a una luna</em> (alla costruzione), estrae il suo paniere di ' +
+          'risorse di default e auto-alimenta il proprio magazzino; l\'eccedenza va alla colonia rifornitrice. Vedi la lezione ' +
+          '<em>Lune</em>.</li>' +
         '</ul>' +
-        '<p>Cresce di <strong>livello come una struttura</strong>; la <strong>linea di rifornimento</strong> dalla colonia riempie ' +
-        'il serbatoio; se <em>isolata</em> le funzioni degradano (mai autodistruzione).</p>' +
+        '<p><strong>Magazzino &amp; rifornitrice.</strong> La stazione tiene un <strong>magazzino delle 4 risorse</strong> (food/water/' +
+        'met/en), quasi come lo stock di una colonia: da lì escono rifornimento flotte, metallo del cantiere, upkeep e riparazione. ' +
+        'Una <strong>colonia rifornitrice</strong> (scegliibile e <em>riassegnabile</em> dalla card) lo riempie. Cresce di ' +
+        '<strong>livello come una struttura</strong>.</p>' +
+        '<p><strong>Distanza = lentezza, non debolezza.</strong> Oltre i 4 salti l\'<strong>efficienza logistica</strong> cala con la ' +
+        'distanza (fino al 50% a 8 salti): rifornimento, riparazione ed estrazione più <em>lenti</em>. Ma una stazione integra ' +
+        '<strong>combatte sempre al 100%</strong> — il malus di una base lontana è la logistica, non il fuoco. Se nessuna colonia è ' +
+        'in raggio è <em>isolata</em> e le funzioni degradano (mai autodistruzione).</p>' +
         '<p><strong>Assedio (Fase B):</strong> AI e predoni possono <strong>assediare</strong> le tue stazioni con un combattimento ' +
         'a più round — manda rinforzi finché regge. Se cade: i predoni la <strong>distruggono</strong>, una civiltà la ' +
         '<strong>cattura</strong> (diventa un presidio nemico). Una stazione catturata si <strong>riconquista</strong> inviando ' +
         'una flotta armata e usando <em>Attacca</em> sul suo sistema.</p>'
+    },
+    {
+      id: 'moons',
+      tag: 'Corpi · ◌',
+      title: 'Lune: giacimenti a paniere',
+      body:
+        '<p>Le <strong>lune ◌ non sono colonizzabili</strong>: competevano male coi pianeti. Sono invece <strong>giacimenti ' +
+        'a paniere</strong> — le sfrutti dall\'orbita, come cinture e giganti gassosi, ma con un profilo unico.</p>' +
+        '<ul>' +
+          '<li><strong>Paniere proporzionale</strong> — a differenza di una cintura (solo metalli) o di un gigante (solo energia), ' +
+          'una luna rende <strong>tutte e 4 le risorse in proporzione</strong> ai suoi potenziali (non solo la più abbondante).</li>' +
+          '<li><strong>Strato avanzato</strong> — può dare anche <em>esotici</em>, ma solo dopo che una colonia con ' +
+          '<strong>Osservatorio</strong> entra in raggio e ne rivela l\'identità. Da\' un mestiere duraturo all\'Osservatorio.</li>' +
+        '</ul>' +
+        '<p><strong>Due modi per estrarre:</strong></p>' +
+        '<ul>' +
+          '<li><strong>Estrattore in survey</strong> — manda una flotta con un <em>Estrattore</em> sulla luna (azione ' +
+          '<em>Estrai</em>): estrazione spot, economica, early-game.</li>' +
+          '<li><strong>Stazione ancorata</strong> — alla costruzione ancori la stazione alla luna: estrae di default per sola ' +
+          'presenza e <strong>auto-alimenta il proprio magazzino</strong>; l\'eccedenza va alla colonia rifornitrice ' +
+          '(× efficienza logistica, quindi una luna lontana rende poco netto). Le due vie si <strong>escludono</strong>: con una ' +
+          'stazione ancorata non mandi anche un estrattore.</li>' +
+        '</ul>' +
+        '<p>Morale: l\'estrazione redditizia la fai <strong>vicino casa</strong>; una stazione molto lontana è soprattutto per ' +
+        'tenere una flotta dove non hai colonie.</p>'
     },
     {
       id: 'dispatches',

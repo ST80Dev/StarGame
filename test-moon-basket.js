@@ -155,26 +155,55 @@ console.log('— Test 5: scan Osservatorio in raggio → advRevealed → exotic 
   assert(approx(col.stock.en, 1.0 * 30 / 70), 'base ri-normalizzato sul totale con exotic');
 }
 
-console.log('— Test 6: stazione ancorata — estrae di default, precedenza su estrattore');
+console.log('— Test 6: stazione ancorata — precedenza estrattore + AUTO-FEED magazzino');
 {
   const g = makeGame(false);
   ORION.anomaly.ensureSites(g, 7);
   const site = g.anomalies['7:luna:b0m0'];
   site.mix = { met: 10, en: 30, food: 0, water: 10 }; site.exoticW = 0; site.advRevealed = false;
-  /* Stazione lvl 2 ancorata alla luna + un estrattore presente: la stazione
-     vince (rate 1.6), la nave NON si usura (mutua esclusione). */
-  g.stations = [{
-    id: 'st1', systemId: 7, bodyKey: 'b0m0', ownerColonyKey: '8:b0',
-    level: 2, phase: 'operational', owner: null, supplyState: 'ok', hp: 300, supply: 200
-  }];
+  /* Stazione lvl 2 ancorata + estrattore presente: la stazione vince (rate 1.6),
+     la nave NON si usura. L'estratto AUTO-ALIMENTA il magazzino (store vuoto →
+     pieno di room → niente va alla colonia). */
+  const st = {
+    id: 'st1', systemId: 7, bodyKey: 'b0m0', ownerColonyKey: '8:b0', supplierColonyKey: '8:b0',
+    level: 2, phase: 'operational', owner: null, supplyState: 'ok', hp: 300,
+    store: { food: 0, water: 0, met: 0, en: 0 }
+  };
+  g.stations = [st];
   const fleet = extractorFleet();
   g.fleets = [fleet];
   const col = g.colonies['8:b0'];
+  const enBefore = col.stock.en;
   ORION.anomaly.tick(g, []);
   const expRate = 1.2 + 0.4 * (2 - 1);  // 1.6
-  assert(approx(site.reserve, 1200 - expRate), 'riserva scalata del rate stazione (1.6), non dell\'estrattore');
-  assert(approx(col.stock.en, expRate * 30 / 50), 'deposito a paniere dalla stazione');
-  assert(fleet.ships[0].wear === 0, 'nave NON usurata (estrazione dalla stazione, mutua esclusione)');
+  assert(approx(site.reserve, 1200 - expRate), 'riserva scalata dal rate stazione (1.6), non dall\'estrattore');
+  assert(approx(st.store.en, expRate * 30 / 50), 'energia estratta → magazzino stazione (auto-feed)');
+  assert(approx(st.store.met, expRate * 10 / 50), 'metallo estratto → magazzino stazione');
+  assert(col.stock.en === enBefore, 'colonia NON riceve nulla finché il magazzino ha spazio');
+  assert(fleet.ships[0].wear === 0, 'nave NON usurata (estrazione dalla stazione)');
+}
+
+console.log('— Test 6b: stazione ancorata — overflow alla colonia × L (magazzino pieno)');
+{
+  const g = makeGame(true);                 // colonia con osservatorio (per exotic)
+  ORION.anomaly.ensureSites(g, 7);
+  const site = g.anomalies['7:luna:b0m0'];
+  site.mix = { met: 10, en: 30, food: 0, water: 10 }; site.exoticW = 20; site.advRevealed = true;
+  /* Magazzino già PIENO ai cap → tutto l'estratto fa overflow alla colonia × L.
+     Stazione a 1 hop dalla colonia (sys7→sys8) → L = 1.0. */
+  const cap = ORION.station.storeCap(2);
+  const st = {
+    id: 'st1', systemId: 7, bodyKey: 'b0m0', ownerColonyKey: '8:b0', supplierColonyKey: '8:b0',
+    level: 2, phase: 'operational', owner: null, supplyState: 'ok', hp: 300,
+    store: { food: cap.food, water: cap.water, met: cap.met, en: cap.en }
+  };
+  g.stations = [st];
+  const col = g.colonies['8:b0'];
+  const enBefore = col.stock.en, exBefore = col.exoticAccum;
+  ORION.anomaly.tick(g, []);
+  const rate = 1.6, totalW = 70;            // 10+30+10 base + 20 exotic
+  assert(approx(col.stock.en, enBefore + rate * 30 / totalW), 'overflow energia → colonia × L (L=1 a 1 hop)');
+  assert(approx(col.exoticAccum, exBefore + rate * 20 / totalW), 'esotici → colonia exoticAccum × L');
 }
 
 console.log('— Test 7: build stazione con ancoraggio + mutua esclusione (fetta 2)');
@@ -202,6 +231,15 @@ console.log('— Test 7: build stazione con ancoraggio + mutua esclusione (fetta
   g2.colonies['8:b0'].stock = { met: 500, en: 300, food: 100, water: 100 };
   const r2 = ST.build(g2, '8:b0', 7, null, 'b0');
   assert(!r2.ok, 'build con ancoraggio su corpo non-luna rifiutato');
+}
+
+console.log('— Test 8: comparsa anticipata — ensureExplored registra le lune senza flotta');
+{
+  const g = makeGame(false);
+  g.state.discovery[7] = 2;                  // sistema 7 esplorato (nessuna flotta lì)
+  assert(!g.anomalies['7:luna:b0m0'], 'sito-luna non ancora registrato');
+  ORION.anomaly.ensureExplored(g);
+  assert(!!g.anomalies['7:luna:b0m0'], 'ensureExplored crea il sito-luna del sistema esplorato');
 }
 
 console.log('\nTutti i test superati.');

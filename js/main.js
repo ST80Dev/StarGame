@@ -6478,7 +6478,15 @@ function renderEconAnomaliesView(stage) {
   if (!stage) return;
   const g = ORION.game;
   if (!g) return;
-  if (ORION.tutorial) ORION.tutorial.fire('economy-hub');
+  /* Comparsa anticipata: registra i siti di tutti i sistemi esplorati, così
+     le lune (e gli altri giacimenti) compaiono senza dover passare con una flotta. */
+  if (ORION.anomaly && ORION.anomaly.ensureExplored) ORION.anomaly.ensureExplored(g);
+  if (ORION.tutorial) {
+    ORION.tutorial.fire('economy-hub');
+    /* Lezione lune: contestuale, quando in vista c'è almeno un giacimento luna. */
+    const sites = (ORION.anomaly && ORION.anomaly.knownSites) ? ORION.anomaly.knownSites(g) : [];
+    if (sites.some(function (s) { return s.basket; })) ORION.tutorial.fire('moons');
+  }
   stage.innerHTML =
     '<div class="fleet-view market-view economy-view">' +
       econViewHead('Anomalie &amp; sfruttamenti', 'Economia · §17.3') +
@@ -6610,8 +6618,10 @@ function renderStationsView(stage) {
   if (list.length) {
     listHtml = '<ul class="station-list">' + list.map(function (st) {
       const lvl = Math.max(0, st.level);
-      const cap = ST.supplyCap(Math.max(1, lvl));
-      const supFrac = cap > 0 ? Math.max(0, Math.min(1, (st.supply || 0) / cap)) : 0;
+      const store = ST.ensureStore ? ST.ensureStore(st) : (st.store || { food: 0, water: 0, met: 0, en: 0 });
+      const capTot = ST.storeCapTotal ? ST.storeCapTotal(Math.max(1, lvl)) : 0;
+      const total = ST.storeTotal ? ST.storeTotal(st) : 0;
+      const supFrac = capTot > 0 ? Math.max(0, Math.min(1, total / capTot)) : 0;
       const sup = stationSupplyMeta(st.supplyState);
       const def = ST.defenseStats(st);
       const hpFrac = def.maxHp > 0 ? Math.max(0, Math.min(1, def.hp / def.maxHp)) : 0;
@@ -6640,9 +6650,15 @@ function renderStationsView(stage) {
         body =
           '<div class="station-stats">' +
             '<div class="station-stat">' +
-              '<span class="station-stat__lbl">Serbatoio</span>' +
+              '<span class="station-stat__lbl">Magazzino</span>' +
               '<div class="station-bar"><div class="station-bar__fill station-bar__fill--' + sup.cls + '" style="width:' + Math.round(supFrac * 100) + '%"></div></div>' +
-              '<span class="station-stat__val is-' + sup.cls + '">' + Math.round(st.supply || 0) + ' / ' + cap + ' · ' + sup.label + '</span>' +
+              '<span class="station-stat__val is-' + sup.cls + '">' + Math.round(total) + ' / ' + capTot + ' · ' + sup.label + '</span>' +
+            '</div>' +
+            '<div class="station-store">' +
+              '<span class="station-store__r">' + resIcon('met') + ' ' + Math.round(store.met || 0) + '</span>' +
+              '<span class="station-store__r">' + resIcon('en') + ' ' + Math.round(store.en || 0) + '</span>' +
+              '<span class="station-store__r">' + resIcon('food') + ' ' + Math.round(store.food || 0) + '</span>' +
+              '<span class="station-store__r">' + resIcon('water') + ' ' + Math.round(store.water || 0) + '</span>' +
             '</div>' +
             '<div class="station-stat">' +
               '<span class="station-stat__lbl">Corazza</span>' +
@@ -6653,6 +6669,7 @@ function renderStationsView(stage) {
           '<div class="station-actions">' + upgBtn +
             '<button class="btn btn--mini btn--danger" data-action="station-demolish" data-id="' + st.id + '" type="button">Smantella</button>' +
           '</div>' +
+          stationSupplierHtml(g, st) +
           stationYardHtml(st);
       }
 
@@ -6702,7 +6719,7 @@ function renderStationsView(stage) {
       '<button class="btn btn--enter station-view__new" data-action="station-new" type="button"' + (canFound ? '' : ' disabled') + '>' +
         '+ Costruisci stazione</button>' +
       listHtml +
-      '<p class="panel__note">Una stazione si costruisce <em>a distanza</em> da una tua colonia (max ' + ST.CFG.BUILD_RANGE + ' salti) e cresce di livello come una struttura: ogni modulo aggiunge corazza, fuoco difensivo e capacità del serbatoio. La <em>linea di rifornimento</em> dalla colonia riempie il serbatoio; se isolata le funzioni degradano (mai distrutta da sé). Le flotte si riforniscono qui in territorio profondo.</p>' +
+      '<p class="panel__note">Una stazione si costruisce <em>a distanza</em> da una tua colonia (fino a ' + ST.CFG.MAX_RANGE + ' salti) e cresce di livello come una struttura: ogni modulo aggiunge corazza, fuoco difensivo e capacità del magazzino. Una colonia <em>rifornitrice</em> (scegliibile e riassegnabile) riempie il magazzino delle 4 risorse; oltre i ' + ST.CFG.COMFORT_RANGE + ' salti l\'efficienza logistica cala con la distanza (più lenta a rifornire/riparare), ma la potenza di fuoco resta piena. Le flotte si riforniscono qui in territorio profondo.</p>' +
     '</div>';
 
   const newBtn = stage.querySelector('[data-action="station-new"]');
@@ -6724,6 +6741,9 @@ function renderStationsView(stage) {
       persistGame(g); renderStationsView(stage); updateGlobalResourceHud();
     });
   });
+  stage.querySelectorAll('[data-action="station-supplier"]').forEach(function (b) {
+    b.addEventListener('click', function () { openStationSupplierPicker(stage, b.dataset.id); });
+  });
   stage.querySelectorAll('[data-action="station-cancel"]').forEach(function (b) {
     b.addEventListener('click', function () {
       ST.cancelBuild(g, b.dataset.id);
@@ -6744,6 +6764,73 @@ function renderStationsView(stage) {
   });
 }
 
+/* Riga "Rifornitrice" della card stazione (redesign logistica 2026): colonia
+   che la rifornisce + distanza/efficienza logistica L + bottone Riassegna. */
+function stationSupplierHtml(g, st) {
+  const ST = ORION.station;
+  if (!ST || !ST.supplierColonyFor || !ST.isPlayerStation(st) || st.phase === 'building') return '';
+  const sup = ST.supplierColonyFor(g, st);
+  const reassign = '<button class="btn btn--mini" data-action="station-supplier" data-id="' + st.id + '" type="button">Riassegna</button>';
+  if (!sup) {
+    return '<div class="station-supplier is-crit">⚠ Nessuna rifornitrice entro ' + ST.CFG.MAX_RANGE +
+      ' salti — magazzino non si ricarica ' + reassign + '</div>';
+  }
+  const Lpct = Math.round(sup.L * 100);
+  const effHtml = sup.L >= 1
+    ? '<span class="is-ok">piena</span>'
+    : '<span class="is-warn">' + Lpct + '% (distanza)</span>';
+  return '<div class="station-supplier">' +
+    '<span class="station-supplier__lbl">Rifornitrice</span> <strong>' + escapeHtml(colonyNameFromKey(sup.key)) + '</strong>' +
+    ' · ' + sup.hops + ' salti · efficienza ' + effHtml + ' ' + reassign +
+  '</div>';
+}
+
+/* Picker di riassegnazione della rifornitrice: colonie proprie operative entro
+   MAX_RANGE, con distanza/L. Libera e istantanea (scelta utente). */
+function openStationSupplierPicker(stage, stationId) {
+  const g = ORION.game, ST = ORION.station;
+  if (!g || !ST) return;
+  const st = ST.stationById(g, stationId);
+  if (!st) return;
+  const opts = ST.eligibleSuppliers ? ST.eligibleSuppliers(g, st) : [];
+  const ov = document.createElement('div');
+  ov.className = 'fleet-create-overlay';
+  function close() { ov.remove(); document.removeEventListener('keydown', onKey); }
+  function onKey(e) { if (e.key === 'Escape') close(); }
+  let rows;
+  if (opts.length) {
+    rows = '<ul class="station-cand-list">' + opts.map(function (o) {
+      const Lpct = Math.round(o.L * 100);
+      const cur = (st.supplierColonyKey === o.key) ? ' <em>(attuale)</em>' : '';
+      const eff = o.L >= 1 ? 'efficienza piena' : ('efficienza ' + Lpct + '% · distanza');
+      return '<li class="station-cand">' +
+        '<span class="station-cand__name">' + escapeHtml(colonyNameFromKey(o.key)) + cur + '</span>' +
+        '<span class="station-cand__hops">' + o.hops + ' salti · ' + eff + '</span>' +
+        '<button class="btn btn--mini btn--enter" data-pick="' + escapeHtml(o.key) + '" type="button">Scegli</button>' +
+      '</li>';
+    }).join('') + '</ul>';
+  } else {
+    rows = '<p class="panel__note">Nessuna tua colonia operativa entro ' + ST.CFG.MAX_RANGE + ' salti da questa stazione.</p>';
+  }
+  ov.innerHTML =
+    '<div class="fleet-create-overlay__panel">' +
+      '<header class="fleet-create-overlay__head"><h3>Rifornitrice della stazione</h3>' +
+        '<button class="btn btn--mini" data-close type="button">✕</button></header>' +
+      '<p class="sysinfo__sub">Oltre i 4 salti l\'efficienza logistica cala (rifornimento/riparazione/estrazione più lenti), ma la potenza di fuoco resta piena.</p>' +
+      rows +
+    '</div>';
+  ov.querySelector('[data-close]').addEventListener('click', close);
+  ov.querySelectorAll('[data-pick]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const r = ST.assignSupplier(g, st, b.dataset.pick);
+      if (!r.ok) { showToast(r.reason || 'Riassegnazione rifiutata'); return; }
+      persistGame(g); close(); renderStationsView(stage); updateGlobalResourceHud();
+    });
+  });
+  document.addEventListener('keydown', onKey);
+  (document.body || document.documentElement).appendChild(ov);
+}
+
 /* Pannello "Cantiere leggero/medio" di una stazione operativa: riserva
    metalli + slip + coda di assemblaggio. Vuoto se il livello non offre slip. */
 function stationYardHtml(st) {
@@ -6751,8 +6838,10 @@ function stationYardHtml(st) {
   if (!ST || !ST.buildSlotsFor) return '';
   const slots = ST.buildSlotsFor(st);
   if (slots <= 0) return '';
-  const metCap = ST.metReserveCap(st.level);
-  const metFrac = metCap > 0 ? Math.max(0, Math.min(1, (st.metReserve || 0) / metCap)) : 0;
+  const yStore = ST.ensureStore ? ST.ensureStore(st) : (st.store || { met: 0 });
+  const metCap = (ST.storeCap ? ST.storeCap(Math.max(1, st.level)).met : 0);
+  const metHave = yStore.met || 0;
+  const metFrac = metCap > 0 ? Math.max(0, Math.min(1, metHave / metCap)) : 0;
   const q = st.buildQueue || [];
   let qHtml = '';
   if (q.length) {
@@ -6760,7 +6849,7 @@ function stationYardHtml(st) {
       const cls = (F && F.getClass(job.kind)) || { name: job.kind, glyph: '◈' };
       const prog = job.total > 0 ? Math.max(0, Math.min(1, 1 - (job.left || 0) / job.total)) : 0;
       const perI = (job.metCost || 0) / Math.max(1, job.total);
-      const paused = (i < slots) && ((st.metReserve || 0) < perI);
+      const paused = (i < slots) && (metHave < perI);
       return '<li class="station-yard__job">' +
         '<span class="struct-item__glyph">' + cls.glyph + '</span> ' + escapeHtml(cls.name) +
         ' · ' + Math.ceil(job.left || 0) + ' ' + iU() +
@@ -6772,9 +6861,9 @@ function stationYardHtml(st) {
   }
   return '<div class="station-yard">' +
     '<div class="station-stat">' +
-      '<span class="station-stat__lbl">Riserva metalli</span>' +
+      '<span class="station-stat__lbl">Metallo cantiere</span>' +
       '<div class="station-bar"><div class="station-bar__fill station-bar__fill--met" style="width:' + Math.round(metFrac * 100) + '%"></div></div>' +
-      '<span class="station-stat__val">' + Math.round(st.metReserve || 0) + ' / ' + metCap + ' ' + resIcon('met') + '</span>' +
+      '<span class="station-stat__val">' + Math.round(metHave) + ' / ' + metCap + ' ' + resIcon('met') + '</span>' +
     '</div>' +
     '<div class="station-yard__head">Cantiere leggero/medio · ' + q.length + '/' + slots + ' slip</div>' +
     qHtml +

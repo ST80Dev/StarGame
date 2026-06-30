@@ -476,10 +476,31 @@ Quando più flotte (proprie e/o alleate vs nemiche) convergono sullo stesso sist
 - Possibilità di coordinare con alleati AI (se diplomazia attiva)
 
 ### 12.7 Stazioni spaziali
-- Costruibili in qualsiasi sistema esplorato
-- Funzioni: avamposto militare, deposito risorse, punto riparazione, hub commerciale
-- Difendibili, attaccabili, conquistabili
-- Richiedono rifornimento periodico dal pianeta più vicino
+- Costruibili in qualsiasi sistema esplorato; una sola stazione per sistema.
+- Entità a **livelli (1→4)**, non strutture interne: le funzioni sono fisse, la capacità scala col livello.
+- Funzioni: avamposto militare (difesa), porto di rifornimento flotte (#69), cantiere navi leggere/medie (≤ Fregata), riparazione/refit, e — se **ancorata a una luna** — estrazione a paniere (vedi §6.3).
+- Difendibili, attaccabili, conquistabili.
+
+#### 12.7.1 Logistica stazione (redesign 2026)
+
+**Magazzino tipizzato unico.** La stazione tiene un magazzino delle **4 risorse base** `{food, water, met, en}`, *quasi come lo stock di una colonia* (non più un "serbatoio astratto"). Da qui attinge per **tutto**:
+- **Rifornimento flotte (#69):** consuma le 4 risorse nelle **stesse proporzioni** del rifornimento a colonia (`food/water/met` su equipaggio, `en` su stazza — voce dominante). Coerenza piena col meccanismo base.
+- **Cantiere navale:** il metallo per assemblare scafi esce **dallo stesso magazzino** (niente più riserva metalli separata).
+- **Upkeep / riparazione:** piccolo drenaggio di sostentamento.
+
+Cap **per-risorsa**, scalato col livello: un rifornimento (dominato dall'energia) svuota soprattutto la casella energia, lasciando food/water per upkeep e difesa.
+
+**Rifornitrice esplicita & riassegnabile.** Ogni stazione è legata a **UNA colonia rifornitrice**, scelta dal giocatore (default = fondatrice), **riassegnabile liberamente**. La colonia riempie il magazzino per-risorsa (1:1 dal suo stock). Così puoi spostare il carico da una colonia in difficoltà a una florida, e una colonia ricca può reggere più stazioni.
+
+**Gradiente di distanza `L`.** Niente più muro netto a 4 hop. Sia la costruzione sia la rifornitura sono ammesse **fino a 8 hop**, ma con efficienza logistica `L ∈ [0.50, 1.00]`:
+- `h ≤ 4` → `L = 1.0` (pieno regime); lineare fino a `L = 0.50` a 8 hop; `h > 8` → `isolated`.
+- `L` scala **solo i ritmi** (lentezza/logistica): velocità di rifornimento (in), riparazione, metallo al cantiere, e **consegna dell'estratto alla colonia** (out).
+- `L` **non** tocca la potenza ferma: una stazione integra/riparata combatte al **100% ovunque**. Il malus di una base lontana emerge dalla lentezza di rifornimento/riparazione, non da un debuff sulle strutture al 100%.
+- Se la rifornitrice è persa → auto-fallback alla colonia valida più vicina ≤8 hop (voce di cronaca); nessuna ≤8 → `isolated` (recovery-friendly: husk difensivo riconquistabile, mai distrutto).
+
+Scelta strategica risultante: **base avanzata lontana** = utile per tenere una flotta dove non hai colonie (difesa/porto pieni se in salute), ma **lenta da rifornire/riparare** e con **estrazione poco redditizia netta** → l'estrazione efficiente la fai vicino casa.
+
+**Auto-feed estrazione (stazione ancorata a luna).** La luna rende il **paniere pieno** (nessun `L` sull'estrazione). I 4 base estratti **auto-alimentano il magazzino della stazione** (uso locale, piena efficienza), rendendo una base ancorata più autosufficiente. **Esotici + l'eccedenza** oltre i cap del magazzino vengono **consegnati alla colonia rifornitrice `× L`** (l'export lungo è lossy). L'energia estratta serve in loco al rifornimento, non è solo export.
 
 ---
 

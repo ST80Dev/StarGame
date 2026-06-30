@@ -254,6 +254,22 @@
     /* advRevealed lazy (default falsy): true quando un Osservatorio entra in raggio. */
   }
 
+  /* Registra i siti di TUTTI i sistemi ESPLORATI (non solo quelli dove orbita
+     una flotta): così i giacimenti — lune incluse — compaiono nella vista
+     sfruttamenti appena esplori il sistema, senza doverci passare con una
+     flotta. Idempotente (guardia _anomScanned): costo una-tantum per sistema.
+     Usato dalla UI della vista Anomalie & sfruttamenti. */
+  function ensureExplored(game) {
+    ensure(game);
+    if (!(ORION.system && ORION.system.generate)) return;
+    const disc = game && game.state && game.state.discovery;
+    if (!Array.isArray(disc)) return;
+    const EXP = (ORION.galaxy && ORION.galaxy.DISCOVERY) ? ORION.galaxy.DISCOVERY.EXPLORED : 2;
+    for (let sysId = 0; sysId < disc.length; sysId++) {
+      if (disc[sysId] >= EXP) ensureSites(game, sysId);
+    }
+  }
+
   /* Flotta presente nel sistema, a prescindere dall'ordine (uso generico). */
   /* Flotta che sta facendo RICOGNIZIONE su QUESTO sito specifico (sistema +
      tipo): ordine `survey` con anomalyKind corrispondente, presente in orbita.
@@ -363,6 +379,42 @@
       });
     }
     if (exoticShare > 0) col.exoticAccum = (col.exoticAccum || 0) + take * (exoticShare / total);
+  }
+
+  /* Deposito a PANIERE da una STAZIONE ANCORATA (redesign logistica 2026):
+     l'estrazione è piena alla luna, ma l'estratto AUTO-ALIMENTA prima il
+     magazzino della stazione (uso locale, piena efficienza), e SOLO l'eccedenza
+     oltre i cap + gli esotici vengono consegnati alla colonia RIFORNITRICE
+     `× L` (l'export lungo è lossy). L'energia estratta riempie store.en (serve
+     al rifornimento flotte), non è più solo export. */
+  function depositBasketToStation(game, station, site, take) {
+    const mix = site.mix || { met: 0, en: 0, food: 0, water: 0 };
+    let total = (mix.met || 0) + (mix.en || 0) + (mix.food || 0) + (mix.water || 0);
+    let exoticShare = 0;
+    if (site.advRevealed && site.exoticW > 0) { exoticShare = site.exoticW; total += exoticShare; }
+    if (total <= 0) return;
+    const S = ORION.station;
+    const store = (S && S.ensureStore) ? S.ensureStore(station) : station.store;
+    const cap = (S && S.storeCap) ? S.storeCap(Math.max(1, station.level || 1)) : null;
+    const sup = (S && S.supplierColonyFor) ? S.supplierColonyFor(game, station) : null;
+    const L = sup ? sup.L : 0;
+    const col = sup && sup.colony;
+    /* Strato base: riempi il magazzino verso il cap (locale), overflow → colonia × L. */
+    ['met', 'en', 'food', 'water'].forEach(function (r) {
+      const w = mix[r] || 0; if (w <= 0) return;
+      let amt = take * (w / total);
+      if (store && cap) {
+        const room = (cap[r] || 0) - (store[r] || 0);
+        const into = Math.max(0, Math.min(amt, room));
+        store[r] = (store[r] || 0) + into;
+        amt -= into;
+      }
+      if (amt > 0 && col && col.stock) col.stock[r] = (col.stock[r] || 0) + amt * L;
+    });
+    /* Esotici: la stazione non li usa → tutti alla colonia (exoticAccum) × L. */
+    if (exoticShare > 0 && col) {
+      col.exoticAccum = (col.exoticAccum || 0) + take * (exoticShare / total) * L;
+    }
   }
 
   /* Stazione del giocatore ANCORATA a questo corpo (luna) e operativa →
@@ -551,8 +603,12 @@
         const rate = station ? stationExtractRate(station) : harvestRateFor(game, fleet);
         const take = Math.min(rate, site.reserve);
         if (take > 0) {
-          if (site.basket) depositBasket(game, station ? null : fleet, site, take);
-          else deposit(game, fleet, site.res, take, site);
+          if (site.basket) {
+            /* Stazione ancorata → auto-feed magazzino + overflow × L; flotta
+               estrattore → deposito diretto alla colonia più vicina al sito. */
+            if (station) depositBasketToStation(game, station, site, take);
+            else depositBasket(game, fleet, site, take);
+          } else deposit(game, fleet, site.res, take, site);
           site.reserve -= take;
           site.harvested = (site.harvested || 0) + take;
           /* Usura/XP per Ι in survey (decisione utente 2026-06-16): SOLO per le
@@ -646,8 +702,12 @@
       const s = game.anomalies[k];
       if (!s || s.kind === 'reliquie' || !(s.reserve > 0)) return;
       const station = s.basket ? anchoredStation(game, s) : null;
-      const fleet = station ? null : fleetSurveyingSite(game, s.sysId, s.kind, s.bodyKey);
-      if (!station && !fleet) return;
+      /* Estrazione da STAZIONE ancorata: auto-alimenta il magazzino della
+         stazione (solo l'eccedenza ×L arriva alla colonia, variabile) → NON la
+         contiamo nel surplus diretto per colonia. Qui solo l'estrattore-flotta. */
+      if (station) return;
+      const fleet = fleetSurveyingSite(game, s.sysId, s.kind, s.bodyKey);
+      if (!fleet) return;
       const colKey = depositColonyKey(game, fleet, s);
       if (!colKey) return;
       const rate = Math.min(station ? stationExtractRate(station) : harvestRateFor(game, fleet), s.reserve);
@@ -676,6 +736,7 @@
     KINDS: KINDS,
     ensure: ensure,
     ensureSites: ensureSites,
+    ensureExplored: ensureExplored,
     tick: tick,
     nextEventDelta: nextEventDelta,
     knownSites: knownSites,
