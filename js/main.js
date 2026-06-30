@@ -6610,8 +6610,10 @@ function renderStationsView(stage) {
   if (list.length) {
     listHtml = '<ul class="station-list">' + list.map(function (st) {
       const lvl = Math.max(0, st.level);
-      const cap = ST.supplyCap(Math.max(1, lvl));
-      const supFrac = cap > 0 ? Math.max(0, Math.min(1, (st.supply || 0) / cap)) : 0;
+      const store = ST.ensureStore ? ST.ensureStore(st) : (st.store || { food: 0, water: 0, met: 0, en: 0 });
+      const capTot = ST.storeCapTotal ? ST.storeCapTotal(Math.max(1, lvl)) : 0;
+      const total = ST.storeTotal ? ST.storeTotal(st) : 0;
+      const supFrac = capTot > 0 ? Math.max(0, Math.min(1, total / capTot)) : 0;
       const sup = stationSupplyMeta(st.supplyState);
       const def = ST.defenseStats(st);
       const hpFrac = def.maxHp > 0 ? Math.max(0, Math.min(1, def.hp / def.maxHp)) : 0;
@@ -6640,9 +6642,15 @@ function renderStationsView(stage) {
         body =
           '<div class="station-stats">' +
             '<div class="station-stat">' +
-              '<span class="station-stat__lbl">Serbatoio</span>' +
+              '<span class="station-stat__lbl">Magazzino</span>' +
               '<div class="station-bar"><div class="station-bar__fill station-bar__fill--' + sup.cls + '" style="width:' + Math.round(supFrac * 100) + '%"></div></div>' +
-              '<span class="station-stat__val is-' + sup.cls + '">' + Math.round(st.supply || 0) + ' / ' + cap + ' · ' + sup.label + '</span>' +
+              '<span class="station-stat__val is-' + sup.cls + '">' + Math.round(total) + ' / ' + capTot + ' · ' + sup.label + '</span>' +
+            '</div>' +
+            '<div class="station-store">' +
+              '<span class="station-store__r">' + resIcon('met') + ' ' + Math.round(store.met || 0) + '</span>' +
+              '<span class="station-store__r">' + resIcon('en') + ' ' + Math.round(store.en || 0) + '</span>' +
+              '<span class="station-store__r">' + resIcon('food') + ' ' + Math.round(store.food || 0) + '</span>' +
+              '<span class="station-store__r">' + resIcon('water') + ' ' + Math.round(store.water || 0) + '</span>' +
             '</div>' +
             '<div class="station-stat">' +
               '<span class="station-stat__lbl">Corazza</span>' +
@@ -6751,8 +6759,10 @@ function stationYardHtml(st) {
   if (!ST || !ST.buildSlotsFor) return '';
   const slots = ST.buildSlotsFor(st);
   if (slots <= 0) return '';
-  const metCap = ST.metReserveCap(st.level);
-  const metFrac = metCap > 0 ? Math.max(0, Math.min(1, (st.metReserve || 0) / metCap)) : 0;
+  const yStore = ST.ensureStore ? ST.ensureStore(st) : (st.store || { met: 0 });
+  const metCap = (ST.storeCap ? ST.storeCap(Math.max(1, st.level)).met : 0);
+  const metHave = yStore.met || 0;
+  const metFrac = metCap > 0 ? Math.max(0, Math.min(1, metHave / metCap)) : 0;
   const q = st.buildQueue || [];
   let qHtml = '';
   if (q.length) {
@@ -6760,7 +6770,7 @@ function stationYardHtml(st) {
       const cls = (F && F.getClass(job.kind)) || { name: job.kind, glyph: '◈' };
       const prog = job.total > 0 ? Math.max(0, Math.min(1, 1 - (job.left || 0) / job.total)) : 0;
       const perI = (job.metCost || 0) / Math.max(1, job.total);
-      const paused = (i < slots) && ((st.metReserve || 0) < perI);
+      const paused = (i < slots) && (metHave < perI);
       return '<li class="station-yard__job">' +
         '<span class="struct-item__glyph">' + cls.glyph + '</span> ' + escapeHtml(cls.name) +
         ' · ' + Math.ceil(job.left || 0) + ' ' + iU() +
@@ -6772,9 +6782,9 @@ function stationYardHtml(st) {
   }
   return '<div class="station-yard">' +
     '<div class="station-stat">' +
-      '<span class="station-stat__lbl">Riserva metalli</span>' +
+      '<span class="station-stat__lbl">Metallo cantiere</span>' +
       '<div class="station-bar"><div class="station-bar__fill station-bar__fill--met" style="width:' + Math.round(metFrac * 100) + '%"></div></div>' +
-      '<span class="station-stat__val">' + Math.round(st.metReserve || 0) + ' / ' + metCap + ' ' + resIcon('met') + '</span>' +
+      '<span class="station-stat__val">' + Math.round(metHave) + ' / ' + metCap + ' ' + resIcon('met') + '</span>' +
     '</div>' +
     '<div class="station-yard__head">Cantiere leggero/medio · ' + q.length + '/' + slots + ' slip</div>' +
     qHtml +

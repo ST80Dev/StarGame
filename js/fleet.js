@@ -2041,12 +2041,19 @@
     const colony = ownColonyAt(game, fleet.location.systemId);
     let fillI = cap - cur;
     if (!colony && ORION.station && ORION.station.stationAt) {
-      /* M16 (#81): nessuna tua colonia qui ma una STAZIONE operativa →
-         rifornisce dal proprio serbatoio (limitato → parziale, recovery-
-         friendly). Se il serbatoio è a corto la flotta carica meno. */
+      /* M16 (#81) + redesign 2026: nessuna tua colonia qui ma una STAZIONE
+         operativa → rifornisce dal proprio MAGAZZINO TIPIZZATO, consumando le
+         STESSE 4 risorse del rifornimento a colonia, nelle stesse proporzioni
+         (food/water/met sull'equipaggio, energia sulla stazza — voce dominante).
+         Coerenza piena col meccanismo base. Parziale se a corto (recovery-friendly). */
       const st = ORION.station.stationAt(game, fleet.location.systemId);
-      if (st && ORION.station.isOperationalPort(st)) {
-        fillI = ORION.station.drawRefuel(game, st, crew, fillI);
+      if (st && ORION.station.isOperationalPort(st) && ORION.station.drawRefuelTyped) {
+        const mass = Math.max(1, dockWeightOfFleet(fleet));
+        const costPerI = {
+          food: crew * VIVERI_RATE_FOOD, water: crew * VIVERI_RATE_WATER,
+          met: crew * VIVERI_RATE_MET, en: mass * VIVERI_RATE_EN
+        };
+        fillI = ORION.station.drawRefuelTyped(game, st, costPerI, fillI);
         fleet.viveri = cur + fillI;
         return fillI;
       }

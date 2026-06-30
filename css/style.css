@@ -8967,6 +8967,9 @@ select.main-menu__input { cursor: pointer; }
   border-left: 2px solid var(--c-good);
 }
 .station-cand__anchor { margin: 0 6px; max-width: 220px; }
+/* Redesign logistica: riga del magazzino tipizzato (4 risorse) sulla card. */
+.station-store { display: flex; gap: 12px; flex-wrap: wrap; margin: 2px 0 6px; font-family: var(--font-data); font-size: 0.76rem; color: var(--c-text-dim); }
+.station-store__r { display: inline-flex; align-items: center; gap: 3px; }
 .station-stat__val.is-warn { color: #f0c050; }
 .station-stat__val.is-crit { color: #ff7a5a; }
 /* Picker di costruzione: lista candidati */
