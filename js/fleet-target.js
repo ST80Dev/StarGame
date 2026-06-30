@@ -97,9 +97,13 @@
     const isFree = !out.ownColony && !aiHere;
     out.colonizable = !!(isFree && habitable);
 
-    /* Giacimento sfruttabile (non sulla mia colonia). */
+    /* Giacimento sfruttabile (redesign 2026: TUTTI i corpi liberi — pianeti
+       rocciosi inclusi — sono estraibili a paniere SENZA colonizzare). Solo se
+       LIBERO: non sulla mia colonia e non occupato da un'AI (i pianeti AI sono
+       fuori, gancio futuro). Un pianeta libero abitabile offre quindi sia
+       Colonizza (full) sia Estrai (light). */
     if (body && ORION.anomaly && ORION.anomaly.bodyGiacimento) {
-      out.giacimento = !out.ownColony && !!ORION.anomaly.bodyGiacimento(body);
+      out.giacimento = isFree && !!ORION.anomaly.bodyGiacimento(body);
       /* Mutua esclusione (redesign lune): se una STAZIONE è ancorata a questa
          luna, estrae lei di default → non si manda anche un estrattore. */
       if (out.giacimento && bk != null && ORION.station && ORION.station.stationAnchoredAt &&

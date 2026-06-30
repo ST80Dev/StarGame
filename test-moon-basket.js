@@ -98,10 +98,11 @@ console.log('— Test 2: bodyGiacimento — luna=paniere, cintura/gassoso mono')
   const moon = ORION.system.findBody(SYS, 'b0m0');
   const gi = ORION.anomaly.bodyGiacimento(moon);
   assert(gi && gi.kind === 'luna' && gi.basket === true && gi.res === null, 'bodyGiacimento(luna) = paniere (res null)');
+  /* Redesign estrazione 2026: anche gassoso/cintura ora sono a paniere. */
   const gGas = ORION.anomaly.bodyGiacimento({ type: 'gassoso' });
-  assert(gGas && gGas.res === 'en' && !gGas.basket, 'gassoso resta mono (en)');
+  assert(gGas && gGas.basket === true, 'gassoso ora a paniere');
   const gBelt = ORION.anomaly.bodyGiacimento({ type: 'cintura' });
-  assert(gBelt && gBelt.res === 'met' && !gBelt.basket, 'cintura resta mono (met)');
+  assert(gBelt && gBelt.basket === true, 'cintura ora a paniere');
 }
 
 console.log('— Test 3: ensureSites crea il sito-luna con mix + determinismo');
@@ -131,12 +132,13 @@ console.log('— Test 4: estrazione a paniere via flotta (base sì, avanzato no)
   site.exoticW = 20; site.advIds = ['cristalli']; site.advRevealed = false;
   g.fleets = [extractorFleet()];
   const col = g.colonies['8:b0'];
-  ORION.anomaly.tick(g, []);            // rate estrattore L1 = 1.0
-  assert(approx(col.stock.met, 1.0 * 10 / 50), 'met depositato in proporzione (base, no exotic)');
-  assert(approx(col.stock.en, 1.0 * 30 / 50), 'en depositato in proporzione');
-  assert(approx(col.stock.water, 1.0 * 10 / 50), 'water depositato in proporzione');
+  const rate = ORION.anomaly.CFG.EXTRACTOR_RATE_BASE;   // estrattore L1 (no Hangar)
+  ORION.anomaly.tick(g, []);            // riserva al cap → niente regen, take = rate
+  assert(approx(col.stock.met, rate * 10 / 50), 'met depositato in proporzione (base, no exotic)');
+  assert(approx(col.stock.en, rate * 30 / 50), 'en depositato in proporzione');
+  assert(approx(col.stock.water, rate * 10 / 50), 'water depositato in proporzione');
   assert(col.exoticAccum === 0, 'exoticAccum invariato finché non rivelato');
-  assert(approx(site.reserve, 1199.0), 'riserva scalata del take totale (1.0)');
+  assert(approx(site.reserve, 1200 - rate), 'riserva scalata del take totale (rate)');
   assert(g.fleets[0].ships[0].wear > 0, 'la nave in survey subisce usura');
 }
 
@@ -149,10 +151,11 @@ console.log('— Test 5: scan Osservatorio in raggio → advRevealed → exotic 
   site.exoticW = 20; site.advIds = ['cristalli']; site.advRevealed = false;
   g.fleets = [extractorFleet()];
   const col = g.colonies['8:b0'];
+  const rate = ORION.anomaly.CFG.EXTRACTOR_RATE_BASE;
   ORION.anomaly.tick(g, []);
   assert(site.advRevealed === true, 'Osservatorio entro OBS_SCAN_RANGE → advRevealed = true');
-  assert(approx(col.exoticAccum, 1.0 * 20 / 70), 'exoticAccum accresciuto (strato avanzato nel paniere, totale 70)');
-  assert(approx(col.stock.en, 1.0 * 30 / 70), 'base ri-normalizzato sul totale con exotic');
+  assert(approx(col.exoticAccum, rate * 20 / 70), 'exoticAccum accresciuto (strato avanzato nel paniere, totale 70)');
+  assert(approx(col.stock.en, rate * 30 / 70), 'base ri-normalizzato sul totale con exotic');
 }
 
 console.log('— Test 6: stazione ancorata — precedenza estrattore + AUTO-FEED magazzino');
@@ -174,9 +177,10 @@ console.log('— Test 6: stazione ancorata — precedenza estrattore + AUTO-FEED
   g.fleets = [fleet];
   const col = g.colonies['8:b0'];
   const enBefore = col.stock.en;
+  const C = ORION.anomaly.CFG;
+  const expRate = C.STATION_EXTRACT_BASE + C.STATION_EXTRACT_PER_LVL * (2 - 1);  // lvl2
   ORION.anomaly.tick(g, []);
-  const expRate = 1.2 + 0.4 * (2 - 1);  // 1.6
-  assert(approx(site.reserve, 1200 - expRate), 'riserva scalata dal rate stazione (1.6), non dall\'estrattore');
+  assert(approx(site.reserve, 1200 - expRate), 'riserva scalata dal rate stazione, non dall\'estrattore');
   assert(approx(st.store.en, expRate * 30 / 50), 'energia estratta → magazzino stazione (auto-feed)');
   assert(approx(st.store.met, expRate * 10 / 50), 'metallo estratto → magazzino stazione');
   assert(col.stock.en === enBefore, 'colonia NON riceve nulla finché il magazzino ha spazio');
@@ -200,8 +204,9 @@ console.log('— Test 6b: stazione ancorata — overflow alla colonia × L (maga
   g.stations = [st];
   const col = g.colonies['8:b0'];
   const enBefore = col.stock.en, exBefore = col.exoticAccum;
+  const C = ORION.anomaly.CFG;
+  const rate = C.STATION_EXTRACT_BASE + C.STATION_EXTRACT_PER_LVL * (2 - 1), totalW = 70;  // base+exotic
   ORION.anomaly.tick(g, []);
-  const rate = 1.6, totalW = 70;            // 10+30+10 base + 20 exotic
   assert(approx(col.stock.en, enBefore + rate * 30 / totalW), 'overflow energia → colonia × L (L=1 a 1 hop)');
   assert(approx(col.exoticAccum, exBefore + rate * 20 / totalW), 'esotici → colonia exoticAccum × L');
 }
@@ -210,7 +215,9 @@ console.log('— Test 7: build stazione con ancoraggio + mutua esclusione (fetta
 {
   const ST = ORION.station;
   assert(ST.isAnchorableBody({ galaxy: {} }, 7, 'b0m0') === true, 'isAnchorableBody(luna) = true');
-  assert(ST.isAnchorableBody({ galaxy: {} }, 7, 'b0') === false, 'isAnchorableBody(gigante) = false (solo lune)');
+  /* Redesign estrazione 2026: ogni corpo a paniere è ancorabile (anche il gigante). */
+  assert(ST.isAnchorableBody({ galaxy: {} }, 7, 'b0') === true, 'isAnchorableBody(gigante) = true (tutti i corpi a paniere)');
+  assert(ST.isAnchorableBody({ galaxy: {} }, 7, 'zzz') === false, 'isAnchorableBody(corpo inesistente) = false');
   const g = makeGame(false);
   g.state.discovery[7] = 2; g.state.discovery[8] = 2;
   const col = g.colonies['8:b0'];
@@ -226,11 +233,11 @@ console.log('— Test 7: build stazione con ancoraggio + mutua esclusione (fetta
   /* Mutua esclusione: con la stazione ancorata, l\'estrattore non ha più Estrai. */
   const d = ORION.fleetTarget.describe(g, 7, 'b0m0');
   assert(d.giacimento === false && d.stationAnchored === true, 'describe: giacimento OFF (stazione ancorata) → niente estrattore');
-  /* Build con bodyKey non-luna è rifiutato. */
+  /* Build con ancoraggio a un corpo INESISTENTE è rifiutato. */
   const g2 = makeGame(false); g2.state.discovery[7] = 2; g2.state.discovery[8] = 2;
   g2.colonies['8:b0'].stock = { met: 500, en: 300, food: 100, water: 100 };
-  const r2 = ST.build(g2, '8:b0', 7, null, 'b0');
-  assert(!r2.ok, 'build con ancoraggio su corpo non-luna rifiutato');
+  const r2 = ST.build(g2, '8:b0', 7, null, 'zzz');
+  assert(!r2.ok, 'build con ancoraggio su corpo inesistente rifiutato');
 }
 
 console.log('— Test 8: comparsa anticipata — ensureExplored registra le lune senza flotta');

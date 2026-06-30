@@ -236,8 +236,9 @@
     for (var k in cost) colony.stock[k] = Math.max(0, (colony.stock[k] || 0) - cost[k]);
   }
 
-  /* Una luna è ancorabile? (redesign lune): solo i corpi a giacimento PANIERE
-     (lune) ospitano l'ancoraggio della stazione → estrazione di default. */
+  /* Un corpo è ancorabile? (redesign estrazione 2026): ogni corpo a giacimento
+     PANIERE (pianeti rocciosi + lune + cinture + giganti) ospita l'ancoraggio
+     della stazione → estrazione di default. */
   function isAnchorableBody(game, sysId, bodyKey) {
     if (bodyKey == null) return false;
     if (!(ORION.system && ORION.system.generate && ORION.system.findBody &&
@@ -273,7 +274,7 @@
     var hops = hopsBetween(game.galaxy, colony.systemId, targetSysId);
     if (hops > CFG.BUILD_RANGE) return { ok: false, reason: 'Fuori raggio (' + hops + ' salti, max ' + CFG.BUILD_RANGE + ')' };
     if (bodyKey != null && !isAnchorableBody(game, targetSysId, bodyKey)) {
-      return { ok: false, reason: 'Ancoraggio valido solo su una luna del sistema' };
+      return { ok: false, reason: 'Ancoraggio valido solo su un corpo sfruttabile del sistema' };
     }
     var cost = stepCost(1);
     if (!colonyCanPay(colony, cost)) return { ok: false, reason: 'Risorse insufficienti' };
