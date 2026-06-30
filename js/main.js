@@ -5128,9 +5128,10 @@ function anomalyKindMeta(kind) {
   if (kind === 'detriti')  return { label: 'Campo di detriti',      res: 'metalli' };
   if (kind === 'nebulosa') return { label: 'Nebulosa',              res: 'energia' };
   if (kind === 'reliquie') return { label: 'Reliquia antica',       res: null };
-  if (kind === 'cintura')  return { label: 'Cintura asteroidale',   res: 'metalli' };
-  if (kind === 'gassoso')  return { label: 'Gigante gassoso',       res: 'energia' };
+  if (kind === 'cintura')  return { label: 'Cintura asteroidale',   res: 'paniere' };
+  if (kind === 'gassoso')  return { label: 'Gigante gassoso',       res: 'paniere' };
   if (kind === 'luna')     return { label: 'Luna',                  res: 'paniere' };
+  if (kind === 'pianeta')  return { label: 'Pianeta',               res: 'paniere' };
   return { label: kind, res: null };
 }
 
@@ -5158,6 +5159,7 @@ function anomalyKindIcon(kind) {
   if (kind === 'gassoso')  return uiIcon('fspGrav', 'amber');  /* orbita gravitazionale */
   if (kind === 'reliquie') return uiIcon('fspRelic', 'violet');/* esagono reliquia */
   if (kind === 'luna')     return uiIcon('dotCircle', 'violet');/* luna — paniere (viola: strato avanzato) */
+  if (kind === 'pianeta')  return uiIcon('dotCircle', 'cyan');  /* pianeta libero — estrazione orbitale */
   return uiIcon('star', 'soft');
 }
 
@@ -7278,23 +7280,25 @@ function renderDispatchView(stage) {
   });
 }
 
-/* Lune sfruttabili (giacimento a paniere) di un sistema, per l'ancoraggio
-   stazione. Deterministico dal seed (system.generate). Le lune sono annidate
-   in body.moons (non top-level). */
-function harvestableMoonsOf(g, sysId) {
+/* Corpi sfruttabili LIBERI (giacimento a paniere, non colonizzati) di un
+   sistema, per l'ancoraggio stazione. Redesign 2026: tutti i corpi (pianeti
+   rocciosi top-level + lune annidate + cinture/giganti). Deterministico dal seed. */
+function harvestableBodiesOf(g, sysId) {
   const out = [];
   if (!(ORION.system && ORION.system.generate && ORION.anomaly && ORION.anomaly.bodyGiacimento)) return out;
   let sys;
   try { sys = ORION.system.generate(g.galaxy, sysId); } catch (_) { return out; }
   const tops = (sys && sys.bodies) || [];
+  function colonized(key) { const c = g.colonies && g.colonies[sysId + ':' + key]; return !!(c && c.colonized); }
+  function consider(b) {
+    if (!b || !b.key || colonized(b.key)) return;
+    const gi = ORION.anomaly.bodyGiacimento(b);
+    if (gi && gi.basket) out.push({ key: b.key, name: b.name || b.key });
+  }
   for (let i = 0; i < tops.length; i++) {
-    const b = tops[i];
-    const moons = (b && Array.isArray(b.moons)) ? b.moons : [];
-    for (let m = 0; m < moons.length; m++) {
-      const mn = moons[m];
-      const gi = mn && ORION.anomaly.bodyGiacimento(mn);
-      if (gi && gi.basket) out.push({ key: mn.key, name: mn.name || mn.key });
-    }
+    consider(tops[i]);
+    const moons = (tops[i] && Array.isArray(tops[i].moons)) ? tops[i].moons : [];
+    for (let m = 0; m < moons.length; m++) consider(moons[m]);
   }
   return out;
 }
@@ -7343,14 +7347,14 @@ function openStationBuildPicker(stage) {
     if (cands.length) {
       candHtml = '<ul class="station-cand-list">' + cands.map(function (c) {
         const s = g.galaxy.systems[c.id];
-        /* Redesign lune: se il sistema ha lune (giacimento a paniere), offri
-           l'ancoraggio opzionale della stazione → estrazione di default. */
-        const moons = harvestableMoonsOf(g, c.id);
+        /* Redesign estrazione 2026: se il sistema ha corpi sfruttabili liberi,
+           offri l'ancoraggio opzionale della stazione → estrazione di default. */
+        const anchorBodies = harvestableBodiesOf(g, c.id);
         let anchorHtml = '';
-        if (moons.length) {
-          anchorHtml = '<select class="fleet-row__select station-cand__anchor" data-anchor="' + c.id + '" title="Ancora la stazione a una luna per estrarne il paniere di risorse">' +
+        if (anchorBodies.length) {
+          anchorHtml = '<select class="fleet-row__select station-cand__anchor" data-anchor="' + c.id + '" title="Ancora la stazione a un corpo per estrarne il paniere di risorse">' +
             '<option value="">Orbita il sistema (nessun ancoraggio)</option>' +
-            moons.map(function (mn) {
+            anchorBodies.map(function (mn) {
               return '<option value="' + escapeHtml(mn.key) + '">⚓ Ancora a ' + escapeHtml(mn.name) + ' (estrazione)</option>';
             }).join('') +
           '</select>';
@@ -16104,6 +16108,39 @@ function renderContextActionBar(ctx) {
         potsHtml += '</div>';
       }
 
+      /* Riga "Giacimento" (redesign estrazione 2026): per un corpo LIBERO
+         estraibile, mostra la riserva attuale (non solo i potenziali) + la
+         composizione del paniere, così decidi al volo se mandarci un estrattore. */
+      let giacimentoHtml = '';
+      if (planet && isFree && ORION.anomaly && ORION.anomaly.bodyGiacimento) {
+        const gi = ORION.anomaly.bodyGiacimento(body);
+        if (gi && gi.basket) {
+          if (ORION.anomaly.ensureSites) { try { ORION.anomaly.ensureSites(g, sysId); } catch (_) {} }
+          let site = null;
+          const an = g.anomalies || {};
+          Object.keys(an).forEach(function (kk) {
+            const s = an[kk];
+            if (s && s.sysId === sysId && s.bodyKey != null && String(s.bodyKey) === String(body.key)) site = s;
+          });
+          const cap = site ? site.cap : gi.cap;
+          const reserve = site ? Math.round(site.reserve || 0) : cap;
+          const pct = cap > 0 ? Math.round(reserve / cap * 100) : 0;
+          const pot = planet.potentials || {};
+          const tot = (pot.met || 0) + (pot.en || 0) + (pot.food || 0) + (pot.water || 0);
+          const lbl = { met: 'Met', en: 'En', food: 'Cib', water: 'Acq' };
+          let mixStr = '';
+          if (tot > 0) {
+            mixStr = ['met', 'en', 'food', 'water'].filter(function (r) { return (pot[r] || 0) > 0; })
+              .sort(function (a, b) { return (pot[b] || 0) - (pot[a] || 0); })
+              .map(function (r) { return lbl[r] + ' ' + Math.round((pot[r] || 0) / tot * 100) + '%'; }).join(' · ');
+          }
+          giacimentoHtml = '<div class="bodyinfo__giac" title="Sfruttabile dall\'orbita con un Estrattore (o stazione ancorata), senza colonizzare. Riserva attuale e composizione del paniere.">' +
+            '⛏ <strong>Giacimento</strong> · riserva <strong>' + reserve + ' / ' + cap + '</strong> (' + pct + '%)' +
+            (mixStr ? ' · paniere ' + mixStr : '') +
+          '</div>';
+        }
+      }
+
       /* Moons + anomalie quick info */
       let extraHtml = '';
       const moonCount = body.moons ? body.moons.length : 0;
@@ -16306,6 +16343,7 @@ function renderContextActionBar(ctx) {
             badgeHtml + extraHtml +
           '</div>' +
           potsHtml +
+          giacimentoHtml +
           chipsHtml +
           distHtml +
           costBlockHtml +
