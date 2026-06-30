@@ -143,6 +143,48 @@
      all'asse X (orizzontale schermo). L'utente poi è libero su 3 assi. */
   const DEFAULT_PITCH = 0.55;             // ~31°
   function defaultOrient() { return Quat.fromAxisAngle(1, 0, 0, DEFAULT_PITCH); }
+
+  /* Angolazione 3D persistita della mappa (richiesta utente 2026-06-30): la
+     mappa viene distrutta/ricreata ad ogni navigazione via e ritorno, perciò
+     senza questo `this.orient` tornerebbe sempre al tilt di default e l'utente
+     dovrebbe rimettere a mano l'angolazione che preferisce.
+       L'angolazione è un puro angolo di camera (indipendente dal seed): vale
+     per qualunque galassia, quindi la trattiamo come PREFERENZA DI DISPOSITIVO
+     in localStorage così sopravvive anche al reload della pagina (richiesta
+     utente: "non devo ogni volta rispostare l'angolazione del focus").
+       È stato UI volatile → vive solo in localStorage, MAI nel save di partita
+     (UI_GUIDE §9). Zoom/gruppo restano gestiti dalla navigazione. */
+  const ORIENT_LS_KEY = 'orion.uiprefs.mapOrient';
+  let savedOrient = null;       // Quat | null — ultima angolazione scelta
+  let savedOrientLoaded = false;
+  function loadSavedOrient() {
+    if (savedOrientLoaded) return savedOrient;
+    savedOrientLoaded = true;
+    try {
+      const raw = root.localStorage && root.localStorage.getItem(ORIENT_LS_KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d && typeof d.w === 'number' && typeof d.x === 'number' &&
+            typeof d.y === 'number' && typeof d.z === 'number') {
+          const q = new Quat(d.w, d.x, d.y, d.z).normalize();
+          // scarta valori degeneri (NaN/zero) → ricadi sul default
+          if (isFinite(q.w + q.x + q.y + q.z)) savedOrient = q;
+        }
+      }
+    } catch (_) { /* localStorage non disponibile o JSON corrotto: ignora */ }
+    return savedOrient;
+  }
+  function persistOrient(q) {
+    if (!q) return;
+    savedOrient = q;
+    savedOrientLoaded = true;
+    try {
+      if (root.localStorage) {
+        root.localStorage.setItem(ORIENT_LS_KEY,
+          JSON.stringify({ w: q.w, x: q.x, y: q.y, z: q.z }));
+      }
+    } catch (_) { /* quota/privacy mode: resta comunque in memoria di sessione */ }
+  }
   /* Distanza camera-centro: regola l'intensità della prospettiva. */
   const VIEWER_D = 1.55;
 
@@ -177,6 +219,7 @@
 
       // pseudo-3D — rotazione libera 360° via quaternion (decisione #20)
       this.orient = defaultOrient();
+      this._orientDirty = false;   // true dopo una rotazione utente, da persistere
 
       // navigazione gerarchica
       this.activeGroupId = -1; // gruppo "entrato" esplicitamente (-1 = nessuno)
@@ -309,6 +352,9 @@
     }
 
     destroy() {
+      /* Memorizza l'angolazione corrente così la mappa la ritrova al prossimo
+         mount (e al prossimo avvio, via localStorage). */
+      this._persistOrient();
       if (this._ro) { this._ro.disconnect(); this._ro = null; }
       else window.removeEventListener('resize', this._onResize);
       window.removeEventListener('keydown', this._onKeyDown);
@@ -396,7 +442,10 @@
       this.scale = this.fitScale;
       this.offsetX = (this.cssW - this.scale) / 2;
       this.offsetY = (this.cssH - this.scale) / 2;
-      this.orient = defaultOrient();
+      /* Ripristina l'angolazione 3D scelta in precedenza (anche da una
+         sessione passata, via localStorage), altrimenti parte dal tilt di
+         default. */
+      this.orient = loadSavedOrient() || defaultOrient();
       this.requestRender();
     }
 
@@ -710,6 +759,7 @@
       if (axis) {
         const dq = Quat.fromAxisAngle(axis[0], axis[1], axis[2], ang);
         this.orient = dq.mul(this.orient).normalize();
+        this._persistOrient();   // rotazione da tastiera: persisti subito
         this.requestRender();
       }
     }
@@ -826,6 +876,10 @@
       }
       if (this.pointers.size < 2) this.lastPinchDist = 0;
       if (this.pointers.size === 0) this.dragging = false;
+
+      /* Fine gesto: se ho ruotato (arcball/roll/pinch) persisti l'angolazione,
+         così sopravvive anche a un reload senza prima navigare altrove. */
+      if (this._orientDirty) this._persistOrient();
 
       if (!wasDrag && e.pointerType !== undefined) {
         /* M08 polish (decisione #61): modifiers per il picker (move/attack/explore) */
@@ -974,12 +1028,22 @@
       const angle = mag * 0.012;
       const dq = Quat.fromAxisAngle(ax, ay, 0, angle);
       this.orient = dq.mul(this.orient).normalize();
+      this._orientDirty = true;
     }
 
     _applyRoll(angle) {
       if (!angle) return;
       const dq = Quat.fromAxisAngle(0, 0, 1, angle);
       this.orient = dq.mul(this.orient).normalize();
+      this._orientDirty = true;
+    }
+
+    /* Salva l'angolazione corrente (target dell'animazione se in volo, per non
+       persistere un fotogramma a metà) come preferenza di dispositivo. */
+    _persistOrient() {
+      const q = this._anim ? this._tOrient : this.orient;
+      if (q) persistOrient(q);
+      this._orientDirty = false;
     }
 
     /* ---- Camera animata verso un riquadro-mondo (proiettato) ----
