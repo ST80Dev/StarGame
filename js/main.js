@@ -6478,7 +6478,15 @@ function renderEconAnomaliesView(stage) {
   if (!stage) return;
   const g = ORION.game;
   if (!g) return;
-  if (ORION.tutorial) ORION.tutorial.fire('economy-hub');
+  /* Comparsa anticipata: registra i siti di tutti i sistemi esplorati, così
+     le lune (e gli altri giacimenti) compaiono senza dover passare con una flotta. */
+  if (ORION.anomaly && ORION.anomaly.ensureExplored) ORION.anomaly.ensureExplored(g);
+  if (ORION.tutorial) {
+    ORION.tutorial.fire('economy-hub');
+    /* Lezione lune: contestuale, quando in vista c'è almeno un giacimento luna. */
+    const sites = (ORION.anomaly && ORION.anomaly.knownSites) ? ORION.anomaly.knownSites(g) : [];
+    if (sites.some(function (s) { return s.basket; })) ORION.tutorial.fire('moons');
+  }
   stage.innerHTML =
     '<div class="fleet-view market-view economy-view">' +
       econViewHead('Anomalie &amp; sfruttamenti', 'Economia · §17.3') +

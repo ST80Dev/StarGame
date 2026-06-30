@@ -233,4 +233,13 @@ console.log('— Test 7: build stazione con ancoraggio + mutua esclusione (fetta
   assert(!r2.ok, 'build con ancoraggio su corpo non-luna rifiutato');
 }
 
+console.log('— Test 8: comparsa anticipata — ensureExplored registra le lune senza flotta');
+{
+  const g = makeGame(false);
+  g.state.discovery[7] = 2;                  // sistema 7 esplorato (nessuna flotta lì)
+  assert(!g.anomalies['7:luna:b0m0'], 'sito-luna non ancora registrato');
+  ORION.anomaly.ensureExplored(g);
+  assert(!!g.anomalies['7:luna:b0m0'], 'ensureExplored crea il sito-luna del sistema esplorato');
+}
+
 console.log('\nTutti i test superati.');

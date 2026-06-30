@@ -254,6 +254,22 @@
     /* advRevealed lazy (default falsy): true quando un Osservatorio entra in raggio. */
   }
 
+  /* Registra i siti di TUTTI i sistemi ESPLORATI (non solo quelli dove orbita
+     una flotta): così i giacimenti — lune incluse — compaiono nella vista
+     sfruttamenti appena esplori il sistema, senza doverci passare con una
+     flotta. Idempotente (guardia _anomScanned): costo una-tantum per sistema.
+     Usato dalla UI della vista Anomalie & sfruttamenti. */
+  function ensureExplored(game) {
+    ensure(game);
+    if (!(ORION.system && ORION.system.generate)) return;
+    const disc = game && game.state && game.state.discovery;
+    if (!Array.isArray(disc)) return;
+    const EXP = (ORION.galaxy && ORION.galaxy.DISCOVERY) ? ORION.galaxy.DISCOVERY.EXPLORED : 2;
+    for (let sysId = 0; sysId < disc.length; sysId++) {
+      if (disc[sysId] >= EXP) ensureSites(game, sysId);
+    }
+  }
+
   /* Flotta presente nel sistema, a prescindere dall'ordine (uso generico). */
   /* Flotta che sta facendo RICOGNIZIONE su QUESTO sito specifico (sistema +
      tipo): ordine `survey` con anomalyKind corrispondente, presente in orbita.
@@ -720,6 +736,7 @@
     KINDS: KINDS,
     ensure: ensure,
     ensureSites: ensureSites,
+    ensureExplored: ensureExplored,
     tick: tick,
     nextEventDelta: nextEventDelta,
     knownSites: knownSites,
