@@ -189,12 +189,14 @@
          { fromCivId, fromCivName, fromCivColor, fromAlignment, sinceI }.
          Additivo: i save vecchi caricano con {} (nessuna migrazione). */
       occupations: (game.occupations && typeof game.occupations === 'object') ? game.occupations : {},
-      /* Intel grigia Mekhari (M19 §6e, richiesta utente 2026-06-29): voci di
-         galassia acquistate. I marker per-civ (civ.flagSeen / civ.greyIntel)
-         vivono dentro game.civs (auto-serializzato). Additivo: i save vecchi
-         caricano con { rumors: [] } (nessuna migrazione distruttiva). */
-      mekhariIntel: (game.mekhariIntel && typeof game.mekhariIntel === 'object' && Array.isArray(game.mekhariIntel.rumors))
-        ? { rumors: game.mekhariIntel.rumors } : { rumors: [] },
+      /* Vendita informazioni Vehryn (M19 §6e, decisione utente 2026-06-30):
+         voci di galassia acquistate. I marker per-civ (civ.flagSeen /
+         civ.greyIntel) vivono dentro game.civs (auto-serializzato). Additivo:
+         i save vecchi caricano con { rumors: [] } (nessuna migrazione
+         distruttiva). NB: la versione precedente (canale Mekhari) salvava in
+         `mekhariIntel`; la migrazione lazy in main.js lo recupera. */
+      vehrynIntel: (game.vehrynIntel && typeof game.vehrynIntel === 'object' && Array.isArray(game.vehrynIntel.rumors))
+        ? { rumors: game.vehrynIntel.rumors } : { rumors: [] },
       /* Schema 20 (decisione #65): identità del popolo del giocatore —
          { prefix (archetipo di governo), proper (nome proprio) }. Riconoscibile
          nelle card di salvataggio + mood di partita. */

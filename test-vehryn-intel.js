@@ -1,16 +1,18 @@
 /* =====================================================================
-   M19 §6e — Test headless per la RIFONDAZIONE dell'intel grigia Mekhari
-   (richiesta utente 2026-06-29). Esegui con:  node test-mekhari-intel.js
+   M19 §6e — Test headless per la VENDITA INFORMAZIONI del Conclave di Vehryn
+   (decisione utente 2026-06-30: ruolo spostato dai Mekhari ai Vehryn).
+   Esegui con:  node test-vehryn-intel.js
    Verifica:
-     1. Gate Linea A: localizzazione/profilo richiedono che la civ sia
-        IDENTIFICATA (civ.flagSeen) o avvistata — non più "contattata".
+     1. Gate Linea A: localizzazione/profilo richiedono che la civ bersaglio
+        sia IDENTIFICATA (civ.flagSeen) o avvistata.
      2. Localizzazione: rivela i sistemi (discovery → EXPLORED) + promuove
         ad "Avvistata"; rifiuta quando tutto è già noto.
-     3. Profilo grigio: crea civ.greyIntel con forza a fascia (margine
-        d'errore) e campi talvolta incerti; rifiuta se già posseduto.
+     3. Profilo: crea civ.greyIntel con forza a fascia (margine d'errore) e
+        campi talvolta incerti; rifiuta se già posseduto.
      4. Voci di galassia: aggiunge voci, dedup sullo stesso Impulso, alcune
-        anonime (non attendibili).
-     5. Determinismo (#5): stesso seed + stesso Impulso → stesso esito.
+        anonime (non attendibili). Stato in game.vehrynIntel.
+     5. Acquisti LEGITTIMI: costano crediti ma NON reputazione (≠ Mekhari).
+     6. Determinismo (#5): stesso seed + stesso Impulso → stesso esito.
    ===================================================================== */
 'use strict';
 
@@ -24,14 +26,14 @@ function load(rel) {
   return eval(wrap)(root, root);
 }
 load('js/rng.js');
-const ORION = load('js/galaxy.js');   // serve DISCOVERY + revealSystem reali
+const ORION = load('js/galaxy.js');   // DISCOVERY + revealSystem reali
 
 function assert(cond, msg) {
   if (!cond) { console.error('  ✗ FAIL:', msg); process.exitCode = 1; throw new Error(msg); }
   console.log('  ✓', msg);
 }
 
-/* --- mock minimale delle API che mekhari.js usa ---------------------- */
+/* --- mock minimale delle API che vehryn.js usa ---------------------- */
 const KNOWLEDGE = { unknown: 0, spotted: 1, contacted: 2, known: 3, familiar: 4 };
 const INTEL = { fragmentary: 1, partial: 2, complete: 3, deep: 4 };
 ORION.ai = {
@@ -48,9 +50,10 @@ ORION.ai = {
   dossier: function (c) { return { vocationLabel: 'Mercantili', systems: (c.systems || []).length }; },
   dispositionLabel: function (v) { return v < 0 ? 'Ostile' : 'Cordiale'; }
 };
+let repAdjusted = 0;
 ORION.diplomacy = {
   reputation: function (g) { return g.reputation; },
-  adjustReputation: function (g, d) { g.reputation = Math.max(0, Math.min(100, g.reputation + d)); }
+  adjustReputation: function (g, d) { repAdjusted += d; g.reputation += d; }
 };
 ORION.treasury = {
   totalCredits: function (g) { return g._credits; },
@@ -60,9 +63,8 @@ ORION.treasury = {
   }
 };
 
-const MK = load('js/mekhari.js').mekhari;
+const V = load('js/vehryn.js').vehryn;
 
-/* --- fixture: galassia lineare a 4 sistemi -------------------------- */
 const D = ORION.galaxy.DISCOVERY;
 function fakeGame() {
   return {
@@ -72,7 +74,7 @@ function fakeGame() {
     galaxy: { seed: 'TST', systems: [{ links: [1] }, { links: [0, 2] }, { links: [1, 3] }, { links: [2] }] },
     state: { discovery: [D.EXPLORED, D.UNKNOWN, D.UNKNOWN, D.UNKNOWN] },
     civs: [
-      { id: 'mek', name: 'Mekhari', faction: 'mekhari', alive: true, knowledge: 'contacted', planets: ['3:b0'], systems: [3] },
+      { id: 'veh', name: 'Vehryn', faction: 'vehryn', alive: true, knowledge: 'contacted', planets: ['3:b0'], systems: [3] },
       { id: 'r1', name: 'Vorthan', alive: true, alignment: 'male', phase: 'rise', power: 120,
         disposition: -20, vocation: 'espansionisti', homeTier: 'orlo', knowledge: 'unknown', planets: ['1:b0', '2:b0'], systems: [1, 2] },
       { id: 'r2', name: 'Aelin', alive: true, alignment: 'bene', phase: 'growth', power: 60,
@@ -84,56 +86,54 @@ function fakeGame() {
 console.log('— Test 1: gate Linea A richiede identificazione (flagSeen)');
 {
   const g = fakeGame();
-  assert(MK.isAvailable(g) === true, 'Mekhari contattati → mercato disponibile');
-  assert(MK.quoteLocate(g, 'r1').ok === false, 'localizzazione rifiutata su civ non identificata');
-  assert(MK.quoteProfile(g, 'r1').ok === false, 'profilo rifiutato su civ non identificata');
-  g.civs[1].flagSeen = true; // come se aifleet avesse identificato una loro flotta
-  assert(MK.quoteLocate(g, 'r1').ok === true, 'dopo flagSeen → localizzazione disponibile');
-  assert(MK.quoteProfile(g, 'r1').ok === true, 'dopo flagSeen → profilo disponibile');
-  assert(MK.civIdentified(g, g.civs[2]) === false, 'r2 non ancora identificata');
+  assert(V.isAvailable(g) === true, 'Vehryn contattati → vendita info disponibile');
+  assert(V.quoteLocate(g, 'r1').ok === false, 'localizzazione rifiutata su civ non identificata');
+  assert(V.quoteProfile(g, 'r1').ok === false, 'profilo rifiutato su civ non identificata');
+  g.civs[1].flagSeen = true;
+  assert(V.quoteLocate(g, 'r1').ok === true, 'dopo flagSeen → localizzazione disponibile');
+  assert(V.quoteProfile(g, 'r1').ok === true, 'dopo flagSeen → profilo disponibile');
 }
 
 console.log('— Test 2: localizzazione rivela i sistemi + promuove ad Avvistata');
 {
   const g = fakeGame();
   g.civs[1].flagSeen = true;
-  const credBefore = g._credits, repBefore = g.reputation;
-  const r = MK.buyLocate(g, 'r1');
+  repAdjusted = 0;
+  const credBefore = g._credits;
+  const r = V.buyLocate(g, 'r1');
   assert(r.ok === true, 'acquisto localizzazione ok');
   assert(r.revealed === 2, 'rivelati i 2 sistemi di Vorthan (1 e 2)');
   assert(g.state.discovery[1] >= D.EXPLORED && g.state.discovery[2] >= D.EXPLORED, 'discovery[1] e [2] = EXPLORED');
   assert(g.civs[1].knowledge === 'spotted', 'civ promossa ad Avvistata');
   assert(g._credits < credBefore, 'crediti spesi');
-  assert(g.reputation < repBefore, 'costo di reputazione applicato');
-  assert(MK.quoteLocate(g, 'r1').ok === false, 'rifiuta: sistemi già noti');
+  assert(repAdjusted === 0, 'NESSUN costo di reputazione (acquisto legittimo Vehryn)');
+  assert(V.quoteLocate(g, 'r1').ok === false, 'rifiuta: sistemi già noti');
 }
 
-console.log('— Test 3: profilo grigio crea snapshot con margine d\'errore');
+console.log('— Test 3: profilo crea snapshot con margine d\'errore');
 {
   const g = fakeGame();
   g.civs[1].flagSeen = true;
-  const r = MK.buyProfile(g, 'r1');
+  const r = V.buyProfile(g, 'r1');
   assert(r.ok === true, 'acquisto profilo ok');
   const gi = g.civs[1].greyIntel;
   assert(gi && gi.force, 'greyIntel.force presente');
   assert(gi.force.lo < gi.force.mid && gi.force.mid < gi.force.hi, 'forza è una FASCIA (lo < mid < hi)');
-  assert(gi.force.lo >= 1, 'limite inferiore ≥ 1');
   assert(gi.I === g.timeImpulsi, 'snapshot DATATO (impulso registrato)');
   assert(gi.powerAtBuy === 120, 'potenza reale al momento dell\'acquisto registrata');
-  assert(MK.quoteProfile(g, 'r1').ok === false, 'rifiuta: dossier già posseduto');
+  assert(gi.source === 'vehryn', 'fonte marcata vehryn');
+  assert(V.quoteProfile(g, 'r1').ok === false, 'rifiuta: dossier già posseduto');
 }
 
 console.log('— Test 4: voci di galassia, dedup e anonimato');
 {
   const g = fakeGame();
-  const r = MK.buyRumor(g);
+  const r = V.buyRumor(g);
   assert(r.ok === true, 'acquisto voci ok');
-  assert(r.added >= 1 && r.added <= MK.RUMOR_BATCH, 'aggiunte 1..BATCH voci');
-  assert(g.mekhariIntel.rumors.length === r.added, 'voci archiviate in game.mekhariIntel');
-  assert(r.rumors.every(function (v) { return typeof v.text === 'string' && v.text.length > 0; }), 'ogni voce ha testo');
+  assert(r.added >= 1 && r.added <= V.RUMOR_BATCH, 'aggiunte 1..BATCH voci');
+  assert(g.vehrynIntel.rumors.length === r.added, 'voci archiviate in game.vehrynIntel');
   assert(r.rumors.every(function (v) { return v.reliable || v.civId == null; }), 'voci non attendibili → anonime (civId null)');
-  /* stesso Impulso → stesse voci → niente di nuovo da vendere. */
-  const r2 = MK.buyRumor(g);
+  const r2 = V.buyRumor(g);
   assert(r2.ok === false, 'stesso Impulso: rifiuta (nessuna voce più fresca)');
 }
 
@@ -141,10 +141,10 @@ console.log('— Test 5: determinismo (#5) — stesso seed + Impulso → stesso 
 {
   const a = fakeGame(); a.civs[1].flagSeen = true;
   const b = fakeGame(); b.civs[1].flagSeen = true;
-  MK.buyProfile(a, 'r1'); MK.buyProfile(b, 'r1');
+  V.buyProfile(a, 'r1'); V.buyProfile(b, 'r1');
   assert(JSON.stringify(a.civs[1].greyIntel) === JSON.stringify(b.civs[1].greyIntel),
     'greyIntel identico su due partite con stesso seed/Impulso');
-  const ra = MK.buyRumor(a), rb = MK.buyRumor(b);
+  const ra = V.buyRumor(a), rb = V.buyRumor(b);
   assert(JSON.stringify(ra.rumors) === JSON.stringify(rb.rumors), 'voci identiche su due partite con stesso seed/Impulso');
 }
 

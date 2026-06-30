@@ -41,10 +41,10 @@
        delle incursioni): basta che la galassia/civiltà esistano. */
     START_I: 24,
     GLOBAL_CAP: 11,         // max flottiglie ambientali simultanee (alzato per
-                            // dare spazio al traffico Mekhari, 2026-06-30)
+                            // dare spazio al traffico Vehryn, 2026-06-30)
     PER_CIV_CAP: 2,
-    PER_CIV_CAP_MEKHARI: 3, // i Mekhari (corrieri del mercato grigio) viaggiano
-                            // più di chiunque → più carovane simultanee
+    PER_CIV_CAP_VEHRYN: 3,  // i Vehryn (archeologi/informatori) viaggiano più di
+                            // chiunque → più spedizioni simultanee, più incontri
     SPAWN_PER_TICK: 2,      // max spawn per decisione (anti-burst)
     SPAWN_CHANCE: 0.18,     // per civ idonea per decisione
     SPAWN_RAMP_I: 1500,     // sotto: chance scalata (decollo dolce, non rigido)
@@ -392,15 +392,15 @@
       if (game.aiFleets.length >= CFG.GLOBAL_CAP) break;
       const civ = order[i];
       if (!civ.systems || !civ.systems.length) continue;
-      /* I Mekhari (fixer mercantile) tengono più carovane in viaggio degli
-         altri → cap per-civ più alto, così li incroci più spesso (richiesta
-         utente 2026-06-30). */
-      const perCivCap = civ.faction === 'mekhari' ? CFG.PER_CIV_CAP_MEKHARI : CFG.PER_CIV_CAP;
+      /* I Vehryn (archeologi/informatori) tengono più spedizioni in viaggio
+         degli altri → cap per-civ più alto, così li incroci più spesso e apri
+         il canale informazioni (decisione utente 2026-06-30). */
+      const perCivCap = civ.faction === 'vehryn' ? CFG.PER_CIV_CAP_VEHRYN : CFG.PER_CIV_CAP;
       if (countCivFleets(game, civ.id) >= perCivCap) continue;
       const crng = rng(game, 'spawn:' + civ.id + ':' + I);
       let chance = CFG.SPAWN_CHANCE * ramp;
       /* Le pacifiste/isolazioniste muovono meno; predoni/espansionisti di più. */
-      if (civ.faction === 'mekhari') chance *= 1.6;            // corrieri ovunque
+      if (civ.faction === 'vehryn') chance *= 1.6;            // spedizioni ovunque
       else if (civ.vocation === 'isolazionisti' || civ.faction) chance *= 0.5;
       if (civ.vocation === 'espansionisti' || civ.vocation === 'predoni' || civ.vocation === 'imperialisti') chance *= 1.4;
       if (!crng.chance(chance)) continue;
@@ -789,13 +789,15 @@
     if (!af || (af.intel || 0) < CFG.INTEL_FULL) return;
     const civ = civById(game, af.civId);
     if (!civ) return;
-    /* Mekhari = fixer galattico (richiesta utente 2026-06-30): identificare una
-       loro flotta apre SUBITO un canale → promozione a "contattato" (sblocca
-       diplomazia + mercato grigio + intel). Idempotente in markContact. */
-    if (civ.faction === 'mekhari' && ORION.ai && ORION.ai.markContact) {
+    /* Vehryn = informatori/archeologi (decisione utente 2026-06-30):
+       identificare una loro flotta apre SUBITO un canale → promozione a
+       "contattato" (sblocca diplomazia + vendita informazioni §15.5e).
+       Idempotente in markContact; guardia rank<contacted per non gonfiare
+       civ.interactions. */
+    if (civ.faction === 'vehryn' && ORION.ai && ORION.ai.markContact) {
       const KN = ORION.ai.KNOWLEDGE || { contacted: 2 };
       const rank = ORION.ai.knowledgeRank ? ORION.ai.knowledgeRank(civ) : 0;
-      if (rank < KN.contacted) ORION.ai.markContact(game, civ, events || null, 'mekhari-network');
+      if (rank < KN.contacted) ORION.ai.markContact(game, civ, events || null, 'vehryn-network');
     }
     if (civ.flagSeen) return;
     civ.flagSeen = true;

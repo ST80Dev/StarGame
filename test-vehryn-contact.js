@@ -1,13 +1,12 @@
 /* =====================================================================
-   M19 §13.7/§13.10 — Test contatto automatico Mekhari (richiesta utente
-   2026-06-30). Esegui con:  node test-mekhari-contact.js
+   M19 §13.7/§13.10 — Test contatto automatico Vehryn (decisione utente
+   2026-06-30). Esegui con:  node test-vehryn-contact.js
    Verifica:
      1. markContact reale promuove una civ a "contattato" (+1 interazione).
      2. La guardia rank<contacted impedisce di richiamare markContact ogni
-        tick → niente inflazione di civ.interactions (che farebbe fast-track
-        errato a "Conosciuta", soglia 3 interazioni).
-     3. Una volta contattati, mekhari.isAvailable() = true (sblocca mercato
-        grigio + intel); prima è false.
+        tick → niente inflazione di civ.interactions (fast-track a "Conosciuta").
+     3. Una volta contattati, vehryn.isAvailable() = true (sblocca vendita
+        informazioni); prima è false.
    ===================================================================== */
 'use strict';
 
@@ -20,9 +19,9 @@ function load(rel) {
 }
 load('js/rng.js'); load('js/utils.js'); load('js/galaxy.js'); load('js/ai.js');
 root.ORION.treasury = { totalCredits: g => g._cr, spendCredits: (g, c) => { g._cr -= c; return { ok: true }; } };
-root.ORION.diplomacy = { reputation: g => g.reputation, adjustReputation: (g, d) => { g.reputation += d; } };
-const ORION = load('js/mekhari.js');
-const AI = ORION.ai, MK = ORION.mekhari;
+root.ORION.diplomacy = { reputation: g => g.reputation, adjustReputation: (g, d) => { g.reputation = Math.max(0, Math.min(100, g.reputation + d)); } };
+const ORION = load('js/vehryn.js');
+const AI = ORION.ai, V = ORION.vehryn;
 
 function assert(c, m) { if (!c) { console.error('  ✗ FAIL:', m); process.exitCode = 1; } else console.log('  ✓', m); }
 
@@ -30,39 +29,39 @@ function game() {
   return {
     timeImpulsi: 100, reputation: 50, _cr: 5000,
     galaxy: { seed: 'CT', systems: [{ links: [1] }, { links: [0] }] },
-    civs: [{ id: 'mek', name: 'Mekhari', faction: 'mekhari', alive: true,
+    civs: [{ id: 'veh', name: 'Vehryn', faction: 'vehryn', alive: true,
              knowledge: 'spotted', interactions: 0, planets: ['1:b0'], systems: [1], power: 80, disposition: 0 }]
   };
 }
 
 /* Replica la guardia usata in aifleet.markCivFlagSeen / ai.js (spotted→contact). */
-function mekhariEncounter(g) {
+function vehrynEncounter(g) {
   const civ = g.civs[0];
   const KN = AI.KNOWLEDGE || { contacted: 2 };
-  if (civ.faction === 'mekhari' && AI.knowledgeRank(civ) < KN.contacted) {
-    AI.markContact(g, civ, [], 'mekhari-network');
+  if (civ.faction === 'vehryn' && AI.knowledgeRank(civ) < KN.contacted) {
+    AI.markContact(g, civ, [], 'vehryn-network');
   }
 }
 
-console.log('— Test 1: prima del contatto il mercato grigio è chiuso');
+console.log('— Test 1: prima del contatto la vendita info è chiusa');
 {
   const g = game();
-  assert(MK.isAvailable(g) === false, 'Mekhari solo "spotted" → mercato non disponibile');
+  assert(V.isAvailable(g) === false, 'Vehryn solo "spotted" → vendita non disponibile');
 }
 
-console.log('— Test 2: incrocio/hub Mekhari → contattato + mercato aperto');
+console.log('— Test 2: incrocio/avamposto Vehryn → contattato + canale aperto');
 {
   const g = game();
-  mekhariEncounter(g);
+  vehrynEncounter(g);
   assert(g.civs[0].knowledge === 'contacted', 'promosso a "contattato"');
   assert(g.civs[0].interactions === 1, 'una sola interazione registrata');
-  assert(MK.isAvailable(g) === true, 'mercato grigio + intel ora disponibili');
+  assert(V.isAvailable(g) === true, 'vendita informazioni ora disponibile');
 }
 
 console.log('— Test 3: incontri ripetuti NON gonfiano le interazioni');
 {
   const g = game();
-  for (let i = 0; i < 10; i++) mekhariEncounter(g); // come 10 tick con la flotta in vista
+  for (let i = 0; i < 10; i++) vehrynEncounter(g);
   assert(g.civs[0].interactions === 1, 'interactions resta 1 (guardia rank<contacted)');
   assert(g.civs[0].knowledge === 'contacted', 'resta "contattato", NON fast-track a "conosciuta"');
 }

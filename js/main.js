@@ -797,8 +797,8 @@ function newGame(seed, opts) {
     /* M11 Fase B parziale: sistemi occupati dopo vittoria su civiltà AI.
        Lazy, additivo; nessun bump di schema. */
     occupations: {},
-    /* Intel grigia Mekhari (M19 §6e): voci di galassia acquistate. Additivo. */
-    mekhariIntel: { rumors: [] },
+    /* Vendita informazioni Vehryn (M19 §6e): voci di galassia acquistate. Additivo. */
+    vehrynIntel: { rumors: [] },
     /* M17 Fase A (decisione #83): Dispacci & Missioni + Memoria Storica.
        missions = offerte/incarichi; memoria = log milestone permanente
        (uncapped); dispatchMeta = stato del generatore (cooldown/contatori). */
@@ -963,10 +963,14 @@ function newGame(seed, opts) {
     if (saved.occupations && typeof saved.occupations === 'object') {
       ORION.game.occupations = Object.assign({}, saved.occupations);
     }
-    /* Intel grigia Mekhari (M19 §6e): voci acquistate (additivo, no migrazione).
-       I marker per-civ flagSeen/greyIntel arrivano dentro saved.civs. */
-    if (saved.mekhariIntel && Array.isArray(saved.mekhariIntel.rumors)) {
-      ORION.game.mekhariIntel = { rumors: saved.mekhariIntel.rumors.slice() };
+    /* Vendita informazioni Vehryn (M19 §6e): voci acquistate (additivo, no
+       migrazione). I marker per-civ flagSeen/greyIntel arrivano dentro
+       saved.civs. Migrazione lazy: i save della versione precedente (canale
+       Mekhari) tenevano le voci in saved.mekhariIntel → le recuperiamo. */
+    const savedRumors = (saved.vehrynIntel && Array.isArray(saved.vehrynIntel.rumors)) ? saved.vehrynIntel.rumors
+      : (saved.mekhariIntel && Array.isArray(saved.mekhariIntel.rumors)) ? saved.mekhariIntel.rumors : null;
+    if (savedRumors) {
+      ORION.game.vehrynIntel = { rumors: savedRumors.slice() };
     }
     /* Identità del popolo (decisione #65, schema 20). Save pre-20 → null,
        il fallback sotto deriva il default dalla colonia natale. */
@@ -6138,15 +6142,6 @@ function bindMarketBodyEvents(stage, refresh) {
   stage.querySelectorAll('[data-action="mek-buy"]').forEach(function (b) {
     b.addEventListener('click', function () { doSmuggle(b.dataset.res, stage); });
   });
-  /* Mekhari intel grigia: selettore civ + dossier mirato + voci di galassia. */
-  const mekIntelSel = stage.querySelector('[data-bind="mek-intel-civ"]');
-  if (mekIntelSel) mekIntelSel.addEventListener('change', function () { ORION.mekhariIntelCivId = this.value; refresh(); });
-  const locBtn = stage.querySelector('[data-action="mek-locate"]');
-  if (locBtn && !locBtn.disabled) locBtn.addEventListener('click', function () { doMekhariLocate(stage); });
-  const profBtn = stage.querySelector('[data-action="mek-profile"]');
-  if (profBtn && !profBtn.disabled) profBtn.addEventListener('click', function () { doMekhariProfile(stage); });
-  const rumBtn = stage.querySelector('[data-action="mek-rumor"]');
-  if (rumBtn && !rumBtn.disabled) rumBtn.addEventListener('click', function () { doMekhariRumor(stage); });
 }
 
 /* Ridisegna la sotto-vista Economia attiva al centro, usata dalle azioni che
@@ -7413,10 +7408,10 @@ function buildMekhariPanel(g) {
   const MK = ORION.mekhari;
   if (!MK || !MK.isAvailable(g)) return '';
   const sc = MK.surcharge(g);
+  /* Solo mercato grigio/contrabbando: la VENDITA INFORMAZIONI è dei Vehryn
+     (vista Civiltà, vedi js/vehryn.js + vehrynTargetHtml/vehrynShopHtml). */
   return '<p class="sysinfo__sub">Mercato grigio Mekhari <span class="cantieri-section__hint">(sovrapprezzo ' + Math.round(sc * 100) + '% · costa reputazione)</span></p>' +
-    buildMekhariSmuggle(g) +
-    buildMekhariIntel(g) +
-    buildMekhariRumors(g);
+    buildMekhariSmuggle(g);
 }
 
 /* (b) Contrabbando — rifornimento a una colonia (richiede colonie). */
@@ -7458,52 +7453,8 @@ function buildMekhariSmuggle(g) {
     '<p class="panel__note">Il Sindacato Mekhari rifornisce qualunque colonia accettando <em>qualunque valuta</em> del tuo portfolio — utile dove non hai la valuta locale o sei bloccato. Paghi un sovrapprezzo da <strong>mercato grigio</strong> e un <strong>costo di reputazione</strong> §14 (pista Tiranno).</p>';
 }
 
-/* (e) Intel grigia — LINEA A: dossier mirato su una civ IDENTIFICATA (di cui
-   hai pedinato/incrociato una flotta, civ.flagSeen) anche senza contatto
-   formale. Localizzazione (dove vivono) + Profilo grigio (chi sono, sfumato). */
-function buildMekhariIntel(g) {
-  const MK = ORION.mekhari;
-  const civs = (g.civs || []).filter(function (c) {
-    return c && c.alive && c.faction !== 'mekhari' && MK.civIdentified(g, c);
-  });
-  if (!civs.length) {
-    return '<p class="sysinfo__sub" style="margin-top:.6rem">Intel grigia — dossier mirato</p>' +
-      '<p class="panel__note">⚖ Identifica una flotta nemica (<strong>pedinala</strong> finché non sai a chi appartiene) e i Mekhari ti venderanno dove vive quella civiltà e che cosa è.</p>';
-  }
-  if (!ORION.mekhariIntelCivId || !civs.some(function (c) { return c.id === ORION.mekhariIntelCivId; })) {
-    ORION.mekhariIntelCivId = civs[0].id;
-  }
-  const sel = civs.filter(function (c) { return c.id === ORION.mekhariIntelCivId; })[0] || civs[0];
-  const opts = civs.map(function (c) {
-    return '<option value="' + escapeHtml(c.id) + '"' + (c.id === sel.id ? ' selected' : '') + '>' + escapeHtml(c.name) + '</option>';
-  }).join('');
-  const credits = (ORION.treasury && ORION.treasury.totalCredits(g)) || 0;
-  const qL = MK.quoteLocate(g, sel.id);
-  const qP = MK.quoteProfile(g, sel.id);
-  let btns = '';
-  if (qL.ok) {
-    const aff = credits + 1e-6 >= qL.costCredits;
-    btns += '<button class="btn btn--mini" data-action="mek-locate" type="button"' + (aff ? '' : ' disabled') +
-      ' title="Rivela dove si trovano le loro colonie (' + qL.systems + ' sistemi) · −' + qL.repCost.toFixed(1) + ' reputazione">📍 Localizza colonie <span class="mek-cost">≈' + qL.costCredits + '</span></button>';
-  }
-  if (qP.ok) {
-    const aff = credits + 1e-6 >= qP.costCredits;
-    btns += '<button class="btn btn--mini" data-action="mek-profile" type="button"' + (aff ? '' : ' disabled') +
-      ' title="Dossier approssimato (fonte non verificata): forza a fascia, indole, disposizione · −' + qP.repCost.toFixed(1) + ' reputazione">⚖ Compra profilo <span class="mek-cost">≈' + qP.costCredits + '</span></button>';
-  }
-  let note = '';
-  if (!qL.ok && !qP.ok) {
-    note = '<p class="panel__note">' + escapeHtml(qP.reason || qL.reason || 'Niente di nuovo da vendere su di loro.') + '</p>';
-  }
-  return '<p class="sysinfo__sub" style="margin-top:.6rem">Intel grigia — dossier mirato</p>' +
-    '<label class="route-picker__field">Civiltà <select data-bind="mek-intel-civ">' + opts + '</select></label>' +
-    (btns ? '<div class="dip-actions">' + btns + '</div>' : '') +
-    note +
-    greyIntelHtml(g, sel);
-}
-
 /* Overlay "fonte non verificata": renderizza il profilo grigio già acquistato
-   (riusabile anche nel dossier civ). È una FOTO DATATA (non si aggiorna). */
+   dai Vehryn (riusabile nel dossier/lista civ). È una FOTO DATATA. */
 function greyIntelHtml(g, c) {
   const gi = c && c.greyIntel;
   if (!gi) return '';
@@ -7517,23 +7468,63 @@ function greyIntelHtml(g, c) {
   const f = gi.force || { lo: 0, hi: 0 };
   const staleCls = age >= STALE ? ' civ-deepintel-stale' : '';
   return '<div class="civ-card__row' + staleCls + '" style="margin-top:.4rem">' +
-      '<span class="civ-card__k">⚖ Forza (stima grigia)</span><span title="Fonte Mekhari non verificata: fascia ampia, centro possibilmente spostato">≈ ' + f.lo + '–' + f.hi + '</span>' +
+      '<span class="civ-card__k">⚖ Forza (stima)</span><span title="Fonte Vehryn non verificata: fascia ampia, centro possibilmente spostato">≈ ' + f.lo + '–' + f.hi + '</span>' +
       '<span class="civ-card__k">Allineamento</span><span>' + escapeHtml(alignTxt) + '</span></div>' +
     '<div class="civ-card__row' + staleCls + '">' +
       '<span class="civ-card__k">Vocazione</span><span>' + escapeHtml(vocTxt) + '</span>' +
       '<span class="civ-card__k">Disposizione (≈)</span><span>' + escapeHtml(dispTxt) + '</span></div>' +
-    '<p class="panel__note">Fonte Mekhari <strong>non verificata</strong> · rilevamento di ' + age + ' Ι fa' +
+    '<p class="panel__note">Fonte Vehryn <strong>non verificata</strong> · rilevamento di ' + age + ' Ι fa' +
       (age >= STALE ? ' — datato, rinnova con lo spionaggio' : '') + '.</p>';
 }
 
-/* (e) Intel grigia — LINEA B: voci di galassia (spunti generici, economici,
-   affidabilità bassa). Pescate dallo stato reale con velo d'imprecisione. */
-function buildMekhariRumors(g) {
-  const MK = ORION.mekhari;
-  const q = MK.quoteRumor(g);
+/* ====================================================================
+   VENDITA INFORMAZIONI VEHRYN (M19 §6e) — UI nella vista Civiltà.
+   - vehrynTargetHtml(c): bottoni Localizza/Profilo sulla card della civ
+     bersaglio (qualunque civ NON-Costante che hai identificato) + overlay
+     del profilo grigio già comprato.
+   - vehrynShopHtml(c): sezione sulla card del Conclave stesso — voci di
+     galassia (compra + lista) + come aprire il canale.
+   ==================================================================== */
+function vehrynTargetHtml(g, c) {
+  const V = ORION.vehryn;
+  /* Costanti escluse dai bottoni (le incontri direttamente); mostra comunque
+     un eventuale profilo grigio già acquistato. */
+  if (!V || c.faction) return greyIntelHtml(g, c);
+  if (!V.isAvailable(g)) return greyIntelHtml(g, c);
+  if (!V.civIdentified(g, c)) return greyIntelHtml(g, c);
+  const credits = (ORION.treasury && ORION.treasury.totalCredits(g)) || 0;
+  const qL = V.quoteLocate(g, c.id);
+  const qP = V.quoteProfile(g, c.id);
+  let btns = '';
+  if (qL.ok) {
+    const aff = credits + 1e-6 >= qL.costCredits;
+    btns += '<button class="btn btn--mini" data-action="veh-locate" data-civ="' + escapeHtml(c.id) + '" type="button"' + (aff ? '' : ' disabled') +
+      ' title="Il Conclave rivela dove si trovano le sue colonie (' + qL.systems + ' sistemi)">📍 Localizza colonie <span class="mek-cost">≈' + qL.costCredits + '</span></button>';
+  }
+  if (qP.ok) {
+    const aff = credits + 1e-6 >= qP.costCredits;
+    btns += '<button class="btn btn--mini" data-action="veh-profile" data-civ="' + escapeHtml(c.id) + '" type="button"' + (aff ? '' : ' disabled') +
+      ' title="Dossier approssimato (fonte non verificata): forza a fascia, indole, disposizione">⚖ Compra profilo <span class="mek-cost">≈' + qP.costCredits + '</span></button>';
+  }
+  let head = '';
+  if (btns || c.greyIntel) head = '<span class="civ-card__k">⬡ Conclave di Vehryn</span>';
+  return (head ? '<div class="civ-trade">' + head : '') +
+    (btns ? '<div class="dip-actions">' + btns + '</div>' : '') +
+    greyIntelHtml(g, c) +
+    (head ? '</div>' : '');
+}
+
+function vehrynShopHtml(g, c) {
+  const V = ORION.vehryn;
+  if (!V || c.faction !== 'vehryn') return '';
+  if (!V.isAvailable(g)) {
+    return '<div class="civ-trade"><span class="civ-card__k">Vendita informazioni</span>' +
+      '<p class="panel__note">⬡ Identifica una loro flotta (pedinala) o avvista un loro avamposto: il Conclave aprirà il canale e venderà <strong>localizzazioni</strong> e <strong>profili</strong> sulle altre civiltà, più <strong>voci di galassia</strong>.</p></div>';
+  }
+  const q = V.quoteRumor(g);
   const credits = (ORION.treasury && ORION.treasury.totalCredits(g)) || 0;
   const aff = q.ok && credits + 1e-6 >= q.costCredits;
-  const intel = MK.ensureIntel(g);
+  const intel = V.ensureIntel(g);
   const rumors = intel.rumors || [];
   const list = rumors.length
     ? rumors.map(function (rm) {
@@ -7541,12 +7532,13 @@ function buildMekhariRumors(g) {
         const conf = rm.reliable ? '' : ' <em>(non confermata)</em>';
         return '<p class="panel__note mek-rumor">' + icon + ' ' + escapeHtml(rm.text) + conf + '</p>';
       }).join('')
-    : '<p class="panel__note">Nessuna voce raccolta — i Mekhari ne hanno sempre, per il giusto prezzo.</p>';
-  return '<p class="sysinfo__sub" style="margin-top:.6rem">Voci di galassia</p>' +
-    '<button class="btn btn--mini" data-action="mek-rumor" type="button"' + (aff ? '' : ' disabled') +
-      ' title="' + (q.ok ? ('Compra ' + q.count + ' spunti generici · −' + q.repCost.toFixed(1) + ' reputazione') : '') + '">' +
+    : '<p class="panel__note">Nessuna voce raccolta — il Conclave ne ha sempre, per il giusto prezzo.</p>';
+  return '<div class="civ-trade"><span class="civ-card__k">Voci di galassia</span>' +
+    '<button class="btn btn--mini" data-action="veh-rumor" type="button"' + (aff ? '' : ' disabled') +
+      ' title="' + (q.ok ? ('Compra ' + q.count + ' spunti generici sulla galassia') : '') + '">' +
       '🜂 Compra voci <span class="mek-cost">≈' + (q.ok ? q.costCredits : '—') + '</span></button>' +
-    list;
+    list +
+    '<p class="panel__note">Il dossier mirato (localizzazione/profilo) su una civiltà si compra dalla <strong>sua</strong> card, una volta che ne hai identificato una flotta.</p></div>';
 }
 
 function doSmuggle(resource, stage) {
@@ -7571,49 +7563,67 @@ function doSmuggle(resource, stage) {
 }
 
 /* Intel grigia Mekhari — LINEA A: localizzazione colonie di una civ identificata. */
-function doMekhariLocate(stage) {
-  const g = ORION.game; const MK = ORION.mekhari;
-  if (!MK) return;
-  const civId = ORION.mekhariIntelCivId;
-  const r = MK.buyLocate(g, civId);
+/* Vendita informazioni Vehryn — handler azioni (vista Civiltà). Dopo
+   l'acquisto ridisegna la vista Civiltà (lo stato vive in game.civs /
+   game.vehrynIntel). */
+function doVehrynLocate(stage, civId) {
+  const g = ORION.game; const V = ORION.vehryn;
+  if (!V) return;
+  const r = V.buyLocate(g, civId);
   if (!r.ok) { showToast(r.reason || 'Acquisto rifiutato'); return; }
   const civ = (g.civs || []).filter(function (c) { return c.id === civId; })[0];
-  pushChronicle(ORION.time.currentDS(g) + ' — Intel Mekhari: localizzate le colonie di ' +
-    (civ ? civ.name : 'una civiltà') + ' (' + r.revealed + ' sistemi · −' + r.repCost.toFixed(1) + ' reputazione).', 'system');
-  if (ORION.tutorial) ORION.tutorial.fire('mekhari');
+  pushChronicle(ORION.time.currentDS(g) + ' — Conclave di Vehryn: localizzate le colonie di ' +
+    (civ ? civ.name : 'una civiltà') + ' (' + r.revealed + ' sistemi).', 'system');
+  if (ORION.tutorial) ORION.tutorial.fire('vehryn');
   showToast('Colonie localizzate' + (civ ? ' · ' + civ.name : ''));
   persistGame(g);
-  refreshActiveTradeView(stage);
+  renderCivView(stage);
 }
 
-/* Intel grigia Mekhari — LINEA A: profilo grigio (dossier sfumato e datato). */
-function doMekhariProfile(stage) {
-  const g = ORION.game; const MK = ORION.mekhari;
-  if (!MK) return;
-  const civId = ORION.mekhariIntelCivId;
-  const r = MK.buyProfile(g, civId);
+function doVehrynProfile(stage, civId) {
+  const g = ORION.game; const V = ORION.vehryn;
+  if (!V) return;
+  const r = V.buyProfile(g, civId);
   if (!r.ok) { showToast(r.reason || 'Acquisto rifiutato'); return; }
   const civ = (g.civs || []).filter(function (c) { return c.id === civId; })[0];
-  pushChronicle(ORION.time.currentDS(g) + ' — Intel Mekhari: profilo grigio su ' +
-    (civ ? civ.name : 'una civiltà') + ' (fonte non verificata · −' + r.repCost.toFixed(1) + ' reputazione).', 'system');
-  if (ORION.tutorial) ORION.tutorial.fire('mekhari');
-  showToast('Profilo grigio acquisito' + (civ ? ' · ' + civ.name : ''));
+  pushChronicle(ORION.time.currentDS(g) + ' — Conclave di Vehryn: profilo su ' +
+    (civ ? civ.name : 'una civiltà') + ' (fonte non verificata).', 'system');
+  if (ORION.tutorial) ORION.tutorial.fire('vehryn');
+  showToast('Profilo acquisito' + (civ ? ' · ' + civ.name : ''));
   persistGame(g);
-  refreshActiveTradeView(stage);
+  renderCivView(stage);
 }
 
-/* Intel grigia Mekhari — LINEA B: voci di galassia. */
-function doMekhariRumor(stage) {
-  const g = ORION.game; const MK = ORION.mekhari;
-  if (!MK) return;
-  const r = MK.buyRumor(g);
+function doVehrynRumor(stage) {
+  const g = ORION.game; const V = ORION.vehryn;
+  if (!V) return;
+  const r = V.buyRumor(g);
   if (!r.ok) { showToast(r.reason || 'Acquisto rifiutato'); return; }
-  pushChronicle(ORION.time.currentDS(g) + ' — Voci di galassia dai Mekhari: ' + r.added +
-    ' nuovi spunti (−' + r.repCost.toFixed(1) + ' reputazione).', 'system');
-  if (ORION.tutorial) ORION.tutorial.fire('mekhari');
+  pushChronicle(ORION.time.currentDS(g) + ' — Voci di galassia dal Conclave di Vehryn: ' + r.added +
+    ' nuovi spunti.', 'system');
+  if (ORION.tutorial) ORION.tutorial.fire('vehryn');
   showToast('Raccolte ' + r.added + ' voci di galassia');
   persistGame(g);
-  refreshActiveTradeView(stage);
+  renderCivView(stage);
+}
+
+/* Aggancia gli handler della vendita informazioni Vehryn entro `stage`
+   (condiviso tra lista Civiltà e dossier dettagliato). Selettori assenti =
+   no-op. Dopo l'acquisto i do* ridisegnano la vista Civiltà. */
+function bindVehrynIntel(stage) {
+  if (!stage) return;
+  stage.querySelectorAll('[data-action="veh-locate"]').forEach(function (b) {
+    if (b.disabled) return;
+    b.addEventListener('click', function () { doVehrynLocate(stage, b.dataset.civ); });
+  });
+  stage.querySelectorAll('[data-action="veh-profile"]').forEach(function (b) {
+    if (b.disabled) return;
+    b.addEventListener('click', function () { doVehrynProfile(stage, b.dataset.civ); });
+  });
+  stage.querySelectorAll('[data-action="veh-rumor"]').forEach(function (b) {
+    if (b.disabled) return;
+    b.addEventListener('click', function () { doVehrynRumor(stage); });
+  });
 }
 
 /* Overlay di cambio valuta (M12 Fase A2, §15.4). */
@@ -9020,6 +9030,10 @@ function renderCivView(stage) {
       '<span class="civ-card__swatch" aria-hidden="true"></span>' +
       nameEl;
     if (kLabel) head += '<span class="civ-grade civ-grade--' + (c.knowledge || 'unknown') + '">' + escapeHtml(kLabel) + '</span>';
+    /* Civ identificata solo via flotta (sotto "Avvistata"): chip dedicato. */
+    if (rank < KNOWLEDGE.spotted && c.flagSeen && !factionDef) {
+      head += '<span class="civ-grade civ-grade--unknown" title="Hai identificato una sua flotta: ne conosci l\'identità, non dove vive. Il Conclave di Vehryn può venderti la localizzazione.">Bandiera identificata</span>';
+    }
     /* Ruolo (solo 4 Costanti): visibile sempre. */
     if (factionDef) head += '<span class="civ-faction-role">' + escapeHtml(factionDef.role) + '</span>';
     head += '</div>';
@@ -9290,20 +9304,31 @@ function renderCivView(stage) {
       }
     }
 
+    /* Vendita informazioni Vehryn: sulla card del Conclave la sezione "voci";
+       su ogni altra civ (non-Costante) i bottoni Localizza/Profilo + l'overlay
+       del profilo grigio già comprato. */
+    const vehHtml = (c.faction === 'vehryn') ? vehrynShopHtml(g, c)
+      : (!c.faction ? vehrynTargetHtml(g, c) : '');
     return '<li class="civ-card civ-card--' + (c.knowledge || 'unknown') + '"' +
       ' data-civ-id="' + escapeHtml(String(c.id)) + '"' +
       ' style="--civ-color:' + escapeHtml(c.color) + '">' +
-      head + body + '</li>';
+      head + body + vehHtml + '</li>';
   }
 
   /* Separa 4 Costanti dalle altre. Le 4 Costanti sono sempre visibili nella
      loro sezione fissa anche se 'unknown'. */
   const allCivs = (g.civs || []).filter(function (c) { return c.alive; });
   const costantiCivs = allCivs.filter(function (c) { return !!c.faction; });
-  const otherVisible = visible.filter(function (c) { return !c.faction; });
-
   /* Ordina per grado decrescente (familiar → known → contacted → spotted). */
   function rankOf(c) { return ORION.ai.knowledgeRank ? ORION.ai.knowledgeRank(c) : (c.contacted ? 2 : 0); }
+  const otherVisible = visible.filter(function (c) { return !c.faction; });
+  /* Civ IDENTIFICATE via flotta (flagSeen) ma non ancora avvistate: compaiono
+     comunque nella lista (card minima) così puoi comprarne la localizzazione
+     dal Conclave di Vehryn — è lì che il pedinamento "frutta". */
+  const flagSeenExtra = allCivs.filter(function (c) {
+    return !c.faction && c.flagSeen && rankOf(c) < (KNOWLEDGE.spotted || 1) && otherVisible.indexOf(c) < 0;
+  });
+  flagSeenExtra.forEach(function (c) { otherVisible.push(c); });
   otherVisible.sort(function (a, b) { return rankOf(b) - rankOf(a); });
 
   /* Sezione fissa "Le Quattro Costanti". */
@@ -9523,6 +9548,7 @@ function renderCivView(stage) {
       renderCivView(stage);
     });
   });
+  bindVehrynIntel(stage);
   stage.querySelectorAll('[data-action="occ-release"]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       const sid = Number(btn.dataset.sys);
@@ -9954,7 +9980,8 @@ function renderCivDetail(stage, c) {
       '</section>' +
       '<section class="civ-detail__sec"><h3>Colonie note <span class="civ-detail__count">' + colKnown.length + '</span></h3>' + colHtml + '</section>' +
       '<section class="civ-detail__sec"><h3>Flotte identificate <span class="civ-detail__count">' + aifs.length + '</span></h3>' + fleetHtml + '</section>' +
-      (c.greyIntel ? '<section class="civ-detail__sec"><h3>Profilo grigio (Mekhari)</h3>' + greyIntelHtml(g, c) + '</section>' : '') +
+      (((!c.faction && ORION.vehryn && ORION.vehryn.isAvailable(g) && ORION.vehryn.civIdentified(g, c)) || c.greyIntel)
+        ? '<section class="civ-detail__sec"><h3>Conclave di Vehryn</h3>' + vehrynTargetHtml(g, c) + '</section>' : '') +
       tradeProfileHtml +
       (dipHtml ? '<section class="civ-detail__sec"><h3>Diplomazia</h3>' + dipHtml + '</section>' : '') +
       (espHtml ? '<section class="civ-detail__sec"><h3>Spionaggio</h3>' + espHtml + '</section>' : '') +
@@ -9977,6 +10004,7 @@ function renderCivDetail(stage, c) {
       if (civ) runDiplomacyAction(civ, btn.dataset.dipAct);
     });
   });
+  bindVehrynIntel(stage);
   /* M19 Fase A (spionaggio): arma/annulla operazione coperta, poi
      ri-renderizza il dossier (lo stato vive in game.espionage). */
   if (ORION.espionage) {
@@ -10001,9 +10029,8 @@ function renderCivDetail(stage, c) {
       });
     });
   }
-  /* L'intel grigia Mekhari ora vive nel banco Mekhari (vista Economia):
-     dossier mirato (localizzazione/profilo) + voci di galassia. Vedi
-     buildMekhariIntel/buildMekhariRumors. */
+  /* La vendita informazioni (dossier mirato + voci) è dei Vehryn e vive nella
+     vista Civiltà: vehrynTargetHtml/vehrynShopHtml + bindVehrynIntel. */
 }
 
 /* M12 Fase A2 (#56 §15.3): blocco "Commercio" nella card civiltà. */
@@ -10069,11 +10096,9 @@ function civEspionageHtml(g, c) {
         '</div>';
     }
   }
-  /* Intel grigia Mekhari (GDD §6e): il canale remoto a pagamento (dossier
-     mirato + voci di galassia) vive ora nel banco Mekhari della vista
-     Economia. L'overlay del profilo grigio acquistato è mostrato come sezione
-     a sé nel dossier (vedi renderCivDetail), così appare anche per civ solo
-     "Avvistate" — non solo contattate (questo blocco è gated a "contattata"). */
+  /* La vendita informazioni (dossier mirato + voci) è dei Vehryn e vive nella
+     vista Civiltà (vedi vehrynTargetHtml/vehrynShopHtml). L'overlay del profilo
+     grigio acquistato è mostrato come sezione a sé nel dossier. */
   if (c.deepIntel) {
     const di = c.deepIntel;
     const btLbl = (di.betrayal && di.betrayal.label) ? di.betrayal.label : (di.betrayalRisk ? 'alto' : 'basso');

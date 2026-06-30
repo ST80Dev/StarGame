@@ -436,8 +436,9 @@
         '<p>Indipendentemente dall\'esito morale, il <strong>successo</strong> alza un po\' l\'<strong>ICG</strong>; ' +
         'il <strong>fallimento</strong> (vieni scoperto) costa <strong>reputazione</strong>, alza l\'ICG e raffredda la ' +
         'disposizione del bersaglio — ma <em>non</em> il karma: essere beccato non rende l\'atto più malvagio.</p>' +
-        '<p>Alternativa senza flotta e senza rischio: l\'<strong>Intel grigia dei Mekhari</strong> — compri informazioni a ' +
-        'pagamento, ma è <em>meno completa</em> (arriva solo a dossier <strong>parziale</strong>) e costa crediti e un po\' di reputazione.</p>'
+        '<p>Alternativa senza flotta e senza rischio: le <strong>informazioni del Conclave di Vehryn</strong> — compri ' +
+        'localizzazione, profilo o voci a pagamento, ma è <em>meno completa</em> e <em>non verificata</em> rispetto allo ' +
+        'spionaggio vero.</p>'
     },
     {
       id: 'ai-vocations',
@@ -850,13 +851,24 @@
         '<p><strong>Il prezzo:</strong> un <strong>sovrapprezzo</strong> da mercato grigio (più basso con buona reputazione) ' +
         '+ un <strong>costo di reputazione</strong> §14 a ogni acquisto — è la pista <em>Tiranno</em>: scorciatoie comode ' +
         'che ti rendono meno raccomandabile.</p>' +
-        '<p><strong>Intel grigia (§6e):</strong> i Mekhari vendono anche <em>informazioni</em>. Se hai <strong>identificato ' +
-        'una flotta</strong> di una civiltà (pedinandola) ma non sai dove vive, comprane la <strong>localizzazione</strong> ' +
-        '(rivela le sue colonie) o un <strong>profilo grigio</strong> (chi è — forza a fascia, indole, disposizione, ma ' +
-        '<em>fonte non verificata</em> e datata). Oppure compra <strong>voci di galassia</strong>: spunti generici ed ' +
-        'economici su minacce e opportunità. Meno affidabile dello <em>spionaggio</em> vero, ma non richiede flotte sul posto.</p>' +
+        '<p>Per <strong>informazioni</strong> sulle altre civiltà rivolgiti invece al <strong>Conclave di Vehryn</strong> ' +
+        '(vedi lezione dedicata): i Mekhari trafficano merci, non dati.</p>' +
         '<p><strong>In arrivo:</strong> mercato secondario delle risorse avanzate (M13), contratti mercenari (M14), ' +
         'taglie e mercato nero pieno (M17).</p>'
+    },
+    {
+      id: 'vehryn', tag: 'Civiltà · ⬡', title: 'Conclave di Vehryn — informazioni',
+      body:
+        '<p>Il <strong>Conclave di Vehryn</strong> (una delle 4 Costanti, archeologi delle stelle) è il <em>venditore di ' +
+        'informazioni</em> della galassia. Si fa vivo da sé: <strong>identificarne una flotta</strong> (pedinala) o ' +
+        '<strong>avvistarne un avamposto</strong> apre subito il canale (contatto + diplomazia).</p>' +
+        '<p><strong>Dossier mirato</strong> (dalla card della civ bersaglio, nella vista Civiltà): se hai <strong>identificato ' +
+        'una flotta</strong> di una civiltà ma non sai dove vive, compra la <strong>localizzazione</strong> (rivela le sue ' +
+        'colonie) o un <strong>profilo</strong> (chi è — forza a fascia, indole, disposizione; <em>fonte non verificata</em> e ' +
+        'datata). Così pedinare una flotta <em>serve</em>: ti dà la chiave per comprarne il dossier.</p>' +
+        '<p><strong>Voci di galassia</strong> (dalla card del Conclave): spunti generici ed economici su minacce e ' +
+        'opportunità, alcuni vaghi. Meno affidabile dello <strong>spionaggio</strong> vero, ma non richiede flotte sul posto ' +
+        'e — a differenza del mercato grigio Mekhari — <strong>non costa reputazione</strong> (è commercio legittimo).</p>'
     },
     {
       id: 'trade-raids', tag: 'Commercio · ☠', title: 'Razzie sulle rotte',
