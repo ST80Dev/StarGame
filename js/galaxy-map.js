@@ -143,6 +143,15 @@
      all'asse X (orizzontale schermo). L'utente poi è libero su 3 assi. */
   const DEFAULT_PITCH = 0.55;             // ~31°
   function defaultOrient() { return Quat.fromAxisAngle(1, 0, 0, DEFAULT_PITCH); }
+
+  /* Angolazione 3D persistita tra un mount e l'altro della mappa (richiesta
+     utente 2026-06-30): la mappa viene distrutta/ricreata ad ogni navigazione
+     via e ritorno, perciò senza questo `this.orient` tornerebbe sempre al tilt
+     di default. La conserviamo in memoria di sessione, per-seed così un'altra
+     partita non eredita l'angolo. È stato UI volatile → NON entra nel save di
+     partita (UI_GUIDE §9). Zoom/gruppo restano gestiti dalla navigazione. */
+  let savedOrient = null;      // Quat | null — ultima angolazione scelta
+  let savedOrientSeed = null;  // seed della galassia cui appartiene
   /* Distanza camera-centro: regola l'intensità della prospettiva. */
   const VIEWER_D = 1.55;
 
@@ -309,6 +318,13 @@
     }
 
     destroy() {
+      /* Memorizza l'angolazione corrente così la mappa la ritrova al prossimo
+         mount. Se è in corso un'animazione di camera salviamo il target, per
+         non congelare un fotogramma a metà volo. */
+      if (this.galaxy) {
+        savedOrient = this._anim ? this._tOrient : this.orient;
+        savedOrientSeed = this.galaxy.seed;
+      }
       if (this._ro) { this._ro.disconnect(); this._ro = null; }
       else window.removeEventListener('resize', this._onResize);
       window.removeEventListener('keydown', this._onKeyDown);
@@ -396,7 +412,10 @@
       this.scale = this.fitScale;
       this.offsetX = (this.cssW - this.scale) / 2;
       this.offsetY = (this.cssH - this.scale) / 2;
-      this.orient = defaultOrient();
+      /* Ripristina l'angolazione 3D scelta in precedenza (se è di questa
+         galassia), altrimenti parte dal tilt di default. */
+      this.orient = (savedOrient && savedOrientSeed === this.galaxy.seed)
+        ? savedOrient : defaultOrient();
       this.requestRender();
     }
 
