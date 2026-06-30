@@ -282,6 +282,33 @@ L'avvio non è "colonia già operativa": l'umanità (o civiltà giocata) **scegl
 > - Riserva più capiente delle altre, stessa rigenerazione continua (recovery-friendly).
 >   I corpi prime d'origine restano rocciosi: nessun impatto su home/AI.
 
+> **Estrazione orbitale da TUTTI i corpi (2026).** Generalizzazione del paniere lunare:
+> **ogni corpo LIBERO** (pianeti rocciosi + lune + cinture + giganti) è sfruttabile
+> dall'orbita **a paniere proporzionale** ai potenziali, **senza colonizzare** —
+> supplemento leggero che copre i *gap* di risorse senza obbligare a colonizzare un
+> mondo "ostile" solo per una risorsa. Così la colonizzazione torna una scelta di
+> strategia: colonizzi dove hai il punto di forza ed estrai i complementi dai corpi
+> liberi giusti (cibo da forestale/terrestre, metallo da desertico/vulcanico, ecc.).
+> - **Supplemento, non economia:** niente pop/strutture/territorio/difesa; rate basso
+>   rispetto a una colonia sviluppata (una miniera scala molto oltre).
+> - **Mutua esclusione:** un corpo **colonizzato** non è più un sito d'estrazione; un
+>   pianeta **libero** offre sia *Colonizza* sia *Estrai*; i pianeti **AI** sono fuori
+>   (gancio futuro).
+> - **Regen DOPPIA → gioco di smistamento:** con un estrattore presente la riserva si
+>   rigenera **poco** (regen *attiva* → a regime rende poco, accamparsi non conviene);
+>   senza, si ricarica **in fretta** (regen *idle*). Conviene **ruotare** gli estrattori
+>   tenendone uno "in burst" alla volta. Due categorie: **sostenuti** (pianeti/lune,
+>   attiva 1.0 / idle 3.0, cap grande) e **burst** (cinture/giganti/anomalie, attiva
+>   0.5 / idle 2.0, cap minore — lo spot estremo da spremere e abbandonare).
+> - **Rate (burst)** alzato (estrattore ~3-5/Ι, stazione ~2-3.8/Ι): l'estrattore consuma
+>   viveri e va rifornito, quindi il prelievo deve valere. Il netto a regime resta basso
+>   (governato dalla regen attiva); il grosso è nel burst sulla riserva.
+> - **Anomalie** (detriti/nebulosa) restano **mono** (campi a risorsa unica, non corpi
+>   a 4 potenziali). Lo **strato avanzato** è gated dall'Osservatorio per tutti i corpi.
+> - **Stazione ancorata** estendibile a **qualunque corpo** (non solo lune).
+> - **UI:** il riquadro info del corpo mostra una riga **"Giacimento"** con la riserva
+>   attuale e la composizione del paniere.
+
 ---
 
 ## 7. RISORSE
@@ -478,7 +505,7 @@ Quando più flotte (proprie e/o alleate vs nemiche) convergono sullo stesso sist
 ### 12.7 Stazioni spaziali
 - Costruibili in qualsiasi sistema esplorato; una sola stazione per sistema.
 - Entità a **livelli (1→4)**, non strutture interne: le funzioni sono fisse, la capacità scala col livello.
-- Funzioni: avamposto militare (difesa), porto di rifornimento flotte (#69), cantiere navi leggere/medie (≤ Fregata), riparazione/refit, e — se **ancorata a una luna** — estrazione a paniere (vedi §6.3).
+- Funzioni: avamposto militare (difesa), porto di rifornimento flotte (#69), cantiere navi leggere/medie (≤ Fregata), riparazione/refit, e — se **ancorata a un corpo** — estrazione a paniere (vedi §6.3).
 - Difendibili, attaccabili, conquistabili.
 
 #### 12.7.1 Logistica stazione (redesign 2026)

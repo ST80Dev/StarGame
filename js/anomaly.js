@@ -40,7 +40,17 @@
        sull'energia, dove la flotta in orbita costa viveri (energia su stazza).
        Con regen continua il sito raggiunge un equilibrio ≈ regen, rendendo
        l'estrazione un supplemento reale invece di un burst una-tantum. */
-    REGEN: 1.0,           // rigenerazione/Ι della riserva (continua, anche in harvest)
+    REGEN: 1.0,           // fallback legacy (kind senza regenActive/regenIdle)
+    /* Redesign estrazione 2026 (richiesta utente): la regen diventa DOPPIA per
+       premiare lo SMISTAMENTO degli estrattori invece del "parcheggia e
+       dimentica". Quando un estrattore/stazione è PRESENTE la riserva si
+       rigenera poco (regenActive) → a regime rende poco, non conviene
+       accamparsi; quando è ASSENTE si ricarica in fretta (regenIdle). I valori
+       per-kind stanno in KINDS; questi sono i fallback. Rivede la decisione
+       2026-06-27 (regen continua uguale sempre): ora l'accampamento È debole
+       di proposito, ma regenActive > 0 resta recovery-friendly (#22). */
+    REGEN_ACTIVE_DEFAULT: 0.5,
+    REGEN_IDLE_DEFAULT: 2.0,
     RELIC_HOLD: 40,       // Ι di presenza per esplorare una reliquia
     RELIC_REWARD: { met: 220, en: 130 },
     LOW_FRAC: 0.15,       // soglia "riserva quasi esaurita" (evento una volta)
@@ -53,9 +63,13 @@
        Decisione utente 2026-06-27: drenaggio alzato (0.6/0.2 → 1.0/0.3) così il
        burst è più veloce e il netto supera nettamente il costo viveri della
        flotta in orbita. lvl1=1.0 · lvl2=1.3 · lvl3=1.6 · lvl4=1.9 · lvl5=2.2.
-       Calcolato come EXTRACTOR_RATE_BASE + EXTRACTOR_RATE_PER_LVL * (lvl-1). */
-    EXTRACTOR_RATE_BASE: 1.0,
-    EXTRACTOR_RATE_PER_LVL: 0.3,
+       Calcolato come EXTRACTOR_RATE_BASE + EXTRACTOR_RATE_PER_LVL * (lvl-1).
+       Redesign estrazione 2026: rate (burst) alzato — l'estrattore consuma
+       viveri e va rifornito, quindi il prelievo deve valere. base 1.0→3.0,
+       per-lvl 0.3→0.5 → lvl1=3.0 · lvl3=4.0 · lvl5=5.0. Il netto a regime resta
+       basso (governato da regenActive), il grosso è nel burst sulla riserva. */
+    EXTRACTOR_RATE_BASE: 3.0,
+    EXTRACTOR_RATE_PER_LVL: 0.5,
     /* XP equipaggio durante harvest: +1 ogni N Ι di drenaggio effettivo. */
     SURVEY_XP_EVERY: 40,
     /* Redesign lune 2026 — paniere + scan + stazione ancorata.
@@ -70,43 +84,53 @@
          premio del "set-and-forget" logistico. */
     OBS_SCAN_RANGE: 3,
     ADV_WEIGHT_SCALE: 0.3,
-    STATION_EXTRACT_BASE: 1.2,
-    STATION_EXTRACT_PER_LVL: 0.4
+    /* Redesign estrazione 2026: rate stazione ancorata alzato in linea con
+       l'estrattore (lvl1=2.0 · lvl4=3.8). */
+    STATION_EXTRACT_BASE: 2.0,
+    STATION_EXTRACT_PER_LVL: 0.6
   };
 
   /* Mappa kind → comportamento.
      `perBody:true` (cintura) = un sito per ogni corpo del tipo nel sistema
      (più cinture in un sistema = più siti distinti). Per gli altri kind
      una sola entità per (sysId, kind). */
+  /* Redesign estrazione 2026 (richiesta utente): OGNI corpo è sfruttabile a
+     PANIERE proporzionale ai potenziali; la regen è DOPPIA (active/idle) per
+     premiare lo smistamento. Due categorie:
+       - SOSTENUTI (pianeti rocciosi + lune): i corpi che "tappi" come
+         supplemento; regenActive 1.0 (accampato rende un filo), regenIdle 3.0
+         (ricarica veloce), cap grande.
+       - CAMPI BURST (cinture, gassosi, anomalie): lo spot estremo da spremere
+         e abbandonare; regenActive 0.5 (accampato ≈ nulla), regenIdle 2.0
+         (ricarica più lenta → burst più raro), cap minore.
+     Anomalie detriti/nebulosa restano MONO (sono campi a risorsa unica, non
+     corpi a 4 potenziali). */
   const KINDS = {
-    detriti:  { harvest: true, res: 'met', cap: 420 },
-    nebulosa: { harvest: true, res: 'en',  cap: 320 },
+    detriti:  { harvest: true, res: 'met', cap: 420, regenActive: 0.5, regenIdle: 2.0 },
+    nebulosa: { harvest: true, res: 'en',  cap: 320, regenActive: 0.5, regenIdle: 2.0 },
     reliquie: { harvest: false, relic: true },
-    /* Cintura asteroidale: corpo §6.3, esposta come sito harvest (richiesta
-       utente 2026-06-16). Riserva maggiore delle altre — è una risorsa
-       industriale ricorrente, non un'anomalia "rara". */
-    cintura:  { harvest: true, res: 'met', cap: 600, perBody: true },
-    /* Decisione A (Stadio 1, docs/FLEET_FLOW.md): GIACIMENTI su corpi non
-       colonizzabili. Il gigante gassoso è sfruttabile (energia) — stesso
-       modello perBody della cintura. Risponde a "estrarre da pianeta non
-       colonizzabile" senza inventare meccaniche nuove. */
-    gassoso:  { harvest: true, res: 'en', cap: 500, perBody: true },
-    /* Redesign lune 2026 (richiesta utente): la luna, ora NON colonizzabile
-       (system.js → habitable:false), diventa un GIACIMENTO A PANIERE. A
-       differenza di cintura (solo met) e gassoso (solo en), rende TUTTE le sue
-       risorse in PROPORZIONE ai potenziali seed-derived: strato base
-       (met/en/food/water → stock) + strato avanzato (esotici → exoticAccum),
-       quest'ultimo sbloccato dallo scan dell'Osservatorio entro raggio. `basket`
-       segnala il deposito multi-risorsa (vedi depositBasket). Riserva più alta
-       delle altre, stessa regen continua (recovery-friendly #22). Niente `res`
-       singolo: il mix vive in site.mix/site.exoticW (computeBasketMix). */
-    luna:     { harvest: true, basket: true, cap: 1200, perBody: true }
+    /* Cintura/gassoso ora a PANIERE (i potenziali li rendono quasi-mono:
+       cintura ≈ metallo, gassoso ≈ energia) → coerenza col resto. Categoria
+       burst. */
+    cintura:  { harvest: true, basket: true, cap: 600, perBody: true, regenActive: 0.5, regenIdle: 2.0 },
+    gassoso:  { harvest: true, basket: true, cap: 500, perBody: true, regenActive: 0.5, regenIdle: 2.0 },
+    /* Lune (redesign 2026): paniere proporzionale, categoria sostenuta. */
+    luna:     { harvest: true, basket: true, cap: 1200, perBody: true, regenActive: 1.0, regenIdle: 3.0 },
+    /* Pianeti rocciosi LIBERI (non colonizzati): paniere proporzionale ai 4
+       potenziali, sfruttabili dall'orbita SENZA colonizzare (supplemento;
+       niente pop/strutture). Un kind unico per tutti i tipi rocciosi — il mix
+       è per-corpo dai potenziali reali. Categoria sostenuta. */
+    pianeta:  { harvest: true, basket: true, cap: 1500, perBody: true, regenActive: 1.0, regenIdle: 3.0 }
   };
 
-  /* Corpi (non colonizzabili) che espongono un giacimento sfruttabile:
-     body.type → kind harvest. Cintura (met) + gigante gassoso (en) + luna
-     (paniere proporzionale). */
-  const BODY_GIACIMENTO = { cintura: 'cintura', gassoso: 'gassoso', luna: 'luna' };
+  /* Corpi che espongono un giacimento a paniere: body.type → kind. Ora TUTTI i
+     corpi (pianeti rocciosi + lune + cinture + giganti). I pianeti rocciosi
+     mappano al kind unico `pianeta`. */
+  const BODY_GIACIMENTO = {
+    cintura: 'cintura', gassoso: 'gassoso', luna: 'luna',
+    terrestre: 'pianeta', desertico: 'pianeta', oceanico: 'pianeta',
+    ghiacciato: 'pianeta', vulcanico: 'pianeta', forestale: 'pianeta'
+  };
 
   /* Helper esposto: il corpo ha un giacimento? → { kind, res, cap } | null.
      Usato da actionsFor (gate Estrai) e dall'ingresso-da-mappa. Deterministico
@@ -117,6 +141,15 @@
     if (!kind) return null;
     const def = KINDS[kind];
     return { kind: kind, res: def.res || null, cap: def.cap, basket: !!def.basket };
+  }
+
+  /* Il corpo è una colonia (mia o comunque colonizzata)? Un pianeta colonizzato
+     NON è un sito d'estrazione (la colonia lo lavora già — mutua esclusione
+     colonizzazione/estrazione, redesign 2026). */
+  function bodyIsColonized(game, sysId, bodyKey) {
+    if (bodyKey == null || !game || !game.colonies) return false;
+    const c = game.colonies[sysId + ':' + bodyKey];
+    return !!(c && c.colonized);
   }
 
   function ensure(game) {
@@ -216,6 +249,10 @@
       if (!b || !b.key) continue;
       const kind = BODY_GIACIMENTO[b.type];
       if (!kind) continue;
+      /* Mutua esclusione: niente sito d'estrazione su un corpo colonizzato
+         (la colonia lo lavora già). Vale per i pianeti — lune/cinture/giganti
+         non sono colonizzabili. */
+      if (bodyIsColonized(game, sysId, b.key)) continue;
       const gdef = KINDS[kind];
       const bk = siteKey(sysId, kind, b.key);
       if (game.anomalies[bk]) continue;
@@ -554,6 +591,12 @@
     const keys = Object.keys(game.anomalies);
     for (let i = 0; i < keys.length; i++) {
       const site = game.anomalies[keys[i]];
+      /* Mutua esclusione: se il corpo è stato colonizzato, rimuovi il sito
+         d'estrazione (la colonia lo lavora ora). Gestisce il colonizza-dopo. */
+      if (site.bodyKey != null && bodyIsColonized(game, site.sysId, site.bodyKey)) {
+        delete game.anomalies[keys[i]];
+        continue;
+      }
       /* Scan Osservatorio (luna): rivela in modo PERMANENTE lo strato avanzato
          se una colonia con Osservatorio è entro raggio. Flag persistito sul
          sito (game.anomalies è serializzato): scansiona una volta, sai per sempre. */
@@ -586,20 +629,31 @@
         }
         continue;
       }
-      /* Rigenerazione CONTINUA (decisione utente 2026-06-27): la riserva si
-         ricostituisce sempre, anche mentre una flotta estrae. A regime, se il
-         drenaggio ≥ regen, il sito si stabilizza erogando ≈ regen/Ι in modo
-         sostenibile (più il burst iniziale fino a `cap`). Vale per energia e
-         metallo. Idempotente, deterministico (nessun RNG). */
+      /* Backfill lazy: cinture/giganti dei save vecchi erano mono (res); ora
+         sono a paniere → calcola il mix una volta (idempotente). */
+      const kdef = KINDS[site.kind] || {};
+      if (kdef.basket && !site.basket) computeBasketMix(game, site.sysId, site.bodyKey, site);
+
+      /* Estrattore che drena QUESTO sito: stazione ancorata (basket) o flotta in
+         survey. Su un corpo a paniere la stazione ha la PRECEDENZA sull'estrattore
+         (mutua esclusione): se ancorata, la flotta è ignorata. */
+      const station = site.basket ? anchoredStation(game, site) : null;
+      const extractorPresent = !!station || !!fleet;
+
+      /* Rigenerazione DOPPIA (redesign estrazione 2026): con un estrattore
+         presente la riserva si rigenera POCO (regenActive → a regime rende poco,
+         accamparsi non conviene); senza estrattore si ricarica IN FRETTA
+         (regenIdle → pronta per il prossimo burst). Premia lo smistamento.
+         Per-kind (pianeti/lune sostenuti vs cinture/giganti/anomalie burst). */
       if (site.reserve < site.cap) {
-        site.reserve = Math.min(site.cap, site.reserve + CFG.REGEN);
+        const regen = extractorPresent
+          ? (kdef.regenActive != null ? kdef.regenActive : CFG.REGEN_ACTIVE_DEFAULT)
+          : (kdef.regenIdle != null ? kdef.regenIdle : CFG.REGEN_IDLE_DEFAULT);
+        site.reserve = Math.min(site.cap, site.reserve + regen);
         if (site.lowFlag && site.reserve > site.cap * CFG.LOW_FRAC * 2) site.lowFlag = false;
       }
-      /* Raccolta ricorrente. Su una luna, una STAZIONE ancorata estrae di
-         default (rate ∝ livello) e ha la PRECEDENZA sull'estrattore (mutua
-         esclusione, scelta utente): se ancorata, la flotta è ignorata. */
-      const station = site.basket ? anchoredStation(game, site) : null;
-      if ((station || fleet) && site.reserve > 0) {
+      /* Raccolta. */
+      if (extractorPresent && site.reserve > 0) {
         const rate = station ? stationExtractRate(station) : harvestRateFor(game, fleet);
         const take = Math.min(rate, site.reserve);
         if (take > 0) {
@@ -649,10 +703,14 @@
     return isFinite(best) ? best : 0;
   }
 
-  /* Siti noti (registrati) per la UI. */
+  /* Siti noti (registrati) per la UI. Esclude i corpi colonizzati (mutua
+     esclusione: un pianeta colonizzato non è più un sito d'estrazione). */
   function knownSites(game) {
     if (!game || !game.anomalies) return [];
-    return Object.keys(game.anomalies).map(function (k) {
+    return Object.keys(game.anomalies).filter(function (k) {
+      const s = game.anomalies[k];
+      return !(s && s.bodyKey != null && bodyIsColonized(game, s.sysId, s.bodyKey));
+    }).map(function (k) {
       const s = game.anomalies[k];
       const sys = game.galaxy.systems[s.sysId];
       /* Fix display 2026-06-27: il rate mostrato in UI era CFG.HARVEST_RATE
@@ -668,8 +726,12 @@
       const fleet = station ? null : fleetSurveyingSite(game, s.sysId, s.kind, s.bodyKey);
       const harvesting = !!station || !!fleet;
       const grossRate = station ? stationExtractRate(station) : (fleet ? harvestRateFor(game, fleet) : 0);
+      /* A sito esaurito il ritmo effettivo converge alla regen ATTIVA (mentre
+         estrai), non a quella idle. */
+      const kdef = KINDS[s.kind] || {};
+      const regA = kdef.regenActive != null ? kdef.regenActive : CFG.REGEN_ACTIVE_DEFAULT;
       const effRate = harvesting
-        ? Math.round(Math.min(grossRate, (s.reserve || 0) + CFG.REGEN) * 10) / 10
+        ? Math.round(Math.min(grossRate, (s.reserve || 0) + regA) * 10) / 10
         : CFG.HARVEST_RATE;
       return {
         key: k, sysId: s.sysId, sysName: sys ? sys.name : '—', kind: s.kind,

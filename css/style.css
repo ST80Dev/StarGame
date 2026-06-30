@@ -8211,6 +8211,16 @@ select.main-menu__input { cursor: pointer; }
   flex-wrap: wrap;
   gap: 4px;
 }
+/* Riga "Giacimento" del riquadro corpo: riserva attuale + paniere (estrazione
+   orbitale, redesign 2026). Verde "surplus/operativo" su superficie canonica. */
+.bodyinfo__giac {
+  font-size: 0.76rem; line-height: 1.45; margin: 4px 0;
+  padding: 4px 8px; border-radius: 6px;
+  color: var(--c-good);
+  background: rgb(var(--c-surface-rgb) / 0.4);
+  border-left: 2px solid var(--c-good);
+  font-family: var(--font-data);
+}
 .bodyinfo__chip {
   display: inline-flex;
   align-items: baseline;
