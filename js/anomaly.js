@@ -365,6 +365,42 @@
     if (exoticShare > 0) col.exoticAccum = (col.exoticAccum || 0) + take * (exoticShare / total);
   }
 
+  /* Deposito a PANIERE da una STAZIONE ANCORATA (redesign logistica 2026):
+     l'estrazione è piena alla luna, ma l'estratto AUTO-ALIMENTA prima il
+     magazzino della stazione (uso locale, piena efficienza), e SOLO l'eccedenza
+     oltre i cap + gli esotici vengono consegnati alla colonia RIFORNITRICE
+     `× L` (l'export lungo è lossy). L'energia estratta riempie store.en (serve
+     al rifornimento flotte), non è più solo export. */
+  function depositBasketToStation(game, station, site, take) {
+    const mix = site.mix || { met: 0, en: 0, food: 0, water: 0 };
+    let total = (mix.met || 0) + (mix.en || 0) + (mix.food || 0) + (mix.water || 0);
+    let exoticShare = 0;
+    if (site.advRevealed && site.exoticW > 0) { exoticShare = site.exoticW; total += exoticShare; }
+    if (total <= 0) return;
+    const S = ORION.station;
+    const store = (S && S.ensureStore) ? S.ensureStore(station) : station.store;
+    const cap = (S && S.storeCap) ? S.storeCap(Math.max(1, station.level || 1)) : null;
+    const sup = (S && S.supplierColonyFor) ? S.supplierColonyFor(game, station) : null;
+    const L = sup ? sup.L : 0;
+    const col = sup && sup.colony;
+    /* Strato base: riempi il magazzino verso il cap (locale), overflow → colonia × L. */
+    ['met', 'en', 'food', 'water'].forEach(function (r) {
+      const w = mix[r] || 0; if (w <= 0) return;
+      let amt = take * (w / total);
+      if (store && cap) {
+        const room = (cap[r] || 0) - (store[r] || 0);
+        const into = Math.max(0, Math.min(amt, room));
+        store[r] = (store[r] || 0) + into;
+        amt -= into;
+      }
+      if (amt > 0 && col && col.stock) col.stock[r] = (col.stock[r] || 0) + amt * L;
+    });
+    /* Esotici: la stazione non li usa → tutti alla colonia (exoticAccum) × L. */
+    if (exoticShare > 0 && col) {
+      col.exoticAccum = (col.exoticAccum || 0) + take * (exoticShare / total) * L;
+    }
+  }
+
   /* Stazione del giocatore ANCORATA a questo corpo (luna) e operativa →
      estrazione di default per sola presenza (no sotto-struttura, scelta utente).
      Mutua esclusione con l'estrattore: se ancorata, il sito è drenato dalla
@@ -551,8 +587,12 @@
         const rate = station ? stationExtractRate(station) : harvestRateFor(game, fleet);
         const take = Math.min(rate, site.reserve);
         if (take > 0) {
-          if (site.basket) depositBasket(game, station ? null : fleet, site, take);
-          else deposit(game, fleet, site.res, take, site);
+          if (site.basket) {
+            /* Stazione ancorata → auto-feed magazzino + overflow × L; flotta
+               estrattore → deposito diretto alla colonia più vicina al sito. */
+            if (station) depositBasketToStation(game, station, site, take);
+            else depositBasket(game, fleet, site, take);
+          } else deposit(game, fleet, site.res, take, site);
           site.reserve -= take;
           site.harvested = (site.harvested || 0) + take;
           /* Usura/XP per Ι in survey (decisione utente 2026-06-16): SOLO per le
