@@ -1152,6 +1152,14 @@
           impulso: I
         });
       }
+      /* Mekhari = fixer galattico (richiesta utente 2026-06-30): scoprire uno
+         dei loro hub apre SUBITO un canale. Diversamente dalle altre civ (dove
+         "spotted" resta tale finché non c'è un atto formale), il Sindacato si fa
+         vivo da sé → promozione diretta a "contattato" (sblocca diplomazia +
+         mercato grigio + intel). Idempotente: se già ≥ contacted, no-op. */
+      if (civ.faction === 'mekhari' && knowledgeRank(civ) === KNOWLEDGE.spotted) {
+        markContact(game, civ, events, 'mekhari-network');
+      }
       /* Auto-promozione di grado in base alle interazioni accumulate. */
       maybePromoteKnowledge(game, civ, I);
     }

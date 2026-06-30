@@ -794,6 +794,8 @@ function newGame(seed, opts) {
     /* M11 Fase B parziale: sistemi occupati dopo vittoria su civiltà AI.
        Lazy, additivo; nessun bump di schema. */
     occupations: {},
+    /* Intel grigia Mekhari (M19 §6e): voci di galassia acquistate. Additivo. */
+    mekhariIntel: { rumors: [] },
     /* M17 Fase A (decisione #83): Dispacci & Missioni + Memoria Storica.
        missions = offerte/incarichi; memoria = log milestone permanente
        (uncapped); dispatchMeta = stato del generatore (cooldown/contatori). */
@@ -957,6 +959,11 @@ function newGame(seed, opts) {
     /* M11 Fase B parziale: sistemi occupati (additivo, no migrazione). */
     if (saved.occupations && typeof saved.occupations === 'object') {
       ORION.game.occupations = Object.assign({}, saved.occupations);
+    }
+    /* Intel grigia Mekhari (M19 §6e): voci acquistate (additivo, no migrazione).
+       I marker per-civ flagSeen/greyIntel arrivano dentro saved.civs. */
+    if (saved.mekhariIntel && Array.isArray(saved.mekhariIntel.rumors)) {
+      ORION.game.mekhariIntel = { rumors: saved.mekhariIntel.rumors.slice() };
     }
     /* Identità del popolo (decisione #65, schema 20). Save pre-20 → null,
        il fallback sotto deriva il default dalla colonia natale. */
@@ -6128,6 +6135,15 @@ function bindMarketBodyEvents(stage, refresh) {
   stage.querySelectorAll('[data-action="mek-buy"]').forEach(function (b) {
     b.addEventListener('click', function () { doSmuggle(b.dataset.res, stage); });
   });
+  /* Mekhari intel grigia: selettore civ + dossier mirato + voci di galassia. */
+  const mekIntelSel = stage.querySelector('[data-bind="mek-intel-civ"]');
+  if (mekIntelSel) mekIntelSel.addEventListener('change', function () { ORION.mekhariIntelCivId = this.value; refresh(); });
+  const locBtn = stage.querySelector('[data-action="mek-locate"]');
+  if (locBtn && !locBtn.disabled) locBtn.addEventListener('click', function () { doMekhariLocate(stage); });
+  const profBtn = stage.querySelector('[data-action="mek-profile"]');
+  if (profBtn && !profBtn.disabled) profBtn.addEventListener('click', function () { doMekhariProfile(stage); });
+  const rumBtn = stage.querySelector('[data-action="mek-rumor"]');
+  if (rumBtn && !rumBtn.disabled) rumBtn.addEventListener('click', function () { doMekhariRumor(stage); });
 }
 
 /* Ridisegna la sotto-vista Economia attiva al centro, usata dalle azioni che
@@ -7304,12 +7320,21 @@ const MEKHARI_LOT = 25;
 function buildMekhariPanel(g) {
   const MK = ORION.mekhari;
   if (!MK || !MK.isAvailable(g)) return '';
+  const sc = MK.surcharge(g);
+  return '<p class="sysinfo__sub">Mercato grigio Mekhari <span class="cantieri-section__hint">(sovrapprezzo ' + Math.round(sc * 100) + '% · costa reputazione)</span></p>' +
+    buildMekhariSmuggle(g) +
+    buildMekhariIntel(g) +
+    buildMekhariRumors(g);
+}
+
+/* (b) Contrabbando — rifornimento a una colonia (richiede colonie). */
+function buildMekhariSmuggle(g) {
+  const MK = ORION.mekhari;
   const mine = myColonyKeys().filter(function (k) { const c = g.colonies[k]; return c && c.colonized; });
   if (!mine.length) return '';
   /* Colonia selezionata (memoria, non salvata). */
   if (!ORION.mekhariColonyKey || mine.indexOf(ORION.mekhariColonyKey) < 0) ORION.mekhariColonyKey = mine[0];
   const colKey = ORION.mekhariColonyKey;
-  const sc = MK.surcharge(g);
   const credits = (ORION.treasury && ORION.treasury.totalCredits(g)) || 0;
   /* Prezzo mostrato nella valuta della regione della colonia destinataria
      (è il "prezzo equivalente locale"). Il backend continua a spendere via
@@ -7336,10 +7361,100 @@ function buildMekhariPanel(g) {
       '</button>' +
     '</div>';
   }).join('');
-  return '<p class="sysinfo__sub">Mercato grigio Mekhari <span class="cantieri-section__hint">(sovrapprezzo ' + Math.round(sc * 100) + '% · costa reputazione)</span></p>' +
-    '<label class="route-picker__field">Colonia <select data-bind="mek-colony">' + colOpts + '</select></label>' +
+  return '<label class="route-picker__field">Colonia <select data-bind="mek-colony">' + colOpts + '</select></label>' +
     '<div class="bank-grid">' + rows + '</div>' +
-    '<p class="panel__note">Il Sindacato Mekhari rifornisce qualunque colonia accettando <em>qualunque valuta</em> del tuo portfolio — utile dove non hai la valuta locale o sei bloccato. Paghi un sovrapprezzo da <strong>mercato grigio</strong> e un <strong>costo di reputazione</strong> §14 (pista Tiranno). Mercato secondario delle risorse avanzate e contratti mercenari arrivano con M13/M14.</p>';
+    '<p class="panel__note">Il Sindacato Mekhari rifornisce qualunque colonia accettando <em>qualunque valuta</em> del tuo portfolio — utile dove non hai la valuta locale o sei bloccato. Paghi un sovrapprezzo da <strong>mercato grigio</strong> e un <strong>costo di reputazione</strong> §14 (pista Tiranno).</p>';
+}
+
+/* (e) Intel grigia — LINEA A: dossier mirato su una civ IDENTIFICATA (di cui
+   hai pedinato/incrociato una flotta, civ.flagSeen) anche senza contatto
+   formale. Localizzazione (dove vivono) + Profilo grigio (chi sono, sfumato). */
+function buildMekhariIntel(g) {
+  const MK = ORION.mekhari;
+  const civs = (g.civs || []).filter(function (c) {
+    return c && c.alive && c.faction !== 'mekhari' && MK.civIdentified(g, c);
+  });
+  if (!civs.length) {
+    return '<p class="sysinfo__sub" style="margin-top:.6rem">Intel grigia — dossier mirato</p>' +
+      '<p class="panel__note">⚖ Identifica una flotta nemica (<strong>pedinala</strong> finché non sai a chi appartiene) e i Mekhari ti venderanno dove vive quella civiltà e che cosa è.</p>';
+  }
+  if (!ORION.mekhariIntelCivId || !civs.some(function (c) { return c.id === ORION.mekhariIntelCivId; })) {
+    ORION.mekhariIntelCivId = civs[0].id;
+  }
+  const sel = civs.filter(function (c) { return c.id === ORION.mekhariIntelCivId; })[0] || civs[0];
+  const opts = civs.map(function (c) {
+    return '<option value="' + escapeHtml(c.id) + '"' + (c.id === sel.id ? ' selected' : '') + '>' + escapeHtml(c.name) + '</option>';
+  }).join('');
+  const credits = (ORION.treasury && ORION.treasury.totalCredits(g)) || 0;
+  const qL = MK.quoteLocate(g, sel.id);
+  const qP = MK.quoteProfile(g, sel.id);
+  let btns = '';
+  if (qL.ok) {
+    const aff = credits + 1e-6 >= qL.costCredits;
+    btns += '<button class="btn btn--mini" data-action="mek-locate" type="button"' + (aff ? '' : ' disabled') +
+      ' title="Rivela dove si trovano le loro colonie (' + qL.systems + ' sistemi) · −' + qL.repCost.toFixed(1) + ' reputazione">📍 Localizza colonie <span class="mek-cost">≈' + qL.costCredits + '</span></button>';
+  }
+  if (qP.ok) {
+    const aff = credits + 1e-6 >= qP.costCredits;
+    btns += '<button class="btn btn--mini" data-action="mek-profile" type="button"' + (aff ? '' : ' disabled') +
+      ' title="Dossier approssimato (fonte non verificata): forza a fascia, indole, disposizione · −' + qP.repCost.toFixed(1) + ' reputazione">⚖ Compra profilo <span class="mek-cost">≈' + qP.costCredits + '</span></button>';
+  }
+  let note = '';
+  if (!qL.ok && !qP.ok) {
+    note = '<p class="panel__note">' + escapeHtml(qP.reason || qL.reason || 'Niente di nuovo da vendere su di loro.') + '</p>';
+  }
+  return '<p class="sysinfo__sub" style="margin-top:.6rem">Intel grigia — dossier mirato</p>' +
+    '<label class="route-picker__field">Civiltà <select data-bind="mek-intel-civ">' + opts + '</select></label>' +
+    (btns ? '<div class="dip-actions">' + btns + '</div>' : '') +
+    note +
+    greyIntelHtml(g, sel);
+}
+
+/* Overlay "fonte non verificata": renderizza il profilo grigio già acquistato
+   (riusabile anche nel dossier civ). È una FOTO DATATA (non si aggiorna). */
+function greyIntelHtml(g, c) {
+  const gi = c && c.greyIntel;
+  if (!gi) return '';
+  const AI = ORION.ai;
+  const ALIGN = { bene: 'Bene', male: 'Male', neutrale: 'Neutrale' };
+  const age = Math.max(0, (g.timeImpulsi || 0) - (gi.I || 0));
+  const STALE = 200;
+  const alignTxt = gi.alignment ? (ALIGN[gi.alignment] || gi.alignment) : 'incerto';
+  const vocTxt = gi.vocationLabel || 'incerta';
+  const dispTxt = (AI && AI.dispositionLabel) ? AI.dispositionLabel(gi.dispositionApprox) : String(gi.dispositionApprox);
+  const f = gi.force || { lo: 0, hi: 0 };
+  const staleCls = age >= STALE ? ' civ-deepintel-stale' : '';
+  return '<div class="civ-card__row' + staleCls + '" style="margin-top:.4rem">' +
+      '<span class="civ-card__k">⚖ Forza (stima grigia)</span><span title="Fonte Mekhari non verificata: fascia ampia, centro possibilmente spostato">≈ ' + f.lo + '–' + f.hi + '</span>' +
+      '<span class="civ-card__k">Allineamento</span><span>' + escapeHtml(alignTxt) + '</span></div>' +
+    '<div class="civ-card__row' + staleCls + '">' +
+      '<span class="civ-card__k">Vocazione</span><span>' + escapeHtml(vocTxt) + '</span>' +
+      '<span class="civ-card__k">Disposizione (≈)</span><span>' + escapeHtml(dispTxt) + '</span></div>' +
+    '<p class="panel__note">Fonte Mekhari <strong>non verificata</strong> · rilevamento di ' + age + ' Ι fa' +
+      (age >= STALE ? ' — datato, rinnova con lo spionaggio' : '') + '.</p>';
+}
+
+/* (e) Intel grigia — LINEA B: voci di galassia (spunti generici, economici,
+   affidabilità bassa). Pescate dallo stato reale con velo d'imprecisione. */
+function buildMekhariRumors(g) {
+  const MK = ORION.mekhari;
+  const q = MK.quoteRumor(g);
+  const credits = (ORION.treasury && ORION.treasury.totalCredits(g)) || 0;
+  const aff = q.ok && credits + 1e-6 >= q.costCredits;
+  const intel = MK.ensureIntel(g);
+  const rumors = intel.rumors || [];
+  const list = rumors.length
+    ? rumors.map(function (rm) {
+        const icon = rm.kind === 'threat' ? '⚠' : (rm.kind === 'opportunity' ? '✦' : '◇');
+        const conf = rm.reliable ? '' : ' <em>(non confermata)</em>';
+        return '<p class="panel__note mek-rumor">' + icon + ' ' + escapeHtml(rm.text) + conf + '</p>';
+      }).join('')
+    : '<p class="panel__note">Nessuna voce raccolta — i Mekhari ne hanno sempre, per il giusto prezzo.</p>';
+  return '<p class="sysinfo__sub" style="margin-top:.6rem">Voci di galassia</p>' +
+    '<button class="btn btn--mini" data-action="mek-rumor" type="button"' + (aff ? '' : ' disabled') +
+      ' title="' + (q.ok ? ('Compra ' + q.count + ' spunti generici · −' + q.repCost.toFixed(1) + ' reputazione') : '') + '">' +
+      '🜂 Compra voci <span class="mek-cost">≈' + (q.ok ? q.costCredits : '—') + '</span></button>' +
+    list;
 }
 
 function doSmuggle(resource, stage) {
@@ -7359,6 +7474,52 @@ function doSmuggle(resource, stage) {
     ' a ' + colonyNameFromKey(colKey) + ' (≈ ' + priceLabel + ' · −' + r.repCost.toFixed(1) + ' reputazione).', 'system');
   if (ORION.tutorial) ORION.tutorial.fire('mekhari');
   showToast('Contrabbando: +' + MEKHARI_LOT + ' ' + tradeResLabel(resource));
+  persistGame(g);
+  refreshActiveTradeView(stage);
+}
+
+/* Intel grigia Mekhari — LINEA A: localizzazione colonie di una civ identificata. */
+function doMekhariLocate(stage) {
+  const g = ORION.game; const MK = ORION.mekhari;
+  if (!MK) return;
+  const civId = ORION.mekhariIntelCivId;
+  const r = MK.buyLocate(g, civId);
+  if (!r.ok) { showToast(r.reason || 'Acquisto rifiutato'); return; }
+  const civ = (g.civs || []).filter(function (c) { return c.id === civId; })[0];
+  pushChronicle(ORION.time.currentDS(g) + ' — Intel Mekhari: localizzate le colonie di ' +
+    (civ ? civ.name : 'una civiltà') + ' (' + r.revealed + ' sistemi · −' + r.repCost.toFixed(1) + ' reputazione).', 'system');
+  if (ORION.tutorial) ORION.tutorial.fire('mekhari');
+  showToast('Colonie localizzate' + (civ ? ' · ' + civ.name : ''));
+  persistGame(g);
+  refreshActiveTradeView(stage);
+}
+
+/* Intel grigia Mekhari — LINEA A: profilo grigio (dossier sfumato e datato). */
+function doMekhariProfile(stage) {
+  const g = ORION.game; const MK = ORION.mekhari;
+  if (!MK) return;
+  const civId = ORION.mekhariIntelCivId;
+  const r = MK.buyProfile(g, civId);
+  if (!r.ok) { showToast(r.reason || 'Acquisto rifiutato'); return; }
+  const civ = (g.civs || []).filter(function (c) { return c.id === civId; })[0];
+  pushChronicle(ORION.time.currentDS(g) + ' — Intel Mekhari: profilo grigio su ' +
+    (civ ? civ.name : 'una civiltà') + ' (fonte non verificata · −' + r.repCost.toFixed(1) + ' reputazione).', 'system');
+  if (ORION.tutorial) ORION.tutorial.fire('mekhari');
+  showToast('Profilo grigio acquisito' + (civ ? ' · ' + civ.name : ''));
+  persistGame(g);
+  refreshActiveTradeView(stage);
+}
+
+/* Intel grigia Mekhari — LINEA B: voci di galassia. */
+function doMekhariRumor(stage) {
+  const g = ORION.game; const MK = ORION.mekhari;
+  if (!MK) return;
+  const r = MK.buyRumor(g);
+  if (!r.ok) { showToast(r.reason || 'Acquisto rifiutato'); return; }
+  pushChronicle(ORION.time.currentDS(g) + ' — Voci di galassia dai Mekhari: ' + r.added +
+    ' nuovi spunti (−' + r.repCost.toFixed(1) + ' reputazione).', 'system');
+  if (ORION.tutorial) ORION.tutorial.fire('mekhari');
+  showToast('Raccolte ' + r.added + ' voci di galassia');
   persistGame(g);
   refreshActiveTradeView(stage);
 }
@@ -9701,6 +9862,7 @@ function renderCivDetail(stage, c) {
       '</section>' +
       '<section class="civ-detail__sec"><h3>Colonie note <span class="civ-detail__count">' + colKnown.length + '</span></h3>' + colHtml + '</section>' +
       '<section class="civ-detail__sec"><h3>Flotte identificate <span class="civ-detail__count">' + aifs.length + '</span></h3>' + fleetHtml + '</section>' +
+      (c.greyIntel ? '<section class="civ-detail__sec"><h3>Profilo grigio (Mekhari)</h3>' + greyIntelHtml(g, c) + '</section>' : '') +
       tradeProfileHtml +
       (dipHtml ? '<section class="civ-detail__sec"><h3>Diplomazia</h3>' + dipHtml + '</section>' : '') +
       (espHtml ? '<section class="civ-detail__sec"><h3>Spionaggio</h3>' + espHtml + '</section>' : '') +
@@ -9747,21 +9909,9 @@ function renderCivDetail(stage, c) {
       });
     });
   }
-  /* M19 (GDD §6e): acquisto intel grigia dai Mekhari (remoto, a pagamento). */
-  if (ORION.mekhari && ORION.mekhari.buyIntel) {
-    stage.querySelectorAll('[data-esp-mekhari]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        const civ = (g.civs || []).filter(function (x) { return x.id === btn.dataset.espMekhari; })[0];
-        if (!civ) return;
-        const r = ORION.mekhari.buyIntel(g, civ.id);
-        if (r.ok) {
-          persistGame(g);
-          showToast('Intel grigia acquistata · ' + civ.name + ' (dossier parziale)');
-        } else if (r.reason) { showToast(r.reason); }
-        renderCivDetail(stage, civ);
-      });
-    });
-  }
+  /* L'intel grigia Mekhari ora vive nel banco Mekhari (vista Economia):
+     dossier mirato (localizzazione/profilo) + voci di galassia. Vedi
+     buildMekhariIntel/buildMekhariRumors. */
 }
 
 /* M12 Fase A2 (#56 §15.3): blocco "Commercio" nella card civiltà. */
@@ -9827,16 +9977,11 @@ function civEspionageHtml(g, c) {
         '</div>';
     }
   }
-  /* Intel grigia Mekhari (GDD §6e): canale REMOTO a pagamento, indipendente
-     dalla presenza flotta. Meno completo dello spionaggio (cap "parziale"). */
-  if (ORION.mekhari && ORION.mekhari.quoteIntel) {
-    const qg = ORION.mekhari.quoteIntel(g, c.id);
-    if (qg.ok) {
-      inner += '<p class="panel__note" style="margin-top:.5rem">⚖ <strong>Intel grigia (Mekhari)</strong> — remota, porta il dossier a <strong>parziale</strong>: ≈' +
-        qg.costCredits + ' crediti · −' + qg.repCost + ' reputazione.</p>' +
-        '<button class="btn btn--mini" type="button" data-esp-mekhari="' + escapeHtml(c.id) + '">Compra intel grigia</button>';
-    }
-  }
+  /* Intel grigia Mekhari (GDD §6e): il canale remoto a pagamento (dossier
+     mirato + voci di galassia) vive ora nel banco Mekhari della vista
+     Economia. L'overlay del profilo grigio acquistato è mostrato come sezione
+     a sé nel dossier (vedi renderCivDetail), così appare anche per civ solo
+     "Avvistate" — non solo contattate (questo blocco è gated a "contattata"). */
   if (c.deepIntel) {
     const di = c.deepIntel;
     const btLbl = (di.betrayal && di.betrayal.label) ? di.betrayal.label : (di.betrayalRisk ? 'alto' : 'basso');

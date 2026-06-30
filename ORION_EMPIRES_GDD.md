@@ -587,7 +587,7 @@ Quattro fazioni **sempre presenti** in ogni galassia, ognuna con funzione narrat
 
 | Fazione | Sistemi | Distribuzione | Funzione |
 |---|---|---|---|
-| **Sindacato Mekhari** | 4-6 | Sparsa — 1 hub per cluster fino a max 6 | Mercato grigio, contrabbando, taglie pirata, intel grigia (gancio M19), spread ridotto nei cluster dove presente. **Vocazione fissa: Mercantile.** |
+| **Sindacato Mekhari** | 6-9 | Sparsa — 1 hub per cluster (rete capillare) | Mercato grigio, contrabbando, taglie pirata, intel grigia (M19), spread ridotto nei cluster dove presente. **Rete capillare + molte carovane in viaggio** → facili da incrociare; avvistarne un hub *o* identificarne una flotta **apre subito il contatto** (fixer che si fa vivo da sé). **Vocazione fissa: Mercantile.** |
 | **Conclave di Vehryn** | 2-4 | Sparsa — avamposti presso sistemi con anomalie/reliquie | Vendita informazioni su sistemi inesplorati, dati antichi §7.2, contratti scoperta. **Vocazione fissa: Tecnocratici + affinità Glaciale.** |
 | **Guardiani di Phaerion** | 2-3 | Concentrata — sede ancestrale + 1-2 satelliti | Custodi di tech antica, intransigenti sui confini (scaramuccia su violazione), forniscono tech rare se aiutati. **Vocazione fissa: Isolazionisti + affinità Ancestrale.** |
 | **Pellegrini di Solhar** | 3-5 | Sparsa — missioni in cluster Nucleo/Colonie | Conversione diplomatica (dispacci, alleanze ideologiche), figure speciali religiose (gancio M14), bonus passivo decadimento ICG quando galassia allineata. Subiscono secessioni eretiche (scissione → nuova micro-AI). **Vocazione fissa: Mistici + affinità Biotica.** |
@@ -626,6 +626,8 @@ Le AI appaiono nel dossier **per gradi di intimità** (decisione #52):
 | **Familiare** | Alleanza ≥1000 Ι, o federazione | + cronaca specifica della relazione + ultimo scontro + perché disposizione |
 
 Le **4 Costanti** sono visibili in sezione fissa con nome+ruolo sempre noti, dossier per gradi come le altre.
+
+**Identificazione bandiera (sotto "Avvistata"):** pedinare/incrociare una flotta AI fino a riconoscerne l'identità (intel piena) registra un marker `flagSeen` sulla civ — conosci la sua esistenza/identità ma non sai ancora dove vive né nulla del dossier. Non promuove di grado, ma sblocca il **dossier mirato dei Mekhari** (§15.5e) su quella civ. **Eccezione Mekhari:** identificarne una flotta *o* avvistarne un hub li porta direttamente a **Contattata** (il fixer si fa vivo da sé → diplomazia + mercato grigio + intel aperti).
 
 ---
 
@@ -698,7 +700,7 @@ Una delle 4 Costanti (§13.7). Funzione **non bancaria** (il cambio è digitale 
 - **(b) Contrabbando**: aggirano embarghi diplomatici (M11/M17). Se sei in guerra con una civiltà che ti embargo'a, i Mekhari ti rivendono comunque le sue risorse con sovrapprezzo + costo reputazione. Pista Tiranno (#23).
 - **(c) Contratti mercenari** (gancio M14): hub naturale per ingaggiare Comandanti freelance, Contrabbandieri, Cacciatori di taglie.
 - **(d) Taglie pirata** (gancio M17): mettono taglie sui covi e pagano in valuta locale + reputazione mista.
-- **(e) Intel grigia** (gancio M19): vendono informazioni su flotte/colonie altrui — costoso e meno affidabile dello spionaggio vero, ma "passivo".
+- **(e) Intel grigia** (M19): vendono informazioni su flotte/colonie altrui — costoso e meno affidabile dello spionaggio vero, ma "passivo". Due linee: **dossier mirato** su una civ di cui hai identificato una flotta (localizzazione delle colonie + profilo grigio sfumato e datato) e **voci di galassia** (spunti generici, economici, a bassa affidabilità). Prerequisito: aver **contattato i Mekhari** (basta incrociarne una flotta o avvistarne un hub — vedi §13.7); il dossier mirato richiede inoltre di aver **identificato** la civ bersaglio (pedinata/incrociata una sua flotta).
 - **(f) Spread "convenienza locale"**: effetto sistemico passivo (vedi §15.4) — non un servizio da richiedere.
 
 ### 15.6 Mercantili come classe nave dedicata
