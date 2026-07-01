@@ -8030,13 +8030,16 @@ select.main-menu__input { cursor: pointer; }
    ===================================================================== */
 .viewport__actionbar {
   position: absolute;
-  /* Compact-left (decisione di sessione): la card non si stira più a
-     destra rubando spazio al canvas — sta a sinistra e cresce solo
-     quanto le serve, con cap responsivo per non andare oltre la metà
-     dello stage su monitor stretti. */
+  /* Compact-left (decisione di sessione + feedback 2026-07): riquadro
+     STRETTO ancorato a sinistra che cresce in verticale (impila descrizioni,
+     barre e pulsanti) invece di allargarsi rubando metà stage al canvas.
+     Ancoraggio in basso: cresce verso l'alto solo quanto serve, fino a
+     quasi tutta l'altezza dello stage (poi scrolla). */
   bottom: 12px; left: 12px; right: auto;
   width: fit-content;
-  max-width: min(560px, calc(100vw - 24px));
+  max-width: min(320px, calc(100vw - 24px));
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -8051,9 +8054,12 @@ select.main-menu__input { cursor: pointer; }
 }
 .viewport__actionbar[hidden] { display: none; }
 .actionbar__buttons {
+  /* Riquadro stretto (feedback 2026-07): i pulsanti si impilano in
+     colonna a tutta larghezza invece di andare a capo in griglia. */
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
 }
 
 /* PR-N: info card del corpo selezionato a livello Sistema. Nasce per
@@ -8140,13 +8146,12 @@ select.main-menu__input { cursor: pointer; }
   font-family: var(--font-data, monospace);
 }
 .bodyinfo__pots {
-  /* Compact (decisione di sessione): non più 4 colonne stirate al 100%.
-     Quattro celle di larghezza fissa, allineate a sinistra; vanno a capo
-     in 2x2 su schermi davvero stretti. */
+  /* Riquadro stretto (feedback 2026-07): le quattro barre risorsa si
+     impilano una sopra l'altra (colonna unica) e occupano la larghezza
+     del riquadro. */
   display: grid;
-  grid-template-columns: repeat(4, 116px);
-  gap: 4px 8px;
-  justify-content: start;
+  grid-template-columns: 1fr;
+  gap: 3px;
 }
 .bodyinfo__pot {
   display: flex;
@@ -8165,12 +8170,12 @@ select.main-menu__input { cursor: pointer; }
 }
 .bodyinfo__pot-bar {
   flex: 1 1 auto;
-  height: 4px;
+  height: 5px;
   background: rgba(120, 160, 255, 0.15);
   border-radius: 2px;
   overflow: hidden;
   min-width: 28px;
-  max-width: 60px;
+  max-width: none;
 }
 .bodyinfo__pot-bar i {
   display: block;
@@ -8199,7 +8204,7 @@ select.main-menu__input { cursor: pointer; }
 @media (max-width: 760px) {
   .viewport__actionbar { max-width: calc(100vw - 16px); }
   .bodyinfo__pots {
-    grid-template-columns: repeat(2, minmax(108px, 1fr));
+    grid-template-columns: 1fr;
   }
   .bodyinfo__name { font-size: 0.88rem; }
 }

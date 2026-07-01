@@ -2174,7 +2174,10 @@ function renderColonizeCostBlock(planet, opts) {
     })
   );
   const colonialClass = F && F.getClass ? F.getClass('coloniale') : null;
-  const pioneerNote = (!anyColonialReady && colonialClass && colonialClass.cost)
+  /* Note accessorie (nave Pioniere + provviste viaggio): omesse in modalità
+     compatta — l'action bar del corpo libero non le mostra, il giocatore
+     esperto conosce già i requisiti fissi (feedback 2026-07). */
+  const pioneerNote = (!opts.compact && !anyColonialReady && colonialClass && colonialClass.cost)
     ? '<p class="panel__note panel__note--accessory">' +
         '<strong>+ Nave Pioniere</strong> da costruire (Hangar lvl 1, ' + colonialClass.time + ' Ι): ' +
         (colonialClass.cost.met || 0) + ' ' + resGlyph('met') + ' · ' +
@@ -2209,7 +2212,10 @@ function renderColonizeCostBlock(planet, opts) {
         '</dl>'
     ) +
     pioneerNote +
-    '<p class="panel__note panel__note--accessory"><strong>+ Provviste viaggio</strong> coloni: <strong>30</strong> ' + resGlyph('food') + ' · <strong>15</strong> ' + resGlyph('water') + ' per ogni livello demografico imbarcato (slider nel selettore).</p>' +
+    (opts.compact
+      ? ''
+      : '<p class="panel__note panel__note--accessory"><strong>+ Provviste viaggio</strong> coloni: <strong>30</strong> ' + resGlyph('food') + ' · <strong>15</strong> ' + resGlyph('water') + ' per ogni livello demografico imbarcato (slider nel selettore).</p>'
+    ) +
     mulNote +
     crisisNote +
     shortNote;
@@ -16109,8 +16115,9 @@ function renderContextActionBar(ctx) {
       }
 
       /* Riga "Giacimento" (redesign estrazione 2026): per un corpo LIBERO
-         estraibile, mostra la riserva attuale (non solo i potenziali) + la
-         composizione del paniere, così decidi al volo se mandarci un estrattore. */
+         estraibile, mostra la riserva disponibile sul cap. La composizione
+         del paniere (%) è omessa: è già leggibile dalle barre dei potenziali
+         qui sopra (feedback 2026-07). */
       let giacimentoHtml = '';
       if (planet && isFree && ORION.anomaly && ORION.anomaly.bodyGiacimento) {
         const gi = ORION.anomaly.bodyGiacimento(body);
@@ -16124,19 +16131,8 @@ function renderContextActionBar(ctx) {
           });
           const cap = site ? site.cap : gi.cap;
           const reserve = site ? Math.round(site.reserve || 0) : cap;
-          const pct = cap > 0 ? Math.round(reserve / cap * 100) : 0;
-          const pot = planet.potentials || {};
-          const tot = (pot.met || 0) + (pot.en || 0) + (pot.food || 0) + (pot.water || 0);
-          const lbl = { met: 'Met', en: 'En', food: 'Cib', water: 'Acq' };
-          let mixStr = '';
-          if (tot > 0) {
-            mixStr = ['met', 'en', 'food', 'water'].filter(function (r) { return (pot[r] || 0) > 0; })
-              .sort(function (a, b) { return (pot[b] || 0) - (pot[a] || 0); })
-              .map(function (r) { return lbl[r] + ' ' + Math.round((pot[r] || 0) / tot * 100) + '%'; }).join(' · ');
-          }
-          giacimentoHtml = '<div class="bodyinfo__giac" title="Sfruttabile dall\'orbita con un Estrattore (o stazione ancorata), senza colonizzare. Riserva attuale e composizione del paniere.">' +
-            '⛏ <strong>Giacimento</strong> · riserva <strong>' + reserve + ' / ' + cap + '</strong> (' + pct + '%)' +
-            (mixStr ? ' · paniere ' + mixStr : '') +
+          giacimentoHtml = '<div class="bodyinfo__giac" title="Sfruttabile dall\'orbita con un Estrattore (o stazione ancorata), senza colonizzare. Riserva disponibile sul cap.">' +
+            '⛏ <strong>Giacimento</strong> · riserva <strong>' + reserve + ' / ' + cap + '</strong>' +
           '</div>';
         }
       }
