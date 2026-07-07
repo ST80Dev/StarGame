@@ -115,6 +115,10 @@
         '<ul><li><strong>Segui</strong>: pedini a distanza e raccogli intel (pedinare nel loro territorio li infastidisce).</li>' +
         '<li><strong>Intercetta</strong>: raggiungi e ingaggia, se la civiltà è ostile.</li>' +
         '<li><strong>Scorta</strong>: accompagni una flotta non ostile (gesto amichevole).</li></ul>' +
+        '<p>I contatti rilevati compaiono anche nel <strong>pannello ordini</strong> della flotta (Riordina / Nuova flotta), ' +
+        'tra gli obiettivi selezionabili. Da lì il verbo <strong>Attacca</strong> ingaggia il contatto <em>comunque</em>: ' +
+        'su una civiltà <strong>non ostile</strong> è un\'<strong>aggressione</strong> — la loro disposizione crolla e la tua ' +
+        '<strong>reputazione</strong> galattica ne paga il prezzo. La galassia ricorda chi spara per primo.</p>' +
         '<p>Anche solo <em>incrociare</em> una flotta con la tua, senza fermarti, ti dà qualche informazione.</p>'
     },
     {

@@ -89,6 +89,12 @@
     FLEET_RING_FALLOFF: 0.45,
     CONTACT_PERSIST_I: 32,  // un contatto resta "ultimo avvistamento" dopo l'uscita dai sensori
     DETECT_BASE: 0.22,      // offset prob. rilevamento
+    /* Aggancio con isteresi (fix flicker marker, richiesta utente 2026-07-07):
+       il rilevamento è un tiro per-Impulso → un singolo tiro mancato NON è
+       una perdita di contatto. Un contatto agganciato resta `detected` per
+       questa finestra di Impulsi dall'ultimo aggancio riuscito, purché ancora
+       in copertura; si perde solo oltre la finestra o uscendo dai sensori. */
+    TRACK_GRACE_I: 4,
     /* Crescita intel/Impulso in copertura. Tarato lento di proposito
        (richiesta utente 2026-06-26): il radar dà presenza/numero, ma la
        COMPOSIZIONE piena (classi) deve costare permanenza vera. Scala
@@ -114,7 +120,16 @@
     SHADOW_DISPO_PEN: 2.5,     // disposizione persa pedinando nel loro territorio
     ESCORT_DISPO_GAIN: 1.6,    // goodwill scortando una flotta non ostile
     STRIKE_RETURN_CAP: 0.20,   // danno di ritorno max alla flotta che intercetta
-    STRIKE_WIN_RATIO: 0.6      // intercetti vinti se fp player ≥ fp AI × questo
+    STRIKE_WIN_RATIO: 0.6,     // intercetti vinti se fp player ≥ fp AI × questo
+
+    /* Aggressione DELIBERATA a una flotta NON ostile (ordine 'attack' dal
+       pannello ordini, richiesta utente 2026-07-07): il colpo riesce come un
+       intercetto, ma il prezzo è politico — la civ ricorda (disposizione) e
+       la galassia osserva (reputazione, façade M18). Tarato sopra il
+       sabotaggio scoperto di M19 (rep −5 / disp −15): sparare per primi a
+       una flotta pacifica è peggio di una spia colta sul fatto. */
+    AGGRESSION_DISPO_PEN: 18,  // disposizione persa con la civ aggredita
+    AGGRESSION_REP_PEN: 5      // reputazione galattica persa
   };
 
   /* Archetipi di MISSIONE ambientale. Le flotte sono per natura LEGGERE
@@ -654,7 +669,17 @@
     const I = game.timeImpulsi || 0;
     const drng = rng(game, 'det:' + af.id + ':' + I);
     const p = Math.max(0.03, Math.min(0.97, best - af.signature * 0.45 + CFG.DETECT_BASE));
-    if (!drng.chance(p)) { af.detected = false; return; }
+    if (!drng.chance(p)) {
+      /* Tiro mancato. Isteresi (2026-07-07): se il contatto era agganciato
+         da poco (≤ TRACK_GRACE_I dall'ultimo aggancio riuscito — lastSeenI
+         NON si aggiorna qui, così la grazia non si auto-rinnova) ed è ancora
+         in copertura (best>0, garantito sopra), il lock resta: niente
+         flicker del marker per un blip statistico. Nessun guadagno intel
+         durante la grazia. */
+      const inGrace = af.detected && af.lastSeenI != null && (I - af.lastSeenI) <= CFG.TRACK_GRACE_I;
+      if (!inGrace) af.detected = false;
+      return;
+    }
 
     af.detected = true;
     af.lastSeenI = I;          // quando l'hai vista l'ultima volta
@@ -879,6 +904,39 @@
     pf.follow = null; // intercettazione: ordine one-shot, concluso
   }
 
+  /* Fallout politico di un attacco DELIBERATO a una flotta non ostile
+     (mode 'attack', richiesta utente 2026-07-07). Deterministico, niente
+     RNG: disposizione giù con la civ colpita (lei sa CHI ha sparato, anche
+     se tu non l'avevi ancora identificata), reputazione galattica giù via
+     façade M18, evento dedicato in cronaca. Recovery-friendly (#22): costa,
+     ma non innesca fail-state — le relazioni si ricostruiscono. */
+  function applyAggressionFallout(game, pf, af, civ, events) {
+    if (civ) {
+      if (ORION.diplomacy && ORION.diplomacy.adjustDisposition) {
+        ORION.diplomacy.adjustDisposition(game, civ, -CFG.AGGRESSION_DISPO_PEN);
+      } else {
+        nudgeDisposition(civ, -CFG.AGGRESSION_DISPO_PEN);
+      }
+    }
+    if (ORION.reputation && ORION.reputation.applyAndRecord) {
+      ORION.reputation.applyAndRecord(game, 'rep', -CFG.AGGRESSION_REP_PEN, 'aggression',
+        'Attacco a flotta neutrale' + (civ && civ.name ? ' — ' + civ.name : ''));
+    }
+    events.push({
+      kind: 'aifleet-aggression',
+      aifleetId: af.id,
+      fleetId: pf.id,
+      fleetName: pf.name,
+      /* Nome pieno anche senza intel: è la vittima a riconoscerti. */
+      civName: civ ? civ.name : null,
+      sysId: pf.location.systemId,
+      regionLabel: regionLabel(game, pf.location.systemId),
+      dispoPen: CFG.AGGRESSION_DISPO_PEN,
+      repPen: CFG.AGGRESSION_REP_PEN,
+      impulso: game.timeImpulsi || 0
+    });
+  }
+
   /* Instrada la flotta player verso `targetNode` inseguendo un bersaglio
      mobile (richiesta utente 2026-06-20: "Segui" usa internamente il comando
      «Inverti rotta» quando il bersaglio è dietro).
@@ -951,6 +1009,21 @@
       const coLoc = playerSys != null && pf.location.status !== 'in-transit'
                  && aiNode != null && playerSys === aiNode;
 
+      /* Scorta/inseguimento IN VOLO sullo stesso tratto (fix flicker,
+         richiesta utente 2026-07-07): se voli sulla MEDESIMA corsia del
+         bersaglio (in una direzione o nell'altra) gli sei accanto — il
+         contatto non si perde per un tiro sensori mancato. Aggiorna anche
+         l'ultimo avvistamento al nodo più vicino alla sua posizione reale. */
+      const pLegSame = fleetLeg(pf);
+      const aLegSame = (af.status === 'in-transit' && Array.isArray(af.route) && af.routeIdx + 1 < af.route.length)
+        ? [af.route[af.routeIdx], af.route[af.routeIdx + 1]] : null;
+      if (pLegSame && aLegSame && sameEdge(pLegSame[0], pLegSame[1], aLegSame[0], aLegSame[1])) {
+        af.detected = true;
+        af.lastSeenI = I;
+        const tA = 1 - (af.etaImpulsi || 0) / Math.max(1, af.legTotal || 1); // progresso dal suo nodo di partenza
+        af.lastSeenSysId = tA < 0.5 ? aLegSame[0] : aLegSame[1];
+      }
+
       if (!coLoc) {
         /* CONVERGENZA TESTA-A-TESTA (richiesta utente 2026-06-20): se la tua
            flotta e quella AI percorrono lo STESSO tratto in direzioni opposte,
@@ -1012,6 +1085,12 @@
       if (mode === 'intercept') {
         if (hostile) { playerStrike(game, pf, af, events); }
         else { af.intel = 1; /* non ostile: ispezione → dossier pieno, niente scontro */ }
+      } else if (mode === 'attack') {
+        /* Attacco deliberato: ingaggia COMUNQUE, anche una flotta non
+           ostile. Sul neutrale prima il fallout (l'atto è tuo), poi il
+           colpo — stesso motore proporzionato dell'intercetto (#22). */
+        if (!hostile) applyAggressionFallout(game, pf, af, civ, events);
+        playerStrike(game, pf, af, events);
       } else if (mode === 'escort') {
         if (!hostile) {
           af.escortedBy = pf.id; // predisposizione difesa da terzi (latente)
@@ -1103,7 +1182,10 @@
      API ORDINI (chiamata dalla UI: mappa / pannello flotta).
      mode ∈ 'shadow' (Segui) · 'intercept' (Intercetta) · 'escort' (Scorta).
      ------------------------------------------------------------------ */
-  const MODES = { shadow: 'Segui', intercept: 'Intercetta', escort: 'Scorta' };
+  /* 'attack' (richiesta utente 2026-07-07): come 'intercept' ma ingaggia
+     ANCHE le flotte non ostili — aggressione deliberata, con fallout
+     politico (disposizione + reputazione). Esposto dal pannello ordini. */
+  const MODES = { shadow: 'Segui', intercept: 'Intercetta', escort: 'Scorta', attack: 'Attacca' };
   function setFollow(game, fleetId, aiFleetId, mode) {
     ensure(game);
     const pf = (game.fleets || []).filter(function (f) { return f && f.id === fleetId; })[0];
@@ -1112,8 +1194,8 @@
     if (!af) return { ok: false, reason: 'Contatto non più disponibile' };
     if (!af.detected) return { ok: false, reason: 'Flotta non rilevata' };
     if (!MODES[mode]) mode = 'shadow';
-    if (mode === 'intercept' && fleetFp(pf.ships) <= 0) {
-      return { ok: false, reason: 'Flotta disarmata: non può intercettare' };
+    if ((mode === 'intercept' || mode === 'attack') && fleetFp(pf.ships) <= 0) {
+      return { ok: false, reason: 'Flotta disarmata: non può ingaggiare' };
     }
     pf.follow = { mode: mode, aiFleetId: aiFleetId, dest: null, lastDispoI: -99999 };
     return { ok: true, mode: mode, modeLabel: MODES[mode], af: af };

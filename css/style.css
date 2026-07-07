@@ -5897,6 +5897,115 @@ select.main-menu__input { cursor: pointer; }
   white-space: nowrap;
 }
 
+/* Picker OBIETTIVO dell'ordine (richiesta utente 2026-07-07): dropdown
+   custom con icone tematiche per corpi/anomalie/contatti AI — sostituisce
+   il <select> nativo nei pannelli ordini flotta. Stesso pattern <details>
+   robusto di .ship-picker (menu inline, niente clipping). */
+.tgt-picker { position: relative; min-width: 0; flex: 1 1 auto; }
+.tgt-picker__trigger {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  background: rgb(var(--c-surface-rgb) / 0.85);
+  border: 1px solid var(--c-border-soft, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-sm, 5px);
+  color: var(--c-text, #e9ecf6);
+  font-size: 0.84rem;
+  cursor: pointer;
+  list-style: none;
+  transition: var(--transition, 200ms ease);
+}
+.tgt-picker__trigger::-webkit-details-marker { display: none; }
+.tgt-picker__trigger:hover { border-color: var(--c-accent, #2fe6e0); }
+.tgt-picker__trigger:focus-visible { outline: 1px solid var(--c-accent, #2fe6e0); }
+.tgt-picker[open] .tgt-picker__trigger {
+  border-color: var(--c-accent, #2fe6e0);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.tgt-picker__trigger .ui-icon { flex: 0 0 auto; font-size: 1em; }
+.tgt-picker__label {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tgt-picker__caret {
+  flex: 0 0 auto;
+  font-size: 0.9em;
+  transform: rotate(90deg);
+  transition: transform var(--transition, 200ms ease);
+}
+.tgt-picker[open] .tgt-picker__caret { transform: rotate(-90deg); }
+.tgt-picker__menu {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 4px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 6px;
+  background: rgb(var(--c-surface-rgb) / 0.45);
+  border: 1px solid var(--c-border-soft, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-sm, 6px);
+}
+/* Intestazione di gruppo ("Contatti AI rilevati"): stile section-head mini. */
+.tgt-picker__group {
+  margin-top: 4px;
+  padding: 4px 6px 2px;
+  font-family: var(--font-display, sans-serif);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-text-faint, #98a3c8);
+  border-top: 1px solid var(--c-border-soft, rgba(255, 255, 255, 0.1));
+}
+.tgt-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 5px 8px;
+  background: rgb(var(--c-surface-rgb) / 0.55);
+  border: 1px solid var(--c-border-soft, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-sm, 6px);
+  color: var(--c-text, #d8def0);
+  cursor: pointer;
+  transition: var(--transition, 200ms ease);
+}
+.tgt-opt:hover:not(:disabled) {
+  border-color: var(--c-accent, #2fe6e0);
+  background: rgb(var(--c-surface-rgb) / 0.8);
+}
+.tgt-opt.is-active {
+  border-color: var(--c-accent, #2fe6e0);
+  box-shadow: inset 2px 0 0 var(--c-accent, #2fe6e0);
+}
+.tgt-opt:disabled { opacity: 0.55; cursor: not-allowed; }
+.tgt-opt .ui-icon { flex: 0 0 auto; font-size: 1.05em; }
+/* Le lune rientrano sotto il pianeta madre. */
+.tgt-opt--moon { margin-left: 18px; width: calc(100% - 18px); }
+.tgt-opt__main { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.tgt-opt__name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tgt-opt__sub {
+  font-size: 0.72rem;
+  color: var(--c-text-faint, #98a3c8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .fleet-view {
   padding: 16px 20px;
   color: var(--c-text, #e9ecf6);
