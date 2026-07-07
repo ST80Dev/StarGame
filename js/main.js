@@ -4765,8 +4765,10 @@ function renderCantieriSection(colony, planet) {
       '<details class="ship-picker">' +
         '<summary class="ship-picker__trigger" aria-label="Scegli classe nave da costruire">' +
           shipVisIcon(pickedCls) +
-          '<span class="ship-picker__label">' + escapeHtml(pickedCls.name) + '</span>' +
-          '<span class="ship-picker__stats hangar-ship__stats">' + shipStatChips(pickedCls) + '</span>' +
+          '<span class="ship-picker__main">' +
+            '<span class="ship-picker__label">' + escapeHtml(pickedCls.name) + '</span>' +
+            '<span class="ship-picker__stats hangar-ship__stats">' + shipStatChips(pickedCls) + '</span>' +
+          '</span>' +
           '<span class="ship-picker__caret ui-icon ui-icon--soft" aria-hidden="true">' + (ORION.icon ? ORION.icon('chevronRight') : '▸') + '</span>' +
         '</summary>' +
         '<div class="ship-picker__menu" role="listbox" aria-label="Classi nave costruibili">' + pickOpts + '</div>' +
