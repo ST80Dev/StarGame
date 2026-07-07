@@ -534,7 +534,52 @@
     /* Biologica / Esotica — cellula (cerchi concentrici). */
     fspBio: svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/>'),
     /* Temporale / Vuoto — frattura (triangolo). */
-    fspTemp: svg('<polygon points="12,4 20,19 4,19"/>')
+    fspTemp: svg('<polygon points="12,4 20,19 4,19"/>'),
+
+    /* ---- Risorse avanzate §7.2 — un'icona per identità (tinta viola
+       data dal contenitore: risorse avanzate = concetto viola). Sostituiscono
+       i glyph Unicode piatti di ORION.planet.ADVANCED (UI_GUIDE §3). ---- */
+
+    /* Cristalli energetici — gemma sfaccettata. */
+    advCristalli: svg(
+      '<path d="M7 3h10l4 6-9 12L3 9z"/>' +
+      '<path d="M3 9h18"/>' +
+      '<path d="M12 21 8.5 9 12 3l3.5 6z"/>'
+    ),
+    /* Metalli esotici — esagono con nucleo. */
+    advEsotici: svg(
+      '<polygon points="12,3 19.8,7.5 19.8,16.5 12,21 4.2,16.5 4.2,7.5"/>' +
+      '<circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/>'
+    ),
+    /* Biomassa rara — germoglio. */
+    advBiomassa: svg(
+      '<path d="M12 21v-8"/>' +
+      '<path d="M12 13c0-4 2.5-7 8-7 0 5-3 8-8 7z"/>' +
+      '<path d="M12 16c0-3-2-5.5-6-5.5 0 4 2.4 6.3 6 5.5z"/>'
+    ),
+    /* Gas nobili — bolle in sospensione. */
+    advGasNobili: svg(
+      '<circle cx="9" cy="9" r="5.5"/>' +
+      '<circle cx="17" cy="14" r="3.2"/>' +
+      '<circle cx="9.5" cy="18.5" r="1.8"/>'
+    ),
+    /* Reliquie antiche — mirino archeologico (cerchio + tacche). */
+    advReliquie: svg(
+      '<circle cx="12" cy="12" r="5.5"/>' +
+      '<line x1="12" y1="2.5" x2="12" y2="6.5"/>' +
+      '<line x1="12" y1="17.5" x2="12" y2="21.5"/>' +
+      '<line x1="2.5" y1="12" x2="6.5" y2="12"/>' +
+      '<line x1="17.5" y1="12" x2="21.5" y2="12"/>'
+    ),
+    /* Dati sintetici — chip di calcolo. */
+    advDati: svg(
+      '<rect x="6" y="6" width="12" height="12" rx="2"/>' +
+      '<rect x="10" y="10" width="4" height="4"/>' +
+      '<line x1="9"  y1="2" x2="9"  y2="6"/><line x1="15" y1="2" x2="15" y2="6"/>' +
+      '<line x1="9"  y1="18" x2="9"  y2="22"/><line x1="15" y1="18" x2="15" y2="22"/>' +
+      '<line x1="2"  y1="9" x2="6"  y2="9"/><line x1="2"  y1="15" x2="6"  y2="15"/>' +
+      '<line x1="18" y1="9" x2="22" y2="9"/><line x1="18" y1="15" x2="22" y2="15"/>'
+    )
   };
 
   ORION.icons = ICONS;

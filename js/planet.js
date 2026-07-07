@@ -182,13 +182,15 @@
      Risorse avanzate (§7.2). Candidate per tipo: l'identità si rivela
      con la struttura "osservatorio" (decisione #15 — gancio scansione).
      ------------------------------------------------------------------ */
+  /* `icon` = nome nel catalogo SVG js/icons.js (UI_GUIDE §3 approccio B);
+     `glyph` resta come fallback testuale per contesti senza catalogo. */
   const ADVANCED = {
-    cristalli:  { label: 'Cristalli energetici', glyph: '◇' },
-    esotici:    { label: 'Metalli esotici',      glyph: '⬢' },
-    biomassa:   { label: 'Biomassa rara',        glyph: '❀' },
-    gasNobili:  { label: 'Gas nobili',           glyph: '◌' },
-    reliquie:   { label: 'Reliquie antiche',     glyph: '⌖' },
-    dati:       { label: 'Dati sintetici',       glyph: '⌘' }
+    cristalli:  { label: 'Cristalli energetici', glyph: '◇', icon: 'advCristalli' },
+    esotici:    { label: 'Metalli esotici',      glyph: '⬢', icon: 'advEsotici' },
+    biomassa:   { label: 'Biomassa rara',        glyph: '❀', icon: 'advBiomassa' },
+    gasNobili:  { label: 'Gas nobili',           glyph: '◌', icon: 'advGasNobili' },
+    reliquie:   { label: 'Reliquie antiche',     glyph: '⌖', icon: 'advReliquie' },
+    dati:       { label: 'Dati sintetici',       glyph: '⌘', icon: 'advDati' }
   };
   /* Pesi delle candidate per tipo di corpo. */
   const ADVANCED_WEIGHTS = {

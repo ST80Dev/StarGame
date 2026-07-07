@@ -1247,13 +1247,19 @@ button { font-family: inherit; }
 .class--mercanti    { background: linear-gradient(90deg, #7d5e96, #b79bff); }
 .class--tecnici     { background: linear-gradient(90deg, #1f5aa0, #7fc6ea); }
 
-/* Risorse avanzate (§7.2) */
+/* Risorse avanzate (§7.2) — icone SVG neon dal catalogo (UI_GUIDE §3);
+   la tinta viola arriva da .ui-icon--violet, il glow da .ui-icon-svg. */
 .adv-item__glyph {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 1.3em;
+  font-size: 0.95rem;
   color: var(--c-violet);
   text-align: center;
 }
+.advanced-hint .ui-icon,
+.bodyinfo__chip-k .ui-icon { font-size: 0.9em; vertical-align: -0.1em; }
 .adv-item__fill { background: linear-gradient(90deg, #8a6cff, #b79bff); }
 .advanced-hint {
   margin: 4px 0 8px;

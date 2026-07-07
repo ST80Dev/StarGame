@@ -12690,7 +12690,15 @@ function rateGrid(rates, upkeep, colony) {
     items.push(row(resLabel(k), '<span class="rate ' + (net >= 0 ? 'rate--pos' : 'rate--neg') + '">' + fmtNet(net) + '</span> / ' + iU() + ' <span class="rate-aux">(' + aux + ')</span>'));
   });
   if (rates.research) items.push(row('Ricerca', '<span class="rate rate--pos">+' + (Math.round(rates.research * 100) / 100) + '</span> / ' + iU()));
-  if (rates.scan) items.push(row('Scansione', '<span class="rate rate--pos">+' + rates.scan + '</span> / ' + iU()));
+  if (rates.scan) {
+    /* La scansione non è estrazione: è la capacità di mappatura dell'osservatorio
+       (riempie "Mappatura risorse avanzate" nella tab Strutture). Nota esplicita
+       per non farla leggere come un flusso di risorse rare (richiesta 2026-07-07). */
+    const scanDone = colony.scanned && colony.scanned.active;
+    const scanAux = scanDone ? 'mappatura completata' : 'osservatorio → mappatura risorse avanzate';
+    items.push(row('Scansione', '<span class="rate rate--pos">+' + (Math.round(rates.scan * 100) / 100) + '</span> / ' + iU() +
+      ' <span class="rate-aux">(' + scanAux + ')</span>'));
+  }
   if (!items.length) return '<p class="panel__note">Nessuna produzione: costruisci strutture estrattive.</p>';
   return '<dl class="sysinfo__list">' + items.join('') + '</dl>';
 }
@@ -12699,13 +12707,13 @@ function advancedResHtml(planet, colony) {
   if (!planet.advanced.length) return '<p class="panel__note">Nessuna risorsa avanzata rilevata su ' + bodyKindDem(planet) + '.</p>';
   const known = colony.scanned.active;
   if (!known) {
-    return '<p class="advanced-hint">⚛ <strong>' + planet.advanced.length + ' risorse avanzate</strong> presenti — identità da scansionare (costruisci un <em>osservatorio</em>).</p>';
+    return '<p class="advanced-hint">' + uiIcon('fspBio', 'violet') + ' <strong>' + planet.advanced.length + ' risorse avanzate</strong> presenti — identità da scansionare (costruisci un <em>osservatorio</em>).</p>';
   }
   const ADV = ORION.planet.ADVANCED;
   return '<ul class="adv-list">' + planet.advanced.map(function (a) {
     const def = ADV[a.id]; if (!def) return '';
     return '<li class="adv-item">' +
-      '<span class="adv-item__glyph">' + def.glyph + '</span>' +
+      '<span class="adv-item__glyph">' + (def.icon ? uiIcon(def.icon, 'violet') : def.glyph) + '</span>' +
       '<span class="adv-item__name">' + def.label + '</span>' +
       '<div class="adv-item__bar"><div class="adv-item__fill" style="width:' + a.potential + '%"></div></div>' +
       '<span class="adv-item__val">' + a.potential + '</span>' +
@@ -16224,7 +16232,7 @@ function renderContextActionBar(ctx) {
         }
         if (advN > 0) {
           chips.push('<span class="bodyinfo__chip is-violet" title="Risorse avanzate §7.2 presenti — identità rivelata da un osservatorio">' +
-            '<span class="bodyinfo__chip-k">⚛ Avanzate</span>' +
+            '<span class="bodyinfo__chip-k">' + uiIcon('fspBio', 'violet') + ' Avanzate</span>' +
             '<span class="bodyinfo__chip-v">' + advN + ' — scansiona</span></span>');
         }
         chipsHtml = '<div class="bodyinfo__chips">' + chips.join('') + '</div>';
