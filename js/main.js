@@ -11109,62 +11109,18 @@ function openFleetDetail(fleetId, opts) {
       return '<option value="' + s + '"' + (s === D.dest.sysId ? ' selected' : '') + '>' +
         escapeHtml(nm) + ' · ' + hop + (cn ? ' · ' + cn + ' AI' : '') + '</option>';
     }).join('');
-    /* Selettore corpi: pianeti + LUNE (annidate in body.moons) + giganti/cinture,
-       differenziati per tipo con glifo (Stadio 2.3b, feedback utente). */
-    function bodyTypeGlyph(type) {
-      const d = ORION.system && ORION.system.BODY_TYPES ? ORION.system.BODY_TYPES[type] : null;
-      const cat = d ? d.cat : '';
-      return cat === 'gas' ? '⬡' : cat === 'belt' ? '≈' : cat === 'moon' ? '◌' : '◉';
+    /* Contatto AI selezionato ma svanito/non più rilevato → decade con
+       grazia (#22): si torna al bersaglio-corpo. */
+    if (D.dest.aiFleetId) {
+      const afSel = (ORION.aifleet && ORION.aifleet.byId) ? ORION.aifleet.byId(g, D.dest.aiFleetId) : null;
+      if (!afSel || !afSel.detected) { D.dest.aiFleetId = null; D.mission = null; }
     }
-    function bodyTypeLabel(type) {
-      const d = ORION.system && ORION.system.BODY_TYPES ? ORION.system.BODY_TYPES[type] : null;
-      return d ? d.label : type;
-    }
-    function bodyOption(b, isMoon) {
-      const g0 = bodyTypeGlyph(b.type);
-      const pre = isMoon ? '  ' : '';
-      return '<option value="' + escapeHtml(b.key) + '"' + (String(D.dest.bodyKey || '') === String(b.key) ? ' selected' : '') + '>' +
-        pre + g0 + ' ' + escapeHtml(b.name || b.key) + ' · ' + escapeHtml(bodyTypeLabel(b.type)) + '</option>';
-    }
-    let destBodyHtml = '';
-    const destExplored = (disc[D.dest.sysId] || 0) >= DISC.EXPLORED;
-    if (destExplored && ORION.system && ORION.system.generate) {
-      let dsys = null;
-      try { dsys = ORION.system.generate(g.galaxy, D.dest.sysId); } catch (e) { dsys = null; }
-      const dbodies = (dsys && dsys.bodies) || [];
-      /* Anomalie a livello sistema (detriti/nebulosa/reliquie): non sono
-         "corpi" ma sono bersagli M2 sfruttabili (Estrai). Senza questo non
-         comparivano fra gli oggetti selezionabili del sistema, pur essendo
-         siti d'energia/metalli noti (feedback utente 2026-06-26). Le anomalie
-         body-tied (cintura/gassoso) restano fra i corpi. Dedup per tipo. */
-      const sysAnoms = [];
-      const seenAnomKind = {};
-      ((dsys && dsys.anomalies) || []).forEach(function (a) {
-        if (!a || !a.kind || seenAnomKind[a.kind]) return;
-        const def = ORION.anomaly && ORION.anomaly.KINDS ? ORION.anomaly.KINDS[a.kind] : null;
-        if (!def || def.perBody) return;
-        seenAnomKind[a.kind] = true;
-        sysAnoms.push(a.kind);
-      });
-      if (dbodies.length || sysAnoms.length) {
-        const generic = !D.dest.bodyKey && !D.dest.anomKind;
-        let bopts = '<option value=""' + (generic ? ' selected' : '') + '>— orbita generica —</option>';
-        dbodies.forEach(function (b) {
-          if (!b || !b.key) return;
-          bopts += bodyOption(b, false);
-          (b.moons || []).forEach(function (m) { if (m && m.key) bopts += bodyOption(m, true); });
-        });
-        sysAnoms.forEach(function (kind) {
-          const meta = anomalyKindMeta(kind);
-          const lbl = meta.label + (meta.res ? ' · ' + meta.res : '');
-          bopts += '<option value="anom:' + escapeHtml(kind) + '"' +
-            (D.dest.anomKind === kind ? ' selected' : '') + '>✦ ' + escapeHtml(lbl) + '</option>';
-        });
-        destBodyHtml = '<select class="fdetail__select" data-bind="dest-body" aria-label="Corpo o anomalia di destinazione">' + bopts + '</select>';
-      }
-    } else if (!destExplored) {
-      destBodyHtml = '<span class="fdest__hint">' + uiIcon('info', 'soft') + ' Sistema non esplorato: corpo non selezionabile.</span>';
-    }
+    /* Picker obiettivo con icone (2026-07-07): pianeti/lune/cinture/gassosi
+       + anomalie di sistema + CONTATTI AI rilevati, differenziati per icona
+       tematica (sostituisce il <select> testuale — Stadio 2.3b superato). */
+    const destBodyHtml = fleetTargetPickerHtml(
+      fleetTargetPickerModel(g, D.dest.sysId, D.dest, sysIdOf(D.newColonyKey)),
+      'dest-target', 'Obiettivo dell\'ordine');
     /* Presenza AI nota (feedback utente): quante/quali nel sistema + sul corpo. */
     const dCivs = knownCivsInSystem(D.dest.sysId);
     let aiLine = dCivs.length
@@ -11189,6 +11145,13 @@ function openFleetDetail(fleetId, opts) {
        composizione le consente. Colonizza diventa il default suggerito quando
        hai una coloniale su un corpo colonizzabile. */
     const draftFleet = buildDraftFleet();
+    /* Bozza armata? (gate del chip Attacca su contatto AI). */
+    let draftArmed = false;
+    Object.keys(D.draft.ships).forEach(function (k) {
+      const n = D.draft.ships[k] || 0;
+      const cls = ORION.fleet.getClass ? ORION.fleet.getClass(k) : null;
+      if (n > 0 && cls && (cls.fp || 0) > 0) draftArmed = true;
+    });
     const destTarget = ORION.fleetTarget ? ORION.fleetTarget.describe(g, D.dest.sysId, D.dest.bodyKey) : null;
     const rawActs = (ORION.fleet.actionsFor && destTarget) ? ORION.fleet.actionsFor(destTarget, draftFleet) : [];
     const MISSION_META = {
@@ -11215,27 +11178,37 @@ function openFleetDetail(fleetId, opts) {
     const intentIds = misOpts.filter(function (a) {
       return !a.future && MISSION_META[a.id];
     }).map(function (a) { return a.id; });
-    if (!D.mission || (selectableIds.indexOf(D.mission) < 0 && intentIds.indexOf(D.mission) < 0)) {
-      /* Default suggerito: Colonizza se possibile, altrimenti solo spostamento. */
-      D.mission = selectableIds.indexOf('colonize') >= 0 ? 'colonize' : 'move';
+    let misChips, misHeadLab;
+    if (D.dest.aiFleetId) {
+      /* Bersaglio = contatto AI → verbi dell'inseguimento (Segui/Attacca/
+         Scorta), coerenti col popup mappa e col riordino. */
+      if (!D.mission || !AI_FOLLOW_LABEL[D.mission] || (D.mission === 'attack' && !draftArmed)) D.mission = 'shadow';
+      misChips = aiFollowChipsHtml(D.mission, draftArmed, 'data-mission');
+      misHeadLab = AI_FOLLOW_LABEL[D.mission];
+    } else {
+      if (!D.mission || (selectableIds.indexOf(D.mission) < 0 && intentIds.indexOf(D.mission) < 0)) {
+        /* Default suggerito: Colonizza se possibile, altrimenti solo spostamento. */
+        D.mission = selectableIds.indexOf('colonize') >= 0 ? 'colonize' : 'move';
+      }
+      misChips = misOpts.map(function (a) {
+        const meta = MISSION_META[a.id]; if (!meta) return '';
+        const disabled = !a.available || a.future;
+        /* Sel resta truthy anche se "disabled" quando l'intent arriva da
+           fuori (es. econ-anom-send mission='extract' senza estrattore): il
+           chip mostra l'intenzione, e il footer "Crea e parti" resta
+           disabilitato finché la flotta non soddisfa il gate. */
+        const sel = (D.mission === a.id);
+        const gateTxt = (!a.available && a.gate) ? (GATE_LABEL[a.gate] || a.gate) : '';
+        const title = gateTxt ? 'Serve: ' + gateTxt : meta.arr;
+        const sfx = gateTxt ? ' <span class="fdetail__chip-note">' + escapeHtml(gateTxt) + '</span>' : '';
+        return '<button class="fdetail__chip' + (sel ? ' is-active' : '') + '" type="button" data-mission="' + a.id + '"' +
+          (disabled ? ' disabled' : '') + ' title="' + escapeHtml(title) + '">' +
+          uiIcon(meta.ic, meta.tone) + ' ' + meta.arr + sfx + '</button>';
+      }).join('');
+      misHeadLab = MISSION_META[D.mission] ? MISSION_META[D.mission].arr : 'Solo spostamento';
     }
-    const misChips = misOpts.map(function (a) {
-      const meta = MISSION_META[a.id]; if (!meta) return '';
-      const disabled = !a.available || a.future;
-      /* Sel resta truthy anche se "disabled" quando l'intent arriva da
-         fuori (es. econ-anom-send mission='extract' senza estrattore): il
-         chip mostra l'intenzione, e il footer "Crea e parti" resta
-         disabilitato finché la flotta non soddisfa il gate. */
-      const sel = (D.mission === a.id);
-      const gateTxt = (!a.available && a.gate) ? (GATE_LABEL[a.gate] || a.gate) : '';
-      const title = gateTxt ? 'Serve: ' + gateTxt : meta.arr;
-      const sfx = gateTxt ? ' <span class="fdetail__chip-note">' + escapeHtml(gateTxt) + '</span>' : '';
-      return '<button class="fdetail__chip' + (sel ? ' is-active' : '') + '" type="button" data-mission="' + a.id + '"' +
-        (disabled ? ' disabled' : '') + ' title="' + escapeHtml(title) + '">' +
-        uiIcon(meta.ic, meta.tone) + ' ' + meta.arr + sfx + '</button>';
-    }).join('');
     const misSec = '<div class="fdetail__sec fdetail__sec--ord is-editing">' +
-      secHead('send', 'cyan', 'Sposta — e all’arrivo', MISSION_META[D.mission] ? MISSION_META[D.mission].arr : 'Solo spostamento') +
+      secHead('send', 'cyan', 'Sposta — e all’arrivo', misHeadLab) +
       '<div class="fdetail__chips">' + misChips + '</div>' +
     '</div>';
 
@@ -11244,16 +11217,21 @@ function openFleetDetail(fleetId, opts) {
     const supSec = secSupplyDraft(crewReq, nShips > 0);
 
     /* ===== Riepilogo viaggio (sticky, Stadio 2.5) — live su ogni render. ===== */
-    const sumSysName = (g.galaxy.systems[D.dest.sysId] || {}).name || ('Sistema ' + D.dest.sysId);
+    let sumSysName = (g.galaxy.systems[D.dest.sysId] || {}).name || ('Sistema ' + D.dest.sysId);
     let sumBodyName = '';
-    if (D.dest.anomKind) {
+    if (D.dest.aiFleetId) {
+      const afSum = (ORION.aifleet && ORION.aifleet.byId) ? ORION.aifleet.byId(g, D.dest.aiFleetId) : null;
+      if (afSum) sumSysName = ORION.aifleet.nameLabel(g, afSum);
+    } else if (D.dest.anomKind) {
       sumBodyName = ' · ' + anomalyKindMeta(D.dest.anomKind).label;
     } else if (D.dest.bodyKey) {
       try { const ds = ORION.system.generate(g.galaxy, D.dest.sysId); const b = ORION.system.findBody(ds, D.dest.bodyKey); if (b) sumBodyName = ' · ' + (b.name || b.key); } catch (e) { /* */ }
     }
-    const sumMisLab = MISSION_META[D.mission] ? MISSION_META[D.mission].lab : 'Sposta';
+    const sumMisLab = MISSION_META[D.mission] ? MISSION_META[D.mission].lab : (AI_FOLLOW_LABEL[D.mission] || 'Sposta');
     let sumEta = '—';
-    if (nShips > 0) {
+    if (nShips > 0 && D.dest.aiFleetId) {
+      sumEta = 'bersaglio mobile';
+    } else if (nShips > 0) {
       const oSys = sysIdOf(D.newColonyKey);
       if (oSys === D.dest.sysId) sumEta = 'intra-sistema';
       else {
@@ -11291,16 +11269,21 @@ function openFleetDetail(fleetId, opts) {
       misSec +
       '<p class="fdetail__hint">' + uiIcon('info', 'soft') + ' Il nome si adatterà alla missione. <strong>Annulla</strong> non crea nulla.</p>';
 
-    /* Validazione globale: composizione + destinazione (o corpo colonizzabile). */
+    /* Validazione globale: composizione + destinazione (o corpo colonizzabile,
+       o contatto AI con verbo d'inseguimento valido). */
     const isColonize = D.mission === 'colonize';
-    const draftOrder = (nShips > 0 && !isColonize) ? buildCreateOrder() : null;
+    const isFollow = !isColonize && !!D.dest.aiFleetId;
+    const draftOrder = (nShips > 0 && !isColonize && !isFollow) ? buildCreateOrder() : null;
     const colonizeReady = isColonize && D.dest && D.dest.sysId != null && !!D.dest.bodyKey;
-    const canCreate = nShips > 0 && crewOk && (isColonize ? colonizeReady : !!draftOrder);
+    const followReady = isFollow && !!AI_FOLLOW_LABEL[D.mission] && (D.mission !== 'attack' || draftArmed);
+    const canCreate = nShips > 0 && crewOk &&
+      (isColonize ? colonizeReady : (isFollow ? followReady : !!draftOrder));
     const disabledReason = (nShips <= 0)
       ? 'Aggiungi almeno una nave'
       : (!crewOk ? 'Equipaggio insufficiente'
                  : (isColonize ? (colonizeReady ? '' : 'Scegli un corpo colonizzabile')
-                               : (!draftOrder ? 'Scegli una destinazione' : '')));
+                               : (isFollow ? (followReady ? '' : 'Scegli il verbo per il contatto')
+                                           : (!draftOrder ? 'Scegli una destinazione' : ''))));
 
     const footer =
       '<div class="fdetail__sum">' + sumChips + '</div>' +
@@ -11933,18 +11916,21 @@ function openFleetDetail(fleetId, opts) {
     /* Destinazione (Stadio 2.3a): sistema + corpo. */
     const destSysSel = host.querySelector('[data-bind="dest-system"]');
     if (destSysSel) destSysSel.addEventListener('change', function () {
-      if (!D.dest) D.dest = { sysId: null, bodyKey: null, anomKind: null };
-      D.dest.sysId = Number(destSysSel.value); D.dest.bodyKey = null; D.dest.anomKind = null; render();
-    });
-    const destBodySel = host.querySelector('[data-bind="dest-body"]');
-    if (destBodySel) destBodySel.addEventListener('change', function () {
-      if (!D.dest) D.dest = { sysId: null, bodyKey: null, anomKind: null };
-      const v = destBodySel.value || '';
-      /* Le anomalie a livello sistema usano il valore sentinella "anom:<kind>"
-         (niente bodyKey); i corpi reali usano il loro key. */
-      if (v.indexOf('anom:') === 0) { D.dest.anomKind = v.slice(5); D.dest.bodyKey = null; }
-      else { D.dest.bodyKey = v || null; D.dest.anomKind = null; }
+      if (!D.dest) D.dest = { sysId: null, bodyKey: null, anomKind: null, aiFleetId: null };
+      D.dest.sysId = Number(destSysSel.value); D.dest.bodyKey = null; D.dest.anomKind = null;
+      /* Cambiare sistema = tornare a un bersaglio-corpo: il contatto AI
+         (globale, mobile) si deseleziona e i verbi si ri-derivano. */
+      if (D.dest.aiFleetId) { D.dest.aiFleetId = null; D.mission = null; }
       render();
+    });
+    /* Picker obiettivo con icone (2026-07-07): corpi, anomalie ("anom:<kind>")
+       e contatti AI rilevati ("aif:<id>"). */
+    host.querySelectorAll('[data-tgt-bind="dest-target"]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!D.dest) D.dest = { sysId: null, bodyKey: null, anomKind: null, aiFleetId: null };
+        if (applyTargetPick(D.dest, b.dataset.tgtPick)) D.mission = null;
+        render();
+      });
     });
     /* Picker missione (Stadio 2.4). */
     host.querySelectorAll('[data-mission]').forEach(function (b) {
@@ -12003,11 +11989,13 @@ function openFleetDetail(fleetId, opts) {
       const draftCrew = Array.isArray(draft.crew) ? draft.crew : [];
       let nShips = 0; Object.keys(draft.ships).forEach(function (k) { nShips += draft.ships[k] || 0; });
       if (nShips <= 0) { showToast('Aggiungi almeno una nave alla flotta'); return; }
-      /* Missione: colonize usa il flusso dedicato (costo per-pianeta); le
-         altre costruiscono un ordine standard. */
+      /* Missione: colonize usa il flusso dedicato (costo per-pianeta);
+         un contatto AI usa l'inseguimento (aifleet.setFollow); le altre
+         costruiscono un ordine standard. */
       const isColonize = (D.mission === 'colonize');
-      const order = isColonize ? null : buildCreateOrder();
-      if (!isColonize && !order) { showToast('Scegli una destinazione'); return; }
+      const isFollow = !isColonize && !!(D.dest && D.dest.aiFleetId);
+      const order = (isColonize || isFollow) ? null : buildCreateOrder();
+      if (!isColonize && !isFollow && !order) { showToast('Scegli una destinazione'); return; }
       if (isColonize && !(D.dest && D.dest.bodyKey != null)) { showToast('Scegli un corpo colonizzabile'); return; }
       /* Materializza solo ora: createFleet + assegnazioni + ordine in un colpo.
          Rollback completo se qualcosa fallisce (#22). */
@@ -12064,6 +12052,26 @@ function openFleetDetail(fleetId, opts) {
         if (!ac.ok) failed = ac.reason;
       }
       if (failed) { ORION.fleet.dissolveFleet(g, nf); showToast(failed); return; }
+
+      if (isFollow) {
+        /* Contatto AI: ordine di inseguimento (Segui/Attacca/Scorta) sulla
+           flotta appena materializzata — stesso motore del popup mappa; la
+           rotta insegue il bersaglio mobile a ogni Impulso. Rollback se il
+           contatto è svanito nel frattempo (#22). */
+        const md = AI_FOLLOW_LABEL[D.mission] ? D.mission : 'shadow';
+        const fr = (ORION.aifleet && ORION.aifleet.setFollow)
+          ? ORION.aifleet.setFollow(g, nf.id, D.dest.aiFleetId, md)
+          : { ok: false, reason: 'Contatti non disponibili' };
+        if (!fr.ok) { ORION.fleet.dissolveFleet(g, nf); showToast(fr.reason || 'Contatto non più disponibile'); return; }
+        if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('ai-fleet-follow');
+        chargeProvision();
+        persistGame(g);
+        fleet = nf; D.creating = false;
+        D.ord = { tripType: null, target: null, waypoints: [], opt: { returnHome: false, exploreEach: false } };
+        showToast(nf.name + ': ' + fr.modeLabel + ' contatto');
+        closeDetail();
+        return;
+      }
 
       if (isColonize) {
         /* Riusa doColonize (costo §6.2 + ordine colonize + rollback). */
@@ -13139,6 +13147,10 @@ const DEFAULT_AUTOPAUSE = {
   'aifleet-hostile-encounter': true,
   'aifleet-skirmish': true,
   'aifleet-destroyed': true,
+  /* Aggressione a flotta neutrale: è un atto DELIBERATO del giocatore
+     (come le proposte diplomatiche, decisione #51) → niente auto-pausa;
+     il fallout è raccontato in cronaca. */
+  'aifleet-aggression': false,
   'follow-lost': false,
   'civ-expand': false,
   'civ-war': false,
@@ -13632,6 +13644,7 @@ function showEventOverlay(events) {
     'aifleet-hostile-encounter': 'Flotta ostile incrociata',
     'aifleet-skirmish': 'Scaramuccia con flotta altrui',
     'aifleet-destroyed': 'Flotta altrui intercettata e dispersa',
+    'aifleet-aggression': 'Attacco a flotta neutrale',
     'follow-lost': 'Contatto perso',
     'pirate-raid': 'Razzia pirata',
     'pirate-cleared': 'Covo pirata sgominato',
@@ -14249,6 +14262,15 @@ function _chronicleEventBody(ev) {
   } else if (ev.kind === 'aifleet-destroyed') {
     const who = ev.civName ? ('<strong>' + escapeHtml(ev.civName) + '</strong>') : 'una flotta non identificata';
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName || 'La tua flotta') + '</strong> ha intercettato e disperso ' + who + ' nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">contatto eliminato</span>.', 'civ');
+  } else if (ev.kind === 'aifleet-aggression') {
+    /* Attacco deliberato a una flotta NON ostile: la vittima ti riconosce
+       (nome pieno), la galassia prende nota. Il colpo vero e proprio è
+       raccontato dall'evento aifleet-destroyed/skirmish che segue. */
+    const who = ev.civName ? ('<strong>' + escapeHtml(ev.civName) + '</strong>') : 'una civiltà neutrale';
+    pushChronicle(ds + ' — ⚠ <strong>' + escapeHtml(ev.fleetName || 'La tua flotta') + '</strong> ha aggredito una flotta di ' +
+      who + ' (non ostile) nel/nella ' + escapeHtml(ev.regionLabel) +
+      ' · disposizione −' + (ev.dispoPen || 0) + ' · reputazione −' + (ev.repPen || 0) +
+      ' · <span class="chronicle__hint">la galassia ricorda chi spara per primo</span>.', 'civ');
   } else if (ev.kind === 'follow-lost') {
     const why = ev.reason === 'noroute' ? 'nessuna rotta verso il contatto' : 'il contatto si è dileguato';
     pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName || 'La tua flotta') + '</strong> ha perso il contatto inseguito (' + why + ') · <span class="chronicle__hint">flotta in attesa di nuovi ordini</span>.', 'civ');
@@ -17436,6 +17458,173 @@ function announceRecon(g, fleet, sysId) {
     ' · <span class="chronicle__hint">tieni la flotta in orbita per accumulare il dossier</span>.', 'civ');
 }
 
+/* =====================================================================
+   Picker OBIETTIVO dell'ordine con icone (richiesta utente 2026-07-07).
+   Sostituisce il <select> nativo di corpo/anomalia nei pannelli ordini:
+   le <option> native non possono contenere SVG → dropdown custom su
+   <details>/<summary> (stesso pattern touch-friendly di .ship-picker,
+   UI_GUIDE §3/§6), con icone tematiche per TIPO di bersaglio
+   (pianeta/luna/cintura/gassoso/anomalia/orbita) e — novità — i
+   CONTATTI AI RILEVATI dai sensori come bersagli selezionabili.
+   Valori: '' (orbita generica) · <bodyKey> · 'anom:<kind>' · 'aif:<id>'.
+   ===================================================================== */
+/* Modello delle voci. `sel` = { bodyKey, anomKind, aiFleetId } della
+   destinazione corrente; `fromSysId` = sistema della flotta/origine (per la
+   distanza in salti dei contatti). Ritorna [{group}|{value,icon,tone,...}]. */
+function fleetTargetPickerModel(g, sysId, sel, fromSysId) {
+  const DISC = (ORION.galaxy && ORION.galaxy.DISCOVERY) || { DETECTED: 1, EXPLORED: 2 };
+  const disc = (g.state && g.state.discovery) || {};
+  const explored = (disc[sysId] || 0) >= DISC.EXPLORED;
+  const items = [];
+  const noneSel = !sel.bodyKey && !sel.anomKind && !sel.aiFleetId;
+  items.push({
+    value: '', icon: 'orbit', tone: 'cyan', name: 'Orbita generica',
+    sub: explored ? 'sosta nel sistema, nessun corpo' : 'sistema non esplorato: corpi non noti',
+    sel: noneSel
+  });
+  if (explored && ORION.system && ORION.system.generate) {
+    let ds = null; try { ds = ORION.system.generate(g.galaxy, sysId); } catch (e) { ds = null; }
+    const bodies = (ds && ds.bodies) || [];
+    function pushBody(b, isMoon) {
+      const d = ORION.system.BODY_TYPES ? ORION.system.BODY_TYPES[b.type] : null;
+      const cat = d ? d.cat : '';
+      const icon = cat === 'gas' ? 'gasGiant' : cat === 'belt' ? 'belt' : (isMoon || cat === 'moon') ? 'moon' : 'planet';
+      items.push({
+        value: String(b.key), icon: icon, tone: 'blue', indent: isMoon,
+        name: escapeHtml(b.name || b.key),
+        sub: escapeHtml((d && d.label) || b.type),
+        sel: String(sel.bodyKey || '') === String(b.key)
+      });
+    }
+    bodies.forEach(function (b) {
+      if (!b || !b.key) return;
+      pushBody(b, false);
+      (b.moons || []).forEach(function (m) { if (m && m.key) pushBody(m, true); });
+    });
+    /* Anomalie a livello sistema (detriti/nebulosa/reliquie): bersagli M2
+       sfruttabili senza bodyKey. Dedup per tipo (come i select storici). */
+    const seenAK = {};
+    ((ds && ds.anomalies) || []).forEach(function (a) {
+      if (!a || !a.kind || seenAK[a.kind]) return;
+      const def = ORION.anomaly && ORION.anomaly.KINDS ? ORION.anomaly.KINDS[a.kind] : null;
+      if (!def || def.perBody) return;
+      seenAK[a.kind] = true;
+      const meta = anomalyKindMeta(a.kind);
+      items.push({
+        value: 'anom:' + a.kind, icon: 'anomaly', tone: 'amber',
+        name: escapeHtml(meta.label),
+        sub: meta.res ? escapeHtml(meta.res) : 'anomalia di sistema',
+        sel: sel.anomKind === a.kind
+      });
+    });
+  }
+  /* Contatti AI rilevati dai sensori: bersagli MOBILI, non legati al sistema
+     di destinazione scelto (l'inseguimento aggiorna la rotta a ogni Impulso). */
+  const contacts = (ORION.aifleet && ORION.aifleet.detectedFleets) ? ORION.aifleet.detectedFleets(g) : [];
+  if (contacts.length) {
+    items.push({ group: true, label: 'Contatti AI rilevati' });
+    contacts.forEach(function (af) {
+      const whereId = af.lastSeenSysId != null ? af.lastSeenSysId : af.systemId;
+      const whereNm = (g.galaxy.systems[whereId] || {}).name || ('Sistema ' + whereId);
+      let hopsTxt = '';
+      if (fromSysId != null && ORION.fleet && ORION.fleet.computePath) {
+        if (whereId === fromSysId) hopsTxt = ' · qui';
+        else {
+          const p = ORION.fleet.computePath(g.galaxy, fromSysId, whereId);
+          if (p) hopsTxt = ' · ' + (p.length - 1) + (p.length - 1 === 1 ? ' salto' : ' salti');
+        }
+      }
+      /* La missione del contatto è nota solo con intel almeno parziale. */
+      const comp = ORION.aifleet.composition ? ORION.aifleet.composition(af) : null;
+      const misTxt = (comp && comp.level !== 'fragmentary' && ORION.aifleet.MISSIONS[af.mission])
+        ? (' · ' + ORION.aifleet.MISSIONS[af.mission].label) : '';
+      items.push({
+        value: 'aif:' + af.id, icon: 'fleet', tone: 'pink',
+        name: escapeHtml(ORION.aifleet.nameLabel(g, af)),
+        sub: escapeHtml('vista presso ' + whereNm + hopsTxt + misTxt),
+        sel: sel.aiFleetId === af.id
+      });
+    });
+  }
+  return items;
+}
+
+/* Markup del dropdown. `bind` finisce in data-bind sul <details> e in
+   data-tgt-bind sulle voci (per distinguere più picker nello stesso host). */
+function fleetTargetPickerHtml(items, bind, aria) {
+  let cur = null;
+  items.forEach(function (it) { if (!it.group && it.sel && !cur) cur = it; });
+  if (!cur) cur = items.filter(function (it) { return !it.group; })[0] || null;
+  let menu = '';
+  items.forEach(function (it) {
+    if (it.group) {
+      menu += '<div class="tgt-picker__group">' + escapeHtml(it.label) + '</div>';
+      return;
+    }
+    menu += '<button type="button" role="option" aria-selected="' + (it.sel ? 'true' : 'false') + '"' +
+      ' class="tgt-opt' + (it.sel ? ' is-active' : '') + (it.indent ? ' tgt-opt--moon' : '') + '"' +
+      ' data-tgt-pick="' + escapeHtml(it.value) + '" data-tgt-bind="' + bind + '">' +
+      uiIcon(it.icon, it.tone) +
+      '<span class="tgt-opt__main">' +
+        '<span class="tgt-opt__name">' + it.name + '</span>' +
+        (it.sub ? '<span class="tgt-opt__sub">' + it.sub + '</span>' : '') +
+      '</span></button>';
+  });
+  return '<details class="tgt-picker" data-bind="' + bind + '">' +
+    '<summary class="tgt-picker__trigger" aria-label="' + escapeHtml(aria) + '">' +
+      (cur ? uiIcon(cur.icon, cur.tone) : '') +
+      '<span class="tgt-picker__label">' + (cur ? cur.name : '—') + '</span>' +
+      '<span class="tgt-picker__caret ui-icon ui-icon--soft" aria-hidden="true">' + ((ORION.icon && ORION.icon('chevronRight')) || '▸') + '</span>' +
+    '</summary>' +
+    '<div class="tgt-picker__menu" role="listbox" aria-label="' + escapeHtml(aria) + '">' + menu + '</div>' +
+  '</details>';
+}
+
+/* Applica il valore scelto nel picker a un oggetto destinazione
+   { bodyKey, anomKind, aiFleetId } (mutato in place). Ritorna true se la
+   scelta ha attraversato il confine corpo↔contatto AI (la missione va
+   ri-derivata: i verbi disponibili cambiano). */
+function applyTargetPick(dest, value) {
+  const wasAi = !!dest.aiFleetId;
+  const v = value || '';
+  if (v.indexOf('aif:') === 0) {
+    dest.aiFleetId = v.slice(4); dest.bodyKey = null; dest.anomKind = null;
+  } else if (v.indexOf('anom:') === 0) {
+    dest.anomKind = v.slice(5); dest.bodyKey = null; dest.aiFleetId = null;
+  } else {
+    dest.bodyKey = v || null; dest.anomKind = null; dest.aiFleetId = null;
+  }
+  return wasAi !== !!dest.aiFleetId;
+}
+
+/* Chip-missione per un bersaglio CONTATTO AI (Segui/Attacca/Scorta),
+   coerenti coi verbi del popup mappa. `mission` = id selezionato;
+   `armed` = la flotta ha potenza di fuoco; `dataAttr` = nome dell'attributo
+   dei chip nel pannello chiamante (es. 'data-ro-mission'). */
+function aiFollowChipsHtml(mission, armed, dataAttr) {
+  const MODES = [
+    { id: 'shadow', ic: 'spy', tone: 'violet', lab: 'Segui',
+      tip: 'Pedina il contatto a distanza e raccogli intel (nel loro territorio li infastidisce)', dis: false },
+    { id: 'attack', ic: 'sword', tone: 'pink', lab: 'Attacca',
+      tip: armed
+        ? 'Raggiungi e ingaggia il contatto. Se la civiltà NON è ostile è un\'aggressione: disposizione e reputazione ne pagano il prezzo.'
+        : 'Serve: potenza di fuoco',
+      dis: !armed, note: armed ? '' : 'potenza di fuoco' },
+    { id: 'escort', ic: 'fleet', tone: 'cyan', lab: 'Scorta',
+      tip: 'Accompagna una flotta non ostile (gesto amichevole: disposizione in crescita)', dis: false }
+  ];
+  return MODES.map(function (m) {
+    const sel = mission === m.id && !m.dis;
+    const sfx = m.note ? ' <span class="fdetail__chip-note">' + escapeHtml(m.note) + '</span>' : '';
+    return '<button class="fdetail__chip' + (sel ? ' is-active' : '') + '" type="button" ' +
+      dataAttr + '="' + m.id + '"' + (m.dis ? ' disabled' : '') +
+      ' title="' + escapeHtml(m.tip) + '">' + uiIcon(m.ic, m.tone) + ' ' + m.lab + sfx + '</button>';
+  }).join('');
+}
+
+/* Etichetta breve della missione-inseguimento (riepilogo sticky). */
+const AI_FOLLOW_LABEL = { shadow: 'Segui', attack: 'Attacca', escort: 'Scorta' };
+
 /* Stadio 4 — selettore CHI per "Manda flotta qui": flotte esistenti ordinate
    per vicinanza (ETA) alla destinazione + opzione "nuova flotta". Scegliendo
    una flotta esistente si apre il riordino con la destinazione gia' compilata
@@ -17519,8 +17708,6 @@ function openFleetReorder(fleetId, opts) {
     return out;
   }
   function civName(c) { return (ORION.ai && ORION.ai.knowledgeRank ? ORION.ai.knowledgeRank(c) : 2) >= 2 ? c.name : 'Ignota'; }
-  function bodyGlyph(type) { const d = ORION.system && ORION.system.BODY_TYPES ? ORION.system.BODY_TYPES[type] : null; const cat = d ? d.cat : ''; return cat === 'gas' ? '⬡' : cat === 'belt' ? '≈' : cat === 'moon' ? '◌' : '◉'; }
-  function bodyTypeLabel(type) { const d = ORION.system && ORION.system.BODY_TYPES ? ORION.system.BODY_TYPES[type] : null; return d ? d.label : type; }
   const MISSION_META = {
     move: { ic: 'send', tone: 'cyan', lab: 'Sposta', arr: 'Solo spostamento' },
     attack: { ic: 'sword', tone: 'pink', lab: 'Attacca', arr: 'Attacca' },
@@ -17533,7 +17720,7 @@ function openFleetReorder(fleetId, opts) {
   for (let i = 0; i < g.galaxy.systems.length; i++) if ((disc[i] || 0) >= DISC.DETECTED) knownSys.push(i);
   const hopsMap = {}; knownSys.forEach(function (s) { hopsMap[s] = hops(s); });
   knownSys.sort(function (a, b) { const ha = hopsMap[a] == null ? 1e9 : hopsMap[a], hb = hopsMap[b] == null ? 1e9 : hopsMap[b]; return ha - hb; });
-  const R = { dest: { sysId: null, bodyKey: null, anomKind: null }, mission: null };
+  const R = { dest: { sysId: null, bodyKey: null, anomKind: null, aiFleetId: null }, mission: null };
   if (opts.dest && opts.dest.sysId != null) {
     /* Destinazione pre-compilata (es. "Manda flotta qui" da mappa). */
     R.dest.sysId = opts.dest.sysId; R.dest.bodyKey = opts.dest.bodyKey || null; R.dest.anomKind = opts.dest.anomKind || null;
@@ -17576,64 +17763,60 @@ function openFleetReorder(fleetId, opts) {
       const cn = knownCivs(s).length;
       return '<option value="' + s + '"' + (s === R.dest.sysId ? ' selected' : '') + '>' + escapeHtml(nm) + ' · ' + hop + (cn ? ' · ' + cn + ' AI' : '') + '</option>';
     }).join('');
-    let bodyHtml = '';
-    const explored = (disc[R.dest.sysId] || 0) >= DISC.EXPLORED;
-    if (explored && ORION.system && ORION.system.generate) {
-      let ds0 = null; try { ds0 = ORION.system.generate(g.galaxy, R.dest.sysId); } catch (e) { ds0 = null; }
-      const bodies = (ds0 && ds0.bodies) || [];
-      /* Anomalie a livello sistema (detriti/nebulosa/reliquie) come bersagli
-         selezionabili (Estrai) — non sono "corpi". Dedup per tipo. */
-      const sysAnoms = []; const seenAK = {};
-      ((ds0 && ds0.anomalies) || []).forEach(function (a) {
-        if (!a || !a.kind || seenAK[a.kind]) return;
-        const def = ORION.anomaly && ORION.anomaly.KINDS ? ORION.anomaly.KINDS[a.kind] : null;
-        if (!def || def.perBody) return;
-        seenAK[a.kind] = true; sysAnoms.push(a.kind);
-      });
-      if (bodies.length || sysAnoms.length) {
-        const generic = !R.dest.bodyKey && !R.dest.anomKind;
-        let bopts = '<option value=""' + (generic ? ' selected' : '') + '>— orbita generica —</option>';
-        bodies.forEach(function (b) {
-          if (!b || !b.key) return;
-          bopts += '<option value="' + escapeHtml(b.key) + '"' + (String(R.dest.bodyKey || '') === String(b.key) ? ' selected' : '') + '>' + bodyGlyph(b.type) + ' ' + escapeHtml(b.name || b.key) + ' · ' + escapeHtml(bodyTypeLabel(b.type)) + '</option>';
-          (b.moons || []).forEach(function (m) { if (m && m.key) bopts += '<option value="' + escapeHtml(m.key) + '"' + (String(R.dest.bodyKey || '') === String(m.key) ? ' selected' : '') + '>  ' + bodyGlyph(m.type) + ' ' + escapeHtml(m.name || m.key) + ' · ' + escapeHtml(bodyTypeLabel(m.type)) + '</option>'; });
-        });
-        sysAnoms.forEach(function (kind) {
-          const meta = anomalyKindMeta(kind);
-          const lbl = meta.label + (meta.res ? ' · ' + meta.res : '');
-          bopts += '<option value="anom:' + escapeHtml(kind) + '"' + (R.dest.anomKind === kind ? ' selected' : '') + '>✦ ' + escapeHtml(lbl) + '</option>';
-        });
-        bodyHtml = '<select class="fdetail__select" data-bind="ro-body" aria-label="Corpo o anomalia di destinazione">' + bopts + '</select>';
-      }
-    } else if (!explored) {
-      bodyHtml = '<span class="fdest__hint">' + uiIcon('info', 'soft') + ' Sistema non esplorato: corpo non selezionabile.</span>';
+    /* Contatto selezionato svanito o non più rilevato → decade con grazia
+       (#22): si torna al bersaglio-corpo senza bloccare il pannello. */
+    if (R.dest.aiFleetId) {
+      const afSel = (ORION.aifleet && ORION.aifleet.byId) ? ORION.aifleet.byId(g, R.dest.aiFleetId) : null;
+      if (!afSel || !afSel.detected) { R.dest.aiFleetId = null; R.mission = null; }
     }
+    /* Picker obiettivo con icone (2026-07-07): corpi/anomalie del sistema +
+       contatti AI rilevati come bersagli selezionabili. */
+    const bodyHtml = fleetTargetPickerHtml(
+      fleetTargetPickerModel(g, R.dest.sysId, R.dest, fromSys),
+      'ro-target', 'Obiettivo dell\'ordine');
     const dc = knownCivs(R.dest.sysId);
     let aiLine = dc.length ? '<div class="fdest__ai">' + uiIcon('civ', 'pink') + ' AI nel sistema: <strong>' + dc.length + '</strong> · ' + dc.map(function (c) { return '<span class="fdest__civ">' + escapeHtml(civName(c)) + '</span>'; }).join(' ') + '</div>' : '<div class="fdest__ai fdest__ai--none">Nessuna AI nota nel sistema</div>';
     if (R.dest.bodyKey && ORION.ai && ORION.ai.civForPlanet) { const bc = ORION.ai.civForPlanet(g, R.dest.sysId, R.dest.bodyKey); if (bc) aiLine += '<div class="fdest__ai">' + uiIcon('civ', 'pink') + ' Sul corpo: <span class="fdest__civ">' + escapeHtml(civName(bc)) + '</span></div>'; }
     /* Stadio 4 (B2): anteprima dossier per la destinazione con lo score di questa flotta. */
     const io = (ORION.ai && ORION.ai.intelOutlook) ? ORION.ai.intelOutlook(g, fleet, R.dest.sysId) : null;
     if (io) aiLine += dossierLineHtml(io);
-    const target = ORION.fleetTarget ? ORION.fleetTarget.describe(g, R.dest.sysId, R.dest.bodyKey) : null;
-    const rawActs = (F.actionsFor && target) ? F.actionsFor(target, fleet) : [];
-    const opts = [{ id: 'move', available: true, gate: null, future: false }];
-    rawActs.forEach(function (a) { if (a.id === 'dock' || a.id === 'defend-ally') return; opts.push(a); });
-    const selable = opts.filter(function (a) { return a.available && !a.future && MISSION_META[a.id]; }).map(function (a) { return a.id; });
-    if (!R.mission || selable.indexOf(R.mission) < 0) R.mission = selable.indexOf('colonize') >= 0 ? 'colonize' : 'move';
-    const chips = opts.map(function (a) {
-      const meta = MISSION_META[a.id]; if (!meta) return '';
-      const disabled = !a.available || a.future;
-      const sel = R.mission === a.id && !disabled;
-      const gate = (!a.available && a.gate) ? (GATE_LABEL[a.gate] || a.gate) : '';
-      const sfx = gate ? ' <span class="fdetail__chip-note">' + escapeHtml(gate) + '</span>' : '';
-      return '<button class="fdetail__chip' + (sel ? ' is-active' : '') + '" type="button" data-ro-mission="' + a.id + '"' + (disabled ? ' disabled' : '') + ' title="' + escapeHtml(gate ? 'Serve: ' + gate : meta.arr) + '">' + uiIcon(meta.ic, meta.tone) + ' ' + meta.arr + sfx + '</button>';
-    }).join('');
+    /* Flotta armata? (gate del chip Attacca su contatto AI). */
+    let armed = false;
+    (fleet.ships || []).forEach(function (s) {
+      const c = F.getClass ? F.getClass(s.kind) : null;
+      if (c && (c.fp || 0) > 0) armed = true;
+    });
+    let chips;
+    if (R.dest.aiFleetId) {
+      /* Bersaglio = contatto AI → i verbi sono quelli dell'inseguimento
+         (Segui/Attacca/Scorta), come dal popup mappa. */
+      if (!R.mission || !AI_FOLLOW_LABEL[R.mission] || (R.mission === 'attack' && !armed)) R.mission = 'shadow';
+      chips = aiFollowChipsHtml(R.mission, armed, 'data-ro-mission');
+    } else {
+      const target = ORION.fleetTarget ? ORION.fleetTarget.describe(g, R.dest.sysId, R.dest.bodyKey) : null;
+      const rawActs = (F.actionsFor && target) ? F.actionsFor(target, fleet) : [];
+      const opts = [{ id: 'move', available: true, gate: null, future: false }];
+      rawActs.forEach(function (a) { if (a.id === 'dock' || a.id === 'defend-ally') return; opts.push(a); });
+      const selable = opts.filter(function (a) { return a.available && !a.future && MISSION_META[a.id]; }).map(function (a) { return a.id; });
+      if (!R.mission || selable.indexOf(R.mission) < 0) R.mission = selable.indexOf('colonize') >= 0 ? 'colonize' : 'move';
+      chips = opts.map(function (a) {
+        const meta = MISSION_META[a.id]; if (!meta) return '';
+        const disabled = !a.available || a.future;
+        const sel = R.mission === a.id && !disabled;
+        const gate = (!a.available && a.gate) ? (GATE_LABEL[a.gate] || a.gate) : '';
+        const sfx = gate ? ' <span class="fdetail__chip-note">' + escapeHtml(gate) + '</span>' : '';
+        return '<button class="fdetail__chip' + (sel ? ' is-active' : '') + '" type="button" data-ro-mission="' + a.id + '"' + (disabled ? ' disabled' : '') + ' title="' + escapeHtml(gate ? 'Serve: ' + gate : meta.arr) + '">' + uiIcon(meta.ic, meta.tone) + ' ' + meta.arr + sfx + '</button>';
+      }).join('');
+    }
     let eta = '—';
-    if (R.dest.sysId === fromSys) eta = 'intra-sistema';
+    if (R.dest.aiFleetId) eta = 'bersaglio mobile';
+    else if (R.dest.sysId === fromSys) eta = 'intra-sistema';
     else { const p = F.computePath(g.galaxy, fromSys, R.dest.sysId); eta = p ? (F.routeImpulsi(g.galaxy, fleet, p) + ' Ι') : 'irraggiungibile'; }
-    const order = buildOrder();
+    const order = R.dest.aiFleetId ? null : buildOrder();
     const isCol = R.mission === 'colonize';
-    const ready = isCol ? !!R.dest.bodyKey : !!order;
+    const ready = R.dest.aiFleetId
+      ? (!!AI_FOLLOW_LABEL[R.mission] && (R.mission !== 'attack' || armed))
+      : (isCol ? !!R.dest.bodyKey : !!order);
     host.innerHTML =
       '<div class="fdetail__panel" role="document">' +
         '<header class="fdetail__head"><div class="fdetail__title">' + uiIcon('fleet', 'cyan') +
@@ -17641,7 +17824,7 @@ function openFleetReorder(fleetId, opts) {
           '<button class="fdetail__x btn--icon-only" data-ro-close type="button" aria-label="Chiudi">' + uiIcon('close') + '</button></header>' +
         '<div class="fdetail__body">' +
           '<div class="fdetail__summary"><span class="fsum__chip">' + uiIcon('pin', 'cyan') + ' da ' + escapeHtml(sysName2(fromSys)) + '</span>' +
-            '<span class="fsum__chip">' + uiIcon('send', 'cyan') + ' ' + escapeHtml(MISSION_META[R.mission] ? MISSION_META[R.mission].lab : 'Sposta') + '</span>' +
+            '<span class="fsum__chip">' + uiIcon('send', 'cyan') + ' ' + escapeHtml(MISSION_META[R.mission] ? MISSION_META[R.mission].lab : (AI_FOLLOW_LABEL[R.mission] || 'Sposta')) + '</span>' +
             '<span class="fsum__chip">' + uiIcon('clock', 'amber') + ' ' + escapeHtml(eta) + '</span></div>' +
           '<div class="fdetail__sec fdetail__sec--dest is-editing"><div class="fdetail__sec-h">' + uiIcon('pin', 'cyan') + ' Destinazione</div>' +
             '<div class="fdetail__origin"><select class="fdetail__select" data-bind="ro-system" aria-label="Sistema di destinazione">' + sysOpts + '</select>' + bodyHtml + '</div>' + aiLine + '</div>' +
@@ -17657,19 +17840,40 @@ function openFleetReorder(fleetId, opts) {
   function bindRO() {
     host.querySelectorAll('[data-ro-close]').forEach(function (b) { b.addEventListener('click', closeFleetOverlay); });
     const ss = host.querySelector('[data-bind="ro-system"]');
-    if (ss) ss.addEventListener('change', function () { R.dest.sysId = Number(ss.value); R.dest.bodyKey = null; R.dest.anomKind = null; render(); });
-    const bs = host.querySelector('[data-bind="ro-body"]');
-    if (bs) bs.addEventListener('change', function () {
-      const v = bs.value || '';
-      if (v.indexOf('anom:') === 0) { R.dest.anomKind = v.slice(5); R.dest.bodyKey = null; }
-      else { R.dest.bodyKey = v || null; R.dest.anomKind = null; }
+    if (ss) ss.addEventListener('change', function () {
+      R.dest.sysId = Number(ss.value); R.dest.bodyKey = null; R.dest.anomKind = null;
+      /* Cambiare sistema = tornare a un bersaglio-corpo: il contatto AI
+         (globale, mobile) si deseleziona e i verbi si ri-derivano. */
+      if (R.dest.aiFleetId) { R.dest.aiFleetId = null; R.mission = null; }
       render();
+    });
+    host.querySelectorAll('[data-tgt-pick]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (applyTargetPick(R.dest, b.dataset.tgtPick)) R.mission = null;
+        render();
+      });
     });
     host.querySelectorAll('[data-ro-mission]').forEach(function (b) { if (b.disabled) return; b.addEventListener('click', function () { R.mission = b.dataset.roMission; render(); }); });
     const cf = host.querySelector('[data-ro-confirm]');
     if (cf) cf.addEventListener('click', doConfirmRO);
   }
   function doConfirmRO() {
+    if (R.dest.aiFleetId) {
+      /* Bersaglio = contatto AI → ordine di inseguimento (Segui/Attacca/
+         Scorta): stesso motore del popup mappa (aifleet.setFollow), la rotta
+         si aggiorna a ogni Impulso sul bersaglio mobile. */
+      const md = AI_FOLLOW_LABEL[R.mission] ? R.mission : 'shadow';
+      const fr = (ORION.aifleet && ORION.aifleet.setFollow)
+        ? ORION.aifleet.setFollow(g, fleet.id, R.dest.aiFleetId, md)
+        : { ok: false, reason: 'Contatti non disponibili' };
+      if (!fr.ok) { showToast(fr.reason || 'Contatto non più disponibile'); return; }
+      if (ORION.tutorial && ORION.tutorial.fire) ORION.tutorial.fire('ai-fleet-follow');
+      persistGame(g);
+      closeFleetOverlay();
+      if (ORION.map && ORION.map.requestRender) ORION.map.requestRender();
+      showToast(fleet.name + ': ' + fr.modeLabel + ' contatto');
+      return;
+    }
     if (R.mission === 'colonize') {
       let planet = null;
       try { const ds = ORION.system.generate(g.galaxy, R.dest.sysId); planet = ORION.planet.generate(g.galaxy, ds, R.dest.bodyKey); } catch (e) { planet = null; }

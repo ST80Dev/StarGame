@@ -84,6 +84,39 @@
       '<path d="M12 3a14 14 0 0 0 0 18"/>'
     ),
 
+    /* Luna — falce (corpo minore in orbita a un pianeta). */
+    moon: svg(
+      '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'
+    ),
+
+    /* Cintura di asteroidi — rocce lungo un arco orbitale. */
+    belt: svg(
+      '<path d="M2 18.5C7 12.5 15 9 22 8.5" opacity="0.45"/>' +
+      '<circle cx="6.5" cy="15.5" r="1.7"/>' +
+      '<circle cx="12.5" cy="12" r="2.4"/>' +
+      '<circle cx="18.5" cy="9.8" r="1.4"/>'
+    ),
+
+    /* Gigante gassoso — globo con anello. */
+    gasGiant: svg(
+      '<circle cx="12" cy="12" r="6"/>' +
+      '<ellipse cx="12" cy="12" rx="10.5" ry="3.4" transform="rotate(-16 12 12)"/>'
+    ),
+
+    /* Anomalia — scintilla a 4 punte (sito sfruttabile: detriti/nebulosa/reliquie). */
+    anomaly: svg(
+      '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/>' +
+      '<line x1="18.5" y1="16.5" x2="18.5" y2="20.5"/>' +
+      '<line x1="16.5" y1="18.5" x2="20.5" y2="18.5"/>'
+    ),
+
+    /* Orbita generica — anello con satellite (nessun corpo specifico). */
+    orbit: svg(
+      '<circle cx="12" cy="12" r="3"/>' +
+      '<circle cx="12" cy="12" r="9" opacity="0.55"/>' +
+      '<circle cx="18.4" cy="5.6" r="1.6" fill="currentColor"/>'
+    ),
+
     /* Flotta — nave/freccia direzionale. */
     fleet: svg(
       '<path d="M3 11l18-8-8 18-2-8-8-2z"/>'

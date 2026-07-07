@@ -114,7 +114,16 @@
     SHADOW_DISPO_PEN: 2.5,     // disposizione persa pedinando nel loro territorio
     ESCORT_DISPO_GAIN: 1.6,    // goodwill scortando una flotta non ostile
     STRIKE_RETURN_CAP: 0.20,   // danno di ritorno max alla flotta che intercetta
-    STRIKE_WIN_RATIO: 0.6      // intercetti vinti se fp player ≥ fp AI × questo
+    STRIKE_WIN_RATIO: 0.6,     // intercetti vinti se fp player ≥ fp AI × questo
+
+    /* Aggressione DELIBERATA a una flotta NON ostile (ordine 'attack' dal
+       pannello ordini, richiesta utente 2026-07-07): il colpo riesce come un
+       intercetto, ma il prezzo è politico — la civ ricorda (disposizione) e
+       la galassia osserva (reputazione, façade M18). Tarato sopra il
+       sabotaggio scoperto di M19 (rep −5 / disp −15): sparare per primi a
+       una flotta pacifica è peggio di una spia colta sul fatto. */
+    AGGRESSION_DISPO_PEN: 18,  // disposizione persa con la civ aggredita
+    AGGRESSION_REP_PEN: 5      // reputazione galattica persa
   };
 
   /* Archetipi di MISSIONE ambientale. Le flotte sono per natura LEGGERE
@@ -879,6 +888,39 @@
     pf.follow = null; // intercettazione: ordine one-shot, concluso
   }
 
+  /* Fallout politico di un attacco DELIBERATO a una flotta non ostile
+     (mode 'attack', richiesta utente 2026-07-07). Deterministico, niente
+     RNG: disposizione giù con la civ colpita (lei sa CHI ha sparato, anche
+     se tu non l'avevi ancora identificata), reputazione galattica giù via
+     façade M18, evento dedicato in cronaca. Recovery-friendly (#22): costa,
+     ma non innesca fail-state — le relazioni si ricostruiscono. */
+  function applyAggressionFallout(game, pf, af, civ, events) {
+    if (civ) {
+      if (ORION.diplomacy && ORION.diplomacy.adjustDisposition) {
+        ORION.diplomacy.adjustDisposition(game, civ, -CFG.AGGRESSION_DISPO_PEN);
+      } else {
+        nudgeDisposition(civ, -CFG.AGGRESSION_DISPO_PEN);
+      }
+    }
+    if (ORION.reputation && ORION.reputation.applyAndRecord) {
+      ORION.reputation.applyAndRecord(game, 'rep', -CFG.AGGRESSION_REP_PEN, 'aggression',
+        'Attacco a flotta neutrale' + (civ && civ.name ? ' — ' + civ.name : ''));
+    }
+    events.push({
+      kind: 'aifleet-aggression',
+      aifleetId: af.id,
+      fleetId: pf.id,
+      fleetName: pf.name,
+      /* Nome pieno anche senza intel: è la vittima a riconoscerti. */
+      civName: civ ? civ.name : null,
+      sysId: pf.location.systemId,
+      regionLabel: regionLabel(game, pf.location.systemId),
+      dispoPen: CFG.AGGRESSION_DISPO_PEN,
+      repPen: CFG.AGGRESSION_REP_PEN,
+      impulso: game.timeImpulsi || 0
+    });
+  }
+
   /* Instrada la flotta player verso `targetNode` inseguendo un bersaglio
      mobile (richiesta utente 2026-06-20: "Segui" usa internamente il comando
      «Inverti rotta» quando il bersaglio è dietro).
@@ -1012,6 +1054,12 @@
       if (mode === 'intercept') {
         if (hostile) { playerStrike(game, pf, af, events); }
         else { af.intel = 1; /* non ostile: ispezione → dossier pieno, niente scontro */ }
+      } else if (mode === 'attack') {
+        /* Attacco deliberato: ingaggia COMUNQUE, anche una flotta non
+           ostile. Sul neutrale prima il fallout (l'atto è tuo), poi il
+           colpo — stesso motore proporzionato dell'intercetto (#22). */
+        if (!hostile) applyAggressionFallout(game, pf, af, civ, events);
+        playerStrike(game, pf, af, events);
       } else if (mode === 'escort') {
         if (!hostile) {
           af.escortedBy = pf.id; // predisposizione difesa da terzi (latente)
@@ -1103,7 +1151,10 @@
      API ORDINI (chiamata dalla UI: mappa / pannello flotta).
      mode ∈ 'shadow' (Segui) · 'intercept' (Intercetta) · 'escort' (Scorta).
      ------------------------------------------------------------------ */
-  const MODES = { shadow: 'Segui', intercept: 'Intercetta', escort: 'Scorta' };
+  /* 'attack' (richiesta utente 2026-07-07): come 'intercept' ma ingaggia
+     ANCHE le flotte non ostili — aggressione deliberata, con fallout
+     politico (disposizione + reputazione). Esposto dal pannello ordini. */
+  const MODES = { shadow: 'Segui', intercept: 'Intercetta', escort: 'Scorta', attack: 'Attacca' };
   function setFollow(game, fleetId, aiFleetId, mode) {
     ensure(game);
     const pf = (game.fleets || []).filter(function (f) { return f && f.id === fleetId; })[0];
@@ -1112,8 +1163,8 @@
     if (!af) return { ok: false, reason: 'Contatto non più disponibile' };
     if (!af.detected) return { ok: false, reason: 'Flotta non rilevata' };
     if (!MODES[mode]) mode = 'shadow';
-    if (mode === 'intercept' && fleetFp(pf.ships) <= 0) {
-      return { ok: false, reason: 'Flotta disarmata: non può intercettare' };
+    if ((mode === 'intercept' || mode === 'attack') && fleetFp(pf.ships) <= 0) {
+      return { ok: false, reason: 'Flotta disarmata: non può ingaggiare' };
     }
     pf.follow = { mode: mode, aiFleetId: aiFleetId, dest: null, lastDispoI: -99999 };
     return { ok: true, mode: mode, modeLabel: MODES[mode], af: af };
