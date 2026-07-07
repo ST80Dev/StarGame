@@ -89,6 +89,12 @@
     FLEET_RING_FALLOFF: 0.45,
     CONTACT_PERSIST_I: 32,  // un contatto resta "ultimo avvistamento" dopo l'uscita dai sensori
     DETECT_BASE: 0.22,      // offset prob. rilevamento
+    /* Aggancio con isteresi (fix flicker marker, richiesta utente 2026-07-07):
+       il rilevamento è un tiro per-Impulso → un singolo tiro mancato NON è
+       una perdita di contatto. Un contatto agganciato resta `detected` per
+       questa finestra di Impulsi dall'ultimo aggancio riuscito, purché ancora
+       in copertura; si perde solo oltre la finestra o uscendo dai sensori. */
+    TRACK_GRACE_I: 4,
     /* Crescita intel/Impulso in copertura. Tarato lento di proposito
        (richiesta utente 2026-06-26): il radar dà presenza/numero, ma la
        COMPOSIZIONE piena (classi) deve costare permanenza vera. Scala
@@ -663,7 +669,17 @@
     const I = game.timeImpulsi || 0;
     const drng = rng(game, 'det:' + af.id + ':' + I);
     const p = Math.max(0.03, Math.min(0.97, best - af.signature * 0.45 + CFG.DETECT_BASE));
-    if (!drng.chance(p)) { af.detected = false; return; }
+    if (!drng.chance(p)) {
+      /* Tiro mancato. Isteresi (2026-07-07): se il contatto era agganciato
+         da poco (≤ TRACK_GRACE_I dall'ultimo aggancio riuscito — lastSeenI
+         NON si aggiorna qui, così la grazia non si auto-rinnova) ed è ancora
+         in copertura (best>0, garantito sopra), il lock resta: niente
+         flicker del marker per un blip statistico. Nessun guadagno intel
+         durante la grazia. */
+      const inGrace = af.detected && af.lastSeenI != null && (I - af.lastSeenI) <= CFG.TRACK_GRACE_I;
+      if (!inGrace) af.detected = false;
+      return;
+    }
 
     af.detected = true;
     af.lastSeenI = I;          // quando l'hai vista l'ultima volta
@@ -992,6 +1008,21 @@
       const aiNode = aiNodeOccupied(af);
       const coLoc = playerSys != null && pf.location.status !== 'in-transit'
                  && aiNode != null && playerSys === aiNode;
+
+      /* Scorta/inseguimento IN VOLO sullo stesso tratto (fix flicker,
+         richiesta utente 2026-07-07): se voli sulla MEDESIMA corsia del
+         bersaglio (in una direzione o nell'altra) gli sei accanto — il
+         contatto non si perde per un tiro sensori mancato. Aggiorna anche
+         l'ultimo avvistamento al nodo più vicino alla sua posizione reale. */
+      const pLegSame = fleetLeg(pf);
+      const aLegSame = (af.status === 'in-transit' && Array.isArray(af.route) && af.routeIdx + 1 < af.route.length)
+        ? [af.route[af.routeIdx], af.route[af.routeIdx + 1]] : null;
+      if (pLegSame && aLegSame && sameEdge(pLegSame[0], pLegSame[1], aLegSame[0], aLegSame[1])) {
+        af.detected = true;
+        af.lastSeenI = I;
+        const tA = 1 - (af.etaImpulsi || 0) / Math.max(1, af.legTotal || 1); // progresso dal suo nodo di partenza
+        af.lastSeenSysId = tA < 0.5 ? aLegSame[0] : aLegSame[1];
+      }
 
       if (!coLoc) {
         /* CONVERGENZA TESTA-A-TESTA (richiesta utente 2026-06-20): se la tua
