@@ -401,7 +401,7 @@
       const p = this._localPos(e);
       const key = this.pickBody(p.x, p.y);
       if (key) {
-        if (this.onActivateBody) { this.selectBody(key); this.onActivateBody(key); }
+        if (this.onActivateBody) { this.selectBody(key, { reframe: false }); this.onActivateBody(key); }
         else this._frameBody(key);
         return;
       }
@@ -450,7 +450,7 @@
             // lascia margine sotto al max così, tornando dal pianeta, non si
             // ridiscende subito (anti-rimbalzo sulla giuntura).
             this.scale = maxScale * 0.78;
-            this.selectBody(key);
+            this.selectBody(key, { reframe: false });
             this.onActivateBody(key);
             return;
           }
@@ -486,7 +486,7 @@
       const r = Math.max(body.radius || body.moonOrbit || 0.05, 0.06);
       const s = clamp(Math.min(this.cssW, this.cssH) * 0.32 / r, this.fitScale * 0.55, this.fitScale * 14);
       this._animateTo(s, this.cssW / 2 - w.x * s, this.cssH / 2 - w.y * s);
-      this.selectBody(key);
+      this.selectBody(key, { reframe: false });
     }
 
     /* ---- Camera animata (riuso del pattern GalaxyMap) ---- */
@@ -508,13 +508,60 @@
     }
 
     /* ---- API pubbliche ---- */
-    selectBody(key) {
+    selectBody(key, opts) {
       if (key === this.selectedKey) { this.requestRender(); return; }
       this.selectedKey = key;
       this.requestRender();
+      /* onSelectBody popola/mostra il pannello info a sinistra: chiamalo PRIMA
+         di ricentrare così _reframeForPanel può misurarne la larghezza reale. */
       if (this.onSelectBody) this.onSelectBody(key);
+      if (!(opts && opts.reframe === false)) this._reframeForPanel(key);
     }
     focusBody(key) { this._frameBody(key); }
+
+    _reducedMotion() {
+      return !!(root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    }
+
+    /* Larghezza (px, spazio-canvas) occupata dal pannello info a sinistra
+       (`.viewport__actionbar`) quando è visibile a colonna. 0 se assente o se
+       il layout non è a colonna (telefono → sheet a fondo schermo). */
+    _panelReservedLeft() {
+      if (typeof document === 'undefined' || !this.container) return 0;
+      const host = document.querySelector('[data-bind="action-bar"]');
+      if (!host || host.hidden) return 0;
+      const cr = this.container.getBoundingClientRect();
+      const hr = host.getBoundingClientRect();
+      if (!hr.width) return 0;
+      const rightLocal = hr.right - cr.left;         // bordo destro del pannello, locale al canvas
+      if (rightLocal <= 0 || rightLocal > this.cssW * 0.66) return 0;
+      return rightLocal + 16;                          // + respiro tra pannello e sistema
+    }
+
+    /* Richiesta utente 2026-07: selezionando un corpo, il sistema scivola a
+       destra e viene inquadrato PER INTERO nell'area libera accanto al pannello
+       info (non si centra sul corpo: si mantiene la visuale su tutto il sistema).
+       Deselezione (key null) → ritorno alla vista centrata piena. Applicato solo
+       su layout con pannello a colonna (desktop/tablet). */
+    _reframeForPanel(key) {
+      if (!this.ctx) return;
+      if (this.cssW <= 760) return;                    // telefono: pannello a fondo schermo
+      const reserved = key == null ? 0 : this._panelReservedLeft();
+      let scale, ox, oy;
+      if (reserved <= 0) {
+        scale = this.fitScale; ox = this.cssW / 2; oy = this.cssH / 2;
+      } else {
+        const availW = Math.max(160, this.cssW - reserved);
+        scale = Math.min(availW, this.cssH) * 0.46;    // stesso margine di fitScale, ma sull'area libera
+        ox = reserved + availW / 2; oy = this.cssH / 2;
+      }
+      if (this._reducedMotion()) {
+        this.scale = scale; this.offsetX = ox; this.offsetY = oy;
+        this._anim = false; this.requestRender();
+      } else {
+        this._animateTo(scale, ox, oy);
+      }
+    }
 
     /* ---- Render ---- */
     requestRender() {
