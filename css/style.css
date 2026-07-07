@@ -3137,11 +3137,14 @@ select.main-menu__input { cursor: pointer; }
 }
 
 /* Riserva navi Hangar (#42): riquadro di riepilogo con card per classe.
-   Icone SVG estese e tintate per ruolo (icons.js shipExplorer/…). */
+   Icone SVG estese e tintate per ruolo (icons.js shipExplorer/…).
+   Taglie ancorate in rem (richiesta utente 2026-07-07): con gli em composti
+   le chip scendevano sotto il floor 0.70rem (UI_GUIDE §2) e su desktop
+   risultavano illeggibili. */
 .hangar-reserve {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 7px;
   margin: 2px 0 9px;
 }
 .hangar-reserve--empty {
@@ -3157,7 +3160,7 @@ select.main-menu__input { cursor: pointer; }
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 6px 9px;
+  padding: 8px 10px;
   background: rgb(var(--c-surface-rgb, 34 46 86) / 0.55);
   border: 1px solid rgba(125, 110, 220, 0.22);
   border-radius: 10px;
@@ -3171,7 +3174,7 @@ select.main-menu__input { cursor: pointer; }
 .hangar-ship__glyph { font-size: 0.85em; }
 .hangar-ship__main { min-width: 0; flex: 1; }
 .hangar-ship__top {
-  font-size: 0.82em;
+  font-size: 0.88rem;
   font-weight: 600;
   color: var(--c-text, #d8def0);
   white-space: nowrap;
@@ -3187,9 +3190,9 @@ select.main-menu__input { cursor: pointer; }
 .hangar-ship__stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 3px;
-  font-size: 0.72em;
+  gap: 5px;
+  margin-top: 4px;
+  font-size: 0.78rem;
   color: var(--c-muted, #8a93b8);
   font-family: var(--font-mono, monospace);
 }
@@ -5814,7 +5817,7 @@ select.main-menu__input { cursor: pointer; }
   border: 1px solid var(--c-border-soft, rgba(255, 255, 255, 0.1));
   border-radius: var(--radius-sm, 5px);
   color: var(--c-text, #e9ecf6);
-  font-size: 0.86em;
+  font-size: 0.88rem;
   cursor: pointer;
   list-style: none;
   transition: var(--transition, 200ms ease);
@@ -5828,15 +5831,23 @@ select.main-menu__input { cursor: pointer; }
   border-bottom-right-radius: 0;
 }
 .ship-picker__trigger .hangar-ship__ico { font-size: 1.4em; }
-.ship-picker__label {
+/* Trigger a due righe come la card riserva (2026-07-07): nome sopra,
+   chip caratteristiche sotto. Con le chip ingrandite il layout in linea
+   schiacciava il nome classe a una lettera. */
+.ship-picker__main {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ship-picker__label {
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.ship-picker__stats { flex: 0 1 auto; }
+.ship-picker__stats { min-width: 0; }
 .ship-picker__caret {
   flex: 0 0 auto;
   font-size: 0.9em;
@@ -5882,7 +5893,7 @@ select.main-menu__input { cursor: pointer; }
 .ship-opt .hangar-ship__ico { flex: 0 0 auto; font-size: 1.85em; }
 .ship-opt__main { min-width: 0; flex: 1; display: flex; flex-direction: column; }
 .ship-opt__name {
-  font-size: 0.84em;
+  font-size: 0.88rem;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -5891,7 +5902,7 @@ select.main-menu__input { cursor: pointer; }
 .ship-opt__lock { font-weight: 400; font-size: 0.85em; color: var(--c-muted, #8a93b8); }
 .ship-opt__cost {
   flex: 0 0 auto;
-  font-size: 0.74em;
+  font-size: 0.76rem;
   font-family: var(--font-mono, monospace);
   color: var(--c-text-soft, #b8c0e0);
   white-space: nowrap;
