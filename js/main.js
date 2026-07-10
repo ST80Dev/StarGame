@@ -14267,11 +14267,44 @@ function _chronicleEventBody(ev) {
     pushChronicle(ds + ' — ⚠ <strong>' + escapeHtml(ev.fleetName || 'La tua flotta') + '</strong> ha incrociato ' + who + ' (ostile) nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">decidi: Intercetta, Segui, oppure ritírati. Nessuno scontro automatico (formazione non aggressiva).</span>', 'civ');
   } else if (ev.kind === 'aifleet-skirmish') {
     const who = ev.civName ? ('<strong>' + escapeHtml(ev.civName) + '</strong>') : 'una flotta ostile';
-    const hitFrag = ev.shipsHit > 0 ? (ev.shipsHit + ' scafi colpiti') : 'nessun danno serio';
-    pushChronicle(ds + ' — Scaramuccia: <strong>' + escapeHtml(ev.fleetName || 'la tua flotta') + '</strong> ha incrociato ' + who + ' nel/nella ' + escapeHtml(ev.regionLabel) + ' (' + hitFrag + ') · <span class="chronicle__hint">flotta avversaria sganciata — ripara e valuta il rientro</span>.', 'civ');
+    if (ev.report) {
+      /* Scontro ALLA PARI (motore M09) concluso senza annientare la preda: si
+         è ritirata. Espone il report come gli scontri a postazioni fisse. */
+      ORION.lastBattle = ev.report;
+      const lossFrag = ev.playerLost > 0
+        ? ' · ' + ev.playerLost + ' tua/e nave/i perdute' + (ev.crewLost > 0 ? ', ' + ev.crewLost + ' equipaggi caduti' : '')
+        : '';
+      if (ev.playerWiped) {
+        pushChronicle(ds + ' — ⚔ Ingaggio nel/nella ' + escapeHtml(ev.regionLabel) + ' contro ' + who +
+          ': <strong>' + escapeHtml(ev.fleetName || 'la tua flotta') + '</strong> è stata <strong>annientata</strong>' +
+          (ev.crewLost > 0 ? ' · ' + ev.crewLost + ' equipaggi caduti' : '') +
+          ' · <span class="chronicle__hint">report completo nella sezione Guerra</span>.', 'system');
+      } else {
+        const verb = ev.outcome === 'win' ? 'ha avuto la meglio,' : ev.outcome === 'loss' ? 'ha avuto la peggio,' : 'ha scambiato colpi,';
+        pushChronicle(ds + ' — ⚔ Ingaggio: <strong>' + escapeHtml(ev.fleetName || 'la tua flotta') + '</strong> ' + verb +
+          ' ' + who + ' <strong>si è ritirata</strong> nel/nella ' + escapeHtml(ev.regionLabel) + lossFrag +
+          ' · <span class="chronicle__hint">report completo in Guerra · la preda può essere inseguita di nuovo</span>.', 'civ');
+      }
+    } else {
+      /* Scaramuccia lampo AI-avviata (maybeSkirmish): brush leggero, no report. */
+      const hitFrag = ev.shipsHit > 0 ? (ev.shipsHit + ' scafi colpiti') : 'nessun danno serio';
+      pushChronicle(ds + ' — Scaramuccia: <strong>' + escapeHtml(ev.fleetName || 'la tua flotta') + '</strong> ha incrociato ' + who + ' nel/nella ' + escapeHtml(ev.regionLabel) + ' (' + hitFrag + ') · <span class="chronicle__hint">flotta avversaria sganciata — ripara e valuta il rientro</span>.', 'civ');
+    }
   } else if (ev.kind === 'aifleet-destroyed') {
     const who = ev.civName ? ('<strong>' + escapeHtml(ev.civName) + '</strong>') : 'una flotta non identificata';
-    pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName || 'La tua flotta') + '</strong> ha intercettato e disperso ' + who + ' nel/nella ' + escapeHtml(ev.regionLabel) + ' · <span class="chronicle__hint">contatto eliminato</span>.', 'civ');
+    if (ev.report) ORION.lastBattle = ev.report;
+    const reportHint = ev.report ? ' · <span class="chronicle__hint">report completo nella sezione Guerra</span>' : '';
+    if (ev.playerWiped) {
+      /* Preda dispersa ma la tua flotta è caduta nell'ingaggio (mutuo K.O.). */
+      pushChronicle(ds + ' — ⚔ Scontro nel/nella ' + escapeHtml(ev.regionLabel) + ': ' + who +
+        ' dispersa, ma <strong>' + escapeHtml(ev.fleetName || 'la tua flotta') + '</strong> è stata <strong>annientata</strong>' +
+        (ev.crewLost > 0 ? ' · ' + ev.crewLost + ' equipaggi caduti' : '') + reportHint + '.', 'system');
+    } else {
+      const lossFrag = ev.playerLost > 0
+        ? ' · ' + ev.playerLost + ' tua/e nave/i perdute' + (ev.crewLost > 0 ? ', ' + ev.crewLost + ' equipaggi caduti' : '')
+        : '';
+      pushChronicle(ds + ' — <strong>' + escapeHtml(ev.fleetName || 'La tua flotta') + '</strong> ha intercettato e disperso ' + who + ' nel/nella ' + escapeHtml(ev.regionLabel) + lossFrag + reportHint + '.', 'civ');
+    }
   } else if (ev.kind === 'aifleet-aggression') {
     /* Attacco deliberato a una flotta NON ostile: la vittima ti riconosce
        (nome pieno), la galassia prende nota. Il colpo vero e proprio è

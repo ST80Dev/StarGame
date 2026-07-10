@@ -119,8 +119,9 @@
     DISPO_EVERY_I: 24,         // throttle degli effetti di disposizione
     SHADOW_DISPO_PEN: 2.5,     // disposizione persa pedinando nel loro territorio
     ESCORT_DISPO_GAIN: 1.6,    // goodwill scortando una flotta non ostile
-    STRIKE_RETURN_CAP: 0.20,   // danno di ritorno max alla flotta che intercetta
-    STRIKE_WIN_RATIO: 0.6,     // intercetti vinti se fp player ≥ fp AI × questo
+    STRIKE_RETURN_CAP: 0.20,   // danno di ritorno max alla flotta che intercetta (solo fallback)
+    STRIKE_WIN_RATIO: 0.6,     // intercetti vinti se fp player ≥ fp AI × questo (solo fallback)
+    ENGAGE_COOLDOWN: 3,        // Ι di respiro fra due ingaggi consecutivi sulla stessa preda
 
     /* Aggressione DELIBERATA a una flotta NON ostile (ordine 'attack' dal
        pannello ordini, richiesta utente 2026-07-07): il colpo riesce come un
@@ -937,6 +938,95 @@
     });
   }
 
+  /* Ritirata di una flotta AI battuta ma sopravvissuta (opzione 2A, richiesta
+     utente 2026-07-10): fugge verso il proprio sistema d'origine. La rimette
+     IN VOLO dal nodo corrente così non resta co-locata e non si riapre un
+     ingaggio nello stesso Impulso. Se non c'è rotta di fuga, breve sosta sul
+     posto (advanceFleet la instraderà o la dissolverà). */
+  function aiFleetFlee(game, af) {
+    const from = (aiNodeOccupied(af) != null) ? aiNodeOccupied(af) : af.systemId;
+    const home = af.homeSysId;
+    const back = (home != null && from != null) ? path(game, from, home) : null;
+    if (back && back.length >= 2) {
+      af.route = back;
+      af.routeIdx = 0;
+      af.returning = true;
+      startLeg(game, af);   // → status 'in-transit' dal nodo `from`
+    } else {
+      af.status = 'orbiting';
+      if (from != null) af.systemId = from;
+      af.lingerLeft = 1;
+      af.returning = false;
+    }
+  }
+
+  /* Ingaggio ALLA PARI di una flotta AI in rotta, col motore M09 (combat.js) —
+     richiesta utente 2026-07-10. Sostituisce il vecchio colpo unico asimmetrico
+     (playerStrike, tenuto solo come fallback): entrambi i lati subiscono perdite
+     reali, la battaglia è a round e produce un vero REPORT — lo stesso pannello
+     degli scontri a postazioni fisse. Una flotta AI battuta ma sopravvissuta si
+     RITIRA (opzione 2A); l'inseguimento resta attivo così puoi ridarle la
+     caccia. `deliberate` (modo 'attack') = colpisci anche una flotta non ostile
+     → prima il fallout politico. Deterministico: seed di battaglia da af.id+Ι. */
+  function engageAiFleet(game, pf, af, civ, deliberate, events) {
+    const I = game.timeImpulsi || 0;
+    const C = ORION.combat;
+    /* Attacco deliberato a flotta non ostile: il prezzo politico prima del colpo. */
+    if (deliberate && !civHostileToPlayer(civ)) applyAggressionFallout(game, pf, af, civ, events);
+    /* Fallback difensivo: senza il motore M09 disponibile, colpo unico storico. */
+    if (!C || !C.forceFromFleet || !C.forceFromAiFleet || !C.resolve || !C.applyOutcomeToFleet) {
+      playerStrike(game, pf, af, events);
+      return;
+    }
+    const A = C.forceFromFleet(game, pf, 'A');
+    const B = C.forceFromAiFleet(game, af, 'B');
+    const report = C.resolve(game, 'aifleet:' + af.id + ':' + I, A, B);
+    report.kind = 'aifleet';
+    report.systemId = pf.location.systemId;
+    const outA = C.applyOutcomeToFleet(game, pf, A);
+    const outB = C.applyOutcomeToAiFleet
+      ? C.applyOutcomeToAiFleet(af, B)
+      : { lost: 0, survivors: (af.ships || []).length };
+    const playerWon = report.winner === 'A';
+    const aiDestroyed = !af.ships || af.ships.length === 0;
+    const playerWiped = !pf.ships || pf.ships.length === 0;
+
+    /* XP di servizio alla flotta vittoriosa (come gli scontri M09 §12.3). */
+    if (playerWon && !playerWiped) {
+      if (ORION.fleet && ORION.fleet.awardCrewXp) ORION.fleet.awardCrewXp(game, pf, 1, events, 'combat');
+      if (ORION.commander && ORION.commander.grantFleetXp) ORION.commander.grantFleetXp(game, pf, 1, events);
+    }
+
+    events.push({
+      kind: aiDestroyed ? 'aifleet-destroyed' : 'aifleet-skirmish',
+      aifleetId: af.id, fleetId: pf.id, fleetName: pf.name,
+      sysId: pf.location.systemId, regionLabel: regionLabel(game, pf.location.systemId),
+      civName: af.intel >= CFG.INTEL_PARTIAL ? af.civName : null,
+      outcome: playerWon ? 'win' : (report.winner === 'B' ? 'loss' : 'draw'),
+      playerLost: outA.lost, aiLost: outB.lost, crewLost: outA.crewLost,
+      aiFled: !aiDestroyed, playerWiped: playerWiped,
+      report: report, impulso: I
+    });
+
+    if (aiDestroyed) {
+      af._dead = true;
+      pf.follow = null;    // contatto eliminato → ordine concluso
+    } else {
+      aiFleetFlee(game, af);
+      if (pf.follow) pf.follow.cooldownUntilI = I + CFG.ENGAGE_COOLDOWN;
+    }
+
+    if (playerWiped) {
+      /* Flotta annientata: le figure si salvano nel pool d'Impero (#22). */
+      if (ORION.commander && ORION.commander.releaseAllFromFleet) ORION.commander.releaseAllFromFleet(game, pf);
+      game.fleets = (game.fleets || []).filter(function (f) { return f !== pf; });
+    } else if (!playerWon && pf.follow) {
+      /* Sopravvissuta ma sconfitta → interrompe la caccia e rientra alla base. */
+      pf.follow = null;
+      if (ORION.fleet && ORION.fleet.setOrder) ORION.fleet.setOrder(game, pf, { type: 'return' });
+    }
+  }
+
   /* Instrada la flotta player verso `targetNode` inseguendo un bersaglio
      mobile (richiesta utente 2026-06-20: "Segui" usa internamente il comando
      «Inverti rotta» quando il bersaglio è dietro).
@@ -1082,15 +1172,20 @@
       const mode = pf.follow.mode;
       const throttled = (I - (pf.follow.lastDispoI || -9999)) >= CFG.DISPO_EVERY_I;
 
+      /* Respiro fra due ingaggi consecutivi sulla stessa preda: evita di
+         riaprire battaglia nello stesso punto se la preda non è riuscita a
+         sganciarsi (ritirata senza rotta di fuga). */
+      const engageReady = I >= (pf.follow.cooldownUntilI || 0);
       if (mode === 'intercept') {
-        if (hostile) { playerStrike(game, pf, af, events); }
-        else { af.intel = 1; /* non ostile: ispezione → dossier pieno, niente scontro */ }
+        /* Scontro alla pari col motore M09 (richiesta utente 2026-07-10): la
+           flottiglia ostile si affronta come uno scontro a postazioni fisse,
+           con report. Non ostile: ispezione → dossier pieno, niente colpo. */
+        if (hostile && engageReady) { engageAiFleet(game, pf, af, civ, false, events); }
+        else if (!hostile) { af.intel = 1; }
       } else if (mode === 'attack') {
-        /* Attacco deliberato: ingaggia COMUNQUE, anche una flotta non
-           ostile. Sul neutrale prima il fallout (l'atto è tuo), poi il
-           colpo — stesso motore proporzionato dell'intercetto (#22). */
-        if (!hostile) applyAggressionFallout(game, pf, af, civ, events);
-        playerStrike(game, pf, af, events);
+        /* Attacco deliberato: ingaggia COMUNQUE, anche una flotta non ostile
+           (il fallout politico è dentro engageAiFleet). */
+        if (engageReady) engageAiFleet(game, pf, af, civ, true, events);
       } else if (mode === 'escort') {
         if (!hostile) {
           af.escortedBy = pf.id; // predisposizione difesa da terzi (latente)

@@ -285,6 +285,55 @@
     };
   }
 
+  /* Forza da una flotta AI ambientale (aifleet.js). A differenza di
+     `forceFromMaterialized` (astrazione a "unità" per gli assedi), qui la
+     flottiglia vagante ha un VERO roster di navi (`af.ships` = {kind}) →
+     scontro alla pari col motore M09 quando la tua flotta la intercetta in
+     rotta (richiesta utente 2026-07-10). Le navi AI non hanno hp persistente:
+     lo lazy-init dalle stat di classe e assegna un id stabile (afs:<afId>:<i>)
+     così il writeback (`applyOutcomeToAiFleet`) può conservare le superstiti
+     quando la flotta è battuta ma sopravvive e si ritira. Applica i
+     moltiplicatori della civ (tech × vocazione) come materialize(). */
+  function forceFromAiFleet(game, af, side) {
+    const F = ORION.fleet;
+    let fpMul = 1, hpMul = 1;
+    if (af && af.civId != null && ORION.ai) {
+      const civ = (game.civs || []).filter(function (c) { return c && c.id === af.civId; })[0];
+      if (civ) {
+        const tech = ORION.ai.techCombatMul ? ORION.ai.techCombatMul(game, civ) : { fpMul: 1, hpMul: 1 };
+        const voc = (ORION.ai.VOCATIONS && ORION.ai.VOCATIONS[civ.vocation]) || {};
+        fpMul = (tech.fpMul || 1) * (voc.fpMul != null ? voc.fpMul : 1);
+        hpMul = (tech.hpMul || 1) * (voc.hpMul != null ? voc.hpMul : 1);
+      }
+    }
+    const combatants = [];
+    const ships = (af && af.ships) || [];
+    for (let i = 0; i < ships.length; i++) {
+      const s = ships[i];
+      if (!s.id) s.id = 'afs:' + ((af && af.id) || 'x') + ':' + i;
+      const cls = (F && F.getClass(s.kind)) || { name: s.kind, fp: 0, hp: 1 };
+      const maxHp = (cls.hp || 1) * hpMul;
+      combatants.push({
+        id: s.id,
+        kind: s.kind,
+        label: cls.name,
+        hp: (s.hp != null ? s.hp : maxHp),
+        maxHp: maxHp,
+        fp: (cls.fp || 0) * fpMul,
+        xp: 0,
+        src: { type: 'aifleet', ref: s, fleet: af }
+      });
+    }
+    return {
+      side: side || 'B',
+      name: (af && af.civName) || 'Flotta',
+      color: (af && af.civColor) || '#e0556e',
+      immobile: false,
+      formation: 'balanced',
+      combatants: combatants
+    };
+  }
+
   function forceFromMaterialized(descriptor, side) {
     const combatants = [];
     const units = Math.max(1, (descriptor && descriptor.units) || 1);
@@ -613,6 +662,42 @@
       crewLost: crewLost, colonistsLost: colonistsLost };
   }
 
+  /* Applica l'esito a una flotta AI ambientale: rimuove le navi distrutte,
+     scrive l'hp residuo sulle superstiti, aggiorna `af.fp`. Nessun xp/
+     equipaggio/leggendaria (le flottiglie AI sono effimere e non hanno crew
+     modellato). Complemento di `forceFromAiFleet` per lo scontro alla pari:
+     una flotta battuta ma NON azzerata conserva le navi rimaste e può
+     ritirarsi (decisione utente 2026-07-10, opzione 2A). Ritorna { lost,
+     survivors }. */
+  function applyOutcomeToAiFleet(af, force) {
+    if (!af || !Array.isArray(af.ships)) return { lost: 0, survivors: 0 };
+    const survivingIds = {};
+    for (let i = 0; i < force.combatants.length; i++) {
+      survivingIds[force.combatants[i].id] = force.combatants[i];
+    }
+    const kept = [];
+    let lost = 0;
+    for (let i = 0; i < af.ships.length; i++) {
+      const s = af.ships[i];
+      const surv = survivingIds[s.id];
+      if (!surv) { lost++; continue; }
+      const F = ORION.fleet;
+      const naturalMax = (F && F.getClass(s.kind) && F.getClass(s.kind).hp) || surv.hp;
+      s.hp = Math.max(1, Math.min(naturalMax, Math.round(surv.hp)));
+      kept.push(s);
+    }
+    af.ships = kept;
+    /* Ricalcola la firma di potenza residua (usata da rilevamento/ostilità). */
+    let fp = 0;
+    const F = ORION.fleet;
+    for (let i = 0; i < kept.length; i++) {
+      const cls = F && F.getClass(kept[i].kind);
+      fp += (cls && cls.fp) || 0;
+    }
+    af.fp = fp;
+    return { lost: lost, survivors: kept.length };
+  }
+
   /* Applica l'esito difensivo a una colonia: traduce l'hp residuo dei
      combattenti-difesa in hp delle strutture difensive (danno riparabile,
      §10.2). Le strutture non vengono MAI rimosse dal combattimento (al più
@@ -871,6 +956,7 @@
     vetFpMul: vetFpMul,
     combatantFp: combatantFp,
     forceFromFleet: forceFromFleet,
+    forceFromAiFleet: forceFromAiFleet,
     forceFromDefenses: forceFromDefenses,
     forceFromPirateNest: forceFromPirateNest,
     forceFromStation: forceFromStation,
@@ -884,6 +970,7 @@
     sideSummary: sideSummary,
     resolve: resolve,
     applyOutcomeToFleet: applyOutcomeToFleet,
+    applyOutcomeToAiFleet: applyOutcomeToAiFleet,
     applyOutcomeToDefenses: applyOutcomeToDefenses,
     applyDefenderWriteback: applyDefenderWriteback,
     grantVeterancy: grantVeterancy,
