@@ -9,9 +9,10 @@
 ## Identità
 
 - **Titolo:** Orion Empires — 4X spaziale strategico testuale, a pannelli (non action, non libro-game).
-- **Stack:** Vanilla JS + HTML + CSS. **No** framework, **no** CDN, **no** WebGL, **no** chiamate esterne.
-- **Piattaforma:** browser / GitHub Pages, desktop + tablet + mobile (≥360px portrait).
-- **Salvataggio:** `localStorage` (5 slot + autosave) + Export/Import `.json`. Schema corrente: **31**.
+- **Stack (attuale):** Vanilla JS + HTML + CSS, namespace globale `ORION`, nessun build step. **In transizione** verso lo stack della Revisione 2026 (vedi sotto).
+- **Piattaforma:** browser / GitHub Pages, **desktop + tablet** (decisione Revisione 2026: il telefono non è più un target).
+- **Salvataggio:** `localStorage` (5 slot + autosave) + Export/Import `.json`. Schema corrente: **32** (verrà azzerato dalla Revisione 2026).
+- **Utenza:** un solo giocatore (il proprietario). Niente obblighi di "sempre giocabile" verso terzi.
 
 ---
 
@@ -20,8 +21,24 @@
 1. **Determinismo (#5):** zero `Math.random`. Tutti gli RNG derivano dal seed (`seed:<scope>:<id>:<I>`). Stesso seed + stessa sequenza di comandi → stesso esito. Replay-safe.
 2. **Recovery-friendly (#22):** mai fail-state a freddo. Le scelte temporanee non devono essere perennemente punitive. Sempre una via d'uscita (evacua, richiama, tribute, refund 50%).
 3. **Seed + delta (#5):** la struttura immutabile (galassia, sistemi, pianeti) si rigenera dal seed; nel save vivono solo i delta + `schemaVersion`.
+3b. **Simulazione pura:** la logica di gioco non dipende da librerie di presentazione (render/UI). Le librerie leggono lo stato e lo mostrano, mai lo modificano.
 4. **Lessico SW-flavor (#34):** classi navi/iperguida/regioni/archetipi fazione/ranghi — sì. Marchi specifici (Jedi/Sith/Tatooine/Force) — no. Nomi propri sempre procedurali.
 5. **Sviluppo modulo per modulo:** confermare prima di passare al successivo. M01-M17 ✅ mergiati in main. M18-M20 ⬜.
+
+---
+
+## Revisione 2026 (decisioni utente, 2026-11-20)
+
+Rifacimento incrementale (non riscrittura da zero) dell'intero gioco, focus anche su grafica/prestazioni.
+
+- **Pacchetti esterni ammessi** se portano un salto di qualità (grafica, prestazioni, manutenibilità), **bundlati** nel build: nessuna chiamata esterna a runtime, nessun CDN. Candidati: Vite (build), TypeScript graduale, Vitest, PixiJS v8 (mappe WebGL), Preact (UI pannelli).
+- **Build step ammesso:** sviluppo con `npm run dev`, deploy su Pages via GitHub Action (`dist/`). Il gioco si usa solo da Pages.
+- **Save:** si riparte da zero con uno schema pulito. La catena di migrazioni legacy (≤32) e la regola "mai distruttivo" verso save vecchi decadono al momento del reset.
+- **Telefono escluso:** il layout ≤760px (bottom nav, sheet mobile, decisione #63) è rimovibile. Target: desktop + tablet.
+- **Gameplay congelato durante il refactor:** nessun cambio di regole; ogni fetta verificata con test golden replay (stesso seed + comandi → stesso esito).
+- Fasi: 0 audit (`docs/AUDIT_2026.md`) → 1 fondamenta (Vite + Vitest + golden replay) → 2 scomposizione `main.js` → 3 pilota PixiJS mappa galattica → 4 migrazione pannelli.
+
+Dove questa sezione contraddice regole più sotto o in `UI_GUIDE.md`, vince questa sezione.
 
 ---
 
