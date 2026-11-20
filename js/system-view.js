@@ -545,7 +545,7 @@
        su layout con pannello a colonna (desktop/tablet). */
     _reframeForPanel(key) {
       if (!this.ctx) return;
-      if (this.cssW <= 760) return;                    // telefono: pannello a fondo schermo
+      if (this.cssW <= 760) return;                    // canvas stretta (tablet): niente reframe, non c'è spazio
       const reserved = key == null ? 0 : this._panelReservedLeft();
       let scale, ox, oy;
       if (reserved <= 0) {

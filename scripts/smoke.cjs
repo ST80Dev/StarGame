@@ -1,7 +1,7 @@
 /* Smoke test end-to-end (Playwright, Chromium preinstallato).
    Serve una cartella (default: dist/) via route http intercettata — niente
    server locale — e percorre il flusso principale raccogliendo errori JS.
-   Uso: node scripts/smoke.cjs [cartella] [--shots <dir>]  */
+   Uso: node scripts/smoke.cjs [cartella] [--shots <dir>] [--size 1024x768]  */
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -11,6 +11,8 @@ const argDir = process.argv[2] && !process.argv[2].startsWith('--') ? process.ar
 const dir = path.resolve(argDir);
 const shotsIdx = process.argv.indexOf('--shots');
 const shots = shotsIdx > 0 ? process.argv[shotsIdx + 1] : null;
+const sizeIdx = process.argv.indexOf('--size');
+const [vw, vh] = (sizeIdx > 0 ? process.argv[sizeIdx + 1] : '1920x1080').split('x').map(Number);
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2',
   '.json': 'application/json', '.map': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png',
@@ -18,7 +20,7 @@ const MIME = {
 
 (async () => {
   const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+  const page = await browser.newPage({ viewport: { width: vw, height: vh } });
   const errors = [];
   page.on('pageerror', e => errors.push('pageerror: ' + e.message));
   page.on('console', m => {

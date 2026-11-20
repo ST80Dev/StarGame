@@ -742,12 +742,10 @@ function initNavigation() {
    Chiamato dai bottoni della navigazione e dai launcher (decisione #50). */
 function navigateView(view) {
   if (!ORION.game) return;
-  closeMobileSheets();   /* PR mobile: cambiare vista chiude eventuali sheet aperte */
   const stage = document.querySelector('[data-view-stage]');
   if (stage) renderView(stage, view);
   setNavActive(view);
   renderLeftPanel();
-  updateMobileNavActive();
 }
 
 function renderView(stage, view) {
@@ -18438,8 +18436,6 @@ function enterGame(opts) {
   renderDxPanel();
   /* M06.6: tutorial — la "?" diventa attiva solo dentro partita. */
   updateTutorialButton();
-  /* PR mobile: mostra la bottom tab bar ora che la partita è attiva. */
-  updateMobileNav();
   /* Sequenza d'apertura (intro cinematica). Se attiva, posticipa il welcome
      a fine intro (così non compare sopra il volo); le lezioni 'system'/
      'planet' restano soppresse durante la cinematica (vedi openSystem/
@@ -18510,7 +18506,6 @@ function initMainMenu() {
 function showMainMenu(view) {
   ORION.menuView = view || 'home';
   stopTimerIfRunning();   // niente auto-advance mentre sei al menu (#31)
-  closeMobileSheets();    // PR mobile: chiudi eventuali sheet aprendo il menu
   const menu = document.querySelector('[data-bind="main-menu"]');
   if (menu) menu.removeAttribute('hidden');
   renderMainMenu();
@@ -18951,103 +18946,6 @@ function injectStaticSvgIcons() {
   });
 }
 
-/* =====================================================================
-   Navigazione mobile (PR mobile, decisione #6 emendata)
-   Bottom tab bar (≤760px): Mappa / Colonia / Flotte / Civiltà / Altro.
-   Mappa·Flotte·Civiltà cambiano la vista centrale (riusano navigateView);
-   Colonia apre la Plancia Operativa (dx) come sheet; Altro apre la Plancia
-   d'Impero (sx). Stato volatile su ORION, mai nel save (UI_GUIDE §9).
-   ===================================================================== */
-function initMobileNav() {
-  const nav = document.querySelector('[data-bind="mobile-nav"]');
-  if (!nav) return;
-  nav.querySelectorAll('[data-mnav]').forEach(function (btn) {
-    btn.addEventListener('click', function () { onMobileNav(btn.dataset.mnav); });
-  });
-  const scrim = document.querySelector('[data-bind="mobile-scrim"]');
-  if (scrim) scrim.addEventListener('click', function () { closeMobileSheets(); });
-  window.addEventListener('resize', function () {
-    updateHudHeightVar();
-    updateMobileNavActive();
-  });
-  updateHudHeightVar();
-  updateMobileNav();
-}
-
-/* Misura l'altezza reale dell'HUD top (varia col wrap su mobile) e la
-   espone come `--hud-h`: le sheet a tutto schermo partono SOTTO l'HUD così
-   risorse/controlli tempo restano visibili anche con una scheda aperta. */
-function updateHudHeightVar() {
-  const hud = document.querySelector('.hud-top');
-  if (!hud) return;
-  const h = hud.offsetHeight || 0;
-  if (h) document.documentElement.style.setProperty('--hud-h', h + 'px');
-}
-
-function onMobileNav(which) {
-  if (!ORION.game) return;
-  switch (which) {
-    case 'map':    closeMobileSheets(); navigateView('galaxy'); break;
-    case 'fleet':  closeMobileSheets(); ORION._siegeDetailId = null; navigateView('fleet');  break;
-    case 'civ':    closeMobileSheets(); navigateView('civ');    break;
-    case 'colony': toggleMobileSheet('right'); break;
-    case 'more':   toggleMobileSheet('left');  break;
-  }
-  updateMobileNavActive();
-}
-
-function toggleMobileSheet(side) {
-  setMobileSheet(ORION._mobileSheet === side ? null : side);
-}
-
-function setMobileSheet(side) {
-  ORION._mobileSheet = side || null;
-  if (side) updateHudHeightVar();   /* l'HUD può aver cambiato altezza (wrap) */
-  const left  = document.querySelector('.panel--left');
-  const right = document.querySelector('.panel--right');
-  const scrim = document.querySelector('[data-bind="mobile-scrim"]');
-  if (left)  left.classList.toggle('is-sheet-open',  side === 'left');
-  if (right) right.classList.toggle('is-sheet-open', side === 'right');
-  if (scrim) scrim.classList.toggle('is-on', !!side);
-  updateMobileNavActive();
-}
-
-function closeMobileSheets() {
-  if (ORION._mobileSheet) setMobileSheet(null);
-}
-
-/* Mostra/nasconde la barra mobile in base alla partita attiva (CSS la rende
-   visibile solo sotto il breakpoint telefono). */
-function updateMobileNav() {
-  const has = !!ORION.game;
-  document.body.classList.toggle('has-game', has);
-  const nav   = document.querySelector('[data-bind="mobile-nav"]');
-  const scrim = document.querySelector('[data-bind="mobile-scrim"]');
-  if (nav)   nav.hidden = !has;
-  if (scrim) scrim.hidden = !has;
-  if (!has) closeMobileSheets();
-  updateMobileNavActive();
-  /* Tutorial: spiega la navigazione mobile la prima volta che la barra
-     compare su schermo stretto (rispetta isEnabled/isSeen). */
-  if (has && ORION.tutorial && window.matchMedia &&
-      window.matchMedia('(max-width: 760px)').matches) {
-    ORION.tutorial.fire('mobile-nav');
-  }
-}
-
-function updateMobileNavActive() {
-  const nav = document.querySelector('[data-bind="mobile-nav"]');
-  if (!nav) return;
-  let active = 'map';
-  if (ORION._mobileSheet === 'right') active = 'colony';
-  else if (ORION._mobileSheet === 'left') active = 'more';
-  else if (ORION._currentView === 'fleet') active = 'fleet';
-  else if (ORION._currentView === 'civ') active = 'civ';
-  nav.querySelectorAll('[data-mnav]').forEach(function (b) {
-    b.classList.toggle('is-active', b.dataset.mnav === active);
-  });
-}
-
 function boot() {
   /* M06: assorbe eventuale autosave M05 (chiavi legacy). Idempotente. */
   if (ORION.save && ORION.save.migrateLegacy) ORION.save.migrateLegacy();
@@ -19068,7 +18966,6 @@ function boot() {
     openSystem: function (id) { openSystem(id); },
     openPlanet: function (sysId, bodyKey) { openPlanet(sysId, bodyKey); }
   });
-  initMobileNav();
   initStabilityHudChips();
   initMainMenu();
   showMainMenu('home');
