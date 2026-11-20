@@ -20,6 +20,7 @@ function load(rel) {
 }
 load('js/rng.js');
 load('js/utils.js');
+load('js/galaxy.js');
 load('js/structures.js');
 const ORION = load('js/station.js');
 const ST = ORION.station;

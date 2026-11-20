@@ -170,33 +170,14 @@
   }
 
   /* ------------------------------------------------------------------
-     Distanza in hop fra due sistemi (BFS sul grafo galassia). Riusa
-     ORION.fleet.computePath se disponibile; altrimenti BFS locale.
+     Distanza in hop fra due sistemi (BFS sul grafo, galaxy.bfsPath).
      ------------------------------------------------------------------ */
   function hopsBetween(galaxy, from, to) {
     if (from === to) return 0;
-    if (ORION.fleet && ORION.fleet.computePath) {
-      var path = ORION.fleet.computePath(galaxy, from, to);
-      return path ? path.length - 1 : Infinity;
-    }
-    // BFS fallback
-    var sys = galaxy && galaxy.systems;
-    if (!sys) return Infinity;
-    var seen = {}, q = [[from, 0]];
-    seen[from] = true;
-    while (q.length) {
-      var cur = q.shift(), id = cur[0], d = cur[1];
-      var links = (sys[id] && sys[id].links) || [];
-      for (var i = 0; i < links.length; i++) {
-        var n = links[i];
-        if (seen[n]) continue;
-        if (n === to) return d + 1;
-        seen[n] = true;
-        q.push([n, d + 1]);
-      }
-    }
-    return Infinity;
+    var path = ORION.galaxy.bfsPath(galaxy, from, to);
+    return path ? path.length - 1 : Infinity;
   }
+
 
   /* Discovery: solo sistemi esplorati possono ospitare una stazione. La
      nebbia di guerra usa livelli numerici (ORION.galaxy.DISCOVERY.EXPLORED=2);

@@ -24,6 +24,7 @@ function load(rel) {
   return eval(wrap)(root, root);
 }
 load('js/rng.js');
+load('js/utils.js');
 const ORION = load('js/galaxy.js');   // serve DISCOVERY + revealSystem reali
 
 function assert(cond, msg) {

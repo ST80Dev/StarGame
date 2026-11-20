@@ -126,8 +126,7 @@
       };
     }
     const g = colony.governor;
-    /* Migrazione lazy per save legacy (decisione #40 → #59). */
-    if (g.level == null) g.level = g.enabled ? 'vigile' : 'off';
+    if (g.level == null) g.level = 'off';
     if (g.vocation == null) g.vocation = 'equilibrata';
     if (!Array.isArray(g.decisions)) g.decisions = [];
     if (g.lastDecisionI === undefined) g.lastDecisionI = null;
@@ -443,14 +442,7 @@
       let veterans = 0;
       for (let c = 0; c < crews.length; c++) if ((crews[c].xp || 0) >= 1) veterans++;
       if (veterans > 0) {
-        const exps = game.expeditions || [];
-        let hasActive = false;
-        for (let e = 0; e < exps.length; e++) {
-          if (exps[e] && exps[e].originColonyKey === colKey && exps[e].status !== 'done') {
-            hasActive = true; break;
-          }
-        }
-        if (!hasActive && coolOk(gov, 'gov-veterans-idle', T, TH.COOLDOWN_VETERANS)) {
+        if (coolOk(gov, 'gov-veterans-idle', T, TH.COOLDOWN_VETERANS)) {
           fire(events, gov, colony, planet, 'gov-veterans-idle', T, { count: veterans });
           gov.lastFire['gov-veterans-idle'] = T;
         }

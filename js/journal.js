@@ -36,7 +36,7 @@
   var REASON_LABEL = { res: 'Risorse', slot: 'Slot', pos: 'Posizione' };
 
   /* ------------------------------------------------------------------
-     lazy init + serialize/migrate
+     lazy init + serialize
      ------------------------------------------------------------------ */
   function ensure(game) {
     if (!game) return;
@@ -68,17 +68,6 @@
       pins: game.journal.pins.slice(),
       nextId: game.journal.nextId | 0 || 1
     };
-  }
-
-  /* Letto da save.js al caricamento: il payload espone `journal`; qui
-     normalizziamo in caso di save legacy senza il campo. Idempotente. */
-  function migrate(payload) {
-    if (!payload) return payload;
-    if (!payload.journal || typeof payload.journal !== 'object') {
-      payload.journal = { pins: [], nextId: 1 };
-    }
-    if (!Array.isArray(payload.journal.pins)) payload.journal.pins = [];
-    return payload;
   }
 
   /* ------------------------------------------------------------------
@@ -186,7 +175,6 @@
     REASON_LABEL: REASON_LABEL,
     ensure: ensure,
     serialize: serialize,
-    migrate: migrate,
     addPin: addPin,
     removePin: removePin,
     setStatus: setStatus,

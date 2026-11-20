@@ -797,11 +797,7 @@
     for (let i = 0; i < arr.length; i++) if (arr[i] && arr[i].id === id) return arr[i];
     return null;
   }
-  function civById(game, id) {
-    const arr = game.civs || [];
-    for (let i = 0; i < arr.length; i++) if (arr[i] && arr[i].id === id) return arr[i];
-    return null;
-  }
+  const civById = ORION.util.civById;   // utils.js (Revisione 2026)
   /* Identificazione "bandiera": quando l'intel su una flotta raggiunge FULL
      (sai a CHI appartiene), registra un marker leggero sulla civ di appartenenza.
      `flagSeen` è uno stato di consapevolezza SOTTO "Avvistata" (§13.10): conosci

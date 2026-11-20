@@ -742,12 +742,10 @@ function initNavigation() {
    Chiamato dai bottoni della navigazione e dai launcher (decisione #50). */
 function navigateView(view) {
   if (!ORION.game) return;
-  closeMobileSheets();   /* PR mobile: cambiare vista chiude eventuali sheet aperte */
   const stage = document.querySelector('[data-view-stage]');
   if (stage) renderView(stage, view);
   setNavActive(view);
   renderLeftPanel();
-  updateMobileNavActive();
 }
 
 function renderView(stage, view) {
@@ -2069,20 +2067,13 @@ function renderPlanetPanel(title, content) {
 }
 
 /* M07: ritorna le spedizioni che originano da una colonia (per UI).
-   Decisione #60: legge sia game.expeditions (legacy/transitorio) che le flotte
-   explore provenienti dalla colonia. Le flotte explore esposte come oggetti
+   Decisione #60: le spedizioni sono flotte explore provenienti dalla colonia. Le flotte explore esposte come oggetti
    "expedition-like" per back-compat UI. */
 function expeditionsForColony(colony) {
   const g = ORION.game;
   if (!g) return [];
   const key = colony.systemId + ':' + colony.bodyKey;
   const out = [];
-  if (Array.isArray(g.expeditions)) {
-    for (let i = 0; i < g.expeditions.length; i++) {
-      const e = g.expeditions[i];
-      if (e && e.originColonyKey === key && e.status !== 'done') out.push(e);
-    }
-  }
   if (Array.isArray(g.fleets)) {
     for (let i = 0; i < g.fleets.length; i++) {
       const f = g.fleets[i];
@@ -2980,51 +2971,9 @@ function colonizeCreatableColonies(g, planet) {
    provviste per il viaggio + setup. Razionale narrativo: i pionieri mangiano
    e bevono durante settimane di viaggio iperspaziale + bootstrap dell'avamposto.
    Tarato per far sentire il costo dell'imbarco senza renderlo proibitivo. */
-const COLONIST_COST_PER_LEVEL = { food: 30, water: 15 };
-
-function colonizeCostInfo(g, planet, fleet, loadPop) {
-  const cost = planet.colCost;
-  const homeColony = g.colonies[g.homePlanetKey];
-  const homeInTrouble = !!(homeColony && homeColony._scar &&
-    (homeColony._scar.food.state === 'crit' || homeColony._scar.water.state === 'crit'));
-  /* Il moltiplicatore §6.2 si applica se la home è ancora produttiva.
-     Per coerenza con il flusso legacy, il check è sulla home (non sulla
-     colonia origine della flotta). */
-  const mul = (homeInTrouble || (g.colonies[planet.systemId + ':' + planet.bodyKey] || {}).isHomeBase) ? 1 : 5;
-  /* Fix B: i coloni considerati per il costo sono quelli effettivamente
-     a bordo + quelli che il picker sta per imbarcare ora (additivo).
-     Se loadPop è undefined, il chiamante non ha ancora deciso → 0. */
-  const onboardNow = (fleet && fleet.popOnboard) || 0;
-  const extraLoad = (typeof loadPop === 'number') ? Math.max(0, loadPop | 0) : 0;
-  const colonistTotal = onboardNow + extraLoad;
-  const colonistCost = {
-    met:   0,
-    en:    0,
-    water: COLONIST_COST_PER_LEVEL.water * colonistTotal,
-    food:  COLONIST_COST_PER_LEVEL.food * colonistTotal
-  };
-  const totalCost = {
-    met:   Math.round(cost.met   * mul),
-    en:    Math.round(cost.en    * mul),
-    water: Math.round(cost.water * mul) + colonistCost.water,
-    food:  Math.round(cost.food  * mul) + colonistCost.food
-  };
-  /* Le risorse vengono prese dalla colonia origine della flotta. */
-  const payerKey = fleet ? fleet.ownerColonyKey : g.homePlanetKey;
-  const payer = g.colonies[payerKey];
-  const stock = payer ? payer.stock : { met: 0, en: 0, food: 0, water: 0 };
-  const canPay =
-    (stock.met   || 0) >= totalCost.met   &&
-    (stock.en    || 0) >= totalCost.en    &&
-    (stock.water || 0) >= totalCost.water &&
-    (stock.food  || 0) >= totalCost.food;
-  return {
-    totalCost: totalCost, mul: mul, homeInTrouble: homeInTrouble,
-    payerKey: payerKey, payer: payer, canPay: canPay,
-    baseImpulsi: cost.impulsi,
-    colonistCost: colonistCost, colonistTotal: colonistTotal
-  };
-}
+/* Costo di colonizzazione: regola di gioco in js/commands.js. */
+const COLONIST_COST_PER_LEVEL = ORION.commands.COLONIST_COST_PER_LEVEL;
+function colonizeCostInfo(g, planet, fleet, loadPop) { return ORION.commands.colonizeCost(g, planet, fleet, loadPop); }
 
 function openColonizePicker(planet) {
   const g = ORION.game;
@@ -3319,86 +3268,9 @@ function doColonize(planet, fleet, loadPop) {
   if (!g || !F) return;
   const colKey = planet.systemId + ':' + planet.bodyKey;
   const colony = g.colonies[colKey];
-  if (!colony || colony.colonized || colony.colonizing) return;
-  /* Fix (C) sessione 2026-06-09: loadPop dal picker rappresenta l'imbarco
-     AGGIUNTIVO. La pop già a bordo (fleet.popOnboard) NON viene re-imbarcata
-     né re-sottratta dalla colonia. Il costo coloni (B) considera SOMMA dei
-     livelli totali a bordo (già + nuovi), perché tutti consumano provviste. */
-  const cap = F.fleetPopCargoCap ? F.fleetPopCargoCap(fleet) : 0;
-  const onboardNow = fleet.popOnboard || 0;
-  const roomOnShip = Math.max(0, cap - onboardNow);
-  const reqLoad = (typeof loadPop === 'number') ? Math.max(0, Math.min(roomOnShip, loadPop | 0)) : 0;
-  /* Costo info ricalcolato con loadPop effettivo (decisione B: provviste extra). */
-  const info = colonizeCostInfo(g, planet, fleet, reqLoad);
-  if (!info.canPay) { showToast('Risorse insufficienti'); return; }
-  /* Imbarco SOLO della quota aggiuntiva. Se 0 e la flotta ha già coloni a bordo,
-     nessun imbarco viene chiamato → nessuna nuova Diaspora attivata. */
-  if (reqLoad > 0) {
-    const embarkRes = F.embarkPop(g, fleet, info.payerKey, reqLoad);
-    if (!embarkRes.ok) {
-      showToast('Imbarco coloni: ' + (embarkRes.reason || 'errore'));
-      return;
-    }
-  }
-  /* Deduce dal payer (colonia origine della flotta). */
-  ['met', 'en', 'water', 'food'].forEach(function (k) {
-    info.payer.stock[k] = Math.max(0, (info.payer.stock[k] || 0) - info.totalCost[k]);
-  });
-  /* Calcola le 3 fasi e imposta l'ordine.
-     Decisione #66 (refinement, sessione 2026-06-09): foundation dipende solo
-     dal pianeta (grandezza+ostilità via colCost.impulsi §6.2), NON dal viaggio.
-     Travel e orbit si aggiungono sopra. Intra-sistema → totale ≈ orbit + foundation;
-     extra-sistema → totale ≈ travel + orbit + foundation (M13 iperguida scalerà
-     solo il travel). Più fisicamente intuitivo + travel diventa "visibile" come
-     costo, motivazione narrativa per M13. */
-  const intra = (fleet.location.systemId === planet.systemId);
-  const orbitI = 10;
-  const foundationI = Math.max(20, info.baseImpulsi);
-  /* Memo del costo pagato per refund 50% se nave persa in transit. */
-  fleet._colonizePaidCost = {
-    coloniale: F.getClass('coloniale').cost,
-    colonization: { met: info.totalCost.met, en: info.totalCost.en, food: info.totalCost.food, water: info.totalCost.water },
-    payerKey: info.payerKey
-  };
-  const r = F.setOrder(g, fleet, {
-    type: 'colonize',
-    toSysId: planet.systemId,
-    bodyKey: planet.bodyKey,
-    orbitI: orbitI,
-    foundationI: foundationI
-  });
-  if (!r.ok) {
-    /* Rollback risorse. */
-    ['met', 'en', 'water', 'food'].forEach(function (k) {
-      info.payer.stock[k] = (info.payer.stock[k] || 0) + info.totalCost[k];
-    });
-    /* Fix rollback completo sessione 2026-06-09: se abbiamo imbarcato coloni
-       in questo doColonize (reqLoad > 0), embarkPop ha già sottratto la pop
-       dalla colonia origine + attivato la Diaspora. Se setOrder fallisce,
-       quei side-effects vanno annullati: pop torna alla sorgente, Diaspora
-       rimossa (era stata appena creata da embarkPop in questo flusso).
-       NB: i coloni preesistenti (onboardNow) restano sulla flotta — quelli
-       erano stati imbarcati in precedenza via Manage, NON è il nostro flusso
-       da rollbackare. */
-    if (reqLoad > 0 && info.payer && info.payer.pop) {
-      const popCap = info.payer.pop.cap || 0;
-      const room = Math.max(0, popCap - (info.payer.pop.total || 0));
-      const back = Math.min(reqLoad, room);
-      info.payer.pop.total = (info.payer.pop.total || 0) + back;
-      fleet.popOnboard = Math.max(0, (fleet.popOnboard || 0) - reqLoad);
-      /* La Diaspora era stata creata/rinnovata da embarkPop nel flusso corrente
-         (startedAt === g.timeImpulsi). La rimuoviamo solo se è "fresca" — così
-         non eliminiamo una Diaspora preesistente legittima. */
-      if (info.payer.diaspora && info.payer.diaspora.startedAt === (g.timeImpulsi || 0)) {
-        info.payer.diaspora = null;
-      }
-    }
-    fleet._colonizePaidCost = null;
-    showToast(r.reason || 'Ordine rifiutato');
-    return;
-  }
-  /* Callsign d'esordio "Pioniere N" se ancora "Squadrone N" default. */
-  maybeAutoRenameFleet(g, fleet, { type: 'colonize', toSysId: planet.systemId });
+  const res = ORION.commands.colonize(g, planet, fleet, loadPop);
+  if (!res.ok) { if (res.reason) showToast(res.reason); return; }
+  const intra = res.intra, r = { path: res.path };
   pushChronicle(ORION.time.currentDS(g) + ' — Spedizione coloniale <strong>' + escapeHtml(fleet.name) +
     '</strong> in viaggio verso <strong>' + escapeHtml(planet.name) + '</strong>' + bodyTagHtml(planet.systemId) +
     (intra ? ' (rotta intra-sistema)' : ' (' + (r.path ? r.path.length - 1 : 1) + ' salti)') + '.', 'planet');
@@ -3408,8 +3280,8 @@ function doColonize(planet, fleet, loadPop) {
   }
   /* M10 Fase B (decisione #52 §13.6): colonizzare in un sistema coeso
      costa −15 disposizione a ciascun proprietario AI. */
-  if (ORION.cohesion && ORION.cohesion.applyColonizePenalty) {
-    const nHit = ORION.cohesion.applyColonizePenalty(g, planet.systemId);
+  {
+    const nHit = res.cohesionHits;
     if (nHit > 0) {
       pushChronicle(ORION.time.currentDS(g) + ' — Il consorzio locale di <strong>' + (g.galaxy.systems[planet.systemId] || {}).name + '</strong> reagisce: disposizione di ' + nHit + ' proprietari in calo.', 'civ');
     }
@@ -4114,10 +3986,9 @@ function renderCantieriSection(colony, planet) {
     /* Cantieri occupati = scafi + mercantili in coda (#56). Gli attracchi
        (docks) restano solo per gli scafi: i mercantili non occupano il porto. */
     const cantieriUse = E.activeCantieriUse ? E.activeCantieriUse(colony) : (active + mercQueue.length);
-    const flying = E.shipsOnExpedition ? E.shipsOnExpedition(ORION.game, ORION.openPlanetKey) : 0;
     /* M15: attracchi PESATI (le capitali contano più di 1). Usa il conteggio
        del motore così il display combacia col gate canBuildShip. */
-    const bound = E.totalShipsBound ? E.totalShipsBound(ORION.game, colony, ORION.openPlanetKey).total : (sShips + active + flying);
+    const bound = E.totalShipsBound ? E.totalShipsBound(ORION.game, colony, ORION.openPlanetKey).total : (sShips + active);
     const techBonus = E.techSpeedBonus ? E.techSpeedBonus(colony) : 0;
     const cantieriCls = cantieriUse >= buildSlots ? ' cantieri-cap--full' : '';
     const portCls = bound >= docks ? ' cantieri-cap--full' : '';
@@ -4154,7 +4025,7 @@ function renderCantieriSection(colony, planet) {
       '</div>' +
       '<div class="cantieri-row__caps">' +
         '<span class="cantieri-cap' + cantieriCls + '" title="Build paralleli abilitati dal livello dell\'Hangar (scafi + mercantili)">Cantieri <strong>' + cantieriUse + ' / ' + buildSlots + '</strong></span>' +
-        '<span class="cantieri-cap' + portCls + '" title="Posti d\'attracco totali (attracchi + cantieri): le navi in costruzione prenotano il posto · in spedizione: ' + flying + '">Attracchi <strong>' + bound + ' / ' + docks + '</strong></span>' +
+        '<span class="cantieri-cap' + portCls + '" title="Posti d\'attracco totali (attracchi + cantieri): le navi in costruzione prenotano il posto>Attracchi <strong>' + bound + ' / ' + docks + '</strong></span>' +
         ((F.portMaintenance && F.portMaintenance(ORION.game, colony) > 0)
           ? '<span class="cantieri-cap" title="Manutenzione/riparazione delle navi al porto: riserva + flotte ferme qui (occupare un attracco consuma metalli). Le flotte in viaggio pagano la riserva di viaggio.">Manutenzione <strong>−' + F.portMaintenance(ORION.game, colony).toFixed(2) + ' ' + resIcon('met') + '/' + iU() + '</strong></span>'
           : '') +
@@ -7635,11 +7506,7 @@ function buildWarSection(g) {
 
 /* Costo del tributo per chiudere un assedio: proporzionale alla forza
    residua dei predoni (leva di recovery, recovery-friendly #49). */
-function siegeTributeCost(battle) {
-  const C = ORION.combat;
-  const atkHp = C ? C.totalHp({ combatants: battle.attacker.combatants }) : 50;
-  return { met: Math.round(atkHp * 0.6), en: Math.round(atkHp * 0.3) };
-}
+function siegeTributeCost(battle) { return ORION.commands.siegeTributeCost(battle); }
 
 /* computeSiegeForces — dati grezzi delle forze in campo di un assedio.
    Fonte UNICA condivisa dalla card compatta del riepilogo, dal pannello
@@ -8079,26 +7946,14 @@ function fleetOrderText(g, f) {
 
 function handleSiegeTribute(battleId, stage) {
   const g = ORION.game;
-  const battle = (g.battles || []).filter(function (b) { return b.id === battleId; })[0];
-  if (!battle) { renderFleetView(stage); return; }
-  const colony = g.colonies[battle.colonyKey];
-  if (!colony) return;
-  const cost = siegeTributeCost(battle);
-  if ((colony.stock.met || 0) < cost.met || (colony.stock.en || 0) < cost.en) {
-    showToast('Risorse insufficienti per il tributo'); return;
+  const r = ORION.commands.payTribute(g, battleId);
+  if (!r.ok) {
+    if (r.reason === 'gone') { renderFleetView(stage); return; }
+    showToast(r.reason); return;
   }
-  colony.stock.met -= cost.met; colony.stock.en -= cost.en;
-  battle.status = 'done';
-  g.battles = (g.battles || []).filter(function (b) { return b !== battle; });
-  let extra = '';
-  if (battle.attackerKind === 'ai' && battle.attackerCiv) {
-    /* Tregua breve con la civiltà: non riattacca per un po' (leva di
-       recovery; la diplomazia piena è M11). */
-    const civ = (g.civs || []).filter(function (c) { return c.id === battle.attackerCiv; })[0];
-    if (civ) { civ.truceUntil = (g.timeImpulsi || 0) + 200; extra = ' Tregua di 200 ' + iU() + '.'; }
-  }
+  const extra = r.truceI ? ' Tregua di ' + r.truceI + ' ' + iU() + '.' : '';
   pushChronicle(ORION.time.currentDS(g) + ' — Tributo pagato: assedio revocato su ' +
-    colonyNameFromKey(battle.colonyKey) + '.' + extra, 'system');
+    colonyNameFromKey(r.colonyKey) + '.' + extra, 'system');
   persistGame(g);
   renderFleetView(stage);
 }
@@ -9824,162 +9679,10 @@ function fleetShipIcon(kind) {
   return uiIcon(nm, 'cyan');
 }
 
-/* =====================================================================
-   NOMI FLOTTA AUTO-DERIVATI (#88 → composition-first, richiesta utente
-   2026-06-26)
-   Il nome non si sceglie alla creazione: descrive *cosa è* la flotta.
-   Priorità (alto→basso):
-     1. Override funzionale per composizione (qualsiasi ordine):
-        estrattore a bordo → Estrattore · coloniale a bordo → Pioniere.
-        "Prevale lo scopo": una flotta con un estrattore È un estrattore,
-        anche se scortata da caccia.
-     2. Overlay di scopo per ordine caratterizzante: pattuglia/presidio →
-        Sentinella · esplora → Segugio. Si applica AL VOLO a ogni cambio
-        ordine (non solo alla nascita). L'attacco NON ribattezza (decisione
-        utente 2026-06-26): l'identità di composizione prevale — una flotta
-        di linea resta tale anche mentre attacca.
-     3. Identità per nave di punta (la più forte, fleet.leadKind) × TAGLIA
-        della flotta: il nome cresce da poche unità (Pattuglia) a moltitudine
-        e potenza (Armata, Titano). Copre il caso neutro `move`/`idle`.
-   Ribattezza SOLO nomi auto-derivati (default "Squadrone N", callsign
-   correnti e legacy) → un nome scelto a mano (es. "Pattuglia Alfa",
-   "Mia Flotta") non viene mai toccato. Sempre rinominabile dal dettaglio.
-   ===================================================================== */
-/* Identità per (nave di punta × taglia). Per ogni classe di punta una terna
-   [poche 1–3, diverse 4–7, molte 8+]: il nome cresce da "poche unità" a
-   "moltitudine + potenza". L'intercettore (veloce) ha una terna a parte
-   (Saetta/Falco) anche quando è la nave maggiore tra caccia minori. */
-const FLEET_COMP_TIERS = {
-  'explorer':     ['Segugio',   'Segugio',    'Segugio'],     // ricognizione (flat)
-  'caccia':       ['Pattuglia', 'Squadriglia', 'Stormo'],
-  'intercettore': ['Saetta',    'Falco',      'Stormo'],      // a parte (veloce)
-  'corvetta':     ['Compagnia', 'Battaglione', 'Brigata'],
-  'fregata':      ['Compagnia', 'Battaglione', 'Brigata'],
-  'incrociatore': ['Corazzata', 'Legione',    'Armata'],
-  'dreadnought':  ['Corazzata', 'Legione',    'Armata'],
-  'ammiraglia':   ['Titano',    'Titano',     'Titano'],      // apice (nave unica)
-  'estrattore':   ['Estrattore','Estrattore', 'Estrattore'],  // (anche via override #1)
-  'coloniale':    ['Pioniere',  'Pioniere',   'Pioniere']     // (anche via override #1)
-};
-/* Bucket di taglia dal numero di navi: 0=poche(1–3) · 1=diverse(4–7) · 2=molte(8+). */
-function fleetSizeBucket(fleet) {
-  const n = (fleet && Array.isArray(fleet.ships)) ? fleet.ships.length : 0;
-  if (n >= 8) return 2;
-  if (n >= 4) return 1;
-  return 0;
-}
-/* Overlay di scopo: ordini che caratterizzano la missione e prevalgono
-   sull'identità di composizione (ma NON sugli override funzionali §1).
-   L'attacco è volutamente assente: non ribattezza (decisione 2026-06-26). */
-const FLEET_ORDER_NAMES = {
-  'patrol': 'Sentinella',
-  'patrol-loop': 'Sentinella',
-  'garrison': 'Sentinella',
-  'explore': 'Segugio'
-};
-/* Pool secondario (sinonimi): proposto come DEFAULT quando l'utente rinomina
-   manualmente — un nome+numero alternativo libero. Stesse chiavi dei due
-   cataloghi sopra. */
-const FLEET_NAME_ALT = {
-  'Segugio': 'Pellegrino', 'Estrattore': 'Minatrice', 'Pattuglia': 'Ronda',
-  'Squadriglia': 'Nugolo', 'Stormo': 'Sciame', 'Saetta': 'Strale', 'Falco': 'Astore',
-  'Compagnia': 'Coorte', 'Battaglione': 'Reparto', 'Brigata': 'Schiera',
-  'Corazzata': 'Baluardo', 'Legione': 'Falange', 'Armata': 'Armada',
-  'Titano': 'Colosso', 'Pioniere': 'Avanguardia', 'Sentinella': 'Bastione'
-};
-/* Tutte le basi che generiamo noi (correnti + legacy): un nome che combacia
-   con "<base> <numero>" è considerato auto-derivato → rinominabile al volo.
-   Le basi legacy ("Convoglio", "Vedetta", "Carovana", …) restano qui così i
-   save vecchi migrano al primo cambio ordine, senza bump di schema. */
-const FLEET_AUTO_BASES = [
-  'Squadrone',
-  /* basi correnti (composizione × taglia + override + overlay) */
-  'Segugio', 'Estrattore', 'Pioniere', 'Sentinella',
-  'Pattuglia', 'Squadriglia', 'Stormo', 'Saetta', 'Falco',
-  'Compagnia', 'Battaglione', 'Brigata',
-  'Corazzata', 'Legione', 'Armata', 'Titano',
-  /* basi primarie storiche (versioni precedenti di questo branch): restano
-     qui così i nomi auto già assegnati migrano al primo cambio ordine. */
-  'Flottiglia', 'Squadra', 'Falange', 'Aquila', 'Leviatano', 'Lama',
-  'Convoglio', 'Vedetta'
-];
-/* Numero progressivo per quella base: max suffisso numerico tra le flotte
-   esistenti col prefisso "<Base> ", +1. Robusto a rinomine manuali (chi
-   ribattezza "Segugio 1" → "Mia Flotta" lascia un buco, la successiva sarà
-   "Segugio N+1"). */
-function nextProgressiveFor(g, base) {
-  const re = new RegExp('^' + base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+(\\d+)$');
-  let max = 0;
-  (g.fleets || []).forEach(function (f) {
-    const m = re.exec(f.name || '');
-    if (m) { const n = parseInt(m[1], 10); if (n > max) max = n; }
-  });
-  return max + 1;
-}
-/* Una flotta porta almeno una nave di questa classe? */
-function fleetCarries(fleet, kind) {
-  if (!fleet || !Array.isArray(fleet.ships)) return false;
-  for (let i = 0; i < fleet.ships.length; i++) {
-    if (fleet.ships[i] && fleet.ships[i].kind === kind) return true;
-  }
-  return false;
-}
-/* Base auto-derivata per (composizione, ordine), senza numero. Implementa le
-   tre priorità descritte sopra. null = nessuna base sensata (flotta vuota o
-   ordine/composizione sconosciuti) → non ribattezzare. */
-function autoFleetBase(fleet, order) {
-  /* §1 — override funzionali per composizione (prevalgono su tutto). */
-  if (fleetCarries(fleet, 'estrattore')) return 'Estrattore';
-  if (fleetCarries(fleet, 'coloniale')) return 'Pioniere';
-  /* §2 — overlay di scopo dall'ordine caratterizzante. */
-  if (order && order.type) {
-    if (order.type === 'colonize') return 'Pioniere';
-    if (order.type === 'move-route' && order.exploreEach) return 'Segugio';
-    const ov = FLEET_ORDER_NAMES[order.type];
-    if (ov) return ov;
-  }
-  /* §3 — identità per nave di punta × taglia (caso neutro: move/idle/cargo). */
-  const lead = (ORION.fleet && ORION.fleet.leadKind) ? ORION.fleet.leadKind(fleet) : null;
-  const tier = lead && FLEET_COMP_TIERS[lead];
-  return tier ? tier[fleetSizeBucket(fleet)] : null;
-}
-/* Compone base + numero. Se la flotta porta GIÀ un nome auto con la stessa
-   base, ne conserva il numero (niente renumber-churn a ogni cambio ordine). */
-function autoFleetName(g, fleet, order) {
-  const base = autoFleetBase(fleet, order);
-  if (!base) return null;
-  const keep = new RegExp('^' + base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+\\d+$');
-  if (fleet && keep.test(fleet.name || '')) return fleet.name;
-  return base + ' ' + nextProgressiveFor(g, base);
-}
-/* Un nome è auto-derivato (quindi ribattezzabile al volo) se combacia con
-   "<base nota> <numero>". Tutto il resto è considerato scelto a mano e
-   intoccabile. */
-function isAutoFleetName(name) {
-  name = name || '';
-  for (let i = 0; i < FLEET_AUTO_BASES.length; i++) {
-    const re = new RegExp('^' + FLEET_AUTO_BASES[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+\\d+$');
-    if (re.test(name)) return true;
-  }
-  return false;
-}
-function maybeAutoRenameFleet(g, fleet, order) {
-  /* Ribattezza al volo a ogni ordine, purché il nome sia ancora auto-derivato
-     (default o callsign): così "Lama"/"Sentinella" compaiono al cambio ordine
-     e i "Convoglio" legacy migrano alla nuova identità di composizione. */
-  if (!fleet || !isAutoFleetName(fleet.name)) return;
-  const nm = autoFleetName(g, fleet, order);
-  if (nm && nm !== fleet.name) fleet.name = nm.slice(0, 40);
-}
-/* Suggerimento di rinomina manuale: propone il sinonimo della base auto-derivata
-   corrente + primo numero libero. È solo un default pre-popolato nell'input ✎ —
-   l'utente è libero di modificare. null per flotte senza base sensata. */
-function suggestedRenameFor(g, fleet) {
-  const base = autoFleetBase(fleet, fleet && fleet.orders);
-  if (!base) return null;
-  const alt = FLEET_NAME_ALT[base] || base;
-  return alt + ' ' + nextProgressiveFor(g, alt);
-}
+/* Nomi flotta auto-derivati: regola di gioco spostata in js/fleet-naming.js
+   (Revisione 2026, livello comandi). Alias per i call site della UI. */
+function maybeAutoRenameFleet(g, fleet, order) { return ORION.fleetNaming.maybeAutoRename(g, fleet, order); }
+function suggestedRenameFor(g, fleet) { return ORION.fleetNaming.suggestedRename(g, fleet); }
 
 /* =====================================================================
    GESTIONE FLOTTE IN VOLO (#88) — strada alternativa al "Crea flotta".
@@ -18101,7 +17804,8 @@ function refreshCloudSlots() {
   ORION.cloud.list().then(function (rows) {
     Object.keys(CLOUD_ROWS).forEach(function (k) { CLOUD_ROWS[k] = null; });
     (rows || []).forEach(function (r) {
-      if (r && r.slot && CLOUD_ROWS.hasOwnProperty(r.slot)) CLOUD_ROWS[r.slot] = r;
+      /* Revisione 2026: i save cloud pre-reset non vengono mostrati. */
+      if (r && r.slot && CLOUD_ROWS.hasOwnProperty(r.slot) && ORION.save.isCompatible(r.payload)) CLOUD_ROWS[r.slot] = r;
     });
     CLOUD_ROWS_LOADED = true;
     renderSaveModal();
@@ -18354,6 +18058,11 @@ function handleNewGame() {
 }
 
 function loadPayloadAsGame(payload) {
+  /* Revisione 2026: i save pre-reset (schema ≤ 32) non sono più caricabili. */
+  if (!ORION.save.isCompatible(payload)) {
+    alert(ORION.save.incompatibilityReason(payload));
+    return;
+  }
   /* M06: newGame ricostruisce la galassia dal seed del payload, poi
      applica il delta (colonie/tempo/cronaca/mode). Coerente con
      seed+delta (decisione #5). */
@@ -18366,57 +18075,12 @@ function loadPayloadAsGame(payload) {
 /* Entra in partita (lascia il main menu, monta la mappa). Usato da:
    - Continua / Inizia / Carica dal main menu
    - load slot / import .json dal pannello save */
-/* Migrazione lazy degli ID equipaggio legacy → counter monotono
-   persistente. I save antecedenti al fix (formato `crew-<imp>-<n>` con
-   counter module-local resettato a ogni reload) potevano contenere ID
-   collidenti che il roster mostrava come "Equipaggio 1" duplicato.
-   Idempotente: scorre ogni save e rinomina solo i crew col formato
-   vecchio in `crew-<N>` con N preso dal counter persistente di game. */
-function migrateLegacyCrewIds(game) {
-  if (!game || !game.colonies) return;
-  const T = ORION.time;
-  const LEGACY = /^crew-\d+-\d+$/;
-  const SEQ = /^crew-(\d+)$/;
-  game.idSeq = game.idSeq || {};
-  /* 1ª passata: riconcilia il counter col massimo seq già presente (colonie
-     + flotte). Necessario per i save senza idSeq persistito, così i nuovi
-     equipaggi NON ricollidono con quelli esistenti (es. crew-3 già in giro). */
-  let maxSeq = game.idSeq.crew | 0;
-  function scanSeq(list) {
-    if (!Array.isArray(list)) return;
-    list.forEach(function (c) {
-      const m = c && typeof c.id === 'string' && SEQ.exec(c.id);
-      if (m) maxSeq = Math.max(maxSeq, Number(m[1]));
-    });
-  }
-  Object.keys(game.colonies).forEach(function (k) {
-    const col = game.colonies[k];
-    scanSeq(col && col.crews && col.crews.explorer);
-  });
-  if (Array.isArray(game.fleets)) game.fleets.forEach(function (f) { scanSeq(f && f.crew); });
-  game.idSeq.crew = maxSeq;
-  /* 2ª passata: rinomina gli ID col formato legacy `crew-<imp>-<n>`. */
-  Object.keys(game.colonies).forEach(function (k) {
-    const col = game.colonies[k];
-    const list = col && col.crews && col.crews.explorer;
-    if (!Array.isArray(list)) return;
-    list.forEach(function (c) {
-      if (c && typeof c.id === 'string' && LEGACY.test(c.id)) {
-        c.id = T && T.nextCrewId ? T.nextCrewId(game)
-                                 : ('crew-' + (game.idSeq.crew = (game.idSeq.crew | 0) + 1));
-      }
-    });
-  });
-}
-
 function enterGame(opts) {
   opts = opts || {};
   if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; } if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
   if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
   if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
   if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
-  /* Una tantum per ogni boot: rinomina i crew con ID legacy collidente. */
-  migrateLegacyCrewIds(ORION.game);
   /* Decisione #50: ripristina il pin della dx per questo seed (se presente). */
   loadDxPin(ORION.game);
   hideMainMenu();
@@ -18438,8 +18102,6 @@ function enterGame(opts) {
   renderDxPanel();
   /* M06.6: tutorial — la "?" diventa attiva solo dentro partita. */
   updateTutorialButton();
-  /* PR mobile: mostra la bottom tab bar ora che la partita è attiva. */
-  updateMobileNav();
   /* Sequenza d'apertura (intro cinematica). Se attiva, posticipa il welcome
      a fine intro (così non compare sopra il volo); le lezioni 'system'/
      'planet' restano soppresse durante la cinematica (vedi openSystem/
@@ -18510,7 +18172,6 @@ function initMainMenu() {
 function showMainMenu(view) {
   ORION.menuView = view || 'home';
   stopTimerIfRunning();   // niente auto-advance mentre sei al menu (#31)
-  closeMobileSheets();    // PR mobile: chiudi eventuali sheet aprendo il menu
   const menu = document.querySelector('[data-bind="main-menu"]');
   if (menu) menu.removeAttribute('hidden');
   renderMainMenu();
@@ -18951,106 +18612,7 @@ function injectStaticSvgIcons() {
   });
 }
 
-/* =====================================================================
-   Navigazione mobile (PR mobile, decisione #6 emendata)
-   Bottom tab bar (≤760px): Mappa / Colonia / Flotte / Civiltà / Altro.
-   Mappa·Flotte·Civiltà cambiano la vista centrale (riusano navigateView);
-   Colonia apre la Plancia Operativa (dx) come sheet; Altro apre la Plancia
-   d'Impero (sx). Stato volatile su ORION, mai nel save (UI_GUIDE §9).
-   ===================================================================== */
-function initMobileNav() {
-  const nav = document.querySelector('[data-bind="mobile-nav"]');
-  if (!nav) return;
-  nav.querySelectorAll('[data-mnav]').forEach(function (btn) {
-    btn.addEventListener('click', function () { onMobileNav(btn.dataset.mnav); });
-  });
-  const scrim = document.querySelector('[data-bind="mobile-scrim"]');
-  if (scrim) scrim.addEventListener('click', function () { closeMobileSheets(); });
-  window.addEventListener('resize', function () {
-    updateHudHeightVar();
-    updateMobileNavActive();
-  });
-  updateHudHeightVar();
-  updateMobileNav();
-}
-
-/* Misura l'altezza reale dell'HUD top (varia col wrap su mobile) e la
-   espone come `--hud-h`: le sheet a tutto schermo partono SOTTO l'HUD così
-   risorse/controlli tempo restano visibili anche con una scheda aperta. */
-function updateHudHeightVar() {
-  const hud = document.querySelector('.hud-top');
-  if (!hud) return;
-  const h = hud.offsetHeight || 0;
-  if (h) document.documentElement.style.setProperty('--hud-h', h + 'px');
-}
-
-function onMobileNav(which) {
-  if (!ORION.game) return;
-  switch (which) {
-    case 'map':    closeMobileSheets(); navigateView('galaxy'); break;
-    case 'fleet':  closeMobileSheets(); ORION._siegeDetailId = null; navigateView('fleet');  break;
-    case 'civ':    closeMobileSheets(); navigateView('civ');    break;
-    case 'colony': toggleMobileSheet('right'); break;
-    case 'more':   toggleMobileSheet('left');  break;
-  }
-  updateMobileNavActive();
-}
-
-function toggleMobileSheet(side) {
-  setMobileSheet(ORION._mobileSheet === side ? null : side);
-}
-
-function setMobileSheet(side) {
-  ORION._mobileSheet = side || null;
-  if (side) updateHudHeightVar();   /* l'HUD può aver cambiato altezza (wrap) */
-  const left  = document.querySelector('.panel--left');
-  const right = document.querySelector('.panel--right');
-  const scrim = document.querySelector('[data-bind="mobile-scrim"]');
-  if (left)  left.classList.toggle('is-sheet-open',  side === 'left');
-  if (right) right.classList.toggle('is-sheet-open', side === 'right');
-  if (scrim) scrim.classList.toggle('is-on', !!side);
-  updateMobileNavActive();
-}
-
-function closeMobileSheets() {
-  if (ORION._mobileSheet) setMobileSheet(null);
-}
-
-/* Mostra/nasconde la barra mobile in base alla partita attiva (CSS la rende
-   visibile solo sotto il breakpoint telefono). */
-function updateMobileNav() {
-  const has = !!ORION.game;
-  document.body.classList.toggle('has-game', has);
-  const nav   = document.querySelector('[data-bind="mobile-nav"]');
-  const scrim = document.querySelector('[data-bind="mobile-scrim"]');
-  if (nav)   nav.hidden = !has;
-  if (scrim) scrim.hidden = !has;
-  if (!has) closeMobileSheets();
-  updateMobileNavActive();
-  /* Tutorial: spiega la navigazione mobile la prima volta che la barra
-     compare su schermo stretto (rispetta isEnabled/isSeen). */
-  if (has && ORION.tutorial && window.matchMedia &&
-      window.matchMedia('(max-width: 760px)').matches) {
-    ORION.tutorial.fire('mobile-nav');
-  }
-}
-
-function updateMobileNavActive() {
-  const nav = document.querySelector('[data-bind="mobile-nav"]');
-  if (!nav) return;
-  let active = 'map';
-  if (ORION._mobileSheet === 'right') active = 'colony';
-  else if (ORION._mobileSheet === 'left') active = 'more';
-  else if (ORION._currentView === 'fleet') active = 'fleet';
-  else if (ORION._currentView === 'civ') active = 'civ';
-  nav.querySelectorAll('[data-mnav]').forEach(function (b) {
-    b.classList.toggle('is-active', b.dataset.mnav === active);
-  });
-}
-
 function boot() {
-  /* M06: assorbe eventuale autosave M05 (chiavi legacy). Idempotente. */
-  if (ORION.save && ORION.save.migrateLegacy) ORION.save.migrateLegacy();
   /* PR-A: SVG icons negli host statici (HUD top, main menu). */
   injectStaticSvgIcons();
   /* Decisione #50: prefs UI persistite (cronaca collassata, sezioni sx). */
@@ -19068,7 +18630,6 @@ function boot() {
     openSystem: function (id) { openSystem(id); },
     openPlanet: function (sysId, bodyKey) { openPlanet(sysId, bodyKey); }
   });
-  initMobileNav();
   initStabilityHudChips();
   initMainMenu();
   showMainMenu('home');

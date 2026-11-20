@@ -27,6 +27,7 @@ function load(rel) {
 }
 load('js/rng.js');
 load('js/utils.js');
+load('js/galaxy.js');
 load('js/system.js');
 load('js/planet.js');
 load('js/station.js');
@@ -56,7 +57,7 @@ const SYS = makeSystem();
 /* Override generate: ritorna il nostro sistema per id 7 (evita di costruire
    una galassia reale). findBody resta quello vero (gestisce le lune annidate). */
 ORION.system.generate = function (galaxy, id) { return (id === 7) ? SYS : null; };
-ORION.galaxy = { DISCOVERY: { EXPLORED: 2 } };
+ORION.galaxy = Object.assign({}, ORION.galaxy, { DISCOVERY: { EXPLORED: 2 } });
 
 function makeGame(withObservatory) {
   const colony = {

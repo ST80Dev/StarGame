@@ -627,11 +627,9 @@
           matches.map(function (h) { return '<li>' + h + '</li>'; }).join('') +
           '</ul>';
       }
-      /* Cronaca collassabile (header cliccabile). Default: aperta su desktop,
-         chiusa su mobile (≤760) — lì il deck è solo colpo d'occhio. Stato
-         volatile in ORION.deckCronOpen (tri-stato: undefined = auto). */
-      const wide = (typeof window !== 'undefined') && window.innerWidth > 760;
-      const isOpen = (ORION.deckCronOpen === undefined) ? wide : !!ORION.deckCronOpen;
+      /* Cronaca collassabile (header cliccabile). Default aperta. Stato
+         volatile in ORION.deckCronOpen (undefined = default). */
+      const isOpen = (ORION.deckCronOpen === undefined) ? true : !!ORION.deckCronOpen;
       const icon = (ORION.icon && ORION.icon('chronicle')) || '';
       return '<footer class="deck-footer' + (isOpen ? '' : ' is-collapsed') + '" aria-label="Cronaca colonia">' +
         '<button type="button" class="deck-section__head deck-cron-toggle" data-deck-action="toggle-cron" aria-expanded="' + isOpen + '">' +
@@ -663,8 +661,7 @@
         ORION.deckCatFilter = t.dataset.cat;
         this._render();
       } else if (action === 'toggle-cron') {
-        const wide = (typeof window !== 'undefined') && window.innerWidth > 760;
-        const cur = (ORION.deckCronOpen === undefined) ? wide : !!ORION.deckCronOpen;
+        const cur = (ORION.deckCronOpen === undefined) ? true : !!ORION.deckCronOpen;
         ORION.deckCronOpen = !cur;
         this._render();
       }

@@ -136,11 +136,7 @@
   const RUMOR_RELIABLE = 0.70;       // prob. che una voce sia "attendibile"
 
   function aiApi() { return root.ORION.ai; }
-  function findCiv(game, civId) {
-    const civs = (game && game.civs) || [];
-    for (let i = 0; i < civs.length; i++) if (civs[i] && civs[i].id === civId) return civs[i];
-    return null;
-  }
+  const findCiv = ORION.util.civById;   // utils.js (Revisione 2026)
   function intelRank(level) {
     const AI = aiApi();
     if (AI && AI.intelLevelRank) return AI.intelLevelRank(level);

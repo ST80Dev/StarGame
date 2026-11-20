@@ -11,6 +11,7 @@
      ORION.util.lerp(a, b, t)
      ORION.util.smoothstep(e0, e1, x)   — Hermite su intervallo (GLSL)
      ORION.util.escapeHtml(s)
+     ORION.util.civById(game, id)       — civiltà per id (null se assente)
      ORION.format.compact(v)            — k per migliaia, 1 decimale (ex fmtNum)
      ORION.format.stock(v)              — k/M per scorte aggregate (ex fmtStock)
      ORION.format.rate(v)               — segno esplicito + 2 decimali (ex fmtNet)
@@ -36,11 +37,20 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
+  /* --- Lookup di stato (Revisione 2026: prima 6 copie locali) --- */
+  function civById(game, id) {
+    const civs = game && game.civs;
+    if (!Array.isArray(civs)) return null;
+    for (let i = 0; i < civs.length; i++) if (civs[i] && civs[i].id === id) return civs[i];
+    return null;
+  }
+
   ORION.util = {
     clamp: clamp,
     lerp: lerp,
     smoothstep: smoothstep,
-    escapeHtml: escapeHtml
+    escapeHtml: escapeHtml,
+    civById: civById
   };
 
   /* --- Formattatori numerici UI --- */

@@ -153,9 +153,17 @@
     return { empireLabel: empireLabel, dsLabel: dsLabel };
   }
 
+  /* Chiave dello store locale: unica fonte in save.js. */
+  function storeKey() { return (ORION.save && ORION.save.STORAGE_KEY) || 'orion.saves.v4'; }
+  /* Un payload remoto pre-Revisione 2026 (schema ≤ 32) è trattato come
+     assente: non sovrascrive il locale e non viene proposto al load. */
+  function usable(row) {
+    return !!(row && row.payload && (!ORION.save || !ORION.save.isCompatible || ORION.save.isCompatible(row.payload)));
+  }
+
   function localAutosaveMeta() {
     try {
-      const raw = localStorage.getItem('orion.saves.v3');
+      const raw = localStorage.getItem(storeKey());
       if (!raw) return null;
       const store = JSON.parse(raw);
       if (!store || !store.autosave) return null;
@@ -165,7 +173,7 @@
 
   function localSlotMeta(idx) {
     try {
-      const raw = localStorage.getItem('orion.saves.v3');
+      const raw = localStorage.getItem(storeKey());
       if (!raw) return null;
       const store = JSON.parse(raw);
       if (!store || !store.slots) return null;
@@ -176,27 +184,27 @@
   /* Sovrascrive uno slot locale con un payload remoto (post-reconcile). */
   function writeLocalAutosave(remoteRow) {
     try {
-      const raw = localStorage.getItem('orion.saves.v3');
+      const raw = localStorage.getItem(storeKey());
       const store = raw ? JSON.parse(raw) : { autosave: null, slots: [null, null, null, null, null] };
       store.autosave = {
         payload: remoteRow.payload,
         name: 'Autosave',
         ts: new Date(remoteRow.updated_at).getTime() || Date.now()
       };
-      localStorage.setItem('orion.saves.v3', JSON.stringify(store));
+      localStorage.setItem(storeKey(), JSON.stringify(store));
       return true;
     } catch (e) { return false; }
   }
   function writeLocalSlot(idx, remoteRow) {
     try {
-      const raw = localStorage.getItem('orion.saves.v3');
+      const raw = localStorage.getItem(storeKey());
       const store = raw ? JSON.parse(raw) : { autosave: null, slots: [null, null, null, null, null] };
       store.slots[idx] = {
         payload: remoteRow.payload,
         name: remoteRow.name || ('Slot ' + (idx + 1)),
         ts: new Date(remoteRow.updated_at).getTime() || Date.now()
       };
-      localStorage.setItem('orion.saves.v3', JSON.stringify(store));
+      localStorage.setItem(storeKey(), JSON.stringify(store));
       return true;
     } catch (e) { return false; }
   }
@@ -337,7 +345,8 @@
     return Promise.race([
       pullRemote('autosave'),
       new Promise(function (_, rej) { setTimeout(function () { rej(new Error('boot-timeout')); }, CFG.BOOT_TIMEOUT_MS); })
-    ]).then(function (remote) {
+    ]).then(function (remoteRow) {
+      const remote = usable(remoteRow) ? remoteRow : null;
       const localTs = localMeta ? (localMeta.ts || 0) : 0;
       const remoteTs = remote ? new Date(remote.updated_at).getTime() : 0;
 

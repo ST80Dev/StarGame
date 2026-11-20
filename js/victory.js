@@ -15,14 +15,11 @@
      - mode: { startedAs, preset, modifiers }
      - victoryTracks: { exploration, colonization, economy, tech,
                         reputationLight, reputationDark, survival }
-   Migrazione da v1: vedi `migrate(saved)`.
    ===================================================================== */
 'use strict';
 
 (function (root) {
   const ORION = root.ORION = root.ORION || {};
-
-  const SCHEMA_VERSION = 2;
 
   /* Le 7 piste di vittoria (decisione #23). Score ∈ [0,1]; vince chi
      raggiunge 1.0 per primo. M05 mantiene i tracker; M20 popola formule. */
@@ -315,20 +312,7 @@
     return track;
   }
 
-  /* Migra un payload salvato v1 → v2 aggiungendo i campi mancanti. */
-  function migrate(saved) {
-    if (!saved) return saved;
-    const v = saved.schema || 1;
-    if (v >= SCHEMA_VERSION) return saved;
-    // v1 → v2: aggiungi mode + victoryTracks coi default
-    if (!saved.mode) saved.mode = defaultMode();
-    if (!saved.victoryTracks) saved.victoryTracks = defaultTracks();
-    saved.schema = SCHEMA_VERSION;
-    return saved;
-  }
-
   ORION.victory = {
-    SCHEMA_VERSION: SCHEMA_VERSION,
     TRACKS: TRACKS,
     TRACK_LABELS: TRACK_LABELS,
     MODES: MODES,
@@ -343,7 +327,6 @@
     progress: progress,
     getFocus: getFocus,
     setFocus: setFocus,
-    TRACK_META: TRACK_META,
-    migrate: migrate
+    TRACK_META: TRACK_META
   };
 })(typeof window !== 'undefined' ? window : this);

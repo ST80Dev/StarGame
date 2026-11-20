@@ -688,8 +688,43 @@
     return true;
   }
 
+  /* Cammino minimo (in hop) sul grafo delle rotte, BFS. `canEnter(v)`
+     opzionale filtra i nodi attraversabili (es. nebbia di guerra). Unica
+     implementazione (Revisione 2026): prima copiata in fleet.js ×2 e
+     station.js; l'ordine di visita è quello storico (links in ordine), così
+     i percorsi scelti restano identici. Ritorna [from..to] o null. */
+  function bfsPath(galaxy, fromSysId, toSysId, canEnter) {
+    if (!galaxy || !galaxy.systems) return null;
+    if (fromSysId === toSysId) return [fromSysId];
+    if (!galaxy.systems[fromSysId] || !galaxy.systems[toSysId]) return null;
+    /* Map (non array): funziona anche con systems indicizzato a oggetto. */
+    const prev = new Map();
+    prev.set(fromSysId, -1);
+    const queue = [fromSysId];
+    let head = 0;
+    while (head < queue.length) {
+      const u = queue[head++];
+      if (u === toSysId) break;
+      const sys = galaxy.systems[u];
+      const links = (sys && sys.links) || [];
+      for (let i = 0; i < links.length; i++) {
+        const v = links[i];
+        if (prev.has(v)) continue;
+        if (canEnter && !canEnter(v)) continue;
+        prev.set(v, u);
+        queue.push(v);
+      }
+    }
+    if (!prev.has(toSysId)) return null;
+    const path = [];
+    let cur = toSysId;
+    while (cur !== -1) { path.unshift(cur); cur = prev.get(cur); }
+    return path;
+  }
+
   root.ORION = root.ORION || {};
   root.ORION.galaxy = {
+    bfsPath: bfsPath,
     generate: generate,
     createState: createState,
     DISCOVERY: DISCOVERY,

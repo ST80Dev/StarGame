@@ -1,0 +1,1697 @@
+{
+ "colony:L1:S0:none": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "looted",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "7b41bf26dec1",
+   "fleets": "97d170e1550e",
+   "stations": "97d170e1550e",
+   "warState": "c8b3537476cd"
+  }
+ },
+ "colony:L1:S0:light": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 52,
+    "def": 143
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 30,
+    "def": 123
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 3,
+    "atk": 7,
+    "def": 103
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "1914810686b1",
+   "fleets": "bd3b1602ee4f",
+   "stations": "97d170e1550e",
+   "warState": "4789be62a6ee"
+  }
+ },
+ "colony:L1:S0:heavy": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 0,
+    "def": 543
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "f5c94900ad15",
+   "fleets": "7dcc8a211fb0",
+   "stations": "97d170e1550e",
+   "warState": "4789be62a6ee"
+  }
+ },
+ "colony:L3:S0:none": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "looted",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "3f2779dcda21",
+   "fleets": "97d170e1550e",
+   "stations": "97d170e1550e",
+   "warState": "c8b3537476cd"
+  }
+ },
+ "colony:L3:S0:light": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 106,
+    "def": 131
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 85,
+    "def": 104
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 3,
+    "atk": 61,
+    "def": 74
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 4,
+    "atk": 49,
+    "def": 42
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 5,
+    "atk": 37,
+    "def": 10
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 6,
+    "atk": 26,
+    "def": 0
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "looted",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "5663a895a45d",
+   "fleets": "9edafbf2e6d4",
+   "stations": "97d170e1550e",
+   "warState": "d3e90520a622"
+  }
+ },
+ "colony:L3:S0:heavy": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 44,
+    "def": 531
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 0,
+    "def": 504
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "886096f4307d",
+   "fleets": "b21f7f47c9fe",
+   "stations": "97d170e1550e",
+   "warState": "4789be62a6ee"
+  }
+ },
+ "colony:L6:S0:none": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "looted",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "3e7c66344e04",
+   "fleets": "97d170e1550e",
+   "stations": "97d170e1550e",
+   "warState": "c8b3537476cd"
+  }
+ },
+ "colony:L6:S0:light": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 187,
+    "def": 110
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 165,
+    "def": 67
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 3,
+    "atk": 154,
+    "def": 24
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 4,
+    "atk": 141,
+    "def": 0
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "looted",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "1cb9d0fa4af5",
+   "fleets": "5db02bd4f40f",
+   "stations": "97d170e1550e",
+   "warState": "d3e90520a622"
+  }
+ },
+ "colony:L6:S0:heavy": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 131,
+    "def": 510
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 52,
+    "def": 467
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 3,
+    "atk": 0,
+    "def": 424
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "a61c620b7199",
+   "fleets": "e0dc2ca98e66",
+   "stations": "97d170e1550e",
+   "warState": "4789be62a6ee"
+  }
+ },
+ "colony:L10:S0:none": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "looted",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "afd08af06ae2",
+   "fleets": "97d170e1550e",
+   "stations": "97d170e1550e",
+   "warState": "c8b3537476cd"
+  }
+ },
+ "colony:L10:S0:light": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 291,
+    "def": 91
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 269,
+    "def": 10
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 3,
+    "atk": 258,
+    "def": 0
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "looted",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "4f37dbf7b4de",
+   "fleets": "8699602773dc",
+   "stations": "97d170e1550e",
+   "warState": "e77d4a6f1d89"
+  }
+ },
+ "colony:L10:S0:heavy": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 237,
+    "def": 491
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 160,
+    "def": 410
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 3,
+    "atk": 86,
+    "def": 336
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 4,
+    "atk": 22,
+    "def": 264
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "e798bd13cf2b",
+   "fleets": "ffbe0157c63b",
+   "stations": "97d170e1550e",
+   "warState": "330215984853"
+  }
+ },
+ "station:L1:S1:none": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 67,
+    "def": 165
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 59,
+    "def": 152
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 3,
+    "atk": 48,
+    "def": 141
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 4,
+    "atk": 37,
+    "def": 125
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 5,
+    "atk": 28,
+    "def": 114
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 6,
+    "atk": 17,
+    "def": 101
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 7,
+    "atk": 7,
+    "def": 88
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 8,
+    "atk": 0,
+    "def": 73
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "555d198e9e39",
+   "fleets": "97d170e1550e",
+   "stations": "8c5b4ffa6836",
+   "warState": "4789be62a6ee"
+  }
+ },
+ "station:L1:S1:light": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 42,
+    "def": 325
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 12,
+    "def": 307
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "4cac3b5b84c6",
+   "fleets": "7e3578414dea",
+   "stations": "3e8736f74640",
+   "warState": "4789be62a6ee"
+  }
+ },
+ "station:L1:S3:none": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 37,
+    "def": 642
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 0,
+    "def": 638
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "2ae65ce443a6",
+   "fleets": "97d170e1550e",
+   "stations": "435f46337a9b",
+   "warState": "4789be62a6ee"
+  }
+ },
+ "station:L1:S3:light": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 10,
+    "def": 802
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "0309dfaa7e6d",
+   "fleets": "e957f7774a4e",
+   "stations": "c902c6e0da77",
+   "warState": "4789be62a6ee"
+  }
+ },
+ "station:L3:S1:none": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 120,
+    "def": 149
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 110,
+    "def": 124
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 3,
+    "atk": 100,
+    "def": 103
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 4,
+    "atk": 90,
+    "def": 78
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 5,
+    "atk": 79,
+    "def": 54
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 6,
+    "atk": 68,
+    "def": 27
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 7,
+    "atk": 59,
+    "def": 3
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 8,
+    "atk": 49,
+    "def": 0
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "looted",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "fd9c87dff806",
+   "fleets": "97d170e1550e",
+   "stations": "97d170e1550e",
+   "warState": "c8b3537476cd"
+  }
+ },
+ "station:L3:S1:light": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 95,
+    "def": 309
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 62,
+    "def": 279
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 3,
+    "atk": 29,
+    "def": 253
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 4,
+    "atk": 5,
+    "def": 223
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "59294edadc16",
+   "fleets": "46e320a8e879",
+   "stations": "5a18251cf0d7",
+   "warState": "4789be62a6ee"
+  }
+ },
+ "station:L3:S3:none": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 96,
+    "def": 627
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 54,
+    "def": 615
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 3,
+    "atk": 15,
+    "def": 603
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "56837ad2aaa2",
+   "fleets": "97d170e1550e",
+   "stations": "2340afa52674",
+   "warState": "4789be62a6ee"
+  }
+ },
+ "station:L3:S3:light": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 73,
+    "def": 787
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 4,
+    "def": 761
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "6391ba25b080",
+   "fleets": "bbc7751f6846",
+   "stations": "e365682632bd",
+   "warState": "4789be62a6ee"
+  }
+ },
+ "station:L6:S1:none": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 198,
+    "def": 126
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 189,
+    "def": 89
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 3,
+    "atk": 179,
+    "def": 45
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 4,
+    "atk": 169,
+    "def": 0
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "looted",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "da12e9adc124",
+   "fleets": "97d170e1550e",
+   "stations": "97d170e1550e",
+   "warState": "c8b3537476cd"
+  }
+ },
+ "station:L6:S1:light": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 173,
+    "def": 286
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 143,
+    "def": 244
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 3,
+    "atk": 121,
+    "def": 195
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 4,
+    "atk": 99,
+    "def": 142
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 5,
+    "atk": 89,
+    "def": 105
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 6,
+    "atk": 79,
+    "def": 66
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 7,
+    "atk": 69,
+    "def": 22
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 8,
+    "atk": 58,
+    "def": 0
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "looted",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "3938b419f092",
+   "fleets": "9cc0bc4f8247",
+   "stations": "97d170e1550e",
+   "warState": "c8b3537476cd"
+  }
+ },
+ "station:L6:S3:none": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 166,
+    "def": 606
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 126,
+    "def": 572
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 3,
+    "atk": 90,
+    "def": 537
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 4,
+    "atk": 58,
+    "def": 498
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 5,
+    "atk": 21,
+    "def": 465
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 6,
+    "atk": 0,
+    "def": 430
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "694507a73699",
+   "fleets": "97d170e1550e",
+   "stations": "98f2295e8b71",
+   "warState": "4789be62a6ee"
+  }
+ },
+ "station:L6:S3:light": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 139,
+    "def": 766
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 73,
+    "def": 718
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 3,
+    "atk": 26,
+    "def": 669
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 4,
+    "atk": 0,
+    "def": 616
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "06e7a203997e",
+   "fleets": "35b456ef3598",
+   "stations": "98bf33526f75",
+   "warState": "d40819048155"
+  }
+ },
+ "station:L10:S1:none": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 302,
+    "def": 102
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 291,
+    "def": 35
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 3,
+    "atk": 281,
+    "def": 0
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "looted",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "4cd35d2edf4f",
+   "fleets": "97d170e1550e",
+   "stations": "97d170e1550e",
+   "warState": "c8b3537476cd"
+  }
+ },
+ "station:L10:S1:light": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 279,
+    "def": 262
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 241,
+    "def": 190
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 3,
+    "atk": 220,
+    "def": 123
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 4,
+    "atk": 211,
+    "def": 54
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 5,
+    "atk": 201,
+    "def": 0
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "looted",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "567c939c1bbe",
+   "fleets": "4fddf4c72e6b",
+   "stations": "97d170e1550e",
+   "warState": "c8b3537476cd"
+  }
+ },
+ "station:L10:S3:none": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 270,
+    "def": 584
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 227,
+    "def": 536
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 3,
+    "atk": 195,
+    "def": 487
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 4,
+    "atk": 160,
+    "def": 424
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 5,
+    "atk": 127,
+    "def": 360
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 6,
+    "atk": 86,
+    "def": 297
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 7,
+    "atk": 44,
+    "def": 248
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 8,
+    "atk": 2,
+    "def": 180
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "96f8c0dacdcf",
+   "fleets": "97d170e1550e",
+   "stations": "ab25974b7ebd",
+   "warState": "4789be62a6ee"
+  }
+ },
+ "station:L10:S3:light": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 1,
+    "atk": 242,
+    "def": 744
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 2,
+    "atk": 172,
+    "def": 682
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 3,
+    "atk": 130,
+    "def": 619
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 4,
+    "atk": 94,
+    "def": 556
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 5,
+    "atk": 61,
+    "def": 492
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 6,
+    "atk": 21,
+    "def": 429
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 7,
+    "atk": 0,
+    "def": 380
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "70aa27f82ac1",
+   "fleets": "09446ef63c65",
+   "stations": "179bf02a3459",
+   "warState": "4789be62a6ee"
+  }
+ },
+ "colony:L3:S0:heavy:cap": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 12,
+    "atk": 34,
+    "def": 529
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "27a1aa06ba95",
+   "fleets": "cea5e4fac056",
+   "stations": "97d170e1550e",
+   "warState": "4789be62a6ee"
+  }
+ },
+ "colony:L6:S0:heavy:cap": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 12,
+    "atk": 126,
+    "def": 511
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "28a239b0dce3",
+   "fleets": "fa8fa428c7a7",
+   "stations": "97d170e1550e",
+   "warState": "4789be62a6ee"
+  }
+ },
+ "colony:L10:S0:heavy:cap": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 12,
+    "atk": 237,
+    "def": 480
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "a7ca08a3865d",
+   "fleets": "09ad6b9de5ec",
+   "stations": "97d170e1550e",
+   "warState": "d40819048155"
+  }
+ },
+ "station:L3:S1:light:cap": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 12,
+    "atk": 94,
+    "def": 307
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "cba834ea5474",
+   "fleets": "4f146026b44b",
+   "stations": "9f88387aface",
+   "warState": "4789be62a6ee"
+  }
+ },
+ "station:L3:S3:none:cap": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 12,
+    "atk": 91,
+    "def": 630
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "913837dc67e8",
+   "fleets": "97d170e1550e",
+   "stations": "013f2813c80a",
+   "warState": "4789be62a6ee"
+  }
+ },
+ "station:L6:S1:light:cap": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 12,
+    "atk": 174,
+    "def": 298
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "ea6eedbb8a15",
+   "fleets": "8f4e5cbe1e3c",
+   "stations": "1f6141cd7a10",
+   "warState": "4789be62a6ee"
+  }
+ },
+ "station:L6:S3:none:cap": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 12,
+    "atk": 169,
+    "def": 611
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "eaaa23682ae7",
+   "fleets": "97d170e1550e",
+   "stations": "52b312ea4cd7",
+   "warState": "4789be62a6ee"
+  }
+ },
+ "station:L10:S1:light:cap": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 12,
+    "atk": 273,
+    "def": 263
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "looted",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "403522a350ee",
+   "fleets": "6e4fdfc7d2a9",
+   "stations": "97d170e1550e",
+   "warState": "c8b3537476cd"
+  }
+ },
+ "station:L10:S3:none:cap": {
+  "log": [
+   {
+    "kind": "siege-begin",
+    "outcome": null,
+    "round": null,
+    "atk": null,
+    "def": null
+   },
+   {
+    "kind": "siege-round",
+    "outcome": null,
+    "round": 12,
+    "atk": 271,
+    "def": 578
+   },
+   {
+    "kind": "siege-end",
+    "outcome": "repelled",
+    "round": null,
+    "atk": null,
+    "def": null
+   }
+  ],
+  "h": {
+   "battles": "97d170e1550e",
+   "colonies": "635d4fb12e74",
+   "fleets": "97d170e1550e",
+   "stations": "5e0c9d577dba",
+   "warState": "4789be62a6ee"
+  }
+ }
+}
