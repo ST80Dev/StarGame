@@ -51,3 +51,31 @@ describe('save round-trip', () => {
     });
   }
 });
+
+describe('viaggi', () => {
+  it("B3: l'Iperguida del giocatore non accelera le flotte IA", () => {
+    const { O, game } = fresh('b3-seed');
+    const g = game.galaxy;
+    const [a, b] = [0, g.systems[0].links ? g.systems[0].links[0] : 1];
+    const aiBefore = O.aifleet.legEta(game, a, b, 1);
+    const playerBefore = O.fleet.tempoLeg(g, a, b, 1);
+    game.research.unlocked.push('iperguida');
+    expect(O.research.hyperMul(game)).toBeLessThan(1);
+    expect(O.fleet.tempoLeg(g, a, b, 1)).toBeLessThan(playerBefore);   // il giocatore accelera
+    expect(O.aifleet.legEta(game, a, b, 1)).toBe(aiBefore);            // l'IA no
+  });
+});
+
+describe('pagatori', () => {
+  it('B5: la ricerca addebita la capitale del gruppo natale', () => {
+    const { O, game } = fresh('b5-seed');
+    const cap = O.capital.getOf(game, game.galaxy.homeGroupId);
+    expect(O.research.payerColonyKey(game)).toBe(cap);
+    /* Se la capitale non coincide con la home, vince la capitale. */
+    const fake = '999:b1';
+    game.colonies[fake] = Object.assign({}, game.colonies[game.homePlanetKey]);
+    game.capitals[game.galaxy.homeGroupId] = fake;
+    expect(O.capital.getOf(game, game.galaxy.homeGroupId)).toBe(fake);
+    expect(O.research.payerColonyKey(game)).toBe(fake);
+  });
+});

@@ -206,7 +206,7 @@
   }
   function legEta(game, fromId, toId, minSpeed) {
     let t = (ORION.fleet && ORION.fleet.tempoLeg)
-      ? ORION.fleet.tempoLeg(game.galaxy, fromId, toId, minSpeed) : 50;
+      ? ORION.fleet.tempoLeg(game.galaxy, fromId, toId, minSpeed, 1) : 50;   // B3: niente Iperguida del giocatore
     /* Campo di prossimità FSP (richiesta utente 2026-06-29, §17.7.4): il
        rallentamento/accelerazione vale anche per le flottiglie ambientali AI
        ("legge fisica" simmetrica). Usura/viveri non sono modellati per queste
@@ -1207,6 +1207,7 @@
   }
 
   ORION.aifleet = {
+    legEta: legEta,
     tick: tick,
     ensure: ensure,
     detectedFleets: detectedFleets,

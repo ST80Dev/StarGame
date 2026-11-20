@@ -468,8 +468,12 @@
   /* tempoLeg — durata di un singolo hop fra due sistemi adiacenti.
      Formula richiesta dal task: clamp(50 + danger·30, 40, 80) × (1/minSpeed).
      `minSpeed` = minima velocità delle navi in flotta (la flotta viaggia
-     alla velocità della nave più lenta). */
-  function tempoLeg(galaxy, fromSysId, toSysId, minSpeed) {
+     alla velocità della nave più lenta).
+     `hyperMul` (opzionale) = moltiplicatore Iperguida del PROPRIETARIO della
+     flotta. Omesso → quello del giocatore (tutte le chiamate storiche sono
+     flotte del giocatore). Le flotte IA passano 1: prima ereditavano la tech
+     del giocatore (bug B3, audit 2026). */
+  function tempoLeg(galaxy, fromSysId, toSysId, minSpeed, hyperMul) {
     const d = dangerOf(galaxy, toSysId);
     let base = TRAVEL_BASE + d * TRAVEL_DANGER_FACTOR;
     if (base < TRAVEL_MIN) base = TRAVEL_MIN;
@@ -479,7 +483,8 @@
        terzo. Applicato qui (punto unico) così stima e durata reale coincidono
        per tutti i consumer (startNextLeg, routeImpulsi, wizard viveri). */
     let t = base / sp;
-    if (ORION.research && ORION.research.hyperMul) t *= ORION.research.hyperMul(ORION.game);
+    if (typeof hyperMul === 'number') t *= hyperMul;
+    else if (ORION.research && ORION.research.hyperMul) t *= ORION.research.hyperMul(ORION.game);
     return Math.max(1, Math.round(t));
   }
 
@@ -1880,6 +1885,25 @@
       c += ORION.phenomena.routeIncident(game.galaxy, fleet.route);
     }
     return Math.max(0, Math.min(INCIDENT_RISK_MAX, c));
+  }
+  /* Stima della probabilità d'incidente per un viaggio NON ancora partito,
+     con lo STESSO modello del tiro reale (_accidentChanceForTravel). Usata
+     dalla scheda Esplorazione, che prima mostrava il modello M07 a fasce
+     (expedition.accidentChance) diverso da quello usato davvero (bug B4). */
+  function estimateTravelIncident(game, fromSysId, toSysId, opts) {
+    opts = opts || {};
+    if (!game || !game.galaxy) return 0;
+    const route = computePath(game.galaxy, fromSysId, toSysId);
+    if (!route || route.length < 2) return 0;
+    const probe = {
+      id: 'probe',
+      ships: [{ kind: opts.shipKind || 'explorer' }],
+      crew: [{ xp: opts.crewXp || 0 }],
+      orders: { toSysId: toSysId },
+      location: { systemId: fromSysId },
+      route: route
+    };
+    return _accidentChanceForTravel(game, probe, routeImpulsi(game.galaxy, probe, route));
   }
   function _rollTravelIncident(game, fleet, events) {
     if (fleet._incidentRolled) return;
@@ -3519,6 +3543,7 @@
   }
 
   ORION.fleet = {
+    estimateTravelIncident: estimateTravelIncident,
     CLASSES: CLASSES,
     CLASS_ORDER: CLASS_ORDER,
     CLASS_ICON: CLASS_ICON,

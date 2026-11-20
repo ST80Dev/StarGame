@@ -4725,7 +4725,8 @@ function openExpeditionPicker(colony, opts) {
     const oneWay = estimateExpeditionDuration(g.galaxy, colony.systemId, sid);
     const dur = returnHome ? oneWay * 2 : oneWay;
     const durLabel = returnHome ? (dur + ' ' + iU() + ' (a/r)') : (oneWay + ' ' + iU() + ' (sola andata)');
-    const chance = ORION.expedition.accidentChance(g.galaxy, sid, crewXp, g);
+    /* B4: stesso modello del tiro reale (flotta con ordine explore). */
+    const chance = ORION.fleet.estimateTravelIncident(g, colony.systemId, sid, { crewXp: crewXp });
     const dangerTier = sys.dangerTier || ORION.galaxy.dangerTier(sys.danger);
     return '<div class="expedition-card">' +
       '<div class="expedition-card__head">' +
