@@ -16,17 +16,20 @@ Modulo corrente: **M02 — Galassia** (generazione procedurale deterministica da
 
 ## Eseguire in locale
 
-Nessuna build. Apri `index.html` in un browser, oppure servi la cartella:
-
 ```bash
-python3 -m http.server 8000
-# poi apri http://localhost:8000
+npm install
+npm run dev      # server locale con reload
+npm test         # Vitest: golden replay + test di simulazione
+npm run build    # bundle in dist/ (deploy automatico su Pages via GitHub Action)
 ```
 
 ## Struttura
 
 ```
-index.html            shell UI + caricamento moduli
+index.html            shell UI (un solo entry module)
+src/entry.js          importa i moduli js/* in ordine
+js/newgame.js         creazione partita headless (seed → stato)
+tests/                Vitest: golden replay, simulazione, test storici
 css/style.css         tema scuro spaziale (custom properties)
 js/rng.js             PRNG deterministico (seed → galassia riproducibile)
 js/names.js           nomi dei sistemi (40% reali / 60% inventati)

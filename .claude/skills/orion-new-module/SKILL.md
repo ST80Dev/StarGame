@@ -50,10 +50,10 @@ Note:
   (così girano headless in Node — vedi skill `orion-headless-test`).
 - Convenzione: esporre gli helper interni con prefisso `_` con commento "interni per test".
 
-## 2. Registrazione in `index.html`
-Aggiungi `<script src="js/<modulo>.js"></script>` nel blocco script (`index.html:210-252`),
+## 2. Registrazione in `src/entry.js`
+Aggiungi `import '../js/<modulo>.js';` in `src/entry.js` (Revisione 2026: non più `<script>` in `index.html`),
 **rispettando le dipendenze**: `icons.js → rng.js → utils.js → core → sottosistemi → time.js →
-save.js → tutorial.js → main.js`. I sottosistemi che usano altri moduli vanno **dopo** di essi
+save.js → tutorial.js → newgame.js → main.js`. I sottosistemi che usano altri moduli vanno **dopo** di essi
 (es. `mekhari.js` dopo `treasury.js`/`diplomacy.js`). `main.js` è SEMPRE ultimo.
 
 ## 3. Hook di boot
@@ -99,7 +99,7 @@ migrate + ensure + boot hook).
 ## Checklist
 - [ ] file con IIFE + `ORION.<modulo>` + `ensure()` + helper `_` per test
 - [ ] niente DOM/`Math.random` nella logica pura
-- [ ] `<script>` in `index.html` nell'ordine di dipendenza corretto
+- [ ] `import` in `src/entry.js` nell'ordine di dipendenza corretto
 - [ ] hook `ensure()` al boot (se ha stato)
 - [ ] hook `process(game,events)` nel tick (se evolve)
 - [ ] RNG con seed `base:scope:id[:I]`
