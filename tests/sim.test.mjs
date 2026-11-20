@@ -96,3 +96,61 @@ describe('schema save (Revisione 2026)', () => {
     expect(keys).toEqual(want);
   });
 });
+
+describe('comandi (livello comandi, Revisione 2026)', () => {
+  function withColonialFleet(seed) {
+    const { O, game } = fresh(seed);
+    O.time.advance(game, 80);
+    const key = game.homePlanetKey, home = game.colonies[key];
+    Object.assign(home.stock, { met: 5000, en: 5000, food: 5000, water: 5000 });
+    home.ships.coloniale = 1;
+    const fleet = O.fleet.createFleet(game, key, null).fleet;
+    expect(O.fleet.assignShips(game, fleet, key, 'coloniale', 1).ok).toBe(true);
+    for (let i = 0; i < 4; i++) home.crews.explorer.push({ id: O.time.nextCrewId(game), xp: 1 });
+    expect(O.fleet.assignCrew(game, fleet, key, 4).ok).toBe(true);
+    /* Bersaglio: un altro corpo del sistema natale. */
+    const sys = O.system.generate(game.galaxy, game.galaxy.homeId);
+    const body = sys.bodies.find(b => game.galaxy.homeId + ':' + b.key !== key && b.type !== 'cintura' && b.type !== 'gassoso');
+    const planet = O.planet.generate(game.galaxy, sys, body.key);
+    game.colonies[planet.systemId + ':' + planet.bodyKey] = O.planet.createColony(planet);
+    return { O, game, home, fleet, planet };
+  }
+
+  it('colonize: paga il costo, imposta l\'ordine e ribattezza la flotta', () => {
+    const { O, game, home, fleet, planet } = withColonialFleet('cmd-col');
+    const before = Object.assign({}, home.stock);
+    const cost = O.commands.colonizeCost(game, planet, fleet, 0).totalCost;
+    const r = O.commands.colonize(game, planet, fleet, 0);
+    expect(r.ok).toBe(true);
+    expect(fleet.orders.type).toBe('colonize');
+    expect(fleet.name).toMatch(/^Pioniere \d+$/);
+    for (const k of ['met', 'en', 'food', 'water']) expect(home.stock[k]).toBe(before[k] - cost[k]);
+    /* La colonia nasce davvero avanzando il tempo. */
+    O.time.advance(game, 200);
+    expect(game.colonies[planet.systemId + ':' + planet.bodyKey].colonized).toBe(true);
+  });
+
+  it('colonize: risorse insufficienti → nessun effetto', () => {
+    const { O, game, home, fleet, planet } = withColonialFleet('cmd-col2');
+    Object.assign(home.stock, { met: 0, en: 0, food: 0, water: 0 });
+    const r = O.commands.colonize(game, planet, fleet, 0);
+    expect(r).toEqual({ ok: false, reason: 'Risorse insufficienti' });
+    expect(fleet.orders == null || fleet.orders.type !== 'colonize').toBe(true);
+  });
+
+  it('payTribute: revoca l\'assedio, scala le risorse, tregua con la civiltà AI', () => {
+    const { O, game } = fresh('cmd-trib');
+    O.time.advance(game, 80);
+    const key = game.homePlanetKey, home = game.colonies[key];
+    Object.assign(home.stock, { met: 1000, en: 1000 });
+    const civ = game.civs.find(c => c.alive);
+    game.battles.push({ id: 'b1', attackerKind: 'ai', attackerCiv: civ.id, colonyKey: key, systemId: game.galaxy.homeId,
+      attacker: { combatants: [{ hp: 100 }, { hp: 50 }] }, status: 'active', round: 1, nextRoundAt: 999, log: [] });
+    const r = O.commands.payTribute(game, 'b1');
+    expect(r.ok).toBe(true);
+    expect(r.cost).toEqual({ met: 90, en: 45 });
+    expect(home.stock.met).toBe(910);
+    expect(game.battles.length).toBe(0);
+    expect(civ.truceUntil).toBe(game.timeImpulsi + 200);
+  });
+});

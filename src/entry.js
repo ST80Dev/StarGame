@@ -44,6 +44,8 @@ import '../js/anomaly.js';
 import '../js/phenomena.js';
 import '../js/aifleet.js';
 import '../js/fleet-target.js';
+import '../js/fleet-naming.js';
+import '../js/commands.js';
 import '../js/victory.js';
 import '../js/reputation.js';
 import '../js/espionage.js';
