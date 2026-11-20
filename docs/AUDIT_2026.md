@@ -148,6 +148,12 @@
 
 B3 e la risoluzione delle divergenze d'assedio **cambiano il gameplay** → decisione esplicita dell'utente, fuori dal "gameplay congelato".
 
+**Stato (Fase 1, 2026-11-20):** B1–B6 corretti con test (`tests/sim.test.mjs`). Emerso durante il lavoro:
+B7 — le 4 fazioni "Costanti" nascevano dopo la normalizzazione delle civiltà e ricevevano i default
+(`knowledge`, `interactions`, `phaseSince`) solo al primo load → stato diverso prima/dopo un reload. Corretto;
+il test di round-trip save (3 seed × 2000 Impulsi) ora lo impedisce. Nota B4: lo scarto era grande
+(pericolo 24: mostrato 5%, reale 45%) → la calibrazione del rischio reale è materia di bilanciamento (M20).
+
 ---
 
 ## 6. Sicurezza / esterni
