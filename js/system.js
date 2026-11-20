@@ -116,26 +116,6 @@
     reliquie: { label: 'Reliquie antiche', desc: 'Tracce di una civiltà perduta: potenziali tecnologie uniche.' }
   };
 
-  function weightedPick(rng, weights) {
-    const keys = Object.keys(weights);
-    let total = 0;
-    for (let i = 0; i < keys.length; i++) total += weights[keys[i]];
-    let r = rng.float() * total;
-    for (let i = 0; i < keys.length; i++) {
-      r -= weights[keys[i]];
-      if (r <= 0) return keys[i];
-    }
-    return keys[0];
-  }
-
-  /* Distribuzione dei tipi per fascia orbitale (interno caldo → esterno
-     freddo). t ∈ [0,1] dal corpo più interno al più esterno. */
-  function zoneWeights(t) {
-    if (t < 0.32) return { vulcanico: 4, desertico: 3, cintura: 1, terrestre: 1 };
-    if (t < 0.62) return { terrestre: 3, oceanico: 3, forestale: 2, desertico: 1, cintura: 1 };
-    return { ghiacciato: 3, gassoso: 4, cintura: 2, oceanico: 1 };
-  }
-
   /* ------------------------------------------------------------------
      CONFIGURAZIONI DI SISTEMA (decisione #52 §6.1, algoritmo V2).
      8 archetipi con frequenze tarate (somma = 100). Determina la
@@ -305,158 +285,12 @@
   /* ==================================================================
      GENERAZIONE DELL'INTERNO (immutabile, derivata dal seed)
 
-     V1 (legacy): 4-7 corpi celesti per zona orbitale.
-     V2 (decisione #52 §6.1): 5-10 corpi per 8 configurazioni di sistema
-        + marginali + 70/30 preferenze orbitali.
-
-     Il dispatcher legge `galaxy.systemAlgVersion`: undefined o 2 → V2,
-     1 → V1 (save legacy, preserva i body keys delle colonie esistenti).
+     Decisione #52 §6.1: 5-10 corpi per 8 configurazioni di sistema
+     + marginali + 70/30 preferenze orbitali. (L'algoritmo V1 per i save
+     legacy è stato rimosso con il reset dello schema, Revisione 2026.)
      ================================================================== */
   function generate(galaxy, systemId, opts) {
-    const algV = (galaxy && galaxy.systemAlgVersion === 1) ? 1 : 2;
-    return (algV === 1) ? generateV1(galaxy, systemId, opts) : generateV2(galaxy, systemId, opts);
-  }
-
-  /* --- V1: algoritmo legacy invariato (per save schema ≤ 14). --- */
-  function generateV1(galaxy, systemId, opts) {
-    const sys = galaxy.systems[systemId];
-    const seedBase = galaxy.seed + ':sys:' + systemId;
-    const rng = makeRng(seedBase);
-
-    const stars = buildStars(rng, sys.star);
-
-    // §6.1: 4–7 corpi celesti (slot orbitali primari: pianeti, gassosi,
-    // cinture). Le lune sono corpi-figli aggiuntivi.
-    const count = rng.int(4, 7);
-    const radii = orbitRadii(rng, count);
-
-    // Decisione #26: ogni sistema ha un proprio tema; i corpi ricevono
-    // nomi propri dal tema (deterministico dal seed). Le lune appendono
-    // la lettera (a/b/c) al nome del pianeta padre, restando "figlie"
-    // visivamente.
-    const themePack = root.ORION.names.bodyNamesForSystem(rng);
-
-    const isHome = (opts && opts.forceHome) || systemId === galaxy.homeId;
-    let habitableSlot = -1;     // per garantire un mondo ospitale al sistema d'origine
-    let bestHabT = Infinity;
-
-    const bodies = [];
-    for (let i = 0; i < count; i++) {
-      const t = count > 1 ? i / (count - 1) : 0.5;
-      const type = weightedPick(rng, zoneWeights(t));
-      const def = BODY_TYPES[type];
-      const childSeed = seedBase + ':b' + i;
-      const properName = themePack.names[i % themePack.names.length];
-      const body = {
-        key: 'b' + i,
-        index: i,
-        type: type,
-        // Nome proprio dal tema del sistema (decisione #26). Il contesto
-        // di appartenenza (sigla regione + sistema) viene mostrato dalla
-        // UI come tag, mai dentro al nome stesso.
-        name: properName,
-        designation: ROMAN[i],
-        systemName: sys.name,
-        orbit: radii[i],
-        angle: rng.range(0, Math.PI * 2),
-        seed: childSeed,
-        moons: []
-      };
-
-      if (def.cat === 'belt') {
-        body.beltWidth = rng.range(0.03, 0.06);
-        body.radius = 0;
-      } else if (def.cat === 'gas') {
-        body.radius = rng.range(0.046, 0.072);
-        body.variant = rng.int(0, GAS_VARIANTS.length - 1);
-        body.tilt = rng.range(-0.18, 0.18);
-      } else {
-        body.radius = rng.range(0.022, 0.040);
-        body.tilt = rng.range(0, Math.PI * 2);
-      }
-
-      // lune (§6.1): i gassosi ne hanno sempre alcune; i pianeti rocciosi
-      // grandi talvolta una.
-      let moonCount = 0;
-      if (def.cat === 'gas') moonCount = rng.int(1, 3);
-      else if (def.cat === 'rocky' && rng.chance(0.38)) moonCount = 1;
-      for (let m = 0; m < moonCount; m++) {
-        body.moons.push({
-          key: body.key + 'm' + m,
-          index: m,
-          type: 'luna',
-          name: body.name + ' L-' + MOON_LETTERS[m],   // es. "Zaffiro L-A"
-          designation: ROMAN[i] + ' L-' + MOON_LETTERS[m],
-          systemName: sys.name,
-          parentKey: body.key,
-          moonOrbit: body.radius + 0.026 + m * 0.022 + rng.range(0, 0.02),
-          angle: rng.range(0, Math.PI * 2),
-          radius: rng.range(0.010, 0.018),
-          seed: childSeed + ':m' + m
-        });
-      }
-
-      // tieni traccia dello slot più vicino alla fascia abitabile
-      if (def.habitable && def.cat === 'rocky') {
-        const dH = Math.abs(t - 0.45);
-        if (dH < bestHabT) { bestHabT = dH; habitableSlot = i; }
-      }
-      bodies.push(body);
-    }
-
-    // §5.1/§6.2: il sistema d'origine deve offrire un mondo ospitale.
-    if (isHome) {
-      const slot = habitableSlot >= 0 ? habitableSlot : Math.floor(count / 2);
-      const b = bodies[slot];
-      if (BODY_TYPES[b.type].cat !== 'rocky' || !BODY_TYPES[b.type].habitable) {
-        b.type = 'terrestre';
-        b.radius = Math.max(b.radius || 0, 0.03);
-        b.beltWidth = undefined;
-      }
-      b.homeWorld = true;
-    }
-
-    // Anomalie opzionali (§6.1): 0–2.
-    const anomalies = [];
-    if (rng.chance(0.6)) {
-      const kinds = Object.keys(ANOMALY_KINDS);
-      const nA = rng.int(1, 2);
-      for (let a = 0; a < nA; a++) {
-        const kind = rng.pick(kinds);
-        anomalies.push({
-          kind: kind,
-          label: ANOMALY_KINDS[kind].label,
-          desc: ANOMALY_KINDS[kind].desc,
-          orbit: rng.range(0.22, 0.96),
-          angle: rng.range(0, Math.PI * 2),
-          radius: kind === 'nebulosa' ? rng.range(0.12, 0.22) : rng.range(0.04, 0.08),
-          seed: seedBase + ':a' + a
-        });
-      }
-    }
-
-    /* Annota bodyCount sul sys per il consumer cohesion.js (§13.6). */
-    sys.bodyCount = bodies.length;
-
-    return {
-      schemaVersion: SCHEMA_VERSION,
-      algVersion: 1,
-      id: systemId,
-      seedBase: seedBase,
-      name: sys.name,
-      realName: sys.realName,
-      starKind: sys.star,
-      stars: stars,
-      bodies: bodies,
-      anomalies: anomalies,
-      danger: sys.danger,
-      dangerTier: sys.dangerTier,
-      isHome: isHome,
-      theme: themePack.theme,
-      themeLabel: themePack.themeLabel,
-      config: 'single-prime',                        // legacy fallback
-      configLabel: 'Single-prime (legacy V1)'
-    };
+    return generateV2(galaxy, systemId, opts);
   }
 
   /* --- V2 (decisione #52 §6.1): 5-10 corpi con 8 configurazioni +

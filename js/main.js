@@ -2067,20 +2067,13 @@ function renderPlanetPanel(title, content) {
 }
 
 /* M07: ritorna le spedizioni che originano da una colonia (per UI).
-   Decisione #60: legge sia game.expeditions (legacy/transitorio) che le flotte
-   explore provenienti dalla colonia. Le flotte explore esposte come oggetti
+   Decisione #60: le spedizioni sono flotte explore provenienti dalla colonia. Le flotte explore esposte come oggetti
    "expedition-like" per back-compat UI. */
 function expeditionsForColony(colony) {
   const g = ORION.game;
   if (!g) return [];
   const key = colony.systemId + ':' + colony.bodyKey;
   const out = [];
-  if (Array.isArray(g.expeditions)) {
-    for (let i = 0; i < g.expeditions.length; i++) {
-      const e = g.expeditions[i];
-      if (e && e.originColonyKey === key && e.status !== 'done') out.push(e);
-    }
-  }
   if (Array.isArray(g.fleets)) {
     for (let i = 0; i < g.fleets.length; i++) {
       const f = g.fleets[i];
@@ -4112,10 +4105,9 @@ function renderCantieriSection(colony, planet) {
     /* Cantieri occupati = scafi + mercantili in coda (#56). Gli attracchi
        (docks) restano solo per gli scafi: i mercantili non occupano il porto. */
     const cantieriUse = E.activeCantieriUse ? E.activeCantieriUse(colony) : (active + mercQueue.length);
-    const flying = E.shipsOnExpedition ? E.shipsOnExpedition(ORION.game, ORION.openPlanetKey) : 0;
     /* M15: attracchi PESATI (le capitali contano più di 1). Usa il conteggio
        del motore così il display combacia col gate canBuildShip. */
-    const bound = E.totalShipsBound ? E.totalShipsBound(ORION.game, colony, ORION.openPlanetKey).total : (sShips + active + flying);
+    const bound = E.totalShipsBound ? E.totalShipsBound(ORION.game, colony, ORION.openPlanetKey).total : (sShips + active);
     const techBonus = E.techSpeedBonus ? E.techSpeedBonus(colony) : 0;
     const cantieriCls = cantieriUse >= buildSlots ? ' cantieri-cap--full' : '';
     const portCls = bound >= docks ? ' cantieri-cap--full' : '';
@@ -4152,7 +4144,7 @@ function renderCantieriSection(colony, planet) {
       '</div>' +
       '<div class="cantieri-row__caps">' +
         '<span class="cantieri-cap' + cantieriCls + '" title="Build paralleli abilitati dal livello dell\'Hangar (scafi + mercantili)">Cantieri <strong>' + cantieriUse + ' / ' + buildSlots + '</strong></span>' +
-        '<span class="cantieri-cap' + portCls + '" title="Posti d\'attracco totali (attracchi + cantieri): le navi in costruzione prenotano il posto · in spedizione: ' + flying + '">Attracchi <strong>' + bound + ' / ' + docks + '</strong></span>' +
+        '<span class="cantieri-cap' + portCls + '" title="Posti d\'attracco totali (attracchi + cantieri): le navi in costruzione prenotano il posto>Attracchi <strong>' + bound + ' / ' + docks + '</strong></span>' +
         ((F.portMaintenance && F.portMaintenance(ORION.game, colony) > 0)
           ? '<span class="cantieri-cap" title="Manutenzione/riparazione delle navi al porto: riserva + flotte ferme qui (occupare un attracco consuma metalli). Le flotte in viaggio pagano la riserva di viaggio.">Manutenzione <strong>−' + F.portMaintenance(ORION.game, colony).toFixed(2) + ' ' + resIcon('met') + '/' + iU() + '</strong></span>'
           : '') +

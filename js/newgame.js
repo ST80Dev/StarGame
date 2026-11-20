@@ -161,8 +161,6 @@
         : null,
       /* M06.6: stato tutorial (decisione #28). Persistito nel save (schema 4). */
       tutorial: { enabled: tutorialEnabled, seenLessons: [] },
-      /* M07 (decisione #37): spedizioni di esplorazione in viaggio. */
-      expeditions: [],
       /* M08 Fase A (decisione #42): flotte mobili. */
       fleets: [],
       /* M16 (decisione #81): stazioni spaziali (entità top-level). */

@@ -1224,21 +1224,6 @@
     }
   }
 
-  /* 6c) M07 — spedizioni in viaggio. Itera game.expeditions[], rimuove
-        quelle 'done'. Gli eventi tipo expedition-* sono gestiti dal
-        modulo expedition.js. */
-  function processExpeditions(game, events) {
-    if (!Array.isArray(game.expeditions) || !game.expeditions.length) return;
-    if (!root.ORION.expedition || !root.ORION.expedition.tick) return;
-    const still = [];
-    for (let i = 0; i < game.expeditions.length; i++) {
-      const exp = game.expeditions[i];
-      root.ORION.expedition.tick(game, exp, events);
-      if (exp.status !== 'done') still.push(exp);
-    }
-    game.expeditions = still;
-  }
-
   /* 6d) M08 Fase A — flotte mobili. Itera game.fleets[] facendo avanzare
         gli ordini di movimento (idle/move/explore/patrol/return). NIENTE
         rimozione automatica: le flotte sono entità persistenti, vengono
@@ -2352,8 +2337,6 @@
         root.ORION.colonyFigure.serveTick(game, colony, events);
       }
     }
-    /* M07: spedizioni in volo (1 tick per ogni Impulso). */
-    processExpeditions(game, events);
     /* M08 Fase A: flotte mobili (movimento + ordini). */
     processFleets(game, events);
     /* Decisione intra-sistema: sorveglianza garrison (notifica + auto-pausa
@@ -2672,15 +2655,6 @@
     if (root.ORION.anomaly && root.ORION.anomaly.nextEventDelta) {
       const d = root.ORION.anomaly.nextEventDelta(game);
       if (d > 0 && d < best) best = d;
-    }
-    /* M07: spedizioni in viaggio (outbound o returning) */
-    if (Array.isArray(game.expeditions)) {
-      for (let i = 0; i < game.expeditions.length; i++) {
-        const e = game.expeditions[i];
-        if (!e || e.status === 'done') continue;
-        const d = (e.status === 'outbound') ? e.durationOut : e.durationBack;
-        if (d > 0 && d < best) best = d;
-      }
     }
     /* M08 Fase A: flotte in transito + Decisione #66: fasi orbit/foundation
        di colonize (la flotta è orbiting con phaseLeft countdown). */

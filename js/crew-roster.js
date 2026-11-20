@@ -175,31 +175,6 @@
       }
     }
 
-    /* (3) Legacy expeditions (saves storici, non più popolato da M08+). */
-    var legacy = g.expeditions || [];
-    for (var ei = 0; ei < legacy.length; ei++) {
-      var e = legacy[ei]; if (!e || e.status === 'done') continue;
-      var exp = e.crewXp | 0;
-      out.crews.push({
-        id: e.crewId,
-        label: crewLabel(e.crewId),
-        xp: exp,
-        enr: enrichmentFor(exp),
-        svc: null,
-        dominant: 'tactical',
-        status: 'expedition',
-        statusLabel: 'in spedizione',
-        statusDetail: 'verso ' + sysName(e.targetSystemId),
-        systemId: e.targetSystemId,
-        systemName: sysName(e.targetSystemId),
-        colonyKey: e.originColonyKey || null,
-        colonyName: e.originColonyKey ? colonyName(e.originColonyKey) : '',
-        fleetId: null,
-        fleetName: null,
-        eta: e.durationOut | 0,
-        promotable: exp >= 8
-      });
-    }
 
     /* Figure: pool idle + officers su flotta. */
     var pool = g.commanders || [];
