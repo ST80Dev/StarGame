@@ -79,3 +79,20 @@ describe('pagatori', () => {
     expect(O.research.payerColonyKey(game)).toBe(fake);
   });
 });
+
+describe('schema save (Revisione 2026)', () => {
+  it('rifiuta i save pre-reset con un messaggio chiaro', () => {
+    const { O } = fresh();
+    const old = { schema: 32, seed: 'x', colonies: {} };
+    expect(O.save.isCompatible(old)).toBe(false);
+    expect(O.save.incompatibilityReason(old)).toMatch(/Revisione 2026/);
+    expect(O.save.parseImport(JSON.stringify(old)).ok).toBe(false);
+  });
+
+  it('serialize contiene esattamente i campi dichiarati in STATE_FIELDS', () => {
+    const { O, game } = fresh();
+    const keys = Object.keys(O.save.serialize(game)).sort();
+    const want = ['schema', 'seed', 'discovery', ...O.save.STATE_FIELDS.map(f => f[0])].sort();
+    expect(keys).toEqual(want);
+  });
+});

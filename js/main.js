@@ -18099,7 +18099,8 @@ function refreshCloudSlots() {
   ORION.cloud.list().then(function (rows) {
     Object.keys(CLOUD_ROWS).forEach(function (k) { CLOUD_ROWS[k] = null; });
     (rows || []).forEach(function (r) {
-      if (r && r.slot && CLOUD_ROWS.hasOwnProperty(r.slot)) CLOUD_ROWS[r.slot] = r;
+      /* Revisione 2026: i save cloud pre-reset non vengono mostrati. */
+      if (r && r.slot && CLOUD_ROWS.hasOwnProperty(r.slot) && ORION.save.isCompatible(r.payload)) CLOUD_ROWS[r.slot] = r;
     });
     CLOUD_ROWS_LOADED = true;
     renderSaveModal();
@@ -18352,6 +18353,11 @@ function handleNewGame() {
 }
 
 function loadPayloadAsGame(payload) {
+  /* Revisione 2026: i save pre-reset (schema ≤ 32) non sono più caricabili. */
+  if (!ORION.save.isCompatible(payload)) {
+    alert(ORION.save.incompatibilityReason(payload));
+    return;
+  }
   /* M06: newGame ricostruisce la galassia dal seed del payload, poi
      applica il delta (colonie/tempo/cronaca/mode). Coerente con
      seed+delta (decisione #5). */
@@ -18364,57 +18370,12 @@ function loadPayloadAsGame(payload) {
 /* Entra in partita (lascia il main menu, monta la mappa). Usato da:
    - Continua / Inizia / Carica dal main menu
    - load slot / import .json dal pannello save */
-/* Migrazione lazy degli ID equipaggio legacy → counter monotono
-   persistente. I save antecedenti al fix (formato `crew-<imp>-<n>` con
-   counter module-local resettato a ogni reload) potevano contenere ID
-   collidenti che il roster mostrava come "Equipaggio 1" duplicato.
-   Idempotente: scorre ogni save e rinomina solo i crew col formato
-   vecchio in `crew-<N>` con N preso dal counter persistente di game. */
-function migrateLegacyCrewIds(game) {
-  if (!game || !game.colonies) return;
-  const T = ORION.time;
-  const LEGACY = /^crew-\d+-\d+$/;
-  const SEQ = /^crew-(\d+)$/;
-  game.idSeq = game.idSeq || {};
-  /* 1ª passata: riconcilia il counter col massimo seq già presente (colonie
-     + flotte). Necessario per i save senza idSeq persistito, così i nuovi
-     equipaggi NON ricollidono con quelli esistenti (es. crew-3 già in giro). */
-  let maxSeq = game.idSeq.crew | 0;
-  function scanSeq(list) {
-    if (!Array.isArray(list)) return;
-    list.forEach(function (c) {
-      const m = c && typeof c.id === 'string' && SEQ.exec(c.id);
-      if (m) maxSeq = Math.max(maxSeq, Number(m[1]));
-    });
-  }
-  Object.keys(game.colonies).forEach(function (k) {
-    const col = game.colonies[k];
-    scanSeq(col && col.crews && col.crews.explorer);
-  });
-  if (Array.isArray(game.fleets)) game.fleets.forEach(function (f) { scanSeq(f && f.crew); });
-  game.idSeq.crew = maxSeq;
-  /* 2ª passata: rinomina gli ID col formato legacy `crew-<imp>-<n>`. */
-  Object.keys(game.colonies).forEach(function (k) {
-    const col = game.colonies[k];
-    const list = col && col.crews && col.crews.explorer;
-    if (!Array.isArray(list)) return;
-    list.forEach(function (c) {
-      if (c && typeof c.id === 'string' && LEGACY.test(c.id)) {
-        c.id = T && T.nextCrewId ? T.nextCrewId(game)
-                                 : ('crew-' + (game.idSeq.crew = (game.idSeq.crew | 0) + 1));
-      }
-    });
-  });
-}
-
 function enterGame(opts) {
   opts = opts || {};
   if (ORION.planetView) { ORION.planetView.destroy(); ORION.planetView = null; ORION.openPlanetKey = null; ORION.currentPlanet = null; } if (ORION.planetOverlay) { ORION.planetOverlay.destroy(); ORION.planetOverlay = null; }
   if (ORION.colonyDeck) { ORION.colonyDeck.destroy(); ORION.colonyDeck = null; }
   if (ORION.systemView) { ORION.systemView.destroy(); ORION.systemView = null; ORION.openSystemId = -1; ORION.currentSystem = null; }
   if (ORION.map) { ORION.map.destroy(); ORION.map = null; }
-  /* Una tantum per ogni boot: rinomina i crew con ID legacy collidente. */
-  migrateLegacyCrewIds(ORION.game);
   /* Decisione #50: ripristina il pin della dx per questo seed (se presente). */
   loadDxPin(ORION.game);
   hideMainMenu();
@@ -18947,8 +18908,6 @@ function injectStaticSvgIcons() {
 }
 
 function boot() {
-  /* M06: assorbe eventuale autosave M05 (chiavi legacy). Idempotente. */
-  if (ORION.save && ORION.save.migrateLegacy) ORION.save.migrateLegacy();
   /* PR-A: SVG icons negli host statici (HUD top, main menu). */
   injectStaticSvgIcons();
   /* Decisione #50: prefs UI persistite (cronaca collassata, sezioni sx). */
