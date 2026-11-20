@@ -27,7 +27,11 @@ function runSeed(seed) {
   const checkpoints = [];
   for (let t = EVERY; t <= TICKS; t += EVERY) {
     for (let i = 0; i < EVERY; i++) advance(O, game, 1);
-    checkpoints.push({ t: game.timeImpulsi, h: sectionHashes(O.save.serialize(game)) });
+    const payload = O.save.serialize(game);
+    /* La cronaca oggi è HTML composto dalla UI (main.js), non stato di
+       simulazione: esclusa finché non diventa {kind,data} (Fase 2). */
+    delete payload.chronicle;
+    checkpoints.push({ t: game.timeImpulsi, h: sectionHashes(payload) });
   }
   return checkpoints;
 }

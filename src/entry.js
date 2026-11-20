@@ -52,4 +52,5 @@ import '../js/cloud.js';
 import '../js/journal.js';
 import '../js/save.js';
 import '../js/tutorial.js';
+import '../js/newgame.js';
 import '../js/main.js';

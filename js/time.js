@@ -2558,8 +2558,12 @@
      ne moltiplichiamo solo il count di Impulsi processati (semantica
      "il tempo scorre più veloce a parità di click"). M20 rifinirà se
      servirà una semantica diversa (es. scalare i rates a parità di tick). */
-  function advance(impulsi) {
-    const game = ORION.game;
+  /* Revisione 2026: firma esplicita advance(game, impulsi). La forma legacy
+     advance(impulsi) legge ORION.game (compat transitoria). */
+  function advance(gameOrImpulsi, maybeImpulsi) {
+    let game, impulsi;
+    if (gameOrImpulsi && typeof gameOrImpulsi === 'object') { game = gameOrImpulsi; impulsi = maybeImpulsi; }
+    else { game = ORION.game; impulsi = gameOrImpulsi; }
     if (!game) return { events: [], impulsi: 0 };
     impulsi = Math.max(0, Math.floor(impulsi || 0));
     const speed = (game.mode && game.mode.modifiers && game.mode.modifiers.tsgSpeed) || 1;
@@ -2569,6 +2573,12 @@
       tick(game, events);
       if (maybeCheckVictory(game, events)) break;   // stop alla prima pista chiusa
       if (game.defeated === 'gameover') break;        // M09 Fase B: fine partita (hard)
+    }
+    /* M17 (decisione #83): Memoria Storica — registra le milestone da ogni
+       evento. Prima avveniva in main.js (runAdvance) DOPO il tick: spostato
+       qui perché è stato di simulazione (headless = UI). Idempotente. */
+    if (ORION.dispatch && ORION.dispatch.recordMemoria) {
+      for (let i = 0; i < events.length; i++) ORION.dispatch.recordMemoria(game, events[i]);
     }
     return { events: events, impulsi: effective };
   }
@@ -2720,10 +2730,10 @@
     return Math.min(CFG.NEXT_EVENT_HARD_CAP, Math.max(1, best));
   }
 
-  function advanceToNextEvent() {
-    const game = ORION.game;
+  function advanceToNextEvent(game) {
+    game = game || ORION.game;
     if (!game) return { events: [], impulsi: 0 };
-    return advance(nextEventImpulsi(game));
+    return advance(game, nextEventImpulsi(game));
   }
 
   /* M11 Fase B parziale: rilascio volontario di un sistema occupato.

@@ -79,7 +79,18 @@ const MIME = {
   }
   await shot('04-dopo-eventi');
   const t = await page.evaluate(() => window.ORION && window.ORION.game && window.ORION.game.timeImpulsi);
-  console.log('cartella:', dir, '· tab sx trovate:', tabs.length, '· Impulsi dopo 4 eventi:', t);
+  /* Ricarica e "Continua": esercita il ripristino dal save (autosave). */
+  let t2 = null;
+  await step('ricarica + continua', async () => {
+    await page.evaluate(() => { if (window.ORION.save && window.ORION.save.autosave) window.ORION.save.autosave(window.ORION.game); });
+    await page.reload(); await page.waitForTimeout(1200);
+    await page.click('[data-action="menu-continue"]'); await page.waitForTimeout(1500);
+    await page.keyboard.press('Escape');
+    t2 = await page.evaluate(() => window.ORION.game && window.ORION.game.timeImpulsi);
+    if (!(t2 >= t)) throw new Error('Impulsi dopo il load ' + t2 + ' < prima ' + t);
+  });
+  await shot('05-dopo-load');
+  console.log('cartella:', dir, '· tab sx trovate:', tabs.length, '· Impulsi dopo 4 eventi:', t, '· dopo load:', t2);
   console.log(errors.length ? 'ERRORI:\n' + errors.join('\n') : 'nessun errore');
   await browser.close();
   process.exit(errors.length ? 1 : 0);
