@@ -159,11 +159,6 @@
        sistema ogni tick). Ricostruito al load — i siti veri vivono in
        game.anomalies (persistito). */
     if (!game._anomScanned) game._anomScanned = {};
-    /* Migrazione/dedup una-tantum per sessione: i save vecchi possono avere
-       più entry per la STESSA anomalia (la chiave era basata su `a.seed`, che
-       poteva variare tra generazioni dello stesso sistema → doppioni drenati
-       da una sola flotta). Normalizziamo alla chiave canonica `sysId:kind`. */
-    if (!game._anomNorm) { normalizeAnomalies(game); game._anomNorm = true; }
   }
 
   /* Chiave canonica di un sito: UNA entità per (sistema, tipo). Una flotta
@@ -175,30 +170,6 @@
     const def = KINDS[kind];
     if (def && def.perBody && bodyKey) return sysId + ':' + kind + ':' + bodyKey;
     return sysId + ':' + kind;
-  }
-
-  /* Rifonde game.anomalies sulle chiavi canoniche, unendo eventuali doppioni
-     (tiene lo stato più "avanzato": riserva minima per la raccolta, esplorata/
-     progresso massimo per le reliquie). Idempotente: già-canonico → invariato. */
-  function normalizeAnomalies(game) {
-    const old = game.anomalies || {};
-    const next = {};
-    Object.keys(old).forEach(function (k) {
-      const s = old[k];
-      if (!s || s.sysId == null || !s.kind) return;
-      const ck = siteKey(s.sysId, s.kind, s.bodyKey);
-      const e = next[ck];
-      if (!e) { next[ck] = s; return; }
-      if (s.kind === 'reliquie') {
-        e.explored = e.explored || s.explored;
-        e.progress = Math.max(e.progress || 0, s.progress || 0);
-        if (s.loot) e.loot = s.loot;
-      } else {
-        if (s.reserve != null) e.reserve = Math.min(e.reserve != null ? e.reserve : Infinity, s.reserve);
-        e.lowFlag = e.lowFlag || s.lowFlag;
-      }
-    });
-    game.anomalies = next;
   }
 
   /* Registra i siti di un sistema in game.anomalies (idempotente).

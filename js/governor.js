@@ -126,8 +126,7 @@
       };
     }
     const g = colony.governor;
-    /* Migrazione lazy per save legacy (decisione #40 → #59). */
-    if (g.level == null) g.level = g.enabled ? 'vigile' : 'off';
+    if (g.level == null) g.level = 'off';
     if (g.vocation == null) g.vocation = 'equilibrata';
     if (!Array.isArray(g.decisions)) g.decisions = [];
     if (g.lastDecisionI === undefined) g.lastDecisionI = null;

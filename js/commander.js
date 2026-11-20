@@ -277,35 +277,6 @@
     if (!Array.isArray(game.commanders)) game.commanders = [];
   }
 
-  /* Migrazione di una singola figura legacy (#43 → #75). Idempotente. */
-  function migrateFigure(cmd) {
-    if (!cmd) return cmd;
-    if (!cmd.role) {
-      var s = cmd.specialization;
-      cmd.role = (s === 'tattico') ? 'comandante'
-        : (s === 'navigatore' || s === 'logista') ? 'ingegnere'
-        : 'comandante';
-      if (s === 'logista' && !cmd.trait) { cmd.trait = 'logistico'; cmd.traitLabel = 'Logistico'; }
-    }
-    if (!ROLES[cmd.role]) cmd.role = 'comandante';
-    cmd.roleLabel = ROLES[cmd.role].label;
-    if (!cmd.race) { cmd.race = 'umani'; cmd.raceLabel = 'Umani'; }
-    cmd.rank = rankFor(cmd.xp || 0).label;
-    return cmd;
-  }
-  /* Converte tutte le figure dell'Impero (pool + assegnate). Idempotente.
-     M15: normalizza anche lo slot singolo legacy → fleet.officers[]. */
-  function migrateAll(game) {
-    if (!game) return;
-    ensure(game);
-    game.commanders.forEach(migrateFigure);
-    (game.fleets || []).forEach(function (f) {
-      if (!f) return;
-      ensureOfficers(f);
-      f.officers.forEach(migrateFigure);
-    });
-  }
-
   /* ---------------------------------------------------------------
      Aggancio figura → flotta (single source of truth).
      --------------------------------------------------------------- */
@@ -490,8 +461,6 @@
     list: list,
     allOf: allOf,
     ensure: ensure,
-    migrateFigure: migrateFigure,
-    migrateAll: migrateAll,
     retireOld: retireOld,
     assignableOf: assignableOf,
     assignToFleet: assignToFleet,

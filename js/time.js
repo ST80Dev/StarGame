@@ -513,21 +513,7 @@
     colony.queue = stillQueued;
   }
 
-  /* 2) Colonizzazione in corso (per pianeti non natali).
-     Decisione #66: se `colony.colonizing.fleetId` è valorizzato, la
-     colonizzazione è "in mano" alla flotta coloniale → il countdown è
-     gestito da fleet.js (tickColonizePhase). Qui processColonizing è
-     no-op per non doppio-decrementare. Il path legacy (senza fleetId)
-     resta attivo per i save vecchi (sub-migrazione v20→v21 non converte
-     le colonizzazioni in corso). */
-  function processColonizing(game, colony, planet, events) {
-    if (!colony.colonizing) return;
-    if (colony.colonizing.fleetId) return;  /* #66: gestita da fleet */
-    colony.colonizing.duration = (colony.colonizing.duration || 0) - 1;
-    if (colony.colonizing.duration <= 0) {
-      completeColonization(game, colony, null, planet, events);
-    }
-  }
+
 
   /* Decisione #66: nave coloniale persa in scaramuccia/imboscata. Refund
      50% del costo coloniale + 50% del costo colonizzazione pagato. La
@@ -586,7 +572,7 @@
   }
 
   /* Decisione #66: helper esportato per completare la colonizzazione
-     (stock+pop iniziali coerenti). Chiamato sia da processColonizing
+     (stock+pop iniziali coerenti). Chiamato da fleet.tickColonizePhase
      (legacy path) sia da fleet.tickColonizePhase (foundation done).
      Idempotente: se già colonizzata, no-op.
      Recovery-friendly: applica il contratto minimo M05. */
@@ -2308,7 +2294,6 @@
       const planet = root.ORION.planet.generate(game.galaxy, system, bodyKey);
       if (!planet) continue;
 
-      processColonizing(game, colony, planet, events);
       processQueue(game, colony, planet, events);
       if (!colony.colonized) continue;
 
@@ -2780,7 +2765,7 @@
     evacuateColony: evacuateColony,
     ensureWarState: ensureWarState,
     /* Decisione #66 — completamento colonizzazione (chiamato sia dal
-       path legacy processColonizing sia da fleet.tickColonizePhase). */
+       fleet.tickColonizePhase). */
     completeColonization: completeColonization
   };
 })(typeof window !== 'undefined' ? window : this);
