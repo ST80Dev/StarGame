@@ -9,6 +9,6 @@ import { describe, it } from 'vitest';
 const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'legacy');
 describe('test storici (tests/legacy)', () => {
   for (const f of fs.readdirSync(dir).filter(n => n.endsWith('.cjs')).sort()) {
-    it(f, () => { execFileSync(process.execPath, [path.join(dir, f)], { stdio: 'pipe' }); });
+    it(f, () => { execFileSync(process.execPath, [path.join(dir, f)], { stdio: 'pipe', timeout: 30000 }); });
   }
 });

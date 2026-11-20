@@ -517,36 +517,9 @@
      oppure null se non c'è cammino.
      ------------------------------------------------------------------ */
   function computePath(galaxy, fromSysId, toSysId) {
-    if (!galaxy || !galaxy.systems) return null;
-    if (fromSysId === toSysId) return [fromSysId];
-    const src = galaxy.systems[fromSysId];
-    const dst = galaxy.systems[toSysId];
-    if (!src || !dst) return null;
-    const n = galaxy.systems.length;
-    const visited = new Array(n).fill(false);
-    const prev = new Array(n).fill(-1);
-    visited[fromSysId] = true;
-    const queue = [fromSysId];
-    let head = 0;
-    while (head < queue.length) {
-      const u = queue[head++];
-      if (u === toSysId) break;
-      const links = galaxy.systems[u].links || [];
-      for (let i = 0; i < links.length; i++) {
-        const v = links[i];
-        if (!visited[v]) {
-          visited[v] = true;
-          prev[v] = u;
-          queue.push(v);
-        }
-      }
-    }
-    if (!visited[toSysId]) return null;
-    const path = [];
-    let cur = toSysId;
-    while (cur !== -1) { path.unshift(cur); cur = prev[cur]; }
-    return path;
+    return ORION.galaxy.bfsPath(galaxy, fromSysId, toSysId);
   }
+
 
   /* Decisione di sessione (M08 wizard): variante di computePath che
      rispetta la NEBBIA DI GUERRA — non si può pianificare un viaggio
@@ -577,36 +550,14 @@
        è EXPLORED (la flotta è lì), ma in scenari edge potrebbe essere
        DETECTED → accettiamo entrambi. */
     if (disc[fromSysId] < D.DETECTED) return null;
-    const n = galaxy.systems.length;
-    const visited = new Array(n).fill(false);
-    const prev = new Array(n).fill(-1);
-    visited[fromSysId] = true;
-    const queue = [fromSysId];
-    let head = 0;
-    while (head < queue.length) {
-      const u = queue[head++];
-      if (u === toSysId) break;
-      const links = galaxy.systems[u].links || [];
-      for (let i = 0; i < links.length; i++) {
-        const v = links[i];
-        if (visited[v]) continue;
-        /* Per attraversare un nodo intermedio deve essere EXPLORED:
-           non si pianifica un cammino attraverso sistemi solo "rilevati".
-           Il TARGET è un'eccezione (può essere DETECTED se l'ordine
-           lo permette esplicitamente). */
-        if (v !== toSysId && disc[v] < D.EXPLORED) continue;
-        if (v === toSysId && disc[v] < (allowDetectedTarget ? D.DETECTED : D.EXPLORED)) continue;
-        visited[v] = true;
-        prev[v] = u;
-        queue.push(v);
-      }
-    }
-    if (!visited[toSysId]) return null;
-    const path = [];
-    let cur = toSysId;
-    while (cur !== -1) { path.unshift(cur); cur = prev[cur]; }
-    return path;
+    return ORION.galaxy.bfsPath(galaxy, fromSysId, toSysId, function (v) {
+      /* Nodi intermedi: solo EXPLORED (non si pianifica attraverso sistemi
+         solo "rilevati"). Il TARGET può essere DETECTED se permesso. */
+      if (v !== toSysId) return disc[v] >= D.EXPLORED;
+      return disc[v] >= (allowDetectedTarget ? D.DETECTED : D.EXPLORED);
+    });
   }
+
 
   /* Helper UI: lista delle destinazioni VISIBILI raggiungibili da
      `fromSysId` rispettando la nebbia di guerra, ognuna con il numero di

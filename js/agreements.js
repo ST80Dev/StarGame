@@ -93,11 +93,7 @@
     if (D && D.effectiveRelation) return D.effectiveRelation(game, civ);
     return civ && civ.relation ? civ.relation : 'peace';
   }
-  function civById(game, civId) {
-    const civs = game.civs || [];
-    for (let i = 0; i < civs.length; i++) if (civs[i].id === civId) return civs[i];
-    return null;
-  }
+  const civById = ORION.util.civById;   // utils.js (Revisione 2026)
 
   /* ------------------------------------------------------------------
      Accettazione (deterministica). Gate diplomatico + soglie.

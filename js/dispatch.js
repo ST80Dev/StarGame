@@ -152,11 +152,7 @@
   /* ------------------------------------------------------------------
      HELPERS
      ------------------------------------------------------------------ */
-  function civById(game, id) {
-    const civs = game.civs || [];
-    for (let i = 0; i < civs.length; i++) if (civs[i] && civs[i].id === id) return civs[i];
-    return null;
-  }
+  const civById = ORION.util.civById;   // utils.js (Revisione 2026)
 
   /* Colonia su cui versare le ricompense: la capitale del gruppo natale,
      altrimenti la prima colonia operativa. */

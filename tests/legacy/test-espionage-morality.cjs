@@ -26,6 +26,7 @@ function load(rel) {
   return eval(wrap)(root, root);
 }
 load('js/rng.js');
+load('js/utils.js');
 load('js/victory.js');
 const ORION = load('js/espionage.js');
 
