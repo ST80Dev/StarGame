@@ -1,0 +1,16 @@
+{
+  "name": "orion-empires",
+  "private": true,
+  "version": "0.6.6",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "golden:write": "node tests/golden/capture.cjs --write"
+  },
+  "devDependencies": {
+    "vite": "^6.4.6",
+    "vitest": "^3.2.7"
+  }
+}

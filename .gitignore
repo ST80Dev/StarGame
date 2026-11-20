@@ -13,3 +13,6 @@ node_modules/
 # Claude Code worktrees (agent isolation, ephemeral) — ma versiona le skill di sviluppo
 .claude/*
 !.claude/skills/
+
+# Build
+dist/

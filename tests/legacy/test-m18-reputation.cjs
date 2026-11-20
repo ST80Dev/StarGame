@@ -16,7 +16,7 @@ const path = require('path');
 
 /* Carica reputation.js in un namespace finto (no DOM, no altri moduli). */
 const root = { console: console };
-const src = fs.readFileSync(path.join(__dirname, 'js/reputation.js'), 'utf8');
+const src = fs.readFileSync(path.join(__dirname, '..', '..', 'js/reputation.js'), 'utf8');
 /* L'IIFE di reputation.js si chiude su (typeof window !== 'undefined' ? window : globalThis).
    Eseguendolo qui, globalThis è il process — usiamo `root` come bersaglio
    wrappando il file in un eval che gli assegna `globalThis = root`. */

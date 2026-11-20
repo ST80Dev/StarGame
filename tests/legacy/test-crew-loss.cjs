@@ -16,7 +16,7 @@ const path = require('path');
 
 const root = { console: console, Math: Math };
 function runFile(rel) {
-  const src = fs.readFileSync(path.join(__dirname, rel), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '..', '..', rel), 'utf8');
   /* L'IIFE dei moduli si chiude su (typeof window !== 'undefined' ? window : this).
      Chiamando con `.call(root)`, `window` è indefinito → usa `this` = root. */
   (new Function(src)).call(root);

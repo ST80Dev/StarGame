@@ -1,0 +1,55 @@
+/* Orion Empires — entry point Vite (Revisione 2026, Fase 1).
+   I moduli in js/ restano script IIFE sul namespace ORION: qui sono importati
+   come side-effect, NELLO STESSO ORDINE del vecchio index.html. L'ordine è
+   letto anche da tests/harness.cjs (una riga import per modulo). */
+import '../js/icons.js';
+import '../js/rng.js';
+import '../js/utils.js';
+import '../js/names.js';
+import '../js/galaxy.js';
+import '../js/fleet-marker.js';
+import '../js/galaxy-map.js';
+import '../js/system.js';
+import '../js/system-view.js';
+import '../js/cinematics.js';
+import '../js/structures.js';
+import '../js/planet.js';
+import '../js/planet-view.js';
+import '../js/planet-overlay.js';
+import '../js/colony-deck.js';
+import '../js/empire-deck.js';
+import '../js/fleet.js';
+import '../js/commander.js';
+import '../js/crew-roster.js';
+import '../js/colony-figure.js';
+import '../js/expedition.js';
+import '../js/governor.js';
+import '../js/capital.js';
+import '../js/ai.js';
+import '../js/factions.js';
+import '../js/cohesion.js';
+import '../js/federations.js';
+import '../js/combat.js';
+import '../js/garrison.js';
+import '../js/station.js';
+import '../js/diplomacy.js';
+import '../js/trade.js';
+import '../js/treasury.js';
+import '../js/agreements.js';
+import '../js/mekhari.js';
+import '../js/research.js';
+import '../js/council.js';
+import '../js/dispatch.js';
+import '../js/anomaly.js';
+import '../js/phenomena.js';
+import '../js/aifleet.js';
+import '../js/fleet-target.js';
+import '../js/victory.js';
+import '../js/reputation.js';
+import '../js/espionage.js';
+import '../js/time.js';
+import '../js/cloud.js';
+import '../js/journal.js';
+import '../js/save.js';
+import '../js/tutorial.js';
+import '../js/main.js';

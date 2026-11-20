@@ -214,56 +214,7 @@
   </div>
 
   <!-- Moduli di gioco (vanilla JS, ordine di dipendenza) -->
-  <script src="js/icons.js"></script>
-  <script src="js/rng.js"></script>
-  <script src="js/utils.js"></script>
-  <script src="js/names.js"></script>
-  <script src="js/galaxy.js"></script>
-  <script src="js/fleet-marker.js"></script>
-  <script src="js/galaxy-map.js"></script>
-  <script src="js/system.js"></script>
-  <script src="js/system-view.js"></script>
-  <script src="js/cinematics.js"></script>
-  <script src="js/structures.js"></script>
-  <script src="js/planet.js"></script>
-  <script src="js/planet-view.js"></script>
-  <script src="js/planet-overlay.js"></script>
-  <script src="js/colony-deck.js"></script>
-  <script src="js/empire-deck.js"></script>
-  <script src="js/fleet.js"></script>
-  <script src="js/commander.js"></script>
-  <script src="js/crew-roster.js"></script>
-  <script src="js/colony-figure.js"></script>
-  <script src="js/expedition.js"></script>
-  <script src="js/governor.js"></script>
-  <script src="js/capital.js"></script>
-  <script src="js/ai.js"></script>
-  <script src="js/factions.js"></script>
-  <script src="js/cohesion.js"></script>
-  <script src="js/federations.js"></script>
-  <script src="js/combat.js"></script>
-  <script src="js/garrison.js"></script>
-  <script src="js/station.js"></script>
-  <script src="js/diplomacy.js"></script>
-  <script src="js/trade.js"></script>
-  <script src="js/treasury.js"></script>
-  <script src="js/agreements.js"></script>
-  <script src="js/mekhari.js"></script>
-  <script src="js/research.js"></script>
-  <script src="js/council.js"></script>
-  <script src="js/dispatch.js"></script>
-  <script src="js/anomaly.js"></script>
-  <script src="js/phenomena.js"></script>
-  <script src="js/aifleet.js"></script>
-  <script src="js/fleet-target.js"></script>
-  <script src="js/victory.js"></script>
-  <script src="js/reputation.js"></script>
-  <script src="js/espionage.js"></script>
-  <script src="js/time.js"></script>
-  <script src="js/cloud.js"></script>
-  <script src="js/journal.js"></script>
-  <script src="js/save.js"></script>
-  <script src="js/tutorial.js"></script>
-  <script src="js/main.js"></script>
+  <!-- Revisione 2026: un solo entry module (Vite). I moduli js/* sono importati in ordine da src/entry.js. -->
+  <script type="module" src="./src/entry.js"></script>
 </body>
 </html>
