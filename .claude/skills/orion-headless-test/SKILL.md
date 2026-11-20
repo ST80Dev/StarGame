@@ -5,6 +5,12 @@ description: Scrivere ed eseguire test headless in Node per un modulo di Orion E
 
 # Test headless di un modulo
 
+> **Revisione 2026:** il progetto ha ora Vitest. Per test nuovi preferisci un file in `tests/*.test.mjs`
+> che usa `tests/harness.cjs` (`load()` carica tutti i moduli in un contesto vm isolato, nell'ordine di
+> `src/entry.js`; `ORION.newgame.create(seed, {})` crea una partita completa; `ORION.time.advance(game, n)`).
+> Esempi in `tests/sim.test.mjs`. Esegui con `npm test`. Il pattern "script node ad-hoc" sotto resta valido
+> per prove rapide su un singolo modulo.
+
 Non c'è framework (no Jest/Mocha): il pattern del progetto è uno **script `node` ad-hoc** che
 carica i moduli vanilla JS, costruisce un game state fittizio e fa asserzioni con `console.assert`.
 Funziona perché i moduli di **pura logica** (treasury, agreements, factions, mekhari, combat,

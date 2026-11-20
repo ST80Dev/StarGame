@@ -9,9 +9,10 @@
 ## Identità
 
 - **Titolo:** Orion Empires — 4X spaziale strategico testuale, a pannelli (non action, non libro-game).
-- **Stack:** Vanilla JS + HTML + CSS. **No** framework, **no** CDN, **no** WebGL, **no** chiamate esterne.
-- **Piattaforma:** browser / GitHub Pages, desktop + tablet + mobile (≥360px portrait).
-- **Salvataggio:** `localStorage` (5 slot + autosave) + Export/Import `.json`. Schema corrente: **31**.
+- **Stack (attuale):** Vanilla JS + HTML + CSS su namespace globale `ORION`, bundlato con **Vite** (Fase 1 Revisione 2026 ✅). Test con **Vitest**. In transizione verso PixiJS/Preact (vedi sotto).
+- **Piattaforma:** browser / GitHub Pages, **desktop + tablet** (decisione Revisione 2026: il telefono non è più un target).
+- **Salvataggio:** `localStorage` (5 slot + autosave) + Export/Import `.json`. Schema corrente: **32** (verrà azzerato dalla Revisione 2026).
+- **Utenza:** un solo giocatore (il proprietario). Niente obblighi di "sempre giocabile" verso terzi.
 
 ---
 
@@ -20,8 +21,24 @@
 1. **Determinismo (#5):** zero `Math.random`. Tutti gli RNG derivano dal seed (`seed:<scope>:<id>:<I>`). Stesso seed + stessa sequenza di comandi → stesso esito. Replay-safe.
 2. **Recovery-friendly (#22):** mai fail-state a freddo. Le scelte temporanee non devono essere perennemente punitive. Sempre una via d'uscita (evacua, richiama, tribute, refund 50%).
 3. **Seed + delta (#5):** la struttura immutabile (galassia, sistemi, pianeti) si rigenera dal seed; nel save vivono solo i delta + `schemaVersion`.
+3b. **Simulazione pura:** la logica di gioco non dipende da librerie di presentazione (render/UI). Le librerie leggono lo stato e lo mostrano, mai lo modificano.
 4. **Lessico SW-flavor (#34):** classi navi/iperguida/regioni/archetipi fazione/ranghi — sì. Marchi specifici (Jedi/Sith/Tatooine/Force) — no. Nomi propri sempre procedurali.
 5. **Sviluppo modulo per modulo:** confermare prima di passare al successivo. M01-M17 ✅ mergiati in main. M18-M20 ⬜.
+
+---
+
+## Revisione 2026 (decisioni utente, 2026-11-20)
+
+Rifacimento incrementale (non riscrittura da zero) dell'intero gioco, focus anche su grafica/prestazioni.
+
+- **Pacchetti esterni ammessi** se portano un salto di qualità (grafica, prestazioni, manutenibilità), **bundlati** nel build: nessuna chiamata esterna a runtime, nessun CDN. Candidati: Vite (build), TypeScript graduale, Vitest, PixiJS v8 (mappe WebGL), Preact (UI pannelli).
+- **Build step ammesso:** sviluppo con `npm run dev`, deploy su Pages via GitHub Action (`dist/`). Il gioco si usa solo da Pages.
+- **Save:** si riparte da zero con uno schema pulito. La catena di migrazioni legacy (≤32) e la regola "mai distruttivo" verso save vecchi decadono al momento del reset.
+- **Telefono escluso:** il layout ≤760px (bottom nav, sheet mobile, decisione #63) è rimovibile. Target: desktop + tablet.
+- **Gameplay congelato durante il refactor:** nessun cambio di regole; ogni fetta verificata con test golden replay (stesso seed + comandi → stesso esito).
+- Fasi (ordine aggiornato dall'audit, `docs/AUDIT_2026.md` §7): 0 audit ✅ → 1 fondamenta ✅ (Vite + Vitest + golden replay + `js/newgame.js` + fix B1-B6) → 2 schema save pulito + potatura legacy/telefono + livello comandi + motore d'assedio unico → 3 sistema visivo (palette in scelta) → 4 PixiJS (pilota **planet-view**, poi galassia) → 5 Preact pannelli.
+
+Dove questa sezione contraddice regole più sotto o in `UI_GUIDE.md`, vince questa sezione.
 
 ---
 
@@ -51,11 +68,12 @@ Prima di qualunque modifica a CSS, HTML strutturale o nuovi widget: leggi `UI_GU
 
 ## Convenzioni codice
 
-- **Namespace globale `ORION`**, moduli caricati in ordine via `<script>` in `index.html`. Niente bundler.
+- **Namespace globale `ORION`**: i moduli `js/*.js` sono IIFE importati come side-effect, **in ordine**, da `src/entry.js` (unico `<script type="module">` di `index.html`). Un modulo nuovo = una riga `import '../js/<modulo>.js';` nella posizione giusta (l'harness dei test legge lo stesso elenco).
+- **Simulazione headless:** creare partite con `ORION.newgame.create(seed, opts)` (niente DOM); avanzare con `ORION.time.advance(game, n)`. Lo stato di gioco non si muta dalla UI dopo il tick.
 - **Render Canvas on-demand** (no rAF loop continuo): `ResizeObserver` + `devicePixelRatio` (cap 2.5).
 - **Input unificato Pointer Events** (mouse + touch). Niente funzioni `hover`-only.
 - **Persistenza preferenze UI** in `localStorage['orion.uiprefs']`/`orion.prefs` — **mai nel save di partita** (UI_GUIDE §9).
-- **Schema save:** ogni bump aggiunge una sub-migrazione lazy in `js/save.js → migrate()`, **mai distruttiva**. Campi nuovi sempre additivi/lazy-init dove possibile (no bump).
+- **Schema save:** ogni campo di stato persistito va in `save.serialize` **e** nel ripristino di `js/newgame.js` (il test round-trip in `tests/sim.test.mjs` fallisce se manca). Fino al reset dello schema (Fase 2) restano le migrazioni lazy in `save.js → migrate()`.
 - **Eventi cronaca:** kind con etichetta in `KIND_LABELS` + scelta auto-pausa in `DEFAULT_AUTOPAUSE` (decisione #31).
 - **Tutorial (#29):** aggiungere voci a `ORION.tutorial.LESSONS` + `fire(id)`/`openLesson(id)` ai punti rilevanti. Niente walkthrough — concetti, non istruzioni cliccabili.
 - **Utility condivise:** `ORION.util` (clamp/lerp/smoothstep/escapeHtml) + `ORION.format` in `js/utils.js`. Non duplicare.
@@ -64,9 +82,11 @@ Prima di qualunque modifica a CSS, HTML strutturale o nuovi widget: leggi `UI_GU
 
 ## Comandi utili
 
-- Nessun build step (Vanilla JS puro). Apri `index.html` per testare.
-- Test headless: script `node` ad-hoc per modulo. Pattern già esistenti nei moduli (vedi archivio per esempi).
-- Lint/format: nessun tool obbligatorio.
+- `npm install` una volta. `npm run dev` (server locale con reload), `npm run build` (→ `dist/`), `npm test` (Vitest).
+- **Golden replay** (`tests/golden.test.mjs`): 3 seed × 3000 Impulsi, hash per sezione del save vs `tests/golden/baseline.json`. Un refactor NON deve cambiarlo. Se una modifica cambia il gameplay di proposito: `npm run golden:write` + spiegare nel commit quali sezioni cambiano e perché.
+- Test mirati: `tests/sim.test.mjs` (harness `tests/harness.cjs`: contesto vm isolato, `load()` → `ctx.ORION`). Test storici in `tests/legacy/` (girano sotto Vitest).
+- **Smoke end-to-end:** `node scripts/smoke.cjs dist` (o `.` per i sorgenti) — Playwright, flusso nuova partita → viste → eventi → reload; `--shots <dir>` per gli screenshot.
+- Deploy: GitHub Action `.github/workflows/deploy.yml` (test + build + Pages). Richiede Settings → Pages → Source = "GitHub Actions".
 
 ---
 

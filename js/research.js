@@ -387,6 +387,12 @@
      gruppo natale (auto-promossa #45); fallback alla home, poi a una colonia
      qualsiasi colonizzata. */
   function payerColonyKey(game) {
+    /* B5 (audit 2026): prima saltava la capitale e usava sempre la home,
+       contro il commento e contro dispatch.payColonyKey. */
+    if (ORION.capital && ORION.capital.getOf && game.galaxy) {
+      const cap = ORION.capital.getOf(game, game.galaxy.homeGroupId);
+      if (cap && game.colonies && game.colonies[cap] && game.colonies[cap].colonized) return cap;
+    }
     if (game.homePlanetKey && game.colonies && game.colonies[game.homePlanetKey]) {
       return game.homePlanetKey;
     }

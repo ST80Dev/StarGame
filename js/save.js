@@ -184,11 +184,10 @@
       /* Schema 31 (#48 Fase 2b): contratti di export rifiuti verso le AI
          (smaltimento a pagamento / vendita a chi li valorizza). */
       wasteDeals: Array.isArray(game.wasteDeals) ? game.wasteDeals : [],
-      /* M11 Fase B parziale: sistemi occupati dal giocatore dopo vittoria su
-         civiltà AI (sostituisce il rollback-a-neutrale). Mappa sysId →
-         { fromCivId, fromCivName, fromCivColor, fromAlignment, sinceI }.
-         Additivo: i save vecchi caricano con {} (nessuna migrazione). */
-      occupations: (game.occupations && typeof game.occupations === 'object') ? game.occupations : {},
+      /* Presidi militari (decisione #93): mappa sysId → presidio dichiarato.
+         Prima non era serializzato → i presidi si perdevano al reload (bug B1,
+         audit 2026). */
+      garrisons: (game.garrisons && typeof game.garrisons === 'object') ? game.garrisons : {},
       /* Intel grigia Mekhari (M19 §6e, richiesta utente 2026-06-29): voci di
          galassia acquistate. I marker per-civ (civ.flagSeen / civ.greyIntel)
          vivono dentro game.civs (auto-serializzato). Additivo: i save vecchi

@@ -18,7 +18,7 @@ const path = require('path');
 
 const root = { console: console };
 function load(rel) {
-  const src = fs.readFileSync(path.join(__dirname, rel), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '..', '..', rel), 'utf8');
   const wrap = '(function(globalThis, window){' + src + '\nreturn globalThis.ORION;})';
   return eval(wrap)(root, root);
 }

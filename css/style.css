@@ -39,6 +39,13 @@
   --c-text-soft:   #b3bee0;   /* testo secondario (era #9aa6cc — alzato) */
   --c-text-faint:  #98a3c8;   /* testo tenue / placeholder (alzato per leggibilità) */
 
+  /* Alias per variabili usate nel CSS ma mai definite (bug B6, audit 2026):
+     senza definizione le dichiarazioni erano invalide e il colore veniva
+     ereditato (es. outline di focus invisibile). Da riassorbire con la
+     nuova palette (Revisione 2026, Fase 3). */
+  --c-text-dim:    var(--c-text-faint);
+  --c-amber:       var(--c-accent-warm);
+
   --c-good:        #4fe08a;
   --c-warn:        #ffca55;
   --c-bad:         #ff5c6c;

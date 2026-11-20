@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const root = { console: console };
 function load(rel) {
-  const src = fs.readFileSync(path.join(__dirname, rel), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '..', '..', rel), 'utf8');
   return eval('(function(globalThis, window){' + src + '\nreturn globalThis.ORION;})')(root, root);
 }
 load('js/rng.js'); load('js/utils.js'); load('js/system.js'); load('js/planet.js'); load('js/station.js');
