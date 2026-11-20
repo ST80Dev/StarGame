@@ -1605,125 +1605,9 @@
       if (battle.status !== 'active') continue;
       /* M16 Fase B (#81): assedio a una STAZIONE — difensore = forza stazione
          + flotte presenti, esito cattura/distruzione. */
-      if (battle.stationId) {
-        if (processStationBattle(game, battle, events) === 'ongoing') still.push(battle);
-        continue;
-      }
-      const colonyKey = battle.colonyKey;
-      const colony = game.colonies && game.colonies[colonyKey];
-      // colonia sparita o non più nel sistema → l'assedio decade
-      if (!colony || !colony.colonized || colony.systemId !== battle.systemId) {
-        events.push({ kind: 'siege-end', battleId: battle.id, outcome: 'lifted',
-          colonyKey: colonyKey, impulso: game.timeImpulsi });
-        continue;
-      }
-      if ((game.timeImpulsi || 0) < battle.nextRoundAt) { still.push(battle); continue; }
-
-      battle.round++;
-      battle.nextRoundAt = (game.timeImpulsi || 0) + C.CFG.ROUND_EVERY_I;
-
-      // Ricostruisci attaccante (pirati) dallo stato persistito
-      const atk = {
-        side: 'A', name: battle.attacker.name, color: battle.attacker.color,
-        immobile: false, formation: battle.attacker.formation || 'balanced',
-        combatants: battle.attacker.combatants
-      };
-      // Ricostruisci difensore dallo stato vivo: difese + flotte presenti
-      // AL CORPO ASSEDIATO (in porto alla colonia o in orbita a quel corpo).
-      // Una flotta che mina un'anomalia in un ALTRO corpo dello stesso sistema
-      // resta al suo lavoro: l'assedio è sul pianeta, non sul sistema intero.
-      // È compito del giocatore portar via per tempo gli estrattori parcheggiati
-      // sulla colonia se non vuole rischiarli (recovery-friendly #22: la scelta
-      // c'è, non è un fail-state nascosto).
-      const defDef = C.forceFromDefenses(game, colony, colonyKey, 'B');
-      const colonyBodyKey = (function () {
-        const parts = String(colonyKey).split(':');
-        return parts.length === 2 ? parts[1] : null;
-      })();
-      const F = root.ORION.fleet;
-      const present = fleetsPresentAt(game, battle.systemId).filter(function (f) {
-        const bk = (F && F.fleetCurrentBodyKey) ? F.fleetCurrentBodyKey(game, f) : null;
-        return bk != null && bk === colonyBodyKey;
-      });
-      const defShips = [];
-      for (let i = 0; i < present.length; i++) {
-        const ff = C.forceFromFleet(game, present[i], 'B');
-        for (let j = 0; j < ff.combatants.length; j++) defShips.push(ff.combatants[j]);
-      }
-      const def = {
-        side: 'B', name: colony.name || 'Colonia', color: '#3fcaa0',
-        immobile: defShips.length === 0,   // se ci sono flotte, la difesa può ritirarle
-        formation: 'defensive',
-        combatants: defDef.combatants.concat(defShips)
-      };
-
-      // niente difensori → vittoria attaccante diretta
-      if (def.combatants.length === 0) {
-        const oc = applySiegeWin(game, battle, colony, colonyKey, events);
-        events.push({ kind: 'siege-end', battleId: battle.id, outcome: oc,
-          colonyKey: colonyKey, systemId: battle.systemId, impulso: game.timeImpulsi });
-        continue;
-      }
-
-      const rng = ORION.rng.makeRng((game.seed || '') + ':battle:' + battle.id + ':' + battle.round);
-      const startAtkHp = C.totalHp(atk);
-      const r = C.resolveRound(rng, atk, def);
-      // scrivi gli esiti del difensore sullo stato vivo
-      const survivorsDef = def.combatants;     // post-purge
-      const wb = C.applyDefenderWriteback(game, colony, survivorsDef, r.destroyedB);
-      if (wb.shipsLost > 0) warRegisterLoss(game, wb.shipsLost * CFG.WAR_MORALE_PER_SHIP, wb.shipsLost * CFG.WAR_PRESSURE_PER_LOSS);
-      // l'attaccante hp residuo è già persistito (stesso array di oggetti)
-
-      battle.log.push({ round: battle.round, lostDef: r.destroyedB.length, lostAtk: r.destroyedA.length,
-        atkHp: Math.round(C.totalHp(atk)), defHp: Math.round(C.totalHp(def)) });
-
-      events.push({ kind: 'siege-round', battleId: battle.id, round: battle.round,
-        colonyKey: colonyKey, systemId: battle.systemId,
-        atk: C.totalHp(atk), def: C.totalHp(def),
-        lostDef: r.destroyedB.length, lostAtk: r.destroyedA.length,
-        crewLost: wb.crewLost, colonistsLost: wb.colonistsLost,
-        impulso: game.timeImpulsi });
-
-      // fine assedio?
-      const atkWiped = atk.combatants.length === 0;
-      const atkRetreat = C.checkRetreat(atk, startAtkHp);
-      const defWiped = def.combatants.length === 0;
-      if (atkWiped || atkRetreat) {
-        // difensori vincono: razzia respinta, covo indebolito
-        warRegisterWin(game);
-        if (battle.attackerKind === 'ai' && root.ORION.ai && root.ORION.ai.recordBattle) {
-          root.ORION.ai.recordBattle(game, battle.attackerCiv, 'win', 'siege-defense', battle.systemId);
-        }
-        events.push({ kind: 'siege-end', battleId: battle.id, outcome: 'repelled',
-          colonyKey: colonyKey, systemId: battle.systemId, impulso: game.timeImpulsi });
-        grantSiegeVeterancy(game, present, events);
-        continue;
-      }
-      if (defWiped) {
-        const oc = applySiegeWin(game, battle, colony, colonyKey, events);
-        events.push({ kind: 'siege-end', battleId: battle.id, outcome: oc,
-          colonyKey: colonyKey, systemId: battle.systemId, impulso: game.timeImpulsi });
-        continue;
-      }
-      // cap di sicurezza
-      if (battle.round >= 12) {
-        const win = C.totalHp(def) >= C.totalHp(atk);
-        if (win) {
-          warRegisterWin(game);
-          if (battle.attackerKind === 'ai' && root.ORION.ai && root.ORION.ai.recordBattle) {
-            root.ORION.ai.recordBattle(game, battle.attackerCiv, 'win', 'siege-defense', battle.systemId);
-          }
-          events.push({ kind: 'siege-end', battleId: battle.id, outcome: 'repelled',
-            colonyKey: colonyKey, systemId: battle.systemId, impulso: game.timeImpulsi });
-          grantSiegeVeterancy(game, present, events);
-        } else {
-          const oc = applySiegeWin(game, battle, colony, colonyKey, events);
-          events.push({ kind: 'siege-end', battleId: battle.id, outcome: oc,
-            colonyKey: colonyKey, systemId: battle.systemId, impulso: game.timeImpulsi });
-        }
-        continue;
-      }
-      still.push(battle);
+      const target = battle.stationId ? stationSiegeTarget(game, battle) : colonySiegeTarget(game, battle);
+      if (runSiegeRound(game, battle, target, events) === 'ongoing') still.push(battle);
+      continue;
     }
     game.battles = still;
   }
@@ -1939,86 +1823,168 @@
     return 'looted';
   }
 
-  /* M16 Fase B (#81): un round d'assedio contro una stazione. Difensore =
-     forza della stazione + flotte presenti (rinforzi/ritirate contano).
-     Esito a difensore annientato: pirata → distrutta, AI → catturata
-     (passa alla civiltà, riconquistabile). Recovery-friendly (#22). */
-  function processStationBattle(game, battle, events) {
+  /* ------------------------------------------------------------------
+     MOTORE D'ASSEDIO UNICO (Revisione 2026, Fase 2 — decisione utente).
+     Prima colonia e stazione avevano due copie quasi identiche con due
+     divergenze; ora un solo motore + un adattatore per bersaglio.
+       - presenza difensori: colonia = flotte AL CORPO assediato; stazione =
+         flotte nel sistema (la stazione orbita il sistema). Differenza voluta.
+       - limite 12 round: stessa regola per entrambi → vince chi ha più hp
+         (prima la stazione cadeva sempre al cap, anche in netto vantaggio).
+     Adattatore: { valid, ref, name, color, preRound(), defenders(),
+     writeback(def, r), fallen(def), fallenFirst, onAttackerWin(), present }.
+     ------------------------------------------------------------------ */
+  const SIEGE_MAX_ROUNDS = 12;
+
+  function colonySiegeTarget(game, battle) {
+    const C = root.ORION.combat, F = root.ORION.fleet;
+    const colonyKey = battle.colonyKey;
+    const colony = game.colonies && game.colonies[colonyKey];
+    const valid = !!(colony && colony.colonized && colony.systemId === battle.systemId);
+    const bodyKey = (function () {
+      const parts = String(colonyKey).split(':');
+      return parts.length === 2 ? parts[1] : null;
+    })();
+    const t = {
+      valid: valid,
+      ref: { colonyKey: colonyKey },
+      /* Difensori = difese della colonia + flotte AL CORPO assediato (in porto
+         o in orbita a quel corpo). Una flotta che lavora su un altro corpo del
+         sistema resta al suo posto: tocca al giocatore richiamarla (#22). */
+      defenders: function () {
+        t.present = fleetsPresentAt(game, battle.systemId).filter(function (f) {
+          const bk = (F && F.fleetCurrentBodyKey) ? F.fleetCurrentBodyKey(game, f) : null;
+          return bk != null && bk === bodyKey;
+        });
+        const base = C.forceFromDefenses(game, colony, colonyKey, 'B').combatants;
+        return { name: colony.name || 'Colonia', color: '#3fcaa0', base: base };
+      },
+      writeback: function (def, r) {
+        return C.applyDefenderWriteback(game, colony, def.combatants, r.destroyedB);
+      },
+      fallen: function (def) { return def.combatants.length === 0; },
+      onAttackerWin: function () { return applySiegeWin(game, battle, colony, colonyKey, events_); }
+    };
+    let events_ = null;
+    t.bindEvents = function (ev) { events_ = ev; };
+    return t;
+  }
+
+  function stationSiegeTarget(game, battle) {
     const C = root.ORION.combat, ST = root.ORION.station;
     const st = ST && ST.stationById(game, battle.stationId);
-    if (!st || !ST.isPlayerStation(st) || st.systemId !== battle.systemId) {
-      events.push({ kind: 'siege-end', battleId: battle.id, outcome: 'lifted',
-        stationId: battle.stationId, systemId: battle.systemId, impulso: game.timeImpulsi });
+    const valid = !!(st && ST.isPlayerStation(st) && st.systemId === battle.systemId);
+    let events_ = null;
+    const t = {
+      valid: valid,
+      fallenFirst: true,
+      ref: { stationId: battle.stationId },
+      preRound: function () { st._underAttack = true; },
+      /* Difensori = piattaforma + tutte le flotte nel sistema. */
+      defenders: function () {
+        t.present = fleetsPresentAt(game, battle.systemId);
+        return { name: st.name, color: '#7fc4ff', base: C.forceFromStation(game, st, 'B').combatants };
+      },
+      writeback: function (def, r) {
+        /* hp della piattaforma (combatant sopravvissuto) + perdite navi. */
+        for (let i = 0; i < def.combatants.length; i++) {
+          const c = def.combatants[i];
+          if (c.src && c.src.type === 'station') st.hp = Math.max(1, Math.round(c.hp));
+        }
+        const isShip = function (c) { return c.src && c.src.type === 'ship'; };
+        return C.applyDefenderWriteback(game, null, def.combatants.filter(isShip), r.destroyedB.filter(isShip));
+      },
+      /* La PIATTAFORMA caduta = stazione caduta (le flotte presenti restano). */
+      fallen: function (def) {
+        return !def.combatants.some(function (c) { return c.src && c.src.type === 'station'; });
+      },
+      onAttackerWin: function () { return applyStationSiegeWin(game, battle, st, events_); },
+      bindEvents: function (ev) { events_ = ev; }
+    };
+    return t;
+  }
+
+  /* Un round d'assedio. Ritorna 'ongoing' | 'done'. */
+  function runSiegeRound(game, battle, target, events) {
+    const C = root.ORION.combat;
+    target.bindEvents(events);
+    const endEv = function (outcome) {
+      return Object.assign({ kind: 'siege-end', battleId: battle.id, outcome: outcome },
+        target.ref, { systemId: battle.systemId, impulso: game.timeImpulsi });
+    };
+    if (!target.valid) {
+      /* bersaglio sparito o non più nel sistema → l'assedio decade */
+      events.push(endEv('lifted'));
       return 'done';
     }
     if ((game.timeImpulsi || 0) < battle.nextRoundAt) return 'ongoing';
     battle.round++;
     battle.nextRoundAt = (game.timeImpulsi || 0) + C.CFG.ROUND_EVERY_I;
-    st._underAttack = true;
+    if (target.preRound) target.preRound();
 
     const atk = {
       side: 'A', name: battle.attacker.name, color: battle.attacker.color,
       immobile: false, formation: battle.attacker.formation || 'balanced',
       combatants: battle.attacker.combatants
     };
-    const sf = C.forceFromStation(game, st, 'B');
-    const present = fleetsPresentAt(game, battle.systemId);
+    const d = target.defenders();
+    const present = target.present || [];
     const defShips = [];
     for (let i = 0; i < present.length; i++) {
       const ff = C.forceFromFleet(game, present[i], 'B');
       for (let j = 0; j < ff.combatants.length; j++) defShips.push(ff.combatants[j]);
     }
     const def = {
-      side: 'B', name: st.name, color: '#7fc4ff',
-      immobile: defShips.length === 0, formation: 'defensive',
-      combatants: sf.combatants.concat(defShips)
+      side: 'B', name: d.name, color: d.color,
+      immobile: defShips.length === 0,   // con flotte presenti la difesa può ritirarle
+      formation: 'defensive',
+      combatants: d.base.concat(defShips)
     };
+
+    /* niente difensori → vittoria attaccante diretta */
+    if (def.combatants.length === 0) {
+      events.push(endEv(target.onAttackerWin()));
+      return 'done';
+    }
 
     const rng = ORION.rng.makeRng((game.seed || '') + ':battle:' + battle.id + ':' + battle.round);
     const startAtkHp = C.totalHp(atk);
     const r = C.resolveRound(rng, atk, def);
-
-    // writeback: hp stazione (combatant sopravvissuto) + perdite navi
-    let stationAlive = false;
-    for (let i = 0; i < def.combatants.length; i++) {
-      const c = def.combatants[i];
-      if (c.src && c.src.type === 'station') { stationAlive = true; st.hp = Math.max(1, Math.round(c.hp)); }
-    }
-    const wb = C.applyDefenderWriteback(game, null,
-      def.combatants.filter(function (c) { return c.src && c.src.type === 'ship'; }),
-      r.destroyedB.filter(function (c) { return c.src && c.src.type === 'ship'; }));
+    const wb = target.writeback(def, r);
     if (wb.shipsLost > 0) warRegisterLoss(game, wb.shipsLost * CFG.WAR_MORALE_PER_SHIP, wb.shipsLost * CFG.WAR_PRESSURE_PER_LOSS);
+    /* l'hp residuo dell'attaccante è già persistito (stesso array di oggetti) */
 
     battle.log.push({ round: battle.round, lostDef: r.destroyedB.length, lostAtk: r.destroyedA.length,
       atkHp: Math.round(C.totalHp(atk)), defHp: Math.round(C.totalHp(def)) });
-    events.push({ kind: 'siege-round', battleId: battle.id, round: battle.round,
-      stationId: st.id, systemId: battle.systemId, atk: C.totalHp(atk), def: C.totalHp(def),
-      lostDef: r.destroyedB.length, lostAtk: r.destroyedA.length, crewLost: wb.crewLost,
-      colonistsLost: wb.colonistsLost, impulso: game.timeImpulsi });
+    events.push(Object.assign({ kind: 'siege-round', battleId: battle.id, round: battle.round },
+      target.ref, {
+        systemId: battle.systemId,
+        atk: C.totalHp(atk), def: C.totalHp(def),
+        lostDef: r.destroyedB.length, lostAtk: r.destroyedA.length,
+        crewLost: wb.crewLost, colonistsLost: wb.colonistsLost,
+        impulso: game.timeImpulsi
+      }));
 
-    // la PIATTAFORMA è caduta → la stazione cade (le flotte presenti restano)
-    if (!stationAlive) {
-      const oc = applyStationSiegeWin(game, battle, st, events);
-      events.push({ kind: 'siege-end', battleId: battle.id, outcome: oc,
-        stationId: st.id, systemId: battle.systemId, impulso: game.timeImpulsi });
-      return 'done';
-    }
-    const atkWiped = atk.combatants.length === 0;
-    const atkRetreat = C.checkRetreat(atk, startAtkHp);
-    if (atkWiped || atkRetreat) {
+    const repel = function () {
       warRegisterWin(game);
       if (battle.attackerKind === 'ai' && root.ORION.ai && root.ORION.ai.recordBattle) {
         root.ORION.ai.recordBattle(game, battle.attackerCiv, 'win', 'siege-defense', battle.systemId);
       }
-      events.push({ kind: 'siege-end', battleId: battle.id, outcome: 'repelled',
-        stationId: st.id, systemId: battle.systemId, impulso: game.timeImpulsi });
+      events.push(endEv('repelled'));
       grantSiegeVeterancy(game, present, events);
       return 'done';
-    }
-    if (battle.round >= 12) {
-      const oc = applyStationSiegeWin(game, battle, st, events);
-      events.push({ kind: 'siege-end', battleId: battle.id, outcome: oc,
-        stationId: st.id, systemId: battle.systemId, impulso: game.timeImpulsi });
+    };
+
+    /* Se nello stesso round cadono entrambi: la colonia considera prima la
+       ritirata/annientamento dell'attaccante, la stazione prima la caduta
+       della piattaforma (comportamento storico conservato). */
+    const atkOut = atk.combatants.length === 0 || C.checkRetreat(atk, startAtkHp);
+    if (target.fallenFirst && target.fallen(def)) { events.push(endEv(target.onAttackerWin())); return 'done'; }
+    if (atkOut) return repel();
+    if (target.fallen(def)) { events.push(endEv(target.onAttackerWin())); return 'done'; }
+    if (battle.round >= SIEGE_MAX_ROUNDS) {
+      if (C.totalHp(def) >= C.totalHp(atk)) return repel();
+      events.push(endEv(target.onAttackerWin()));
       return 'done';
     }
     return 'ongoing';
