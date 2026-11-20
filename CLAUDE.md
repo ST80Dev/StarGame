@@ -11,7 +11,7 @@
 - **Titolo:** Orion Empires — 4X spaziale strategico testuale, a pannelli (non action, non libro-game).
 - **Stack (attuale):** Vanilla JS + HTML + CSS su namespace globale `ORION`, bundlato con **Vite** (Fase 1 Revisione 2026 ✅). Test con **Vitest**. In transizione verso PixiJS/Preact (vedi sotto).
 - **Piattaforma:** browser / GitHub Pages, **desktop + tablet** (decisione Revisione 2026: il telefono non è più un target).
-- **Salvataggio:** `localStorage` (5 slot + autosave) + Export/Import `.json`. Schema corrente: **32** (verrà azzerato dalla Revisione 2026).
+- **Salvataggio:** `localStorage` (`orion.saves.v4`: 5 slot + autosave) + Export/Import `.json` + sync cloud. Schema **100** (azzerato nella Revisione 2026: i save ≤ 32 sono rifiutati con messaggio).
 - **Utenza:** un solo giocatore (il proprietario). Niente obblighi di "sempre giocabile" verso terzi.
 
 ---
@@ -36,7 +36,7 @@ Rifacimento incrementale (non riscrittura da zero) dell'intero gioco, focus anch
 - **Save:** si riparte da zero con uno schema pulito. La catena di migrazioni legacy (≤32) e la regola "mai distruttivo" verso save vecchi decadono al momento del reset.
 - **Telefono escluso:** il layout ≤760px (bottom nav, sheet mobile, decisione #63) è rimovibile. Target: desktop + tablet.
 - **Gameplay congelato durante il refactor:** nessun cambio di regole; ogni fetta verificata con test golden replay (stesso seed + comandi → stesso esito).
-- Fasi (ordine aggiornato dall'audit, `docs/AUDIT_2026.md` §7): 0 audit ✅ → 1 fondamenta ✅ (Vite + Vitest + golden replay + `js/newgame.js` + fix B1-B6) → 2 schema save pulito + potatura legacy/telefono + livello comandi + motore d'assedio unico → 3 sistema visivo (palette in scelta) → 4 PixiJS (pilota **planet-view**, poi galassia) → 5 Preact pannelli.
+- Fasi (ordine aggiornato dall'audit, `docs/AUDIT_2026.md` §7): 0 audit ✅ → 1 fondamenta ✅ (Vite + Vitest + golden replay + `js/newgame.js` + fix B1-B6) → 2 ✅ parziale (telefono rimosso, schema 100 con `STATE_FIELDS`, legacy potato, motore d'assedio unico, `js/commands.js` + `js/fleet-naming.js`, `galaxy.bfsPath`/`util.civById`; restano: cronaca come dati, scomposizione `main.js`/`time.js`, altri comandi) → 3 sistema visivo (palette in scelta) → 4 PixiJS (pilota **planet-view**, poi galassia) → 5 Preact pannelli.
 
 Dove questa sezione contraddice regole più sotto o in `UI_GUIDE.md`, vince questa sezione.
 
@@ -73,7 +73,8 @@ Prima di qualunque modifica a CSS, HTML strutturale o nuovi widget: leggi `UI_GU
 - **Render Canvas on-demand** (no rAF loop continuo): `ResizeObserver` + `devicePixelRatio` (cap 2.5).
 - **Input unificato Pointer Events** (mouse + touch). Niente funzioni `hover`-only.
 - **Persistenza preferenze UI** in `localStorage['orion.uiprefs']`/`orion.prefs` — **mai nel save di partita** (UI_GUIDE §9).
-- **Schema save:** ogni campo di stato persistito va in `save.serialize` **e** nel ripristino di `js/newgame.js` (il test round-trip in `tests/sim.test.mjs` fallisce se manca). Fino al reset dello schema (Fase 2) restano le migrazioni lazy in `save.js → migrate()`.
+- **Schema save:** un campo di stato persistito si aggiunge **solo** a `STATE_FIELDS` in `js/save.js` (usato sia da `serialize` sia dal ripristino `applyPayload`). Nessuna migrazione: lo schema è 100 e non si bumpa finché non c'è un'esigenza reale. Il test round-trip in `tests/sim.test.mjs` verifica che salvare e ricaricare non cambi lo stato.
+- **Azioni del giocatore che cambiano lo stato** vanno in `js/commands.js` (`ORION.commands.*`, ritornano `{ ok, reason, … }`), non negli handler di `main.js`. La UI chiama il comando e poi aggiorna cronaca/viste.
 - **Eventi cronaca:** kind con etichetta in `KIND_LABELS` + scelta auto-pausa in `DEFAULT_AUTOPAUSE` (decisione #31).
 - **Tutorial (#29):** aggiungere voci a `ORION.tutorial.LESSONS` + `fire(id)`/`openLesson(id)` ai punti rilevanti. Niente walkthrough — concetti, non istruzioni cliccabili.
 - **Utility condivise:** `ORION.util` (clamp/lerp/smoothstep/escapeHtml) + `ORION.format` in `js/utils.js`. Non duplicare.
@@ -84,6 +85,7 @@ Prima di qualunque modifica a CSS, HTML strutturale o nuovi widget: leggi `UI_GU
 
 - `npm install` una volta. `npm run dev` (server locale con reload), `npm run build` (→ `dist/`), `npm test` (Vitest).
 - **Golden replay** (`tests/golden.test.mjs`): 3 seed × 3000 Impulsi, hash per sezione del save vs `tests/golden/baseline.json`. Un refactor NON deve cambiarlo. Se una modifica cambia il gameplay di proposito: `npm run golden:write` + spiegare nel commit quali sezioni cambiano e perché.
+- Assedi: `tests/siege.test.mjs` (36 scenari deterministici colonia/stazione vs `tests/golden/siege-baseline.json`).
 - Test mirati: `tests/sim.test.mjs` (harness `tests/harness.cjs`: contesto vm isolato, `load()` → `ctx.ORION`). Test storici in `tests/legacy/` (girano sotto Vitest).
 - **Smoke end-to-end:** `node scripts/smoke.cjs dist` (o `.` per i sorgenti) — Playwright, flusso nuova partita → viste → eventi → reload; `--shots <dir>` per gli screenshot.
 - Deploy: GitHub Action `.github/workflows/deploy.yml` (test + build + Pages). Richiede Settings → Pages → Source = "GitHub Actions".

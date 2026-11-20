@@ -189,6 +189,18 @@ il test di round-trip save (3 seed × 2000 Impulsi) ora lo impedisce. Nota B4: l
 
 ---
 
+## 7b. Stato Fase 2 (2026-11-20)
+
+Fatto: layout telefono rimosso · schema save 100 con `STATE_FIELDS` unico (save.js 1045→432 righe), migrazioni
+e rami legacy rimossi (sistemi V1, spedizioni M07, migrazioni comandanti/diario/vittoria/anomalie/governatore,
+colonizzazione senza flotta) · motore d'assedio unico (cap 12 round uniformato, scenari in `tests/siege.test.mjs`)
+· `js/commands.js` (colonizzazione, tributo) + `js/fleet-naming.js` · `galaxy.bfsPath`, `util.civById`.
+Netto: circa −2.600 righe JS/CSS/HTML.
+
+Rimandato (motivo): cronaca come `{kind,data}` (tocca ~870 righe di formattazione UI, meglio con Preact) ·
+`legDuration` unico (cambia le probabilità d'incidente reali: decisione di gameplay) · `canPay/pay` unico (6 varianti
+con semantiche diverse di clamp) · façade unica reputazione/ICG/disposizione · scomposizione `main.js`/`time.js`.
+
 ## 8. Decisioni utente (2026-11-20)
 
 1. **B3 (Iperguida IA):** ✅ correggere — `tempoLeg` riceve il moltiplicatore come parametro; le IA non beneficiano più della tech del giocatore. Cambio di gameplay accettato.
