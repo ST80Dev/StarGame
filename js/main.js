@@ -8874,32 +8874,6 @@ function renderCivView(stage) {
       '</div>';
   }
 
-  /* M11 Fase B parziale: sistemi OCCUPATI dal giocatore (post-skirmish vinto
-     su civiltà AI). Lista con bottone "Abbandona" come leva di recupero. */
-  let occHtml = '';
-  const occMap = g.occupations || {};
-  const occIds = Object.keys(occMap);
-  if (occIds.length) {
-    occHtml = '<div class="civ-occupations">' +
-      '<h3 class="civ-occupations__title">▣ Sistemi occupati <span class="civ-occ__count">' + occIds.length + '</span></h3>' +
-      '<ul class="civ-occupations__list">' + occIds.map(function (sid) {
-        const occ = occMap[sid];
-        const sys = g.galaxy.systems[sid] || {};
-        const tag = systemTagHtml(Number(sid));
-        const since = Math.max(0, (g.timeImpulsi || 0) - (occ.sinceI || 0));
-        const alignCls = occ.fromAlignment || 'neutrale';
-        return '<li class="civ-occupation" style="--occ-color:' + escapeHtml(occ.fromCivColor || '#888') + '">' +
-          '<span class="civ-occ__sys"><strong>' + escapeHtml(sys.name || ('Sistema ' + sid)) + '</strong>' + tag + '</span>' +
-          '<span class="civ-occ__from">strappato a <span class="civ-chip civ-chip--' + alignCls + '">' + escapeHtml(occ.fromCivName || '—') + '</span></span>' +
-          '<span class="civ-occ__since">da ' + since + ' Ι</span>' +
-          '<button type="button" class="btn btn--mini btn--danger" data-action="occ-release" data-sys="' + escapeHtml(sid) + '">Abbandona</button>' +
-        '</li>';
-      }).join('') + '</ul>' +
-      '<p class="panel__note">L\'occupazione di un sistema AI conta per la pista <strong>Egemone</strong>. ' +
-        'Abbandonare un\'occupazione su una civiltà non maligna restituisce un po\' di <strong>reputazione</strong>.</p>' +
-    '</div>';
-  }
-
   /* Card "Te" — confronto onesto della tua Forza Impero con quella delle
      altre civ visibili (decisione 2026-06-26): le civ AI mostrano un range
      stimato sulla stessa scala (civ.power), quindi anche tu vedi il tuo
@@ -8942,7 +8916,6 @@ function renderCivView(stage) {
       constHtml +
       fedsHtml +
       cohHtml +
-      occHtml +
       nestsHtml +
       cards +
     '</div>';
@@ -8998,31 +8971,6 @@ function renderCivView(stage) {
     btn.addEventListener('click', function () {
       ORION._civDetailId = btn.dataset.civDetail;
       renderCivView(stage);
-    });
-  });
-  stage.querySelectorAll('[data-action="occ-release"]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      const sid = Number(btn.dataset.sys);
-      if (!Number.isFinite(sid)) return;
-      const sys = g.galaxy.systems[sid];
-      const sysName = sys ? sys.name : ('sistema ' + sid);
-      confirmAction({
-        title: 'Rilascia occupazione',
-        message: '<p>Abbandonare l\'occupazione di <strong>' + escapeHtml(sysName) + '</strong>?</p>' +
-          '<p class="confirm-hint">Se hai conquistato il sistema da una civiltà buona o neutrale, ' +
-          'il rilascio è un atto di clemenza (+3 reputazione).</p>',
-        confirmLabel: 'Rilascia',
-        danger: true,
-        force: true,
-        onConfirm: function () {
-          const r = ORION.time.releaseOccupation(g, sid);
-          if (!r.ok) { showToast(r.reason || 'Rilascio rifiutato'); return; }
-          chronicleEvent({ kind: 'system-released', sysId: sid, impulso: g.timeImpulsi });
-          persistGame(g);
-          updateGlobalIndicesHud();
-          renderCivView(stage);
-        }
-      });
     });
   });
   /* M12 Fase A2 (#56 §15.3): handler accordi commerciali. */

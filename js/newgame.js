@@ -290,9 +290,6 @@
       tradeAgreements: [],
       /* #48 Fase 2b: contratti di export rifiuti verso le AI. */
       wasteDeals: [],
-      /* M11 Fase B parziale: sistemi occupati dopo vittoria su civiltà AI.
-         Lazy, additivo; nessun bump di schema. */
-      occupations: {},
       /* Intel grigia Mekhari (M19 §6e): voci di galassia acquistate. Additivo. */
       mekhariIntel: { rumors: [] },
       /* M17 Fase A (decisione #83): Dispacci & Missioni + Memoria Storica.
@@ -455,9 +452,9 @@
          proprietà). Save vecchi senza chiave → {}: gli FSP esistono comunque
          (rigenerati dal seed) e partono tutti a "Eco" come in partita nuova. */
       if (saved.phenomena && typeof saved.phenomena === 'object') game.phenomena = Object.assign({}, saved.phenomena);
-      /* M11 Fase B parziale: sistemi occupati (additivo, no migrazione). */
-      if (saved.occupations && typeof saved.occupations === 'object') {
-        game.occupations = Object.assign({}, saved.occupations);
+      /* Presidi militari (#93) — fix B1: ora persistiti. */
+      if (saved.garrisons && typeof saved.garrisons === 'object') {
+        game.garrisons = Object.assign({}, saved.garrisons);
       }
       /* Intel grigia Mekhari (M19 §6e): voci acquistate (additivo, no migrazione).
          I marker per-civ flagSeen/greyIntel arrivano dentro saved.civs. */

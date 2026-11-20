@@ -967,6 +967,14 @@
       game.civs = generate(game);
     }
 
+    /* Spawn 4 Costanti (idempotente). PRIMA della normalizzazione: prima le
+       fazioni nascevano dopo il ciclo e ricevevano i default (knowledge,
+       interactions, phaseSince) solo al primo load → stato diverso tra
+       partita appena creata e la stessa partita ricaricata (audit 2026). */
+    if (ORION.factions && ORION.factions.ensureFactions) {
+      ORION.factions.ensureFactions(game);
+    }
+
     /* Migra civs legacy + normalizza. */
     const galaxy = game.galaxy;
     const migrateRng = ORION.rng.makeRng(galaxy.seed + ':civ-migrate');
@@ -974,11 +982,6 @@
       const c = game.civs[i];
       if (!c) continue;
       migrateLegacyCiv(c, galaxy, migrateRng);
-    }
-
-    /* Spawn 4 Costanti (idempotente). */
-    if (ORION.factions && ORION.factions.ensureFactions) {
-      ORION.factions.ensureFactions(game);
     }
 
     if (game.icg == null) game.icg = 20;

@@ -2736,29 +2736,6 @@
     return advance(game, nextEventImpulsi(game));
   }
 
-  /* M11 Fase B parziale: rilascio volontario di un sistema occupato.
-     Recovery-friendly (#22): il giocatore può sempre abbandonare. Lieve
-     bonus reputazione se l'occupazione era "dark" (atto di clemenza).
-     Il sistema torna neutrale (nessuna re-assegnazione automatica alla
-     vecchia civ — l'AI può ricolonizzarlo con i suoi cicli normali). */
-  function releaseOccupation(game, sysId) {
-    if (!game || !game.occupations) return { ok: false, reason: 'Nessuna occupazione attiva.' };
-    const occ = game.occupations[sysId];
-    if (!occ) return { ok: false, reason: 'Sistema non occupato.' };
-    delete game.occupations[sysId];
-    const wasDark = occ.fromAlignment !== 'male';
-    /* Bonus reputazione discreto per il rilascio quando era atto dark. */
-    if (wasDark && root.ORION.diplomacy && root.ORION.diplomacy.adjustReputation) {
-      root.ORION.diplomacy.adjustReputation(game, 3);
-    }
-    return { ok: true, sysId: sysId, wasDark: wasDark };
-  }
-
-  function occupationCount(game) {
-    if (!game || !game.occupations) return 0;
-    return Object.keys(game.occupations).length;
-  }
-
   /* DISPLAY — single source of truth dei moltiplicatori applicati a OGNI
      Impulso in processProduction. La UI (tab Risorse, deck colonia, dashboard
      impero) deve mostrare la PRODUZIONE REALE in qualunque condizione, inclusi
@@ -2827,8 +2804,6 @@
     wasteStatus: wasteStatus,
     /* M09 Fase B — leve di recovery / esiti esposti per la UI */
     evacuateColony: evacuateColony,
-    releaseOccupation: releaseOccupation,
-    occupationCount: occupationCount,
     ensureWarState: ensureWarState,
     /* Decisione #66 — completamento colonizzazione (chiamato sia dal
        path legacy processColonizing sia da fleet.tickColonizePhase). */
