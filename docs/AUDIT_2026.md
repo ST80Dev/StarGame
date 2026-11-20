@@ -206,4 +206,8 @@ con semantiche diverse di clamp) · façade unica reputazione/ICG/disposizione �
 1. **B3 (Iperguida IA):** ✅ correggere — `tempoLeg` riceve il moltiplicatore come parametro; le IA non beneficiano più della tech del giocatore. Cambio di gameplay accettato.
 2. **Assedio colonia vs stazione:** ✅ unificare in un unico motore parametrico (al cap dei 12 round confronto hp anche per le stazioni; da riconfermare in fase di implementazione).
 3. **Cloud Supabase:** ✅ tenere così com'è.
-4. **Palette:** ⏳ in valutazione — confronto A/B (attuali) vs C Abisso / D Nebulosa / E Plancia (proposte) pubblicato come pagina di anteprima.
+4. **Palette:** ✅ **E · Plancia** (scelta utente). Grafite neutra quasi monocroma, colore solo per stati/concetti, nessun glow.
+   Valori di partenza (Fase 3): fondo `#0b0e13` · fondo 2 `#10141a` · pannello `#151a21` · pannello 2 `#1d242d` ·
+   bordo `rgba(170,190,210,.26)` / morbido `.12` · testo `#e8edf2` / 2° `#aab4bf` / tenue `#808b97` ·
+   accento/galassia `#5cc8d6` · sistema/colonia `#e3a35f` · gruppo/ricerca `#a493f0` · pianeta/info `#74aee0` ·
+   buono `#63c98f` · allerta `#dcbc5b` · critico `#e2697a` · raggio 5px. Contrasti tutti ≥ 5 sul pannello.
