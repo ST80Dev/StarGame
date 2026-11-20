@@ -183,9 +183,9 @@ B3 e la risoluzione delle divergenze d'assedio **cambiano il gameplay** → deci
 
 ---
 
-## 8. Decisioni aperte per l'utente
+## 8. Decisioni utente (2026-11-20)
 
-1. **B3 (Iperguida IA):** correggere (le IA rallentano rispetto a oggi) o considerarlo voluto?
-2. **Assedio colonia vs stazione:** unificare le regole (quale esito al cap dei 12 round)?
-3. **Cloud Supabase:** tenere, proteggere o rimuovere?
-4. **Palette:** adottare quella di UI_GUIDE (più morbida) o quella dei token (più satura)? O nuova direzione artistica?
+1. **B3 (Iperguida IA):** ✅ correggere — `tempoLeg` riceve il moltiplicatore come parametro; le IA non beneficiano più della tech del giocatore. Cambio di gameplay accettato.
+2. **Assedio colonia vs stazione:** ✅ unificare in un unico motore parametrico (al cap dei 12 round confronto hp anche per le stazioni; da riconfermare in fase di implementazione).
+3. **Cloud Supabase:** ✅ tenere così com'è.
+4. **Palette:** ⏳ in valutazione — confronto A/B (attuali) vs C Abisso / D Nebulosa / E Plancia (proposte) pubblicato come pagina di anteprima.
