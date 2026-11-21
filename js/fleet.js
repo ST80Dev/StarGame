@@ -480,8 +480,7 @@
     if (base > TRAVEL_MAX) base = TRAVEL_MAX;
     const sp = minSpeed && minSpeed > 0 ? minSpeed : 1;
     /* M13 (decisione #32/#57): l'Iperguida T1 riduce i tempi di viaggio a un
-       terzo. Applicato qui (punto unico) così stima e durata reale coincidono
-       per tutti i consumer (startNextLeg, routeImpulsi, wizard viveri). */
+       terzo. Base di legDuration (durata reale e stime coincidono, Revisione 2026). */
     let t = base / sp;
     if (typeof hyperMul === 'number') t *= hyperMul;
     else if (ORION.research && ORION.research.hyperMul) t *= ORION.research.hyperMul(ORION.game);
@@ -1752,6 +1751,31 @@
   /* Imposta lo stato di transito per il prossimo leg della rotta corrente.
      Ritorna l'ETA in Impulsi del leg. Se la flotta è già a destinazione
      (route esaurita) ritorna 0 e lascia lo status `orbiting`. */
+  /* Durata REALE di un leg per QUESTA flotta (Revisione 2026: unica fonte).
+     Usata dal viaggio vero (startNextLeg) e da tutte le stime (routeImpulsi →
+     wizard, viveri, rischio incidente): stima e realtà coincidono.
+     tempoLeg (classe più lenta + Iperguida) → Navigatore (#43, −15%) →
+     deriva da viveri esauriti (#69) → campo FSP (§17.7.4). */
+  function legDuration(galaxy, fleet, from, toSys) {
+    let t = tempoLeg(galaxy, from, toSys, fleetMinSpeed(fleet));
+    /* Bonus Comandante Navigatore (#43): −15% durata viaggio. */
+    if (ORION.commander && ORION.commander.fleetSpeedMul) {
+      t = Math.max(1, Math.round(t * ORION.commander.fleetSpeedMul(fleet)));
+    }
+    /* Decisione #69: in deriva (viveri esauriti) la flotta arranca — i leg
+       successivi durano di più (razionamento). */
+    if (fleet._drift && (fleet.viveri || 0) <= 0) t = Math.max(1, t * VIVERI_DRIFT_SLOW);
+    /* Campo di prossimità FSP (richiesta utente 2026-06-29, §17.7.4): se il leg
+       tocca la zona di un Fenomeno di Spazio Profondo (entro 1 hop dall'aggancio),
+       la traversata rallenta o accelera. Lieve e cappato; opaco al giocatore.
+       Stora il `legTotal` post-modificatori così il renderer interpola corretto. */
+    if (ORION.phenomena && ORION.phenomena.legField) {
+      const fld = ORION.phenomena.legField(galaxy, from, toSys);
+      if (fld && fld.dragMul && fld.dragMul !== 1) t = Math.max(1, Math.round(t * fld.dragMul));
+    }
+    return t;
+  }
+
   function startNextLeg(galaxy, fleet) {
     if (!Array.isArray(fleet.route) || fleet.route.length === 0) {
       fleet.location.status = 'orbiting';
@@ -1770,22 +1794,7 @@
     const toSys = fleet.route[nextIdx];
     fleet.location.status = 'in-transit';
     fleet.location.berth = null;   // in viaggio: nessun posto d'attracco occupato
-    let t = tempoLeg(galaxy, from, toSys, fleetMinSpeed(fleet));
-    /* Bonus Comandante Navigatore (#43): −15% durata viaggio. */
-    if (ORION.commander && ORION.commander.fleetSpeedMul) {
-      t = Math.max(1, Math.round(t * ORION.commander.fleetSpeedMul(fleet)));
-    }
-    /* Decisione #69: in deriva (viveri esauriti) la flotta arranca — i leg
-       successivi durano di più (razionamento). */
-    if (fleet._drift && (fleet.viveri || 0) <= 0) t = Math.max(1, t * VIVERI_DRIFT_SLOW);
-    /* Campo di prossimità FSP (richiesta utente 2026-06-29, §17.7.4): se il leg
-       tocca la zona di un Fenomeno di Spazio Profondo (entro 1 hop dall'aggancio),
-       la traversata rallenta o accelera. Lieve e cappato; opaco al giocatore.
-       Stora il `legTotal` post-modificatori così il renderer interpola corretto. */
-    if (ORION.phenomena && ORION.phenomena.legField) {
-      const fld = ORION.phenomena.legField(galaxy, from, toSys);
-      if (fld && fld.dragMul && fld.dragMul !== 1) t = Math.max(1, Math.round(t * fld.dragMul));
-    }
+    const t = legDuration(galaxy, fleet, from, toSys);
     /* Fix bug renderer (decisione di sessione): stora il `legTotal`
        effettivo (post-modificatori comandante/deriva/incidenti) così il
        renderer in `_drawFleets` può interpolare correttamente la posizione
@@ -1856,6 +1865,27 @@
     };
     return _accidentChanceForTravel(game, probe, routeImpulsi(game.galaxy, probe, route));
   }
+  /* Esiti di un incidente (unica fonte, usata dal tiro e dalla stima UI):
+     ritardo 50% · usura 30% · critico 15% (pericolo > 0.5 → usura 100%,
+     scafo perso al rientro; altrimenti usura) · scoperta bonus 5%. */
+  const INCIDENT_SPLIT = { delay: 0.50, wear: 0.30, critical: 0.15 };
+  const INCIDENT_CRIT_DANGER = 0.5;
+
+  /* Ripartizione attesa degli esiti per un viaggio non ancora partito
+     (scheda Esplorazione: "incidente X% · perdita nave Y%"). */
+  function estimateTravelOutcome(game, fromSysId, toSysId, opts) {
+    const chance = estimateTravelIncident(game, fromSysId, toSysId, opts);
+    const s = game && game.galaxy && game.galaxy.systems[toSysId];
+    const danger = s ? Math.max(0, Math.min(1, (s.danger || 0) / 100)) : 0.5;
+    const crit = danger > INCIDENT_CRIT_DANGER;
+    return {
+      chance: chance,
+      delay: chance * INCIDENT_SPLIT.delay,
+      wear: chance * (INCIDENT_SPLIT.wear + (crit ? 0 : INCIDENT_SPLIT.critical)),
+      shipLoss: crit ? chance * INCIDENT_SPLIT.critical : 0,
+      bonus: chance * (1 - INCIDENT_SPLIT.delay - INCIDENT_SPLIT.wear - INCIDENT_SPLIT.critical)
+    };
+  }
   function _rollTravelIncident(game, fleet, events) {
     if (fleet._incidentRolled) return;
     fleet._incidentRolled = true;
@@ -1867,7 +1897,7 @@
     const danger = _dangerForTravel(game.galaxy, fleet);
     const r = rng.float();
     const ship = fleet.ships && fleet.ships[0];
-    if (r < 0.50) {
+    if (r < INCIDENT_SPLIT.delay) {
       const extra = 10 + Math.floor(rng.float() * 11);
       fleet.etaImpulsi = (fleet.etaImpulsi || 0) + extra;
       /* Fix bug renderer: mantieni `legTotal` coerente con l'eta esteso
@@ -1877,15 +1907,15 @@
         incident: { kind: 'delay', amount: extra }, impulso: game.timeImpulsi });
       return;
     }
-    if (r < 0.80) {
+    if (r < INCIDENT_SPLIT.delay + INCIDENT_SPLIT.wear) {
       const w = 10 + Math.floor(rng.float() * 6);
       if (ship) ship.wear = Math.min(100, (ship.wear || 0) + w);
       events.push({ kind: 'fleet-incident', fleetId: fleet.id, fleetName: fleet.name,
         incident: { kind: 'wear', amount: w }, impulso: game.timeImpulsi });
       return;
     }
-    if (r < 0.95) {
-      if (danger > 0.5) {
+    if (r < INCIDENT_SPLIT.delay + INCIDENT_SPLIT.wear + INCIDENT_SPLIT.critical) {
+      if (danger > INCIDENT_CRIT_DANGER) {
         const back = 20 + Math.floor(rng.float() * 21);
         if (ship) ship.wear = 100;
         fleet._critBackOverride = back;
@@ -2273,11 +2303,11 @@
   /* Stima Ι di una rotta (per gli avvisi UI all'ordine). */
   function routeImpulsi(galaxy, fleet, path) {
     if (!Array.isArray(path) || path.length < 2) return 0;
-    const sp = fleetMinSpeed(fleet);
     let t = 0;
-    for (let i = 1; i < path.length; i++) t += tempoLeg(galaxy, path[i - 1], path[i], sp);
+    for (let i = 1; i < path.length; i++) t += legDuration(galaxy, fleet, path[i - 1], path[i]);
     return t;
   }
+
   /* Δ Impulsi al prossimo evento viveri (per nextEventImpulsi in time.js). */
   function viveriNextEventDelta(game, fleet) {
     if (!fleet || !fleet.location) return 0;
@@ -3494,6 +3524,8 @@
   }
 
   ORION.fleet = {
+    legDuration: legDuration,
+    estimateTravelOutcome: estimateTravelOutcome,
     estimateTravelIncident: estimateTravelIncident,
     CLASSES: CLASSES,
     CLASS_ORDER: CLASS_ORDER,

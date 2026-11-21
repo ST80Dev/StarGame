@@ -4522,14 +4522,10 @@ function resShortLabel(res) {
    runtime i modificatori (Comandante Navigatore, deriva viveri, iperguida)
    possono variare leggermente il valore. */
 function estimateExpeditionDuration(galaxy, fromSysId, targetSysId) {
-  if (!ORION.fleet || !ORION.fleet.computePath) return 0;
+  /* Stessa durata del viaggio reale (fleet.legDuration) per uno scafo esploratore. */
   const path = ORION.fleet.computePath(galaxy, fromSysId, targetSysId);
   if (!path || path.length < 2) return 0;
-  let t = 0;
-  for (let i = 0; i < path.length - 1; i++) {
-    t += ORION.fleet.tempoLeg(galaxy, path[i], path[i + 1], 1.1);
-  }
-  return t;
+  return ORION.fleet.routeImpulsi(galaxy, { ships: [{ kind: 'explorer' }] }, path);
 }
 
 function openExpeditionPicker(colony, opts) {
@@ -4596,8 +4592,11 @@ function openExpeditionPicker(colony, opts) {
     const oneWay = estimateExpeditionDuration(g.galaxy, colony.systemId, sid);
     const dur = returnHome ? oneWay * 2 : oneWay;
     const durLabel = returnHome ? (dur + ' ' + iU() + ' (a/r)') : (oneWay + ' ' + iU() + ' (sola andata)');
-    /* B4: stesso modello del tiro reale (flotta con ordine explore). */
-    const chance = ORION.fleet.estimateTravelIncident(g, colony.systemId, sid, { crewXp: crewXp });
+    /* B4 + Revisione 2026 (A): stesso modello del tiro reale, con la
+       ripartizione degli esiti — il rischio di PERDERE lo scafo è mostrato a
+       parte (un incidente è quasi sempre un ritardo o un po' di usura). */
+    const risk = ORION.fleet.estimateTravelOutcome(g, colony.systemId, sid, { crewXp: crewXp });
+    const pct = function (x) { const v = x * 100; return (v > 0 && v < 1) ? '<1%' : Math.round(v) + '%'; };
     const dangerTier = sys.dangerTier || ORION.galaxy.dangerTier(sys.danger);
     return '<div class="expedition-card">' +
       '<div class="expedition-card__head">' +
@@ -4607,7 +4606,10 @@ function openExpeditionPicker(colony, opts) {
       '<dl class="save-card__meta">' +
         '<div><dt>Distanza</dt><dd>' + d.hops + ' salti</dd></div>' +
         '<div><dt>Durata viaggio</dt><dd>' + durLabel + '</dd></div>' +
-        '<div><dt>Rischio incidente</dt><dd>' + Math.round(chance * 100) + '%</dd></div>' +
+        '<div><dt>Rischio incidente</dt><dd title="Se avviene: ritardo ' + pct(risk.delay) + ' · usura ' + pct(risk.wear) +
+          ' · scafo perso ' + pct(risk.shipLoss) + ' · scoperta bonus ' + pct(risk.bonus) + ' (l\'equipaggio si salva sempre)">' +
+          pct(risk.chance) + '</dd></div>' +
+        '<div><dt>Perdita scafo</dt><dd>' + pct(risk.shipLoss) + '</dd></div>' +
       '</dl>' +
       '<div class="expedition-card__actions">' +
         '<button class="btn btn--mini btn--primary btn--with-icon" data-action="exp-launch" data-sys="' + sid + '" type="button"' +
