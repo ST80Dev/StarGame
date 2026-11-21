@@ -1477,7 +1477,8 @@
             if (root.ORION.victory && root.ORION.victory.applyAlignment) {
               root.ORION.victory.applyAlignment(game, impact, 1);
             }
-            if (impact === 'light') bumpIcg(game, -1); else bumpIcg(game, 2);
+            if (impact === 'light') bumpIcg(game, -1, 'Colpo inferto a ' + (civ.name || 'una civiltà ostile'));
+            else bumpIcg(game, 2, 'Attacco a ' + (civ.name || 'una civiltà'));
             report.alignmentImpact = impact;
             report.bodyLost = targetBodyKey;
             /* La colonia nemica viene RAZZIATA, non occupata: il corpo torna
@@ -1795,7 +1796,7 @@
       warRegisterLoss(game, CFG.WAR_MORALE_PER_LOOT * 2 + (wasCapital ? 0.10 : 0), CFG.WAR_PRESSURE_PER_LOSS * 1.5);
       if (raze) {
         removeColony(game, colonyKey, events);
-        bumpIcg(game, 3);
+        bumpIcg(game, 3, 'Colonia rasa al suolo');
         events.push({ kind: 'colony-razed', colonyKey: colonyKey, systemId: sysId,
           civName: civ ? civ.name : battle.attacker.name, wasCapital: wasCapital, impulso: game.timeImpulsi });
         return 'razed';
@@ -1813,7 +1814,7 @@
         civ.power += 15;
       }
       removeColony(game, colonyKey, events);
-      bumpIcg(game, 4);
+      bumpIcg(game, 4, 'Colonia conquistata');
       events.push({ kind: 'colony-conquered', colonyKey: colonyKey, systemId: sysId,
         civName: civ ? civ.name : battle.attacker.name, wasCapital: wasCapital, impulso: game.timeImpulsi });
       return 'conquered';
@@ -2003,7 +2004,7 @@
       }
       if (civ && civ.alive) {
         ST.captureStation(st, civ.id);
-        bumpIcg(game, 2);
+        bumpIcg(game, 2, 'Stazione catturata');
         events.push({ kind: 'station-captured', stationId: st.id, name: st.name,
           systemId: battle.systemId, civName: civ.name, civColor: civ.color, impulso: game.timeImpulsi });
         return 'captured';
@@ -2045,8 +2046,12 @@
     game.battles = (game.battles || []).filter(function (b) { return b.colonyKey !== colonyKey || b.status === 'done'; });
   }
 
-  function bumpIcg(game, n) {
+  /* ICG da eventi di guerra: passa dall'unico punto di scrittura e va nello
+     storico con il motivo (decisione utente 2026-11-21). */
+  function bumpIcg(game, n, label) {
     if (typeof game.icg !== 'number') game.icg = 20;
+    const R = root.ORION.reputation;
+    if (R && R.change) { R.change(game, 'icg', n, 'war', label || 'Evento di guerra'); return; }
     game.icg = Math.max(0, Math.min(100, game.icg + n));
   }
 
@@ -2064,7 +2069,7 @@
     if (alive > 0) return;
     const hard = !!(game.mode && game.mode.modifiers && game.mode.modifiers.gameOver);
     game.defeated = hard ? 'gameover' : 'exile';
-    bumpIcg(game, 6);
+    bumpIcg(game, 6, 'Impero caduto');
     events.push({ kind: 'empire-fallen', hard: hard, impulso: game.timeImpulsi });
   }
 

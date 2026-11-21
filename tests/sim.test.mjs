@@ -198,3 +198,28 @@ describe('viaggi: durata unica e rischio (Revisione 2026, A+B)', () => {
     }
   });
 });
+
+describe('reputazione e ICG: unico punto di scrittura (Revisione 2026)', () => {
+  it('una deriva senza motivo non va nello storico ma fa scattare la soglia', () => {
+    const { O, game } = fresh('rep-drift');
+    game.reputation = 71; O.reputation.ensure(game);
+    const hist = game.repHistory.length;
+    O.reputation.change(game, 'rep', -2);                 // 71 → 69: attraversa 70
+    expect(game.repHistory.length).toBe(hist);
+    expect(game.chronicle.some(e => e && e.kind === 'rep-threshold')).toBe(true);
+  });
+
+  it('una variazione con motivo va nello storico', () => {
+    const { O, game } = fresh('rep-label');
+    O.diplomacy.adjustReputation(game, -4, 'mekhari', 'Servizio Mekhari');
+    expect(game.repHistory[0]).toMatchObject({ kind: 'rep', source: 'mekhari', label: 'Servizio Mekhari' });
+  });
+
+  it('la soglia superata da una deriva non si perde con un ricaricamento', () => {
+    const { O, game } = fresh('rep-reload');
+    game.icg = 59; O.reputation.ensure(game);
+    O.reputation.change(game, 'icg', 2);                  // 59 → 61: attraversa 60
+    const payload = JSON.parse(JSON.stringify(O.save.serialize(game)));
+    expect(payload.chronicle.some(e => e && e.kind === 'icg-threshold')).toBe(true);
+  });
+});

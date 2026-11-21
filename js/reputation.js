@@ -117,6 +117,38 @@
 
   /* Applica il delta e registra in un colpo solo. Usato dai call-site
      nuovi (vita più semplice). Restituisce il valore aggiornato. */
+  /* UNICO punto di scrittura di reputazione e ICG (Revisione 2026).
+     - applica il delta con clamp 0..100;
+     - registra nello storico SOLO se c'è un motivo (label): le variazioni
+       discrete (figure, Mekhari, combattimenti, diplomazia, crisi) sì, le
+       derive passive no (rumore);
+     - controlla SEMPRE le soglie: l'evento di cambio fascia arriva subito,
+       anche se a superarla è una deriva (decisione utente 2026-11-21).
+     Prima esistevano 3 canali e scritture dirette: lo storico era
+     incompleto e le soglie superate fuori canale venivano segnalate in
+     ritardo, o perse dopo un ricaricamento. */
+  function change(game, kind, delta, source, label) {
+    if (!game || !Number.isFinite(delta) || delta === 0) return null;
+    if (kind !== 'rep' && kind !== 'icg') return null;
+    ensure(game);
+    if (label) return applyAndRecord(game, kind, delta, source, label);
+    const field = (kind === 'rep') ? 'reputation' : 'icg';
+    const before = (typeof game[field] === 'number') ? game[field] : (kind === 'rep' ? 50 : 20);
+    game[field] = clamp01(before + delta);
+    detectAndEmitCrossing(game, kind);
+    return game[field];
+  }
+
+  /* Per le derive calcolate altrove con formule proprie (decadimento ICG,
+     ritorno della reputazione verso il bersaglio): dopo averle applicate
+     si chiama questo, così anche loro fanno scattare le soglie. */
+  function checkThresholds(game) {
+    if (!game) return;
+    ensure(game);
+    detectAndEmitCrossing(game, 'rep');
+    detectAndEmitCrossing(game, 'icg');
+  }
+
   function applyAndRecord(game, kind, delta, source, label) {
     if (!game || !Number.isFinite(delta) || delta === 0) return null;
     ensure(game);
@@ -364,6 +396,8 @@
      API pubblica.
      ------------------------------------------------------------------ */
   ORION.reputation = {
+    change: change,
+    checkThresholds: checkThresholds,
     HISTORY_CAP: HISTORY_CAP,
     ICG_THRESHOLDS: ICG_THRESHOLDS,
     REP_THRESHOLDS: REP_THRESHOLDS,

@@ -176,7 +176,7 @@
   }
   function applyRepCost(game, repCost) {
     if (repCost > 0 && root.ORION.diplomacy && root.ORION.diplomacy.adjustReputation) {
-      root.ORION.diplomacy.adjustReputation(game, -repCost);
+      root.ORION.diplomacy.adjustReputation(game, -repCost, 'mekhari', 'Servizio Mekhari');
     }
   }
 
@@ -408,7 +408,7 @@
     colony.stock[resource] = Math.round(((colony.stock[resource] || 0) + amount) * 100) / 100;
     /* Costo di reputazione del mercato grigio (§14, pista Tiranno). */
     if (q.repCost > 0 && root.ORION.diplomacy && root.ORION.diplomacy.adjustReputation) {
-      root.ORION.diplomacy.adjustReputation(game, -q.repCost);
+      root.ORION.diplomacy.adjustReputation(game, -q.repCost, 'mekhari', 'Mercato grigio Mekhari');
     }
     return { ok: true, bought: amount, costCredits: q.costCredits, repCost: q.repCost };
   }

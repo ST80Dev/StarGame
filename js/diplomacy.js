@@ -153,18 +153,17 @@
   function reputation(game) { return Math.round(ensureReputation(game)); }
   function adjustReputation(game, delta, source, label) {
     ensureReputation(game);
-    const before = game.reputation;
-    game.reputation = Math.max(CFG.REP_MIN, Math.min(CFG.REP_MAX, game.reputation + delta));
-    /* M18: registra nello storico SOLO se il chiamante fornisce un label
-       (mutazione discreta narrabile). I drift periodici dal tick.js usano
-       la forma senza label → invisibili allo storico, ma visibili nel
-       valore corrente. */
-    if (label && ORION.reputation && ORION.reputation.record) {
-      const actual = game.reputation - before;
-      if (actual !== 0) ORION.reputation.record(game, 'rep', actual, source || 'diplomacy', label);
+    /* Revisione 2026: passa dall'unico punto di scrittura (storico se c'è
+       un label, soglie sempre). Fallback per i test che non caricano
+       reputation.js. */
+    if (ORION.reputation && ORION.reputation.change) {
+      ORION.reputation.change(game, 'rep', delta, source || 'diplomacy', label);
+      return game.reputation;
     }
+    game.reputation = Math.max(CFG.REP_MIN, Math.min(CFG.REP_MAX, game.reputation + delta));
     return game.reputation;
   }
+
 
   /* ---------- Relazione per-civiltà ---------- */
   function ensureRelation(civ) {
@@ -665,6 +664,9 @@
       const target = Math.max(CFG.REP_MIN, Math.min(CFG.REP_MAX, 50 + (light - dark) * 40));
       game.reputation += (target - game.reputation) * CFG.REP_DRIFT;
       game.reputation = Math.max(CFG.REP_MIN, Math.min(CFG.REP_MAX, game.reputation));
+      /* Deriva passiva: non va nello storico, ma una soglia superata così
+         genera comunque il suo evento (decisione utente 2026-11-21). */
+      if (ORION.reputation && ORION.reputation.checkThresholds) ORION.reputation.checkThresholds(game);
 
       /* M11 Fase B (decisione #94) — drift positivo durante trattato di
          passaggio: il libero transito aumenta lentamente la fiducia
