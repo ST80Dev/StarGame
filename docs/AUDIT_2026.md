@@ -201,6 +201,17 @@ Rimandato (motivo): cronaca come `{kind,data}` (tocca ~870 righe di formattazion
 `legDuration` unico (cambia le probabilità d'incidente reali: decisione di gameplay) · `canPay/pay` unico (6 varianti
 con semantiche diverse di clamp) · façade unica reputazione/ICG/disposizione · scomposizione `main.js`/`time.js`.
 
+## 7c. Viaggi e incidenti (2026-11-21)
+
+Simulazione su 1130 destinazioni (20 partite) + 160 viaggi reali: un incidente è quasi sempre lieve
+(ritardo 50%, usura 30%, critico 15% → perdita scafo solo se pericolo > 50, scoperta bonus 5%). Perdita scafo per
+viaggio: 0% a 1-2 salti, 0,4% a 3, 1,6% a 4, 5,6% a 6.
+- **A ✅** scheda Esplorazione: "Rischio incidente" + "Perdita scafo" separati, dettaglio esiti nel tooltip.
+- **B ✅** `fleet.legDuration` = unica durata (classe + Iperguida + Navigatore + deriva + FSP) per viaggio reale e
+  tutte le stime (`routeImpulsi` → wizard, viveri, rischio). Il Navigatore ora riduce anche il rischio.
+- **C → M20** ritaratura: tetto 55% raggiunto a 3-4 salti (oltre la distanza non conta), esperienza equipaggio
+  quasi ininfluente (max −20%).
+
 ## 8. Decisioni utente (2026-11-20)
 
 1. **B3 (Iperguida IA):** ✅ correggere — `tempoLeg` riceve il moltiplicatore come parametro; le IA non beneficiano più della tech del giocatore. Cambio di gameplay accettato.

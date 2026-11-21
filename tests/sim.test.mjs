@@ -154,3 +154,47 @@ describe('comandi (livello comandi, Revisione 2026)', () => {
     expect(civ.truceUntil).toBe(game.timeImpulsi + 200);
   });
 });
+
+describe('viaggi: durata unica e rischio (Revisione 2026, A+B)', () => {
+  function farTarget(O, game, hops) {
+    const g = game.galaxy;
+    for (let t = 0; t < g.systems.length; t++) {
+      const p = O.galaxy.bfsPath(g, g.homeId, t);
+      if (p && p.length - 1 === hops) return { t, p };
+    }
+    throw new Error('nessun bersaglio a ' + hops + ' hop');
+  }
+
+  it("l'ingegnere (Navigatore) accorcia la stima E il rischio d'incidente", () => {
+    const { O, game } = fresh('trav-nav');
+    const { t, p } = farTarget(O, game, 2);
+    const base = { ships: [{ kind: 'explorer' }], crew: [{ xp: 0 }], route: p, orders: { toSysId: t }, location: { systemId: game.galaxy.homeId } };
+    const nav = Object.assign({}, base, { officers: [{ id: 'o1', role: 'ingegnere', xp: 0 }] });
+    expect(O.fleet.routeImpulsi(game.galaxy, nav, p)).toBeLessThan(O.fleet.routeImpulsi(game.galaxy, base, p));
+  });
+
+  it('la stima coincide con la durata reale assegnata al viaggio', () => {
+    const { O, game } = fresh('trav-real');
+    O.time.advance(game, 70);
+    const key = game.homePlanetKey, home = game.colonies[key];
+    const { t, p } = farTarget(O, game, 1);
+    home.ships.explorer = (home.ships.explorer || 0) + 1;
+    const fleet = O.fleet.createFleet(game, key, null).fleet;
+    O.fleet.assignShips(game, fleet, key, 'explorer', 1);
+    O.fleet.assignCrew(game, fleet, key, 1);
+    const est = O.fleet.routeImpulsi(game.galaxy, fleet, p);
+    expect(O.fleet.setOrder(game, fleet, { type: 'move', toSysId: t }).ok).toBe(true);
+    O.time.advance(game, 1);
+    expect(fleet.legTotal).toBe(est);
+  });
+
+  it('gli esiti stimati sommano alla probabilità di incidente', () => {
+    const { O, game } = fresh('trav-out');
+    for (const hops of [1, 3, 5]) {
+      const { t } = farTarget(O, game, hops);
+      const r = O.fleet.estimateTravelOutcome(game, game.galaxy.homeId, t, { crewXp: 0 });
+      expect(r.delay + r.wear + r.shipLoss + r.bonus).toBeCloseTo(r.chance, 10);
+      expect(r.shipLoss).toBeLessThanOrEqual(r.chance * 0.15 + 1e-12);
+    }
+  });
+});
