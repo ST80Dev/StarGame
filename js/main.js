@@ -6414,7 +6414,7 @@ function renderStabilityView(stage) {
 
   function historyHtml(recent) {
     if (!recent.length) {
-      return '<p class="lp-empty">Nessuna mutazione registrata. Le scelte significative (dispacci, crisi, diplomazia) compariranno qui.</p>';
+      return '<p class="lp-empty">Nessuna variazione registrata. Qui compaiono quelle con un motivo: diplomazia, dispacci e crisi, eventi di guerra, figure, Mekhari, spionaggio. Le derive lente non sono elencate.</p>';
     }
     return '<ol class="stab-history">' + recent.map(function (e) {
       const sign = e.delta > 0 ? '+' : '';

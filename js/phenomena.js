@@ -1045,6 +1045,7 @@
     }
     if (icgDrip > 0) {
       game.icg = Math.max(0, Math.min(100, (typeof game.icg === 'number' ? game.icg : 20) + icgDrip));
+      if (ORION.reputation && ORION.reputation.checkThresholds) ORION.reputation.checkThresholds(game);
     }
   }
 

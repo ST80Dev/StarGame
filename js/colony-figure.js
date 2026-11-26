@@ -409,11 +409,19 @@
   /* Hook chiamato da time.js → removeColony quando una colonia sparisce
      con una figura assegnata. Effetto: −3 reputazione + evento cronaca
      'figure-lost'. Recovery-friendly: la figura non torna nel pool. */
+  /* Variazione di reputazione dalle figure: unico punto di scrittura
+     (storico + soglie). Fallback per i test senza reputation.js. */
+  function repChange(game, delta, label) {
+    var R = root.ORION && root.ORION.reputation;
+    if (R && R.change) R.change(game, 'rep', delta, 'figure', label);
+    else game.reputation = Math.max(0, Math.min(100, game.reputation + delta));
+  }
+
   function onColonyLost(game, colony, colonyKey, events) {
     var fig = colony && colony.figure;
     if (!fig) return;
     if (game && typeof game.reputation === 'number') {
-      game.reputation = Math.max(0, Math.min(100, game.reputation - 3));
+      repChange(game, -3, 'Figura perduta con la colonia: ' + (fig.name || '—'));
     }
     if (events) {
       events.push({
@@ -446,7 +454,7 @@
     function notify(f) {
       var honored = rankIndexForXp(f.xp || 0) >= 2;
       if (honored && typeof game.reputation === 'number') {
-        game.reputation = Math.max(0, Math.min(100, game.reputation + 2));
+        repChange(game, 2, 'Fine mandato onorato: ' + (f.name || '—'));
       }
       if (events) {
         events.push({

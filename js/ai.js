@@ -1191,6 +1191,8 @@
     const icgDecayBonus = (CF && CF.icgDecayBonusFromFigures) ? CF.icgDecayBonusFromFigures(game) : 0;
     game.icg += (20 - game.icg) * (CFG.ICG_DECAY + icgDecayBonus);
     game.icg = Math.max(0, Math.min(100, game.icg));
+    /* Deriva ICG: niente storico, ma le soglie scattano subito. */
+    if (ORION.reputation && ORION.reputation.checkThresholds) ORION.reputation.checkThresholds(game);
 
     /* --- Fase B (decisione #52 §13.6 §13.8): coesione di sistema +
        federazioni emergenti. Entrambi i moduli sono PURI consumer dello
