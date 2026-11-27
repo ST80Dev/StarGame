@@ -212,23 +212,7 @@
        completo ≥6. Persistenza paga: il FLOOR garantisce un guadagno minimo
        a ogni visita → grindabile con flotta minima. (Tunabile in M20.) */
     INTEL_RATE: 0.2,
-    INTEL_FLOOR: 0.1,
-
-    /* MOBILITAZIONE (2026-06-26): coefficienti contestuali per stimare la
-       forza che una civ schiera SU UN PUNTO PRECISO (colonia/sistema), non
-       in astratto. Tutto vive qui — niente magic numbers nei display. */
-    MOB: {
-      /* Modulatori per stato della relazione vs giocatore. */
-      REL: { alliance: 0.0, peace: 0.40, truce: 0.60, war: 1.00, hostile: 0.85 },
-      /* Boost mobilitazione per la capitale (planets[0]); altre colonie 1.0. */
-      CAPITAL_WEIGHT: 1.5,
-      /* Ogni incursione AI inbound già in corso "impegna" N unità che NON
-         difendono casa. Penalty espressa in unità (sottratte dal totale). */
-      INCURSION_UNIT_COST: 1,
-      /* Civ reduce dopo una sconfitta recente: −15% per Ι, con decadimento. */
-      LAST_BATTLE_LOSS_PENALTY: 0.85,
-      LAST_BATTLE_RECENCY_I: 200
-    }
+    INTEL_FLOOR: 0.1
   };
 
   /* ------------------------------------------------------------------
@@ -1932,9 +1916,8 @@
        - garrison.CFG.FP_WEIGHT              (peso FP nella P)
        - techCombatMul(civ)                  (mod tecnologia)
        - VOCATIONS[voc].hpMul/fpMul/massMul  (mod carattere)
-       - VOCATIONS[voc].warMul × PHASES[ph].warMul × MOB.REL[rel]
-         × CAPITAL_WEIGHT / colony-weight    (mod mobilitazione)
-     Niente magic number.
+     Colonia/sistema = la forza che la battaglia schiererebbe davvero
+     (materialize → combat.forceFromMaterialized). Niente magic number.
      ------------------------------------------------------------------ */
 
   /* P di una "unità AI" tipica per quella civ, con composizione tech+voc. */
@@ -1948,66 +1931,6 @@
     const uHp = Math.round(C.AI_UNIT_HP * tech.hpMul * vHp);
     const uFp = Math.round(C.AI_UNIT_FP * tech.fpMul * vFp);
     return uHp + uFp * GAR.FP_WEIGHT;
-  }
-
-  /* Unità "totali" che la civ potrebbe materializzare ovunque. */
-  function aiTotalMobUnits(game, civ) {
-    const tech = techCombatMul(game, civ);
-    const voc = VOCATIONS[civ.vocation] || VOCATIONS.sedentari;
-    const vMass = voc.massMul != null ? voc.massMul : 1;
-    return Math.max(1, Math.round((civ.power || 0) / 25 * tech.massMul * vMass));
-  }
-
-  /* Moltiplicatore di mobilitazione (0..N) per UN PUNTO PRECISO, modulato da
-     vocazione (warMul), fase (warMul), relazione vs giocatore, penalità per
-     sconfitta recente. */
-  function aiMobMul(game, civ) {
-    const voc = VOCATIONS[civ.vocation] || VOCATIONS.sedentari;
-    const phase = PHASES[civ.phase] || PHASES.growth;
-    let rel = (root.ORION.diplomacy && root.ORION.diplomacy.effectiveRelation)
-      ? root.ORION.diplomacy.effectiveRelation(game, civ)
-      : (civ.relation || 'peace');
-    /* effectiveRelation può tornare anche 'hostile'/'cordial'/'friendly'; per
-       la mobilitazione li mappo su disposizione: ostile≈war-like, gli altri
-       come pace. */
-    if (rel === 'cordial' || rel === 'friendly') rel = 'peace';
-    const relMul = (CFG.MOB.REL[rel] != null) ? CFG.MOB.REL[rel] : CFG.MOB.REL.peace;
-    let mul = (voc.warMul || 1) * (phase.warMul || 1) * relMul;
-    if (civ.lastBattle && civ.lastBattle.result === 'loss') {
-      const dt = (game.timeImpulsi || 0) - (civ.lastBattle.impulso || 0);
-      if (dt >= 0 && dt < CFG.MOB.LAST_BATTLE_RECENCY_I) mul *= CFG.MOB.LAST_BATTLE_LOSS_PENALTY;
-    }
-    return Math.max(0, mul);
-  }
-
-  /* Penalità "truppe già impegnate altrove": ogni incursione AI inbound già
-     in corso da QUESTA civ sottrae N unità (default 1 per incursione). */
-  function aiEngagementCost(game, civ) {
-    if (!game || !Array.isArray(game.incursions)) return 0;
-    let n = 0;
-    for (let i = 0; i < game.incursions.length; i++) {
-      const inc = game.incursions[i];
-      if (inc && inc.kind === 'ai' && inc.civId === civ.id) n++;
-    }
-    return n * (CFG.MOB.INCURSION_UNIT_COST || 0);
-  }
-
-  /* Pesi delle colonie per la distribuzione mobilitazione: capitale boost
-     fisso (CFG.MOB.CAPITAL_WEIGHT), altre seed-deterministiche in [0.7, 1.2]. */
-  function aiColonyWeights(game, civ) {
-    const planets = civ.planets || [];
-    if (!planets.length) return { weights: [], sum: 0 };
-    const seed = (game && game.seed) || 0;
-    const rng = root.ORION.rng && root.ORION.rng.makeRng
-      ? root.ORION.rng.makeRng(seed + ':aimob:' + civ.id)
-      : null;
-    const weights = planets.map(function (pk, idx) {
-      if (idx === 0) return CFG.MOB.CAPITAL_WEIGHT || 1.5;
-      const r = rng ? rng.float() : 0.5;
-      return 0.7 + r * 0.5;
-    });
-    const sum = weights.reduce(function (a, b) { return a + b; }, 0) || 1;
-    return { weights: weights, sum: sum };
   }
 
   /* Presenza reale di flotte AI ferme in un sistema (orbiting/docked) per
@@ -2052,45 +1975,23 @@
       return { real: fleetP, mobilizable: 0, total: fleetP, components: { presidio: fleetP } };
     }
 
-    const pPerUnit = aiPowerPerUnit(game, civ);
-    const totalUnits = aiTotalMobUnits(game, civ);
-    const mobMul = aiMobMul(game, civ);
-    const engagement = aiEngagementCost(game, civ);
-    const availableUnits = Math.max(0, totalUnits * mobMul - engagement);
-
-    if (targetKind === 'colony') {
-      const planetKey = String(targetRef);
-      const parts = planetKey.split(':');
-      const sid = Number(parts[0]);
-      const planets = civ.planets || [];
-      const idx = planets.indexOf(planetKey);
-      const ws = aiColonyWeights(game, civ);
-      let colonyShare = 0;
-      if (idx >= 0 && ws.sum > 0) colonyShare = ws.weights[idx] / ws.sum;
-      const colonyUnits = Math.max(0, Math.round(availableUnits * colonyShare));
-      const mobilizable = colonyUnits * pPerUnit;
-      const real = realFleetPowerAtSystem(game, civ.id, sid);
+    /* Colonia o sistema: la battaglia vera schiera ai.materialize, cioè
+       TUTTA la forza della civiltà (le flotte ambientali in orbita non
+       partecipano). La stima mostra esattamente quella (Revisione 2026,
+       docs/AI_FORZA_MILITARE.md opzione A): prima ripartiva la forza tra le
+       colonie e la riduceva per la relazione → in media il 4% del reale. */
+    if (targetKind === 'colony' || targetKind === 'system') {
+      const sid = (targetKind === 'colony') ? Number(String(targetRef).split(':')[0]) : Number(targetRef);
+      const C = root.ORION.combat;
+      const GAR = root.ORION.garrison;
+      const w = (GAR && GAR.CFG && GAR.CFG.FP_WEIGHT) || 8;
+      const desc = materialize(game, civ, sid);
+      const force = C.forceFromMaterialized(desc, 'B');
+      let p = 0;
+      for (let i = 0; i < force.combatants.length; i++) p += force.combatants[i].hp + force.combatants[i].fp * w;
       return {
-        real: real, mobilizable: mobilizable, total: real + mobilizable,
-        components: { fleetInOrbit: real, mobilizable: mobilizable, units: colonyUnits, pPerUnit: pPerUnit }
-      };
-    }
-
-    if (targetKind === 'system') {
-      const sid = Number(targetRef);
-      const planets = civ.planets || [];
-      const ws = aiColonyWeights(game, civ);
-      let sumShare = 0;
-      for (let i = 0; i < planets.length; i++) {
-        const parts = planets[i].split(':');
-        if (Number(parts[0]) === sid && ws.sum > 0) sumShare += ws.weights[i] / ws.sum;
-      }
-      const sysUnits = Math.max(0, Math.round(availableUnits * sumShare));
-      const mobilizable = sysUnits * pPerUnit;
-      const real = realFleetPowerAtSystem(game, civ.id, sid);
-      return {
-        real: real, mobilizable: mobilizable, total: real + mobilizable,
-        components: { fleetInOrbit: real, mobilizable: mobilizable, units: sysUnits, pPerUnit: pPerUnit }
+        real: 0, mobilizable: p, total: p,
+        components: { units: force.combatants.length, pPerUnit: force.combatants.length ? Math.round(p / force.combatants.length) : 0 }
       };
     }
 

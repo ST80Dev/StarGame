@@ -223,3 +223,23 @@ describe('reputazione e ICG: unico punto di scrittura (Revisione 2026)', () => {
     expect(payload.chronicle.some(e => e && e.kind === 'icg-threshold')).toBe(true);
   });
 });
+
+describe('forza militare IA: stima = battaglia (docs/AI_FORZA_MILITARE.md, opzione A)', () => {
+  it('la stima "se attacchi" coincide con la forza schierata in battaglia', () => {
+    const { O, game } = fresh('ai-force');
+    O.time.advance(game, 600);
+    let checked = 0;
+    for (const c of game.civs) {
+      if (!c.alive || !c.planets || !c.planets.length) continue;
+      const pk = c.planets[0];
+      const sid = Number(pk.split(':')[0]);
+      const est = O.ai.aiCombatPowerAt(game, c, 'colony', pk);
+      const force = O.combat.forceFromMaterialized(O.ai.materialize(game, c, sid), 'B');
+      const p = force.combatants.reduce((x, k) => x + k.hp + k.fp * 8, 0);
+      expect(est.total).toBe(p);
+      expect(est.total).toBeGreaterThan(0);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(3);
+  });
+});

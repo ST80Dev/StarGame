@@ -79,7 +79,7 @@ Con relazione di guerra lo scarto si riduce (moltiplicatore 1,0) ma resta la div
 
 | Opzione | Cosa cambia | Costo |
 |---|---|---|
-| **A. Allineare la stima alla battaglia** (minimo) | La UI mostra la forza che combatterebbe davvero (`materialize`), con la stessa fascia d'incertezza | Basso. Solo calcolo della stima |
+| **A. Allineare la stima alla battaglia** ✅ fatto (2026-11-27) | La UI mostra la forza che combatterebbe davvero (`materialize`), con la stessa fascia d'incertezza | Basso. Solo calcolo della stima |
 | **B. Mobilitazione anche in battaglia** | Le battaglie usano la stessa formula della stima (ripartizione tra colonie, relazione, truppe impegnate): attaccare una colonia periferica diventa più facile della capitale | Medio. Cambia molto l'equilibrio delle guerre |
 | **C. Forza "fisica"** | `civ.power` si incarna in flotte militari reali sulla mappa: distruggerle indebolisce davvero la civiltà, la forza si sposta | Alto. Riprogettazione di IA, combattimento e prestazioni |
 

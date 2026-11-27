@@ -9041,11 +9041,9 @@ function renderCivDetail(stage, c) {
       const fleetTag = (intelRank >= 3 && fleetP > 0)
         ? ' <span class="civ-detail__col-tag" style="color:#ffaa66;border-color:rgba(255,170,102,0.30);background:rgba(255,170,102,0.10)" title="Presenza reale: flotte AI ferme in orbita o al porto in questo sistema. NON è una stima.">⚡ in orbita P ' + fleetP + '</span>'
         : '';
-      /* Stima CONTESTUALE "se attacchi questa colonia, cosa affronti?".
-         Combina la presenza reale (flotte in orbita) con la quota di unità
-         che la civ può materializzare LÌ, modulata da vocazione, fase,
-         relazione vs te, peso della colonia (capitale boost). A L3 range
-         ±20%, a L4 esatto. Vedi ORION.ai.aiCombatPowerAt. */
+      /* "Se attacchi questa colonia, cosa affronti?": la forza che la
+         battaglia schiererebbe davvero (tutta la forza della civiltà, vedi
+         ORION.ai.aiCombatPowerAt). A L3 range ±20%, a L4 esatto. */
       let attackTag = '';
       if (intelRank >= 3 && AI.aiCombatPowerAt) {
         const est = AI.aiCombatPowerAt(g, c, 'colony', planetKey);
@@ -9054,10 +9052,10 @@ function renderCivDetail(stage, c) {
           const lo = exact ? est.total : Math.max(1, Math.round(est.total * 0.80));
           const hi = exact ? est.total : Math.round(est.total * 1.20);
           const label = exact ? ('= ' + est.total) : ('≈ ' + lo + '–' + hi);
-          const tip = 'Forza che difenderebbe questa colonia se la attaccassi adesso: ' +
-            (est.real || 0) + ' P reali (flotte in orbita) + ' + est.mobilizable + ' P mobilizzabili (' +
+          const tip = 'Forza che difenderebbe questa colonia se la attaccassi adesso: tutta la forza militare della civiltà (' +
             (est.components && est.components.units ? est.components.units : 0) + ' unità × ' +
             (est.components && est.components.pPerUnit ? est.components.pPerUnit : 0) + ' P/unità). ' +
+            'Le flotte in orbita non sono incluse: non partecipano alla difesa. ' +
             (exact ? 'Valore esatto a Approfondito.' : 'Range a Completo, esatto a Approfondito.');
           attackTag = ' <span class="civ-detail__col-tag" style="color:#ff7676;border-color:rgba(255,118,118,0.35);background:rgba(255,118,118,0.10)" title="' + escapeHtml(tip) + '">⚔ se attacchi P ' + label + '</span>';
         }
