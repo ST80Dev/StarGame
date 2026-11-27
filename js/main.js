@@ -11904,11 +11904,12 @@ ORION.prefs = Object.assign({}, DEFAULT_PREFS);
    preferenza di dispositivo, persistita in localStorage['orion.prefs'],
    NON nel save. */
 const SURFACE_LEVELS = {
-  /* Palette Plancia (Revisione 2026, Fase 3): grafite neutra. */
-  'scuro':       { label: 'Scuro',       surface: '17 21 27', violet: '22 20 30', deep: '9 11 15' },
-  'medio-scuro': { label: 'Medio-scuro', surface: '21 26 33', violet: '27 25 38', deep: '11 14 19' },
-  'medio':       { label: 'Medio',       surface: '29 36 45', violet: '35 32 48', deep: '16 20 26' },
-  'chiaro':      { label: 'Chiaro',      surface: '38 46 57', violet: '44 40 60', deep: '22 27 34' }
+  /* Palette Plancia (Revisione 2026): pannelli grigio scuro, fondo vista
+     blu-ardesia. Ogni livello sposta insieme pannelli e fondo. */
+  'scuro':       { label: 'Scuro',       surface: '28 32 38', violet: '32 30 42', deep: '19 25 37' },
+  'medio-scuro': { label: 'Medio-scuro', surface: '36 40 47', violet: '40 38 52', deep: '26 34 50' },
+  'medio':       { label: 'Medio',       surface: '46 51 59', violet: '50 47 64', deep: '33 43 63' },
+  'chiaro':      { label: 'Chiaro',      surface: '58 64 73', violet: '62 58 78', deep: '41 53 77' }
 };
 const SURFACE_ORDER = ['scuro', 'medio-scuro', 'medio', 'chiaro'];
 

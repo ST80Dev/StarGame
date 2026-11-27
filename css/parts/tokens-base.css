@@ -13,16 +13,19 @@
      Grafite neutra quasi monocroma: il colore compare solo per stati e
      concetti (UI_GUIDE §1). Nessun glow. Ogni tinta ha anche la forma
      `-rgb` per le trasparenze: rgb(var(--c-accent-rgb) / .2). */
-  --c-void:        #0b0e13;   /* fondo pagina                          */
-  --c-space:       #10141a;   /* fondo 2                               */
-  --c-deep:        #151a21;   /* = pannello                            */
+  --c-void:        #121519;   /* fondo pagina (più scuro dei pannelli)  */
+  --c-space:       #171b21;   /* fondo 2                               */
+  --c-deep:        #24282f;   /* = pannello                            */
 
   /* Superfici: UN SOLO knob RGB; l'alpha vive per-uso. Regolabili dal
      giocatore (Preferenze → applySurfaceLevel, 4 livelli di grafite). */
-  --c-surface-rgb:        21 26 33;    /* pannello #151a21 */
-  --c-surface-violet-rgb: 27 25 38;
-  --c-bg-deep-rgb:        11 14 19;    /* viewport / dashboard */
-  --c-surface2:    #1d242d;            /* card dentro un pannello */
+  /* Feedback utente 2026-11-27: barre laterali grigio scuro (non nero),
+     centro delle viste più chiaro con sfumatura blu (non "scuro cosmico"). */
+  --c-surface-rgb:        36 40 47;    /* pannello #24282f — grigio scuro neutro */
+  --c-surface-violet-rgb: 40 38 52;
+  --c-bg-deep-rgb:        26 34 50;    /* fondo blu-ardesia: bordi viewport, dashboard, riquadri vista */
+  --c-view-rgb:           44 58 84;    /* centro della scena (mappa, sistema, pianeta) */
+  --c-surface2:    #2c3139;            /* card dentro un pannello */
 
   --c-panel:       rgb(var(--c-surface-rgb) / 0.96);
   --c-panel-solid: rgb(var(--c-surface-rgb));
@@ -45,7 +48,7 @@
 
   --c-text:        #e8edf2;
   --c-text-soft:   #aab4bf;
-  --c-text-faint:  #808b97;
+  --c-text-faint:  #8f99a5;   /* alzato: leggibile sul grigio dei pannelli */
   /* Alias storici (usati nel CSS/JS esistente). */
   --c-text-dim:    var(--c-text-faint);
   --c-muted:       var(--c-text-faint);

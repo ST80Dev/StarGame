@@ -35,21 +35,22 @@ compare **solo** per stati e concetti. **Nessun glow.** Token in `css/parts/toke
 | **Buono** | `--c-good` | `#63c98f` | ok, surplus, mercato, cibo |
 | **Allerta** | `--c-warn` | `#dcbc5b` | warn, energia |
 | **Critico** | `--c-bad` | `#e2697a` | crit, militare, civiltà ostile |
-| **Testo** | `--c-text` / `--c-text-soft` / `--c-text-faint` | `#e8edf2` / `#aab4bf` / `#808b97` | primario / secondario / tenue |
+| **Testo** | `--c-text` / `--c-text-soft` / `--c-text-faint` | `#e8edf2` / `#aab4bf` / `#8f99a5` | primario / secondario / tenue |
 | **Linee** | `--c-line-rgb` → `--c-border` / `-soft` / `-strong` | `170 190 210` a .26 / .12 / .40 | bordi e separatori |
 
 Varianti scure/chiare di una tinta: `color-mix(in srgb, var(--c-accent) 55%, #000)` / `… 70%, #fff)`.
-Contrasto: tutte le tinte ≥ 5:1 sul pannello.
+Contrasto: testo tenue `#8f99a5` ≥ 4.5:1 sul pannello grigio.
 
 ### Sfondi / superfici
 
 | Ruolo | Token | Valore | Uso |
 |---|---|---|---|
-| **Fondo pagina** | `--c-void` / `--c-space` | `#0b0e13` / `#10141a` | body, starfield |
-| **Pannello** | `--c-surface-rgb` | `21 26 33` (`#151a21`) | pannelli, card, sheet — `rgb(var(--c-surface-rgb) / α)` |
-| **Card nel pannello** | `--c-surface2` | `#1d242d` | blocchi annidati |
-| **Superficie viola** | `--c-surface-violet-rgb` | `27 25 38` | blocchi a tinta viola |
-| **Fondo profondo** | `--c-bg-deep-rgb` | `11 14 19` | viewport, Dashboard Impero |
+| **Fondo pagina** | `--c-void` / `--c-space` | `#121519` / `#171b21` | body, starfield (più scuro dei pannelli) |
+| **Pannello** | `--c-surface-rgb` | `36 40 47` (`#24282f`) | barre laterali, card, sheet — grigio scuro neutro, `rgb(var(--c-surface-rgb) / α)` |
+| **Card nel pannello** | `--c-surface2` | `#2c3139` | blocchi annidati |
+| **Superficie viola** | `--c-surface-violet-rgb` | `40 38 52` | blocchi a tinta viola |
+| **Centro della scena** | `--c-view-rgb` | `44 58 84` | centro del riquadro mappa/sistema/pianeta (blu-ardesia) |
+| **Fondo vista** | `--c-bg-deep-rgb` | `26 34 50` | bordi del riquadro centrale, dashboard, riquadri di vista |
 
 > Le **Preferenze** (luminosità) offrono 4 livelli di grafite (`SURFACE_LEVELS` in `main.js`) che sovrascrivono
 > i tre knob RGB a runtime. Preferenza di dispositivo, **mai nel save**.
@@ -346,3 +347,4 @@ Modifiche a UI_GUIDE.md vanno discusse con l'utente PRIMA di applicarle (come pe
 - **2026-06-07** — Luminosità superfici regolabile (decisione #67). Su richiesta utente, default riportato verso lo **scuro** (livello *medio-scuro*: `--c-surface-rgb` 41,55,98 → **33,44,82**; bg-deep 28,37,76 → **21,28,60**) e, grazie al knob unico, **esposta nelle Preferenze** (ingranaggio in HUD, già presente): 4 livelli *Scuro · Medio-scuro · Medio · Chiaro* applicati a runtime (`applySurfaceLevel`/`SURFACE_LEVELS` in `main.js`), live + persistiti in `localStorage['orion.prefs']` (mai nel save). Stili `.prefs-row--levels`/`.prefs-levels`/`.prefs-level`.
 - **2026-06-12** — Navigazione a zoom Galassia↔Sistema↔Pianeta (decisione #80). Nuovo pattern di transizione: `.is-zoom-entering` + `@keyframes zoom-fade-in` (200ms ease-out, **rispetta `prefers-reduced-motion`**) — mini-dissolvenza dell'holder che compare cambiando livello, applicata via `zoomFadeIn(holder)` in `main.js` su tutte le transizioni (scroll, bottoni, doppio-click). Durata coerente con `--transition` (§7). Nessun nuovo token, nessuna modifica agli standard esistenti. La navigazione sx (nav launcher) resta la via touch su mobile/tablet: lo scroll-in/out è **additivo**, non sostituisce i controlli esistenti.
 - **2026-11-27** — **Revisione 2026, Fase 3 — palette Plancia** (scelta utente tra 5 proposte). Grafite neutra, colore solo per stati/concetti, **nessun glow**, radius 5/3. ~1.260 colori scritti a mano nel CSS sostituiti dai token (con trasparenza e varianti scure/chiare via `color-mix`); token `-rgb` per ogni tinta; `--c-info` nuovo; alias storici (`--c-text-dim`, `--c-amber`, `--c-muted`, `--font-mono`, `--radius-md`…) definiti. Floor 0.70rem applicato (45 dichiarazioni). Marcatori d'angolo e titoli pannello neutri. `style.css` diviso in `css/parts/*.css` contigui (ordine e cascata invariati). Card Dashboard Impero: etichetta sopra il valore (niente più sovrapposizioni). Layout telefono rimosso (Fase 2).
+- **2026-11-27** — Ritocco Plancia (feedback utente): barre laterali **grigio scuro** (`#24282f`, non quasi-nero) per leggibilità; centro delle viste **blu-ardesia più chiaro** (`--c-view-rgb` 44 58 84 → bordo `--c-bg-deep-rgb` 26 34 50) al posto dello "scuro cosmico"; testo tenue alzato a `#8f99a5`; 4 livelli di luminosità ricalibrati di conseguenza.
