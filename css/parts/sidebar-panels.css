@@ -1,0 +1,1703 @@
+/* Orion Empires — Plance sx/dx, action bar, plancia AI, intel, pirati, coesione, scoperta, commercio, stazioni (estratto da style.css, Revisione 2026 Fase 3; ordine invariato). */
+/* =====================================================================
+   Decisione #50 — Refactor sidebar architecture
+   Sx = launcher (Roster + Nav + Diplomazia/Ricerca/Mercato + Cronaca)
+   Dx = Plancia Operativa con selector colonia pinnata, indipendente dalla nav
+   Centro = scena + action bar contestuale (Colonizza / Apri dossier / ...)
+   ===================================================================== */
+
+.panel__content--launcher {
+  padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 10px;
+  min-height: 0;
+}
+
+/* =====================================================================
+   Plancia d'Impero — linguette a icone (decisione UI: stesso meccanismo
+   e stile della Plancia Operativa dx). Riusa .planet-tabs/.planet-tab →
+   glow identico; qui solo il layout del corpo della linguetta attiva. */
+.lp-tabs { margin-bottom: 8px; flex-shrink: 0; }
+/* Header sticky della Plancia d'Impero: nome impero + nav (Galassia/Gruppo/
+   Sistema/Pianeta) + linguette schede restano visibili durante lo scroll del
+   corpo della linguetta attiva. Usa il fondo solido del pannello per coprire
+   il contenuto che scorre sotto. */
+.lp-stickyhead {
+  position: sticky;
+  top: -1px;
+  z-index: 3;
+  background: var(--c-panel-solid, rgb(var(--c-surface-rgb)));
+  padding-top: 1px;
+  margin: -1px -2px 0;
+  padding-left: 2px;
+  padding-right: 2px;
+}
+.lp-tab-body {
+  display: flex; flex-direction: column; gap: 4px;
+  flex: 1 1 auto; min-height: 0;
+}
+.lp-tab-body__count {
+  font-family: var(--font-data);
+  font-size: 0.74rem; color: var(--c-text-soft);
+  letter-spacing: 0.04em; text-transform: uppercase;
+  margin-bottom: 4px;
+}
+/* Cronaca nella linguetta: scorre internamente fino al fondo della sidebar. */
+.lp-tab-body--chron {
+  overflow-y: auto;
+  font-size: 0.84rem; line-height: 1.5;
+  padding: 6px 4px;
+  background: rgb(var(--c-surface-rgb) / 0.4);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+}
+/* Segmented control "Importanti / Tutto" sopra la lista (feedback utente
+   2026-06-15): silenzia gli eventi di routine. UI minimale, riusa la
+   palette dei semantici (UI_GUIDE §7) e lo stile delle linguette. */
+.chron-filter {
+  display: flex; gap: 4px;
+  margin: 2px 4px 8px 4px;
+}
+.chron-filter__btn {
+  flex: 1;
+  background: rgb(var(--c-surface-rgb) / 0.5);
+  color: var(--c-text-soft);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  font-family: inherit;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+.chron-filter__btn:hover {
+  background: rgb(var(--c-surface-rgb) / 0.75);
+  color: var(--c-text);
+}
+.chron-filter__btn.is-active {
+  background: rgb(var(--c-surface-rgb) / 0.9);
+  color: var(--c-accent);
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 1px rgb(var(--c-accent-rgb) / 0.18);
+}
+/* Linguette di sezione cronaca (Galassia/Colonie) — sostituiscono il
+   segmented control filtro Importanti/Tutto. Stessa struttura visiva di
+   .chron-filter ma con badge "non letti" pulsante (decisione 2026-06-17).
+   L'aura è limitata al bottone non-attivo: il bottone attivo ha già il
+   focus dell'utente. */
+.chron-sections {
+  display: flex; gap: 4px;
+  margin: 2px 4px 8px 4px;
+}
+.chron-sections__btn {
+  position: relative;
+  flex: 1;
+  background: rgb(var(--c-surface-rgb) / 0.5);
+  color: var(--c-text-soft);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  font-family: inherit;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+.chron-sections__btn:hover {
+  background: rgb(var(--c-surface-rgb) / 0.75);
+  color: var(--c-text);
+}
+.chron-sections__btn.is-active {
+  background: rgb(var(--c-surface-rgb) / 0.9);
+  color: var(--c-accent);
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 1px rgb(var(--c-accent-rgb) / 0.18);
+}
+.chron-sections__btn.has-alert {
+  border-color: var(--c-accent-warm, var(--c-accent-warm));
+  color: var(--c-text);
+  animation: chronSectionPulse 1.6s ease-in-out infinite;
+}
+.chron-sections__dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--c-accent-warm, var(--c-accent-warm));
+  box-shadow: none;
+  vertical-align: middle;
+}
+@keyframes chronSectionPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(var(--c-warm-rgb) / 0); }
+  50%      { box-shadow: 0 0 0 2px rgb(var(--c-warm-rgb) / 0.35); }
+}
+.lp-tab-body--chron .chronicle__log {
+  display: flex; flex-direction: column; gap: 5px;
+  margin: 0; padding: 0 4px; list-style: none;
+}
+.lp-tab-body--chron .chronicle__entry {
+  padding-left: 12px; position: relative;
+  color: var(--c-text-soft);
+  white-space: normal; word-wrap: break-word;
+}
+.lp-tab-body--chron .chronicle__entry::before {
+  content: "›"; position: absolute; left: 0; color: var(--c-accent);
+}
+.lp-tab-body--chron .chronicle__entry--system { color: var(--c-text-faint); font-style: italic; }
+.lp-tab-body--chron .chronicle__entry--explore { color: var(--c-text); }
+.lp-tab-body--chron .chronicle__entry--explore::before { color: var(--c-accent-warm); }
+.lp-tab-body--chron .chronicle__entry--civ { color: var(--c-text); }
+.lp-tab-body--chron .chronicle__entry--civ::before { color: var(--c-violet); }
+/* Voci cliccabili (decisione 2026-06-21): portano al sistema/colonia/civ.
+   Sottile sottolineatura su hover + cursor pointer per affordance, niente
+   bordo invadente. Margine sinistro extra per dare spazio al focus ring. */
+.lp-tab-body--chron .chronicle__entry--clickable {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  margin-left: -4px; padding-left: 16px;
+  transition: background 120ms, color 120ms;
+}
+.lp-tab-body--chron .chronicle__entry--clickable:hover {
+  background: rgb(var(--c-surface-rgb) / 0.5);
+  color: var(--c-text);
+}
+.lp-tab-body--chron .chronicle__entry--clickable:hover::before { color: var(--c-accent-warm); }
+.lp-tab-body--chron .chronicle__entry--clickable:focus-visible {
+  outline: 1px solid var(--c-accent);
+  outline-offset: 1px;
+}
+
+/* --- Sezione generica del launcher --- */
+/* flex-shrink:0 → ogni sezione mantiene la sua altezza naturale e non viene
+   compressa sotto il contenuto quando il launcher è pieno (evita che i bottoni
+   di una sezione traboccino sopra l'header della successiva). Lo scroll lo fa
+   il contenitore .panel__content--launcher (overflow-y:auto). La CRONACA
+   ridefinisce flex più sotto per crescere fino al fondo. */
+.lp-section { display: flex; flex-direction: column; min-height: 0; flex-shrink: 0; }
+.lp-section__head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 6px 6px 2px;
+  font-family: var(--font-display);
+  font-size: 0.82rem; letter-spacing: 0.1em; text-transform: uppercase;
+  font-weight: 600;
+  color: var(--c-text);
+  cursor: pointer; user-select: none;
+  border-bottom: 1px solid var(--c-border);
+  margin-bottom: 6px;
+}
+.lp-section__head:hover { color: var(--c-accent); }
+.lp-section__caret { color: var(--c-text-soft); font-size: 0.72rem; width: 10px; }
+.lp-section__title { flex: 1; display: inline-flex; align-items: center; gap: 7px; }
+/* Glyph colorato per sezione — stile analogo a .res-icon (decisione #28).
+   PR-A: ora SVG inline (UI_GUIDE §3 B). La tinta arriva da `color:` →
+   currentColor sullo stroke dell'SVG; il glow è drop-shadow morbido. */
+.lp-section__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  line-height: 1;
+  width: 1em;
+  height: 1em;
+}
+.lp-section__glyph--roster { color: var(--c-accent-warm); }
+.lp-section__glyph--nav    { color: var(--c-accent); }
+.lp-section__glyph--launch { color: var(--c-violet); }
+.lp-section__glyph--chron  { color: var(--c-text); }
+/* Glow morbido canonico UI_GUIDE §3 (blur 3px, alpha ~0.4) sulle icone SVG */
+.ui-icon { display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
+.ui-icon-svg { width: 1em; height: 1em; filter: none; display: block; }
+/* PR-C: helper tinte standardizzate ricorrenti (UI_GUIDE §1). */
+.ui-icon--amber  { color: var(--c-accent-warm); }
+.ui-icon--cyan   { color: var(--c-accent); }
+.ui-icon--violet { color: var(--c-violet); }
+.ui-icon--pink   { color: var(--c-bad); }
+.ui-icon--gold   { color: var(--c-warn); }
+.ui-icon--green  { color: var(--c-good); }
+.ui-icon--blue   { color: var(--c-info); }
+.ui-icon--soft   { color: var(--c-text-faint); }
+/* PR-C: bottone icon-only (chiusura modali, azioni inline). Quadrato. */
+.btn--icon-only {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 6px;
+  min-width: 0;
+  font-size: 0.92rem;
+  line-height: 1;
+}
+.btn--icon-only .ui-icon { font-size: 0.95rem; }
+.btn--icon-only:hover .ui-icon { color: var(--c-accent); }
+/* PR-C: bottone con icona + testo (UI_GUIDE §6 pattern). */
+.btn--with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.btn--with-icon .ui-icon { font-size: 0.95rem; }
+/* Bottoni HUD top con SVG: leggermente più grandi */
+.btn--tutorial .ui-icon, .btn--save .ui-icon { font-size: 1.05rem; }
+.lp-section__text { font-weight: 600; }
+.lp-section__count {
+  font-family: var(--font-data);
+  color: var(--c-text-soft);
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 0.78rem;
+  padding: 1px 7px;
+  background: rgb(var(--c-info-rgb) / 0.1);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 10px;
+}
+.lp-section__body { display: flex; flex-direction: column; gap: 3px; min-height: 0; }
+.lp-section.is-collapsed .lp-section__body { display: none; }
+.lp-section.is-collapsed .lp-section__caret::before { content: '▸'; }
+.lp-section:not(.is-collapsed) .lp-section__caret::before { content: '▾'; }
+
+/* Roster cronaca scrollabile — ultima sezione: cresce fino al fondo della
+   sidebar (flex:1) e scorre internamente, così si sfrutta tutta l'altezza
+   disponibile. Niente più max-height fisso (impediva di arrivare al bottom). */
+.lp-section--chron { flex: 1 1 auto; min-height: 120px; }
+.lp-section--chron .lp-section__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  font-size: 0.84rem; line-height: 1.5;
+  padding: 6px 4px;
+  background: rgb(var(--c-surface-rgb) / 0.4);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+}
+.lp-section--chron.is-collapsed .lp-section__body { display: none; }
+.lp-section--chron .chronicle__log {
+  display: flex; flex-direction: column; gap: 5px;
+  margin: 0; padding: 0 4px;
+  list-style: none;
+}
+.lp-section--chron .chronicle__entry {
+  padding-left: 12px; position: relative;
+  color: var(--c-text-soft);
+  white-space: normal;
+  word-wrap: break-word;
+}
+.lp-section--chron .chronicle__entry::before {
+  content: "›"; position: absolute; left: 0; color: var(--c-accent);
+}
+.lp-section--chron .chronicle__entry--system { color: var(--c-text-faint); font-style: italic; }
+.lp-section--chron .chronicle__entry--explore { color: var(--c-text); }
+.lp-section--chron .chronicle__entry--explore::before { color: var(--c-accent-warm); }
+.lp-section--chron .chronicle__entry--civ { color: var(--c-text); }
+.lp-section--chron .chronicle__entry--civ::before { color: var(--c-violet); }
+
+/* --- Item del roster (colonia/flotta) --- */
+.lp-item {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%;
+  padding: 7px 10px;
+  background: rgb(var(--c-surface-rgb) / 0.5);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.88rem;
+  color: var(--c-text);
+  transition: var(--transition);
+}
+.lp-item:hover {
+  background: rgb(var(--c-accent-rgb) / 0.08);
+  border-color: var(--c-accent-dim);
+}
+.lp-item.is-focus {
+  border-color: var(--c-accent);
+  box-shadow: inset 2px 0 0 var(--c-accent);
+}
+/* Glifo item con colore tematico (es. colonia=ambra, flotta=ciano).
+   PR-A: SVG inline, glow via filter sul .ui-icon-svg. */
+.lp-item__glyph {
+  width: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  color: var(--c-accent-warm);
+  line-height: 1;
+}
+.lp-item--fleet .lp-item__glyph {
+  color: var(--c-accent);
+}
+.lp-item__name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-item__name strong { font-weight: 600; color: var(--c-text); }
+.lp-item__sub {
+  font-size: 0.76rem;
+  color: var(--c-text-soft);
+  margin-left: 4px;
+}
+.lp-item__badges { display: flex; gap: 3px; flex: 0 0 auto; }
+/* Decisione utente 2026-06-16 (seconda iterazione): nel roster flotte la
+   prima riga (glifo + nome + badge stato) va tenuta intatta — il nome non
+   deve essere mangiato dalle pillole. Quindi `.lp-item--fleet` diventa
+   colonna: testa in alto, riga viveri/usura sotto. Le colonie restano in
+   layout monolinea (non hanno la seconda riga). */
+.lp-item--fleet { flex-direction: column; align-items: stretch; gap: 4px; }
+.lp-item--fleet .lp-item__head {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  min-width: 0;
+}
+.lp-item--fleet .lp-item__row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  width: 100%;
+}
+/* Riduci il margine verticale delle pillole quando vivono in una riga di
+   roster flotte (evita doppio gap col gap della colonna). */
+.lp-item--fleet .lp-item__row .fleet-viveri,
+.lp-item--fleet .lp-item__row .fleet-wear {
+  margin: 0; flex: 1 1 calc(50% - 4px); min-width: 120px;
+}
+/* Riga "comando in corso" del roster flotte (richiesta utente 2026-06-18):
+   chip leggero, color muted, nasconde overflow lungo. Coerente con tono
+   flotta (ciano) ma in surface neutra per non rubare l'attenzione. */
+.lp-item__order {
+  font-size: 0.74rem;
+  color: var(--c-text-soft);
+  background: rgb(var(--c-surface-rgb) / 0.55);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 4px;
+  padding: 2px 7px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+/* Mini-gauge a torta per viveri + usura nel roster flotte (richiesta utente
+   2026-06-19): due torte conic-gradient su una riga, compatte. Si
+   riempiono/svuotano col valore (--pct). Pure CSS, niente JS. */
+.lp-item__row--gauges { gap: 14px; }
+/* Badge stato della flotta spostato in basso a destra (richiesta utente
+   2026-06-19): vive in coda alla riga gauges (o in una riga propria se
+   senza gauges) e si allinea a destra con margin-left:auto. */
+.lp-item__badges--bottom { margin-left: auto; }
+.lp-item__row--status { justify-content: flex-end; }
+.fleet-gauges {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.fleet-gauge {
+  --pct: 0;
+  --gauge-color: var(--c-good);
+  --gauge-track: rgb(255 255 255 / 0.12);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  color: var(--c-text-soft);
+}
+.fleet-gauge__pie {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: conic-gradient(var(--gauge-color) calc(var(--pct) * 1%), var(--gauge-track) 0);
+  box-shadow: inset 0 0 0 1px var(--c-border-soft);
+}
+.fleet-gauge__txt {
+  font-family: var(--font-data, monospace);
+  white-space: nowrap;
+}
+.fleet-gauge--viveri { --gauge-color: var(--c-good); }
+.fleet-gauge--viveri.fleet-gauge--low  { --gauge-color: var(--c-warn); }
+.fleet-gauge--viveri.fleet-gauge--crit { --gauge-color: var(--c-bad); }
+.fleet-gauge--wear { --gauge-color: var(--c-accent-warm); }
+.fleet-gauge--wear.fleet-gauge--low  { --gauge-color: var(--c-warn); }
+.fleet-gauge--wear.fleet-gauge--crit { --gauge-color: var(--c-bad); }
+.lp-item__badge {
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 9px;
+  background: rgba(255,255,255,0.06);
+  color: var(--c-text-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  line-height: 1;
+}
+.lp-item__badge .ui-icon { font-size: 0.78rem; }
+.lp-item__badge--ok   { background: rgb(var(--c-good-rgb) / 0.18); color: var(--c-good); }
+.lp-item__badge--warn { background: rgb(var(--c-warn-rgb) / 0.18); color: var(--c-warn); }
+.lp-item__badge--crit { background: rgb(var(--c-bad-rgb) / 0.2); color: var(--c-bad); }
+.lp-item__badge--info { background: rgb(var(--c-info-rgb) / 0.18); color: var(--c-info); }
+
+.lp-empty {
+  font-size: 0.82rem;
+  color: var(--c-text-soft);
+  font-style: italic;
+  padding: 4px 6px;
+}
+
+/* --- Nav compatta (Galassia/Gruppo/Sistema/Pianeta) --- */
+.lp-nav { display: flex; flex-direction: column; gap: 4px; }
+.lp-nav .nav-item {
+  padding: 7px 11px;
+  font-size: 0.88rem;
+}
+/* Glifo nav colorato per livello (Galassia=ciano · Gruppo=viola · Sistema=ambra · Pianeta=azzurro).
+   PR-A: SVG inline, glow via filter sul .ui-icon-svg. */
+.lp-nav .nav-item__glyph {
+  display: inline-flex;
+  align-items: center;
+  font-size: 1.05rem;
+  opacity: 0.92;
+}
+.lp-nav .nav-item[data-view="galaxy"] .nav-item__glyph { color: var(--c-accent); }
+.lp-nav .nav-item[data-view="group"]  .nav-item__glyph { color: var(--c-violet); }
+.lp-nav .nav-item[data-view="system"] .nav-item__glyph { color: var(--c-accent-warm); }
+.lp-nav .nav-item[data-view="planet"] .nav-item__glyph { color: var(--c-info); }
+
+/* Strip orizzontale dei 4 livelli sopra il Roster (decisione utente 2026-06-16).
+   I 4 livelli (Galassia/Gruppo/Sistema/Pianeta) sono ora una riga di
+   bottoni-icona compatti in testa al Roster; la label sta sotto al glifo. */
+.lp-nav-horizontal {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin: 0 0 4px;
+  padding: 2px;
+  background: rgba(var(--c-bg-deep-rgb) / 0.5);
+  border: 1px solid rgba(var(--c-surface-rgb) / 0.6);
+  border-radius: 6px;
+}
+.lp-nav-horizontal .nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 3px 4px;
+  font-size: 0.70rem;
+  text-align: center;
+  line-height: 1.05;
+}
+.lp-nav-horizontal .nav-item__glyph {
+  font-size: 1.1rem;
+  opacity: 0.95;
+}
+.lp-nav-horizontal .nav-item[data-view="galaxy"] .nav-item__glyph { color: var(--c-accent); }
+.lp-nav-horizontal .nav-item[data-view="group"]  .nav-item__glyph { color: var(--c-violet); }
+.lp-nav-horizontal .nav-item[data-view="system"] .nav-item__glyph { color: var(--c-accent-warm); }
+.lp-nav-horizontal .nav-item[data-view="planet"] .nav-item__glyph { color: var(--c-info); }
+
+/* Gruppi del Roster: testata "Colonie / Stazioni orbitali" con contatore. */
+.lp-roster-group { margin-bottom: 10px; }
+.lp-roster-group:last-child { margin-bottom: 0; }
+.lp-roster-group__h {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 6px 2px 4px;
+  font-size: 0.70rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--c-text-soft);
+  font-weight: 600;
+}
+.lp-roster-group__n {
+  font-size: 0.70rem;
+  color: var(--c-text-faint);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.lp-item--station .lp-item__glyph { color: var(--c-violet); }
+
+/* --- Launcher buttons (Diplomazia / Ricerca / Mercato) --- */
+.lp-launcher { display: flex; flex-direction: column; gap: 5px; }
+.lp-launcher--single { margin-bottom: 8px; }
+.lp-fleet-war {
+  display: flex; align-items: center; gap: 6px;
+  margin: 0 0 8px;
+  padding: 6px 9px;
+  font-size: 0.78rem;
+  color: var(--c-bad, var(--c-bad));
+  background: rgb(var(--c-bad-rgb) / 0.1);
+  border: 1px solid rgb(var(--c-bad-rgb) / 0.35);
+  border-radius: var(--radius-sm, 5px);
+}
+.lp-fleet-group { margin-bottom: 8px; }
+/* Header del gruppo stellare: bottone cliccabile per collassare/espandere
+   (decisione utente 2026-06-16). Stesso look della testata precedente, con
+   caret a sinistra. */
+.lp-fleet-group__h {
+  display: flex; align-items: center; gap: 5px;
+  width: 100%;
+  margin: 0 0 4px;
+  padding: 2px 0 3px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--c-border-soft, rgba(255, 255, 255, 0.08));
+  font: inherit;
+  font-size: 0.76rem;
+  color: var(--c-text-faint, var(--c-text-soft));
+  text-align: left;
+  cursor: pointer;
+}
+.lp-fleet-group__h:hover { color: var(--c-accent); }
+.lp-fleet-group__caret {
+  display: inline-block;
+  width: 10px;
+  font-size: 0.72rem;
+  color: var(--c-text-soft);
+}
+.lp-fleet-group__h strong { color: var(--c-violet, var(--c-violet)); font-weight: 600; }
+.lp-fleet-group__n {
+  margin-left: auto;
+  font-family: var(--font-data, monospace);
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgb(var(--c-surface-rgb) / 0.6);
+}
+.lp-fleet-group.is-collapsed .lp-fleet-group__body { display: none; }
+.lp-fleet-group.is-collapsed .lp-fleet-group__h { margin-bottom: 0; }
+.lp-launcher__btn {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%;
+  padding: 9px 11px;
+  background: rgb(var(--c-surface-rgb) / 0.5);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.9rem;
+  color: var(--c-text);
+  transition: var(--transition);
+}
+.lp-launcher__btn:hover {
+  background: rgb(var(--c-accent-rgb) / 0.08);
+  border-color: var(--c-accent-dim);
+}
+.lp-launcher__btn.is-active {
+  border-color: var(--c-accent);
+  box-shadow: inset 2px 0 0 var(--c-accent);
+}
+.lp-launcher__btn[disabled] { opacity: 0.6; cursor: default; }
+/* Glyph del launcher con tinte tematiche (palette coerente con .res-icon).
+   PR-A: SVG inline, glow via filter sul .ui-icon-svg. */
+.lp-launcher__glyph {
+  width: 16px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1.05rem; line-height: 1;
+  opacity: 0.92;
+}
+.lp-launcher__btn[data-view="fleet"]    .lp-launcher__glyph { color: var(--c-accent); }
+.lp-launcher__btn[data-view="civ"]      .lp-launcher__glyph { color: var(--c-bad); }
+.lp-launcher__btn[data-view="research"] .lp-launcher__glyph { color: var(--c-violet); }
+.lp-launcher__btn[data-view="market"]   .lp-launcher__glyph { color: var(--c-good); }
+/* Sotto-voci della linguetta Economia (decisione UI: stesso pattern di
+   tinta+glow tramite drop-shadow su .ui-icon-svg, palette UI_GUIDE §1.2). */
+.lp-launcher__btn[data-view="econ-anomalies"] .lp-launcher__glyph { color: var(--c-accent-warm); }
+.lp-launcher__btn[data-view="econ-market"]    .lp-launcher__glyph { color: var(--c-good); }
+.lp-launcher__btn[data-view="econ-treasury"]  .lp-launcher__glyph { color: var(--c-warn); }
+.lp-launcher__btn[data-view="econ-ai"]        .lp-launcher__glyph { color: var(--c-bad); }
+.lp-launcher__sub {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--c-text-soft);
+  font-family: var(--font-data);
+}
+
+/* =====================================================================
+   Plancia Operativa (dx) — selector colonia pinnata
+   ===================================================================== */
+.panel__header--dx {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.dx-selector { display: flex; gap: 6px; align-items: center; }
+.dx-selector__select {
+  flex: 1;
+  background: rgb(var(--c-surface-rgb) / 0.65);
+  border: 1px solid var(--c-border);
+  color: var(--c-text);
+  padding: 5px 8px;
+  font-size: 0.82rem;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  cursor: pointer;
+}
+.dx-selector__select:focus {
+  outline: none; border-color: var(--c-accent);
+}
+.dx-selector__pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  color: var(--c-text-faint);
+  padding: 4px 7px;
+  border: 1px solid var(--c-border-soft);
+  border-radius: 8px;
+  background: rgb(var(--c-surface-rgb) / 0.5);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.dx-selector__pin:hover {
+  color: var(--c-text);
+  border-color: var(--c-accent-dim);
+}
+.dx-selector__pin.is-pinned {
+  color: var(--c-accent-warm);
+  border-color: rgb(var(--c-warm-rgb) / 0.45);
+  background: rgb(var(--c-warm-rgb) / 0.08);
+}
+
+/* =====================================================================
+   Action bar contestuale (centro, sotto la scena)
+   ===================================================================== */
+.viewport__actionbar {
+  position: absolute;
+  /* Compact-left (decisione di sessione + feedback 2026-07): riquadro
+     STRETTO ancorato a sinistra che cresce in verticale (impila descrizioni,
+     barre e pulsanti) invece di allargarsi rubando metà stage al canvas.
+     Ancoraggio in basso: cresce verso l'alto solo quanto serve, fino a
+     quasi tutta l'altezza dello stage (poi scrolla). */
+  bottom: 12px; left: 12px; right: auto;
+  width: fit-content;
+  max-width: min(320px, calc(100vw - 24px));
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 7px 9px;
+  background: rgb(var(--c-surface-rgb) / 0.78);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  backdrop-filter: blur(6px);
+  z-index: 5;
+  box-shadow: var(--shadow-panel);
+}
+.viewport__actionbar[hidden] { display: none; }
+.actionbar__buttons {
+  /* Riquadro stretto (feedback 2026-07): i pulsanti si impilano in
+     colonna a tutta larghezza invece di andare a capo in griglia. */
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+/* PR-N: info card del corpo selezionato a livello Sistema. Nasce per
+   chiudere il buco UX della decisione #50 (dx fissa, niente più
+   contesto sistema/corpo nella sidebar) — mostra inline le info base
+   §6.3 e i potenziali §7.1 senza dover entrare nella vista pianeta. */
+.bodyinfo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bodyinfo__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bodyinfo__name {
+  font-family: var(--font-display, inherit);
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--c-text);
+}
+.bodyinfo__type {
+  font-size: 0.70rem;
+  color: var(--c-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.bodyinfo__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgb(var(--c-info-rgb) / 0.12);
+  border: 1px solid var(--c-border-soft);
+  font-size: 0.70rem;
+  color: var(--c-text-soft);
+}
+.bodyinfo__badge--home {
+  background: rgb(var(--c-warm-rgb) / 0.16);
+  border-color: rgb(var(--c-warm-rgb) / 0.45);
+  color: var(--c-accent-warm);
+}
+.bodyinfo__badge--colony {
+  background: rgb(var(--c-accent-rgb) / 0.14);
+  border-color: rgb(var(--c-accent-rgb) / 0.45);
+  color: var(--c-accent);
+}
+.bodyinfo__badge--candidate {
+  background: rgb(var(--c-warn-rgb) / 0.16);
+  border-color: rgb(var(--c-warn-rgb) / 0.5);
+  color: var(--c-warn);
+}
+.bodyinfo__badge--free {
+  background: rgb(var(--c-good-rgb) / 0.12);
+  border-color: rgb(var(--c-good-rgb) / 0.45);
+  color: var(--c-good);
+}
+.bodyinfo__badge--inhospital {
+  background: rgb(var(--c-info-rgb) / 0.06);
+  color: var(--c-text-faint);
+}
+.bodyinfo__badge--civ.bodyinfo__badge--good {
+  background: rgb(var(--c-good-rgb) / 0.12);
+  border-color: rgb(var(--c-good-rgb) / 0.45);
+  color: var(--c-good);
+}
+.bodyinfo__badge--civ.bodyinfo__badge--bad {
+  background: rgb(var(--c-bad-rgb) / 0.12);
+  border-color: rgb(var(--c-bad-rgb) / 0.45);
+  color: var(--c-bad);
+}
+.bodyinfo__badge--civ.bodyinfo__badge--warn {
+  background: rgb(var(--c-warn-rgb) / 0.12);
+  border-color: rgb(var(--c-warn-rgb) / 0.5);
+  color: var(--c-warn);
+}
+.bodyinfo__meta {
+  font-size: 0.74rem;
+  color: var(--c-text-faint);
+  font-family: var(--font-data, monospace);
+}
+.bodyinfo__pots {
+  /* Riquadro stretto (feedback 2026-07): le quattro barre risorsa si
+     impilano una sopra l'altra (colonna unica) e occupano la larghezza
+     del riquadro. */
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 3px;
+}
+.bodyinfo__pot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-data, monospace);
+  font-size: 0.70rem;
+  min-width: 0;
+}
+.bodyinfo__pot-lbl {
+  flex: 0 0 22px;
+  color: var(--c-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.70rem;
+}
+.bodyinfo__pot-bar {
+  flex: 1 1 auto;
+  height: 5px;
+  background: rgb(var(--c-info-rgb) / 0.15);
+  border-radius: 2px;
+  overflow: hidden;
+  min-width: 28px;
+  max-width: none;
+}
+.bodyinfo__pot-bar i {
+  display: block;
+  height: 100%;
+  transition: width 0.3s ease;
+}
+.bodyinfo__pot-val {
+  flex: 0 0 20px;
+  text-align: right;
+  color: var(--c-text);
+  font-weight: 600;
+  font-size: 0.72rem;
+}
+/* Tinte per risorsa coerenti con .res-icon--* (decisione #28) */
+.bodyinfo__pot--met   .bodyinfo__pot-bar i { background: var(--c-text); }
+.bodyinfo__pot--en    .bodyinfo__pot-bar i { background: var(--c-warn); }
+.bodyinfo__pot--food  .bodyinfo__pot-bar i { background: var(--c-good); }
+.bodyinfo__pot--water .bodyinfo__pot-bar i { background: var(--c-info); }
+.bodyinfo__pot--met   .bodyinfo__pot-lbl   { color: var(--c-text); }
+.bodyinfo__pot--en    .bodyinfo__pot-lbl   { color: var(--c-warn); }
+.bodyinfo__pot--food  .bodyinfo__pot-lbl   { color: var(--c-good); }
+.bodyinfo__pot--water .bodyinfo__pot-lbl   { color: var(--c-info); }
+
+/* Mobile: potenziali in 2x2 invece di 1x4 per leggibilità.
+   Card può occupare quasi tutta la larghezza (lo stage è già ridotto). */
+
+/* Chip secondari: Slot · Pop max · Pericolo · Ostilità · ⚛ Avanzate
+   (decisione di sessione, dopo le barre dei potenziali nella bodyinfo) */
+.bodyinfo__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+/* Riga "Giacimento" del riquadro corpo: riserva attuale + paniere (estrazione
+   orbitale, redesign 2026). Verde "surplus/operativo" su superficie canonica. */
+.bodyinfo__giac {
+  font-size: 0.76rem; line-height: 1.45; margin: 4px 0;
+  padding: 4px 8px; border-radius: 6px;
+  color: var(--c-good);
+  background: rgb(var(--c-surface-rgb) / 0.4);
+  border-left: 2px solid var(--c-good);
+  font-family: var(--font-data);
+}
+.bodyinfo__chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgb(var(--c-surface-rgb) / 0.55);
+  border: 1px solid var(--c-border-soft);
+  font-family: var(--font-data, monospace);
+  font-size: 0.70rem;
+  white-space: nowrap;
+}
+.bodyinfo__chip-k {
+  color: var(--c-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.70rem;
+}
+.bodyinfo__chip-v {
+  color: var(--c-text);
+  font-weight: 600;
+}
+.bodyinfo__chip.is-ok {
+  background: rgb(var(--c-good-rgb) / 0.1);
+  border-color: rgb(var(--c-good-rgb) / 0.35);
+}
+.bodyinfo__chip.is-ok .bodyinfo__chip-v { color: var(--c-good, var(--c-good)); }
+.bodyinfo__chip.is-warn {
+  background: rgb(var(--c-warn-rgb) / 0.1);
+  border-color: rgb(var(--c-warn-rgb) / 0.4);
+}
+.bodyinfo__chip.is-warn .bodyinfo__chip-v { color: var(--c-warn, var(--c-warn)); }
+.bodyinfo__chip.is-crit {
+  background: rgb(var(--c-bad-rgb) / 0.12);
+  border-color: rgb(var(--c-bad-rgb) / 0.5);
+}
+.bodyinfo__chip.is-crit .bodyinfo__chip-v { color: var(--c-bad, var(--c-bad)); }
+.bodyinfo__chip.is-violet {
+  background: rgb(var(--c-violet-rgb) / 0.1);
+  border-color: rgb(var(--c-violet-rgb) / 0.4);
+}
+.bodyinfo__chip.is-violet .bodyinfo__chip-v,
+.bodyinfo__chip.is-violet .bodyinfo__chip-k { color: color-mix(in srgb, var(--c-violet) 70%, #fff); }
+.bodyinfo__chip.is-mute {
+  opacity: 0.72;
+  font-style: italic;
+}
+
+/* Riga Distanza universale (salti + Ι a velocità 1.0) dalla colonia
+   più vicina del giocatore. Tinta ambra: è un indicatore "logistico",
+   coerente con la palette delle distanze sulla mappa. */
+.bodyinfo__dist {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm, 6px);
+  background: rgb(var(--c-warm-rgb) / 0.08);
+  border: 1px solid rgb(var(--c-warm-rgb) / 0.3);
+  font-family: var(--font-data, monospace);
+  font-size: 0.70rem;
+  color: var(--c-text);
+  flex-wrap: wrap;
+}
+.bodyinfo__dist-icon {
+  color: var(--c-accent-warm, var(--c-accent-warm));
+  font-size: 0.85rem;
+  line-height: 1;
+}
+.bodyinfo__dist-k {
+  color: var(--c-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.70rem;
+  font-weight: 600;
+}
+.bodyinfo__dist-time {
+  color: var(--c-accent-warm, var(--c-accent-warm));
+}
+.actionbar__btn {
+  font-family: inherit;
+  font-size: 0.82rem;
+  padding: 6px 12px;
+  background: rgb(var(--c-surface-rgb) / 0.7);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.actionbar__btn .ui-icon { font-size: 0.95rem; }
+.actionbar__btn:hover:not([disabled]) {
+  background: rgb(var(--c-accent-rgb) / 0.12);
+  border-color: var(--c-accent);
+}
+.actionbar__btn[disabled] {
+  opacity: 0.45; cursor: not-allowed;
+}
+.actionbar__btn--primary {
+  background: rgb(var(--c-accent-rgb) / 0.18);
+  border-color: var(--c-accent);
+  color: var(--c-text);
+  font-weight: 600;
+}
+.actionbar__btn--primary:hover:not([disabled]) {
+  background: rgb(var(--c-accent-rgb) / 0.28);
+  box-shadow: none;
+}
+
+/* =====================================================================
+   Plancia AI (decisione #50, Punto 3) — read-only viola/grigia
+   ===================================================================== */
+.colony-deck--foreign .deck-grid,
+.colony-deck--foreign .deck-resources,
+.colony-deck--foreign .deck-structures,
+.colony-deck--foreign .deck-queue,
+.colony-deck--foreign .deck-population,
+.colony-deck--foreign .deck-footer {
+  filter: grayscale(0.4) hue-rotate(225deg);
+  opacity: 0.85;
+}
+.deck-foreign {
+  position: absolute;
+  inset: 56px 12px 80px 12px;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 14px 16px;
+  background: rgb(var(--c-surface-violet-rgb) / 0.78);
+  border: 1px solid rgb(var(--c-violet-rgb) / 0.35);
+  border-radius: var(--radius);
+  backdrop-filter: blur(5px);
+  pointer-events: auto;
+  overflow-y: auto;
+  color: var(--c-text);
+  z-index: 3;
+}
+/* Variante SINTETICA (richiesta utente 2026-06-20): card compatta in ALTO a
+   sinistra (lontano dall'action bar in basso), non più overlay a tutta area.
+   Il dossier vive nella Diplomazia. */
+.deck-foreign--mini {
+  inset: 64px auto auto 12px;
+  width: min(340px, calc(100% - 24px));
+  height: auto;
+  gap: 6px;
+  padding: 10px 12px;
+  overflow: visible;
+}
+.deck-foreign__summary {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.4;
+  color: var(--c-text-soft);
+}
+/* Stima impero nella card Diplomazia (parità col pianeta). */
+.civ-card__est {
+  margin: 6px 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--c-border-soft);
+}
+.deck-foreign__head {
+  display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid rgb(var(--c-violet-rgb) / 0.25);
+  padding-bottom: 8px;
+}
+.deck-foreign__swatch {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--civ-color, var(--c-violet));
+  box-shadow: none;
+}
+.deck-foreign__name {
+  font-family: var(--font-display);
+  font-size: 1.0rem;
+  letter-spacing: 0.08em;
+}
+.deck-foreign__chip {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgb(var(--c-violet-rgb) / 0.15);
+  color: color-mix(in srgb, var(--c-violet) 70%, #fff);
+}
+.deck-foreign__section {
+  display: flex; flex-direction: column; gap: 6px;
+  padding-top: 6px;
+}
+.deck-foreign__section h4 {
+  margin: 0; font-size: 0.72rem; letter-spacing: 0.14em;
+  text-transform: uppercase; color: color-mix(in srgb, var(--c-violet) 70%, #fff);
+  font-family: var(--font-display);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.deck-foreign__h4-icon { font-size: 0.95rem; }
+.deck-foreign__row {
+  display: flex; gap: 10px; font-size: 0.84rem;
+}
+.deck-foreign__k { color: var(--c-text-faint); min-width: 110px; }
+.deck-foreign__v { color: var(--c-text); }
+.deck-foreign__placeholder {
+  padding: 10px;
+  background: rgba(255,255,255,0.03);
+  border: 1px dashed rgb(var(--c-violet-rgb) / 0.3);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem; color: var(--c-text-faint); font-style: italic;
+}
+
+/* M09 — azione "Attacca" dall'action bar (#49/#50) */
+.actionbar__btn--danger {
+  border-color: rgb(var(--c-bad-rgb) / 0.55);
+  color: var(--c-bad);
+}
+.actionbar__btn--danger:hover:not([disabled]) {
+  background: rgb(var(--c-bad-rgb) / 0.18);
+  border-color: rgb(var(--c-bad-rgb) / 0.8);
+}
+.attack-overlay {
+  position: fixed; inset: 0; z-index: 360;
+  background: rgb(11 14 19 / 0.66); backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center;
+}
+.attack-overlay__panel {
+  width: min(440px, 92vw); max-height: 80vh; overflow: auto;
+  background: var(--c-panel, rgb(var(--c-surface-rgb))); border: 1px solid rgb(var(--c-bad-rgb) / 0.4);
+  border-radius: 10px; padding: 16px 18px; box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+}
+.attack-overlay__head { display: flex; align-items: center; justify-content: space-between; margin: 0 0 6px; gap: 10px; }
+.attack-overlay__head h3 { margin: 0; font-size: 1.02rem; display: inline-flex; align-items: center; gap: 8px; }
+.attack-overlay__x { background: none; border: none; color: var(--c-text-faint); font-size: 1rem; cursor: pointer; }
+.attack-overlay__sub { font-size: 0.82rem; color: var(--c-text-dim); margin: 0 0 10px; }
+.attack-warn { color: var(--c-bad); }
+.attack-pick__list { display: flex; flex-direction: column; gap: 6px; }
+.attack-pick__row {
+  display: flex; flex-direction: column; gap: 2px; text-align: left;
+  padding: 8px 10px; border-radius: 6px; cursor: pointer;
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: inherit;
+}
+.attack-pick__row:hover { background: rgb(var(--c-bad-rgb) / 0.12); border-color: rgb(var(--c-bad-rgb) / 0.5); }
+.attack-pick__name { font-weight: 600; font-size: 0.9rem; }
+.attack-pick__meta { font-size: 0.74rem; color: var(--c-text-faint); }
+.attack-overlay__hint { font-size: 0.74rem; color: var(--c-text-faint); margin: 10px 0 0; }
+
+/* Decisione #66 — picker colonizzazione (riusa attack-overlay con tinta ciano). */
+[data-colonize-overlay] .attack-pick__row:hover { background: rgb(var(--c-accent-rgb) / 0.12); border-color: rgb(var(--c-accent-rgb) / 0.5); }
+[data-colonize-overlay] .attack-pick__row[disabled] { opacity: 0.55; cursor: not-allowed; }
+[data-colonize-overlay] .attack-pick__row[disabled]:hover { background: transparent; border-color: rgba(255,255,255,0.08); }
+.colonize-pick__warn { color: var(--c-crit, var(--c-bad)); font-weight: 600; }
+
+/* Decisione #66 estensione: slider coloni a bordo nel picker. */
+.colonize-pick__card { display: flex; flex-direction: column; gap: 6px; padding-bottom: 8px; border-bottom: 1px dashed rgba(255,255,255,0.06); }
+.colonize-pick__card:last-child { border-bottom: none; }
+.colonize-pick__pop { display: flex; align-items: center; gap: 10px; padding: 0 12px 4px; font-size: 0.78rem; color: var(--c-text-dim); flex-wrap: wrap; }
+.colonize-pick__pop label { display: inline-flex; align-items: center; gap: 6px; }
+.colonize-pick__pop input[type="range"] { flex: 1; min-width: 120px; accent-color: var(--c-accent, var(--c-accent)); }
+.colonize-pick__pop strong { color: var(--c-accent, var(--c-accent)); }
+/* Fix (C) sessione 2026-06-09: chip "Già a bordo" + "Totale alla colonia"
+   per il picker che ora rispetta i coloni preesistenti sulla flotta. */
+.colonize-pick__already {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 1px 8px; border-radius: 4px;
+  background: rgb(var(--c-warm-rgb) / 0.12); border: 1px solid rgb(var(--c-warm-rgb) / 0.35);
+  color: var(--c-accent-warm); font-weight: 500;
+}
+.colonize-pick__total {
+  font-size: 0.74rem; color: var(--c-text-faint);
+  flex-basis: 100%;
+}
+/* Fix (B): costo extra coloni (provviste viaggio) mostrato sotto lo slider. */
+.colonize-pick__colonist-cost { flex-basis: 100%; min-height: 1.1em; }
+.colonize-pick__colonist-note {
+  font-size: 0.72rem; color: var(--c-text-faint);
+  font-style: italic;
+}
+.colonize-pick__colonist-note strong { color: var(--c-text); font-weight: 600; }
+/* Quick path (sessione 2026-06-15): card "Crea spedizione coloniale" per
+   colonie con Pioniere in hangar + 4 crew pronti. Si distingue visivamente
+   dalle flotte già esistenti con accento ciano + badge "🆕". */
+.colonize-pick__section-label {
+  margin: 8px 12px 4px; padding: 0;
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--c-text-faint); text-transform: uppercase;
+}
+.colonize-pick__section-label--create { margin-top: 12px; }
+.colonize-pick__card--create {
+  border: 1px dashed rgb(var(--c-accent-rgb) / 0.4);
+  border-radius: 6px;
+  margin: 4px 8px;
+  background: rgb(var(--c-accent-rgb) / 0.06);
+}
+.colonize-pick__card--create .attack-pick__name {
+  color: var(--c-accent, var(--c-accent));
+}
+.colonize-pick__new-badge {
+  display: inline-block;
+  font-size: 0.84rem;
+  margin-right: 4px;
+}
+
+/* M09 — Comandante assegnato alla flotta (#43/#49) */
+.fleet-item__cmd {
+  margin: 4px 0 2px; font-size: 0.8rem; color: var(--c-warn);
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.fleet-item__cmdbonus { color: var(--c-text-faint); font-size: 0.74rem; }
+/* Decisione #66 estensione: indicatore "Coloni a bordo" sulle card flotta
+   con nave coloniale; tinta ambra coerente con Pioniere/insediamento. */
+.fleet-item__pop {
+  margin: 4px 0 2px; font-size: 0.8rem; color: var(--c-accent-warm);
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.fleet-pop__diaspora {
+  display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 4px;
+  background: rgb(var(--c-warm-rgb) / 0.14); border: 1px solid rgb(var(--c-warm-rgb) / 0.4);
+  color: var(--c-accent-warm); font-size: 0.7rem; font-weight: 600;
+}
+/* Decisione #69: gauge viveri di flotta (autonomia logistica). */
+.fleet-viveri {
+  margin: 4px 0 2px; font-size: 0.74rem;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  color: var(--c-text-faint, var(--c-text-soft));
+}
+.fleet-viveri__lbl { white-space: nowrap; }
+.fleet-viveri__bar {
+  flex: 1 1 60px; min-width: 60px; height: 5px; border-radius: 3px;
+  background: rgba(var(--c-surface-rgb, 34 46 86) / 0.7);
+  overflow: hidden;
+}
+.fleet-viveri__fill { display: block; height: 100%; border-radius: 3px; transition: width 0.2s; }
+.fleet-viveri--ok   .fleet-viveri__fill { background: var(--c-good); }
+.fleet-viveri--low  { color: var(--c-accent-warm); }
+.fleet-viveri--low  .fleet-viveri__fill { background: var(--c-warn); }
+.fleet-viveri--crit { color: var(--c-bad); }
+.fleet-viveri--crit .fleet-viveri__fill { background: var(--c-bad); }
+/* Decisione utente 2026-06-16: pillola usura scafi (avg + peak). Stessa
+   anatomia di fleet-viveri (label + bar) per uniformità tipografica. */
+.fleet-wear {
+  margin: 2px 0; font-size: 0.74rem;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  color: var(--c-text-faint, var(--c-text-soft));
+}
+.fleet-wear__lbl { white-space: nowrap; }
+.fleet-wear__bar {
+  flex: 1 1 60px; min-width: 60px; height: 5px; border-radius: 3px;
+  background: rgba(var(--c-surface-rgb, 34 46 86) / 0.7);
+  overflow: hidden;
+}
+.fleet-wear__fill { display: block; height: 100%; border-radius: 3px; transition: width 0.2s; }
+.fleet-wear--ok   .fleet-wear__fill { background: var(--c-good); }
+.fleet-wear--low  { color: var(--c-accent-warm); }
+.fleet-wear--low  .fleet-wear__fill { background: var(--c-warn); }
+.fleet-wear--crit { color: var(--c-bad); }
+.fleet-wear--crit .fleet-wear__fill { background: var(--c-bad); }
+/* Slider capienza serbatoio (#69, bilanciamento 2026-06-16): permette al
+   giocatore di scegliere quanta autonomia caricare al prossimo rifornimento.
+   Costo proporzionale crew × Ι. Disabilitato in volo. */
+.fleet-viveri-cap {
+  width: 100%; margin-top: 6px; padding-top: 6px;
+  border-top: 1px dashed rgba(var(--c-text-faint-rgb, 152 163 200) / 0.25);
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 0.72rem; color: var(--c-text-faint, var(--c-text-soft));
+}
+.fleet-viveri-cap__lbl { white-space: nowrap; }
+.fleet-viveri-cap__lbl strong { color: var(--c-text, color-mix(in srgb, var(--c-info) 70%, #fff)); }
+.fleet-viveri-cap input[type="range"] {
+  width: 100%; accent-color: var(--c-good); cursor: pointer;
+}
+.fleet-viveri-cap input[type="range"]:disabled { opacity: 0.5; cursor: not-allowed; }
+.fleet-viveri-cap__cost { font-size: 0.70rem; opacity: 0.85; }
+.fleet-viveri-cap__cost strong { color: var(--c-text, color-mix(in srgb, var(--c-info) 70%, #fff)); font-weight: 600; }
+/* #69 follow-up: residuo nella colonia origine + nota di limite barra. */
+.fleet-viveri-cap__cost .vcap-rem { color: var(--c-text-faint, var(--c-text-soft)); }
+.fleet-viveri-cap__cost .vcap-rem strong { color: var(--c-good, var(--c-good)); }
+.fleet-viveri-cap__lbl .vcap-limit { color: var(--c-warn, var(--c-accent-warm)); }
+/* P1: chip Diaspora compatto nel deck colonia (riga Popolazione). */
+.deck-pop__diaspora {
+  display: inline-block; margin-left: 8px; padding: 1px 6px; border-radius: 4px;
+  background: rgb(var(--c-warm-rgb) / 0.16); border: 1px solid rgb(var(--c-warm-rgb) / 0.45);
+  color: var(--c-accent-warm); font-size: 0.70rem; font-weight: 600;
+  animation: diaspora-pulse 2.4s ease-in-out infinite;
+}
+/* P1: banner Diaspora completo nella tab Colonia centrale (più informativo). */
+.diaspora-banner {
+  margin: 8px 0; padding: 8px 12px; border-radius: 6px;
+  background: rgb(var(--c-warm-rgb) / 0.1); border: 1px solid rgb(var(--c-warm-rgb) / 0.4);
+  color: var(--c-accent-warm); font-size: 0.86rem; display: flex; align-items: center; gap: 8px;
+  animation: diaspora-pulse 2.4s ease-in-out infinite;
+}
+.diaspora-banner__icon { font-size: 1.1rem; line-height: 1; }
+@keyframes diaspora-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(var(--c-warm-rgb) / 0); }
+  50% { box-shadow: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .deck-pop__diaspora, .diaspora-banner { animation: none; }
+}
+.cmd-pick__current {
+  margin: 0 0 8px; padding: 7px 9px; border-radius: 6px;
+  background: rgb(var(--c-warn-rgb) / 0.08); border: 1px solid rgb(var(--c-warn-rgb) / 0.25);
+  font-size: 0.84rem; display: flex; align-items: center; gap: 8px; justify-content: space-between;
+}
+.cmd-pick__list { display: flex; flex-direction: column; gap: 6px; }
+.cmd-pick__row {
+  display: flex; flex-direction: column; gap: 2px; text-align: left;
+  padding: 8px 10px; border-radius: 6px; cursor: pointer;
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: inherit;
+}
+.cmd-pick__row:hover { background: rgb(var(--c-warn-rgb) / 0.12); border-color: rgb(var(--c-warn-rgb) / 0.45); }
+.cmd-pick__name { font-weight: 600; font-size: 0.9rem; }
+.cmd-pick__meta { font-size: 0.74rem; color: var(--c-text-faint); }
+.cmd-pick__empty { font-size: 0.8rem; color: var(--c-text-faint); margin: 4px 0; }
+
+/* =====================================================================
+   M10 Fase C (decisione #47) — Intel dossier combat-aware
+   ===================================================================== */
+.civ-lastbattle { font-size: 0.80rem; }
+.civ-lastbattle--win  span:last-child { color: var(--c-good); }
+.civ-lastbattle--loss span:last-child { color: var(--c-bad); }
+.civ-card__when { color: var(--c-text-faint); font-family: var(--font-display); font-size: 0.92em; }
+
+.civ-disp__reason {
+  margin-top: 5px; font-size: 0.76rem; font-style: italic;
+  color: var(--c-text-faint);
+}
+
+.civ-deeds { font-weight: 600; }
+.civ-deeds--light { color: var(--c-good); }
+.civ-deeds--dark  { color: var(--c-bad); }
+
+/* =====================================================================
+   M10 Fase E — Covi pirata raidabili (lista "Minacce pirata")
+   ===================================================================== */
+.civ-nests {
+  margin: 10px 0 14px; padding: 10px 12px;
+  border: 1px solid rgb(var(--c-bad-rgb) / 0.35); border-radius: 8px;
+  background: rgb(var(--c-bad-rgb) / 0.06);
+}
+.civ-nests__title { margin: 0 0 7px; font-size: 0.92rem; color: var(--c-bad); font-family: var(--font-display); }
+.civ-nests__list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.civ-nest { display: flex; gap: 10px; align-items: baseline; font-size: 0.82rem; flex-wrap: wrap; }
+.civ-nest__sys { flex: 1 1 auto; }
+.civ-nest__lvl { color: var(--c-text-faint); font-size: 0.76rem; }
+.civ-nest__taglia { color: var(--c-accent-warm); font-size: 0.78rem; }
+.civ-nests__hint { margin: 4px 0 0; }
+
+/* =====================================================================
+   M10 Fase B (decisione #52 §13.6/§13.8) — Coesione di sistema + Federazioni
+   ===================================================================== */
+/* Chip federazione sulla card civiltà (in linea con civ-chip). */
+.civ-fedchip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 999px;
+  font-size: 0.72rem; letter-spacing: 0.06em;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--fed-color, var(--c-warn));
+  border: 1px solid var(--fed-color, var(--c-warn));
+}
+/* Sezione "Federazioni emergenti" (lista compatta). */
+.civ-feds {
+  margin: 10px 0 14px; padding: 10px 12px;
+  border: 1px solid rgb(var(--c-violet-rgb) / 0.35); border-radius: 8px;
+  background: rgb(var(--c-violet-rgb) / 0.06);
+}
+.civ-feds__title { margin: 0 0 7px; font-size: 0.92rem; color: var(--c-violet); font-family: var(--font-display); }
+.civ-feds__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.civ-fed {
+  display: flex; gap: 10px; align-items: center;
+  font-size: 0.82rem; flex-wrap: wrap;
+  border-left: 3px solid var(--fed-color, var(--c-violet));
+  padding: 4px 0 4px 8px;
+}
+.civ-fed__swatch { width: 10px; height: 10px; border-radius: 50%; background: var(--fed-color, var(--c-violet)); flex-shrink: 0; }
+.civ-fed__name { flex: 1 1 auto; }
+.civ-fed__members { color: var(--c-text-faint); font-size: 0.78rem; }
+.civ-fed__age { color: var(--c-text-faint); font-size: 0.76rem; font-family: var(--font-mono, monospace); }
+
+/* Sezione "Sistemi coesi noti". */
+.civ-cohesion {
+  margin: 10px 0 14px; padding: 10px 12px;
+  border: 1px solid rgb(var(--c-warm-rgb) / 0.35); border-radius: 8px;
+  background: rgb(var(--c-warm-rgb) / 0.05);
+}
+.civ-cohesion__title { margin: 0 0 7px; font-size: 0.92rem; color: var(--c-accent-warm); font-family: var(--font-display); }
+.civ-cohesion__list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.civ-cohesion__item { display: flex; gap: 10px; align-items: baseline; font-size: 0.82rem; flex-wrap: wrap; }
+.civ-coh-sys { flex: 1 1 auto; }
+.civ-coh-owners { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.civ-coh-owner {
+  padding: 1px 6px; border-radius: 4px; font-size: 0.74rem;
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--coh-c, var(--c-accent-warm));
+  border: 1px solid var(--coh-c, var(--c-accent-warm));
+}
+.civ-coh-stats { color: var(--c-text-faint); font-size: 0.76rem; }
+
+/* =====================================================================
+   M10 Fase B punto 2 (decisione #52 §13.10) — Scoperta progressiva 5 gradi
+   ===================================================================== */
+/* Chip "grado di scoperta" sulla card civiltà (header). */
+.civ-grade {
+  display: inline-block; padding: 1px 7px; border-radius: 999px;
+  font-size: 0.7rem; letter-spacing: 0.06em; font-family: var(--font-display, monospace);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid currentColor;
+}
+.civ-grade--unknown   { color: #6a7088; }
+.civ-grade--spotted   { color: var(--c-accent-warm); }     /* ambra: hai visto ma non parlato */
+.civ-grade--contacted { color: var(--c-info); }     /* ciano: contatto formale */
+.civ-grade--known     { color: var(--c-good); }     /* verde: dossier completo */
+.civ-grade--familiar  { color: var(--c-accent-warm); background: rgb(var(--c-warm-rgb) / 0.15); }  /* oro: familiare */
+
+/* Chip "grado intel" (frammentario/parziale/completo). Indipendente dal
+   knowledge: una civ contattata può avere intel solo frammentario se la
+   flotta presente al primo contatto era esile. */
+.civ-intel {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 7px; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.02em;
+  border: 1px solid currentColor;
+}
+.civ-intel--fragmentary { color: var(--c-accent-warm); background: rgb(var(--c-warm-rgb) / 0.1); }
+.civ-intel--partial     { color: var(--c-warn); background: rgb(var(--c-warn-rgb) / 0.12); }
+.civ-intel--complete    { color: var(--c-info); background: rgb(var(--c-info-rgb) / 0.1); }
+/* L4 Approfondito (decisione 2026-06-26): tinta viola/oro carica, indica
+   raccolta profonda (ricognizione prolungata o Infiltrazione M19). */
+.civ-intel--deep        { color: color-mix(in srgb, var(--c-violet) 70%, #fff); background: color-mix(in srgb, color-mix(in srgb, var(--c-violet) 70%, #fff) 14%, transparent); border-color: var(--c-violet); }
+
+/* Card di riepilogo "Te" — confronto onesto Forza Impero. */
+.civ-card--self {
+  border: 1px solid rgb(var(--c-info-rgb) / 0.32);
+  background: linear-gradient(135deg, rgb(var(--c-info-rgb) / 0.06), rgb(var(--c-info-rgb) / 0.02));
+  border-radius: 10px; padding: 10px 12px; margin: 8px 0 14px;
+}
+.civ-card--self .civ-card__name { color: var(--c-info); }
+/* Tag "via dossier" sulle colonie rivelate da L4 senza esplorazione fisica. */
+.civ-detail__col-tag {
+  display: inline-block; margin-left: 6px; padding: 0 6px;
+  font-size: 0.70rem; letter-spacing: 0.04em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--c-violet) 70%, #fff); background: color-mix(in srgb, color-mix(in srgb, var(--c-violet) 70%, #fff) 10%, transparent);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--c-violet) 70%, #fff) 30%, transparent); border-radius: 4px;
+}
+/* deepIntel "vecchio" (rilevato N Ι fa): tinta affievolita. */
+.civ-deepintel-stale { opacity: 0.65; }
+
+/* Allineamento "?" usato quando intel è frammentario. */
+.civ-chip--unknown {
+  color: var(--c-text-faint, #98a2b3);
+  background: rgba(152, 162, 179, 0.12);
+  border: 1px dashed rgba(152, 162, 179, 0.45);
+}
+
+/* Card collassata per gradi bassi (spotted/unknown). */
+.civ-card--unknown,
+.civ-card--spotted {
+  opacity: 0.85;
+}
+/* Evidenziazione temporanea quando si arriva dalla vista pianeta tramite
+   "Dossier civiltà" / "Diplomazia": pulse del bordo nel colore della civ
+   per ~2s, così la card giusta è subito riconoscibile. */
+.civ-card--focus {
+  animation: civ-card-focus-pulse 2.2s ease-out;
+}
+@keyframes civ-card-focus-pulse {
+  0%   { box-shadow: 0 0 0 0 var(--civ-color, var(--c-accent-warm)); }
+  20%  { box-shadow: 0 0 0 4px var(--civ-color, var(--c-accent-warm)); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); }
+}
+.civ-card__hint { margin: 4px 0 0; font-size: 0.78rem; }
+.civ-card__chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 3px 0 5px; }
+/* Nudge "early-game pacing" 2026-06-15: bottone "📍 Mostra sulla mappa"
+   sulle card civ SPOTTED. Stile leggero (non azione strategica), accento
+   ambra come gli hint contestuali. */
+.civ-card__actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.civ-card__focus {
+  font-family: inherit;
+  font-size: 0.78rem;
+  background: rgb(var(--c-surface-rgb) / 0.7);
+  color: var(--c-accent-warm);
+  border: 1px solid rgb(var(--c-warn-rgb) / 0.35);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms;
+}
+.civ-card__focus:hover {
+  background: rgb(var(--c-surface-rgb) / 0.9);
+  border-color: rgb(var(--c-warn-rgb) / 0.6);
+}
+
+/* Sezione fissa "Le Quattro Costanti" — sempre presente. */
+.civ-constants {
+  margin: 0 0 14px; padding: 10px 12px;
+  border: 1px solid rgb(var(--c-violet-rgb) / 0.35); border-radius: 8px;
+  background: rgb(var(--c-violet-rgb) / 0.04);
+}
+.civ-constants__title { margin: 0 0 6px; font-size: 0.92rem; color: var(--c-violet); font-family: var(--font-display); }
+.civ-constants .panel__note { margin: 0 0 8px; }
+.civ-faction-role {
+  display: inline-block; padding: 1px 7px; border-radius: 4px;
+  font-size: 0.72rem; font-style: italic;
+  background: rgb(var(--c-violet-rgb) / 0.12); color: var(--c-violet);
+}
+
+/* =====================================================================
+   M12 Fase A1 (decisione #53 §15.2/§15.6) — Commercio interno
+   Tab Rotte per-colonia (mercantili + rotte) + vista Mercato d'impero.
+   Tinta concetto commercio = oro (UI_GUIDE §1).
+   ===================================================================== */
+.trade-tab { display: flex; flex-direction: column; }
+
+/* Roster mercantili. */
+.merc-roster { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.merc-roster__item {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 5px 8px; border-radius: 6px;
+  background: rgb(var(--c-warn-rgb) / 0.05);
+  border: 1px solid rgb(var(--c-warn-rgb) / 0.18);
+}
+.merc-roster__glyph { color: var(--c-warn); font-size: 0.95rem; }
+.merc-roster__name { font-weight: 600; font-size: 0.84rem; }
+.merc-roster__cargo { font-size: 0.72rem; color: var(--c-text-dim); }
+.merc-roster__status { margin-left: auto; font-size: 0.72rem; padding: 1px 7px; border-radius: 4px; }
+.merc-roster__status--idle { background: rgb(var(--c-good-rgb) / 0.14); color: var(--c-good); }
+.merc-roster__status--busy { background: rgb(var(--c-accent-rgb) / 0.14); color: var(--c-accent); }
+
+/* Pulsanti di costruzione mercantili. */
+.merc-build { display: flex; flex-direction: column; gap: 5px; margin: 0 0 8px; }
+.merc-build__btn { justify-content: flex-start; text-align: left; gap: 6px; }
+.merc-build__cost { color: var(--c-text-dim); font-size: 0.72rem; margin-left: auto; }
+.merc-build__lock { opacity: 0.7; }
+
+/* Coda costruzione mercantili. */
+.merc-queue { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.merc-queue__item { display: flex; align-items: center; gap: 8px; }
+.merc-queue__name { font-size: 0.78rem; min-width: 120px; }
+.merc-queue__item .progress-bar { flex: 1; }
+.merc-queue__eta { font-size: 0.72rem; color: var(--c-text-dim); }
+
+/* Lista rotte. */
+.route-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.route-item {
+  padding: 6px 9px; border-radius: 7px;
+  background: rgb(var(--c-warn-rgb) / 0.04);
+  border: 1px solid rgb(var(--c-warn-rgb) / 0.18);
+}
+.route-item__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.route-item__dir { color: var(--c-warn); font-weight: 700; }
+.route-item__peer { font-weight: 600; font-size: 0.84rem; }
+.route-item__res { font-size: 0.78rem; color: var(--c-text-dim); }
+.route-item__status { margin-left: auto; font-size: 0.72rem; padding: 1px 7px; border-radius: 4px; }
+.route-item__status.is-ok   { background: rgb(var(--c-good-rgb) / 0.14); color: var(--c-good); }
+.route-item__status.is-warn { background: rgb(var(--c-warn-rgb) / 0.16); color: var(--c-warn); }
+.route-item__status.is-crit { background: rgb(var(--c-bad-rgb) / 0.16); color: var(--c-bad); }
+.route-item__foot { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.route-item__hops { font-size: 0.72rem; color: var(--c-text-dim); }
+.route-item__foot .btn { margin-left: auto; }
+
+/* Overlay creazione rotta — riusa l'impalcatura .expedition-pick-overlay. */
+.route-picker__controls {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin: 0 0 10px; padding: 8px 10px;
+  border-radius: 7px; background: rgba(255,255,255,0.03);
+}
+.route-picker__field { display: flex; flex-direction: column; gap: 3px; font-size: 0.74rem; color: var(--c-text-dim); }
+.route-picker__field select {
+  background: rgba(0,0,0,0.35); color: var(--c-text);
+  border: 1px solid rgba(255,255,255,0.14); border-radius: 5px; padding: 4px 6px; font: inherit;
+}
+.route-picker__rate { font-size: 0.78rem; color: var(--c-text-dim); margin-left: auto; }
+.route-picker__field--rate { flex-direction: row; align-items: center; gap: 6px; }
+.route-picker__field--rate input[type="range"] { flex: 1; min-width: 90px; accent-color: var(--c-accent); }
+.route-picker__field--rate strong { color: var(--c-text); font-variant-numeric: tabular-nums; min-width: 2.2em; text-align: right; }
+.route-item__rate-input { width: 78px; vertical-align: middle; accent-color: var(--c-accent); }
+.route-item__res strong { color: var(--c-text); font-variant-numeric: tabular-nums; }
+.route-dest-card {
+  padding: 9px 11px; border-radius: 8px;
+  background: rgb(var(--c-warn-rgb) / 0.05); border: 1px solid rgb(var(--c-warn-rgb) / 0.2);
+  display: flex; flex-direction: column; gap: 5px;
+}
+.route-dest-card__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.route-dest-card__name { font-weight: 600; font-size: 0.86rem; }
+.route-dest-card__hops { font-size: 0.72rem; color: var(--c-text-dim); }
+.route-dest-card__meta { margin: 0; font-size: 0.74rem; color: var(--c-text-dim); }
+
+/* Vista Mercato d'impero — riepilogo. */
+.market-summary {
+  display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 14px;
+}
+.market-summary__cell {
+  flex: 1; min-width: 120px; padding: 10px 12px; border-radius: 8px;
+  background: rgb(var(--c-warn-rgb) / 0.05); border: 1px solid rgb(var(--c-warn-rgb) / 0.2);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.market-summary__val { font-family: var(--font-display); font-size: 1.25rem; color: var(--c-warn); }
+.market-summary__lbl { font-size: 0.72rem; color: var(--c-text-dim); }
+
+/* ===================================================================
+   M16 — Stazioni spaziali (decisione #81). Accento ciano (var(--c-info)).
+   =================================================================== */
+.station-view__new { margin: 0 0 14px; }
+.station-list { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.station-item {
+  padding: 10px 12px; border-radius: 9px;
+  background: rgb(var(--c-info-rgb) / 0.05);
+  border: 1px solid rgb(var(--c-info-rgb) / 0.22);
+}
+.station-item__head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.station-item__name { font-family: var(--font-display); font-size: 0.95rem; color: color-mix(in srgb, var(--c-info) 70%, #fff); }
+.station-item__sys { font-size: 0.78rem; color: var(--c-text-dim); font-family: inherit; }
+.station-item__lvl { margin-left: auto; font-size: 0.74rem; color: var(--c-info); }
+.station-stats { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.station-stat { display: grid; grid-template-columns: 5.4em 1fr auto; align-items: center; gap: 8px; }
+.station-stat__lbl { font-size: 0.72rem; color: var(--c-text-dim); }
+.station-stat__val { font-size: 0.74rem; color: var(--c-text-dim); white-space: nowrap; }
+.station-bar { height: 7px; border-radius: 4px; background: rgba(255, 255, 255, 0.07); overflow: hidden; }
+.station-bar__fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+.station-bar__fill--ok { background: var(--c-good); }
+.station-bar__fill--warn { background: var(--c-accent-warm); }
+.station-bar__fill--crit { background: var(--c-bad); }
+.station-bar__fill--hp { background: var(--c-info); }
+.station-bar__fill--build { background: var(--c-accent-warm); }
+.station-bar__fill--met { background: var(--c-accent-warm); }
+.station-build { font-size: 0.78rem; color: var(--c-text-dim); margin-bottom: 8px; }
+/* M16 (2026-06-18): cantiere leggero/medio della stazione. */
+.station-yard { margin-top: 10px; padding-top: 9px; border-top: 1px solid rgb(var(--c-info-rgb) / 0.14); }
+.station-yard__head { font-size: 0.78rem; color: var(--c-text-dim); margin: 7px 0 5px; }
+.station-yard__queue { list-style: none; margin: 0 0 7px; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.station-yard__job { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 0.8rem; }
+.station-yard__job .station-bar { flex: 1 1 80px; }
+.station-yard__job .is-crit { font-size: 0.72rem; }
+.station-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.station-maxed { font-size: 0.74rem; color: var(--c-text-dim); align-self: center; }
+/* M16 Fase B (#81): stazione catturata — presidio nemico riconquistabile. */
+.station-item.is-captured { border-color: rgb(var(--c-bad-rgb) / 0.4); background: rgb(var(--c-bad-rgb) / 0.06); }
+.station-captured-note { font-size: 0.8rem; color: var(--c-accent-warm); line-height: 1.4; }
+/* Redesign lune: riga d'ancoraggio della stazione a una luna (estrazione a
+   paniere). Verde "operativo/surplus" (§1) su superficie canonica. */
+.station-anchor {
+  font-size: 0.78rem; line-height: 1.4; margin: 2px 0 8px;
+  padding: 4px 8px; border-radius: 6px;
+  color: var(--c-good);
+  background: rgb(var(--c-surface-rgb) / 0.45);
+  border-left: 2px solid var(--c-good);
+}
+.station-cand__anchor { margin: 0 6px; max-width: 220px; }
+/* Redesign logistica: riga del magazzino tipizzato (4 risorse) sulla card. */
+.station-store { display: flex; gap: 12px; flex-wrap: wrap; margin: 2px 0 6px; font-family: var(--font-data); font-size: 0.76rem; color: var(--c-text-dim); }
+.station-store__r { display: inline-flex; align-items: center; gap: 3px; }
+/* Riga rifornitrice della stazione (supplier esplicito + efficienza logistica). */
+.station-supplier { font-size: 0.78rem; line-height: 1.5; margin: 4px 0; color: var(--c-text-dim); }
+.station-supplier__lbl { color: var(--c-text-dim); text-transform: uppercase; font-size: 0.70rem; letter-spacing: 0.04em; }
+.station-supplier.is-crit { color: var(--c-bad); }
+.station-supplier .is-ok { color: var(--c-good); }
+.station-supplier .is-warn { color: var(--c-warn); }
+.station-stat__val.is-warn { color: var(--c-accent-warm); }
+.station-stat__val.is-crit { color: var(--c-bad); }
+/* Picker di costruzione: lista candidati */
+.station-cand-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; max-height: 320px; overflow-y: auto; }
+.station-cand {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 9px; border-radius: 6px;
+  background: rgb(var(--c-info-rgb) / 0.05); border: 1px solid rgb(var(--c-info-rgb) / 0.18);
+}
+.station-cand__name { font-size: 0.85rem; }
+.station-cand__hops { margin-left: auto; font-size: 0.74rem; color: var(--c-text-dim); }
+
+/* ----- M12 Fase A2: Tesoreria & valute regionali (decisione #56 §15.4) ----- */
+.cur-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.cur-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 9px; border-radius: 6px;
+  background: rgb(var(--c-warn-rgb) / 0.05); border: 1px solid rgb(var(--c-warn-rgb) / 0.18);
+}
+.cur-item__sym {
+  font-family: var(--font-display); font-size: 0.74rem; color: var(--c-warn);
+  min-width: 30px; text-align: center;
+  background: rgb(var(--c-warn-rgb) / 0.12); border-radius: 4px; padding: 1px 4px;
+}
+.cur-item__name { font-size: 0.82rem; }
+.cur-item__bal { margin-left: auto; font-family: var(--font-display); color: var(--c-warn); }
+.cur-item__mek { color: var(--c-violet); font-size: 0.82rem; }
+
+/* Banco regionale: griglia vendi/compra per risorsa. */
+.bank-grid { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px; }
+.bank-row { display: flex; align-items: center; gap: 6px; }
+.bank-row__res { flex: 1; font-size: 0.8rem; }
+.bank-row__stock { color: var(--c-text-dim); font-size: 0.72rem; }
+
+/* ----- M12 Fase A2: accordi commerciali AI (decisione #56 §15.3) ----- */
+.civ-trade {
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px dashed rgba(255,255,255,0.1);
+  display: flex; flex-direction: column; gap: 5px;
+}
+.agr-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.agr-item {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 4px 8px; border-radius: 6px;
+  background: rgb(var(--c-warn-rgb) / 0.05); border: 1px solid rgb(var(--c-warn-rgb) / 0.16);
+}
+.agr-item__deal { font-size: 0.8rem; }
+.agr-item__dur { font-size: 0.72rem; color: var(--c-text-dim); }
+.agr-item .route-item__status { margin-left: auto; }
+.agr-note { margin: 0; }
+
+/* ----- M12 Fase B (§15.7): eventi perturbativi — usura mercantile + rischio rotta ----- */
+.merc-roster__wear {
+  font-size: 0.72rem; padding: 1px 6px; border-radius: 4px;
+  background: rgb(var(--c-warn-rgb) / 0.14); color: var(--c-warn);
+}
+.merc-roster__wear.is-high { background: rgb(var(--c-bad-rgb) / 0.16); color: var(--c-bad); }
+.route-item__threat { font-size: 0.72rem; }
+.route-item__threat.is-warn { color: var(--c-warn); }
+.route-item__threat.is-crit { color: var(--c-bad); }
+
+/* ----- M12 Fase B slice 2 (§15.5): mercato grigio Mekhari ----- */
+.mek-cost { color: var(--c-text-dim); font-size: 0.72rem; }
+.market-view .route-picker__field { margin: 0 0 6px; }
+
+/* ----- M08 polish (decisione #61): drag&drop dal canvas per ordinare flotte ----- */
+.fleet-picker-hint {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 220;
+  max-width: 380px;
+  padding: 10px 14px;
+  background: rgb(var(--c-surface-rgb) / 0.92);
+  border: 1px solid var(--c-accent, var(--c-info));
+  border-radius: 8px;
+  color: var(--c-text, color-mix(in srgb, var(--c-info) 70%, #fff));
+  font-size: 0.82rem;
+  line-height: 1.4;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55), 0 0 0 1px rgb(var(--c-accent-rgb) / 0.18) inset;
+  backdrop-filter: blur(6px);
+  animation: fleet-picker-pulse 1.6s ease-in-out infinite;
+}
+.fleet-picker-hint strong { color: var(--c-accent, var(--c-info)); }
+.fleet-picker-hint kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  margin: 0 1px;
+  border: 1px solid rgb(var(--c-accent-rgb) / 0.4);
+  border-radius: 3px;
+  background: rgb(var(--c-accent-rgb) / 0.08);
+  font-family: ui-monospace, monospace;
+  font-size: 0.72rem;
+  color: var(--c-text, color-mix(in srgb, var(--c-info) 70%, #fff));
+}
+@keyframes fleet-picker-pulse {
+  0%, 100% { box-shadow: 0 6px 24px rgba(0,0,0,0.55), 0 0 0 1px rgb(var(--c-accent-rgb) / 0.18) inset; }
+  50%      { box-shadow: 0 6px 32px rgba(0,0,0,0.55), 0 0 0 2px rgb(var(--c-accent-rgb) / 0.45) inset; }
+}

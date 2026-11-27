@@ -1,0 +1,337 @@
+/* Orion Empires — Shell, HUD superiore, colonne, viewport (estratto da style.css, Revisione 2026 Fase 3; ordine invariato). */
+/* =====================================================================
+   Shell — griglia generale
+   ===================================================================== */
+/* Decisione #50: rimosso hud-bottom — cronaca migrata in sx come sezione
+   collassabile. La griglia ora è solo 2 righe (top + body). */
+.app-shell {
+  display: grid;
+  grid-template-columns: var(--panel-left-w) 1fr var(--panel-right-w);
+  grid-template-rows: var(--hud-top-h) 1fr;
+  grid-template-areas:
+    "top   top   top"
+    "left  view  right";
+  height: 100vh;
+  height: 100dvh;
+  padding: var(--gap);
+  gap: var(--gap);
+  overflow: hidden;
+}
+.hud-top { grid-area: top; }
+.hud-body { display: contents; }
+.panel--left { grid-area: left; }
+.viewport { grid-area: view; position: relative; }
+.panel--right { grid-area: right; }
+
+/* =====================================================================
+   HUD superiore
+   ===================================================================== */
+.hud-top {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: clamp(6px, 1vw, 12px);
+  padding: 0 10px;
+  background: var(--c-panel);
+  border: 2px solid var(--c-border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel), inset 0 1px 0 var(--c-panel-hilite);
+  backdrop-filter: blur(6px);
+}
+
+.hud-top__brand { display: flex; align-items: center; gap: 10px; }
+.brand-mark {
+  color: var(--c-accent);
+  font-size: 1.4rem;
+  text-shadow: var(--glow-accent);
+}
+.brand-title {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  letter-spacing: 0.18em;
+  color: var(--c-text);
+  text-transform: uppercase;
+}
+
+.resource-bar {
+  display: flex;
+  gap: 5px;
+  flex: 0 1 auto;
+  margin-right: auto;
+  /* Cedevole: quando l'header si stringe, è la barra risorse a dare strada
+     (si comprime e all'occorrenza scorre) così i controlli del tempo non
+     finiscono mai fuori dal bordo destro. */
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.resource-bar::-webkit-scrollbar { display: none; }
+.resource {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: rgb(var(--c-surface-rgb) / 0.7);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+.resource__icon { color: var(--c-accent); font-size: 1rem; text-shadow: none; }
+/* Coloring tematico per-risorsa nell'HUD top — coerente con i glifi
+   `.res-icon--*` usati nei costi/produzione (vedi sotto). Uniforma lo
+   "standard visivo" del progetto: ogni risorsa ha il suo colore ovunque. */
+.resource[data-resource="metalli"] .resource__icon { color: var(--c-text); text-shadow: none; }
+.resource[data-resource="energia"] .resource__icon { color: var(--c-warn); text-shadow: none; }
+.resource[data-resource="cibo"]    .resource__icon { color: var(--c-good); text-shadow: none; }
+.resource[data-resource="acqua"]   .resource__icon { color: var(--c-info); text-shadow: none; }
+.resource__label {
+  font-family: var(--font-display);
+  font-size: 0.70rem;
+  color: var(--c-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+/* Header stretto (tablet landscape / finestra ridotta, prima dei breakpoint
+   mobile): le sigle risorsa spariscono, restano icona + valore — così i
+   controlli del tempo non vengono mai schiacciati né tagliati. */
+@media (max-width: 1450px) {
+  .resource__label { display: none; }
+  .resource { gap: 5px; padding: 5px 7px; }
+}
+.resource__value {
+  font-family: var(--font-data);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-text);
+}
+
+/* La popolazione non è una risorsa stoccata come le altre 4: la separo con un
+   margine e un accento ambra per segnalarne la natura diversa (§9). */
+.resource--pop { margin-left: 6px; }
+.resource--pop .resource__icon {
+  color: var(--c-amber);
+  text-shadow: none;
+}
+
+.hud-top__indices { display: flex; gap: 5px; }
+.index {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 52px;
+  padding: 4px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  background: rgb(var(--c-surface-rgb) / 0.65);
+}
+.index__label {
+  font-family: var(--font-display);
+  font-size: 0.70rem;
+  letter-spacing: 0.18em;
+  color: var(--c-text-soft);
+  text-transform: uppercase;
+}
+.index__value {
+  font-family: var(--font-data);
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-text);
+}
+.index--icg .index__value  { color: var(--c-accent-warm); }
+.index--rep .index__value  { color: var(--c-accent); }
+.index--date .index__value { color: var(--c-text); font-size: 0.95rem; letter-spacing: 0.04em; }
+
+/* =====================================================================
+   Corpo principale a tre colonne
+   ===================================================================== */
+/* .hud-body and .hud-bottom use display:contents — children placed via grid areas on .app-shell */
+
+/* --- Pannelli laterali generici --- */
+.panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--c-panel);
+  border: 2px solid var(--c-border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel), inset 0 1px 0 var(--c-panel-hilite);
+  backdrop-filter: blur(6px);
+  min-height: 0;
+}
+.panel__header {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--c-border);
+  background: linear-gradient(180deg, rgb(var(--c-accent-rgb) / 0.05), transparent);
+}
+.panel__title {
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--c-text-soft);
+  text-shadow: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.panel__title-icon {
+  color: var(--c-accent-warm);        /* "casa" = ambra, coerente con roster/colonia */
+  font-size: 0.95rem;
+}
+.panel__content { padding: 12px 14px; overflow-y: auto; flex: 1; }
+.panel__note { margin-top: 14px; font-size: 0.84rem; color: var(--c-text-soft); line-height: 1.55; }
+.panel__note--target { margin-top: 8px; font-size: 0.78rem; color: var(--c-text-faint); font-style: italic; }
+/* PR-B: panel note con icona inline (warning, info, …) — UI_GUIDE §3 */
+.panel__note--warn { color: var(--c-text); }
+.panel__note-icon { font-size: 0.95rem; vertical-align: -0.18em; margin-right: 3px; }
+.panel__note-icon--warn { color: var(--c-warn); }
+.panel__note-icon--info { color: var(--c-info); }
+/* Feedback utente 2026-06-15: tabella costo colonizzazione con confronto
+   "richiesto / disponibile" e deficit evidenziato. Aiuta a programmare. */
+.cost-table { margin: 4px 0 8px; display: flex; flex-direction: column; gap: 3px; }
+.cost-row {
+  display: grid;
+  grid-template-columns: 5.6em 5.4em 4.4em 1fr;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-family: var(--font-data, inherit);
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: rgb(var(--c-info-rgb) / 0.06);
+}
+.cost-row__label { color: var(--c-text-soft); font-weight: 500; }
+.cost-row__req { color: var(--c-text); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.cost-row__have { color: var(--c-text-faint); text-align: right; font-variant-numeric: tabular-nums; }
+.cost-row__short { color: var(--c-bad); font-weight: 600; font-size: 0.78rem; }
+.cost-row--ok .cost-row__req { color: var(--c-good); }
+.cost-row--short {
+  background: rgb(var(--c-bad-rgb) / 0.1);
+  border-left: 2px solid var(--c-bad);
+}
+.sysinfo__sub-aux {
+  font-size: 0.72rem; color: var(--c-text-faint); font-weight: normal;
+  font-style: italic;
+}
+.panel__note--accessory {
+  font-size: 0.76rem; color: var(--c-text-faint); margin-top: 4px;
+  padding-left: 8px; border-left: 2px solid rgb(var(--c-info-rgb) / 0.18);
+}
+.panel__note--accessory strong { color: var(--c-text-soft); }
+/* Feedback utente 2026-06-15: blocco costo colonizzazione integrato nella
+   action bar in basso (viewport__actionbar). Padding ridotto, sezioni più
+   compatte, dato che la card vive in spazio limitato. */
+.bodyinfo__cost {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--c-border);
+}
+.bodyinfo__cost .sysinfo__sub {
+  margin: 2px 0 4px;
+  font-size: 0.78rem;
+}
+.bodyinfo__cost .cost-table { margin: 2px 0 4px; }
+.bodyinfo__cost .cost-row {
+  font-size: 0.78rem;
+  padding: 2px 5px;
+}
+.bodyinfo__cost .panel__note {
+  font-size: 0.74rem;
+  margin: 3px 0;
+}
+.bodyinfo__cost .panel__note--accessory {
+  font-size: 0.72rem;
+  padding-left: 6px;
+  margin: 3px 0;
+}
+
+/* --- Lista di navigazione --- */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  font-size: 0.85rem;
+  text-align: left;
+  color: var(--c-text-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.nav-item__glyph { color: var(--c-text-faint); transition: var(--transition); }
+.nav-item:hover {
+  color: var(--c-text);
+  background: rgb(var(--c-accent-rgb) / 0.06);
+  border-color: var(--c-border-soft);
+}
+.nav-item.is-active {
+  color: var(--c-text);
+  background: rgb(var(--c-accent-rgb) / 0.1);
+  border-color: var(--c-accent-dim);
+  box-shadow: inset 2px 0 0 var(--c-accent);
+}
+.nav-item.is-active .nav-item__glyph { color: var(--c-accent); text-shadow: var(--glow-accent); }
+
+/* =====================================================================
+   Viewport centrale (Canvas mappa in M02+)
+   ===================================================================== */
+.viewport {
+  position: relative;
+  border: 2px solid var(--c-border-strong);
+  border-radius: var(--radius);
+  background:
+    radial-gradient(ellipse at center, rgb(var(--c-view-rgb)) 0%, rgb(var(--c-bg-deep-rgb)) 85%);
+  box-shadow: var(--shadow-panel), inset 0 0 60px rgba(0, 0, 0, 0.6), inset 0 1px 0 var(--c-panel-hilite);
+  overflow: hidden;
+  min-height: 0;
+}
+/* Striscia breadcrumb unica in cima alla sezione centrale (decisione utente
+   2026-06-20): larga quanto il viewport, bassa, sempre presente. Usata sia
+   dalla mappa sia dalle viste della sidebar. */
+.viewport__crumbs {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  z-index: 6;
+  background: rgb(var(--c-surface-rgb) / 0.6);
+  border-bottom: 1px solid var(--c-border-soft);
+  backdrop-filter: blur(4px);
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.viewport__crumbs::-webkit-scrollbar { height: 0; }
+/* Lo stage parte SOTTO la striscia. */
+.viewport__stage { position: absolute; inset: 28px 0 0 0; display: grid; place-items: center; }
+.viewport__placeholder { text-align: center; color: var(--c-text-faint); user-select: none; }
+.viewport__glyph {
+  display: block;
+  font-size: 3.2rem;
+  color: var(--c-accent-dim);
+  text-shadow: var(--glow-accent);
+  margin-bottom: 12px;
+  animation: pulse 4s ease-in-out infinite;
+}
+.viewport__caption {
+  font-family: var(--font-display);
+  letter-spacing: 0.3em;
+  font-size: 0.95rem;
+  color: var(--c-text-soft);
+  margin: 0 0 6px;
+}
+.viewport__hint { font-size: 0.78rem; margin: 0; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 1;    transform: scale(1.05); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .viewport__glyph { animation: none; }
+}

@@ -10,41 +10,50 @@
 
 1. ☐ Il concetto ha già un colore in palette (§1)? → riusalo
 2. ☐ C'è una classe esistente per questo pattern (§6)? → riusala, non duplicare
-3. ☐ Le icone usano la tinta tematica + glow (§3)? Niente `color: var(--c-text)` su un glyph
+3. ☐ Le icone usano la tinta tematica (§3)? Niente `color: var(--c-text)` su un glyph. **Niente glow** (palette Plancia)
 4. ☐ La label è appropriata per il pubblico (§4)? Sigla per badge stato, parola piena per titoli
 5. ☐ Font ≥ 0.7rem, weight ≥ 400 (§2)?
-6. ☐ Border-radius coerente (4-6 piccoli / 8 pannelli / 999 pill) (§5)?
+6. ☐ Border-radius coerente (`--radius-sm` 3 / `--radius` 5 / 999 pill) (§5)?
 7. ☐ Stato semantico riusa `is-ok/warn/crit/active/busy` (§7)?
-8. ☐ Niente CDN, niente framework, niente WebGL (vincolo §2 progetto)
+8. ☐ Niente CDN a runtime; librerie solo bundlate (Revisione 2026, CLAUDE.md)
 9. ☐ Tutorial: ogni concetto/sigla nuova ha una voce in `ORION.tutorial.LESSONS` (decisione #29)
 
 ---
 
-## 1. Palette (token CSS canonici)
+## 1. Palette (token CSS canonici) — **Plancia**
 
-| Ruolo | Token | Hex indicativo | Uso |
+Revisione 2026 (scelta utente 2026-11-20): **grafite neutra quasi monocroma**. L'interfaccia è grigia; il colore
+compare **solo** per stati e concetti. **Nessun glow.** Token in `css/parts/tokens-base.css`. Ogni tinta ha la forma
+`-rgb` per le trasparenze: `rgb(var(--c-accent-rgb) / .2)`. Mai hex o rgba scritti a mano nel CSS.
+
+| Ruolo | Token | Hex | Uso |
 |---|---|---|---|
-| **Accento primario** | `--c-accent` | `#2fe6e0` ciano | navigazione, flotte, primary action, focus, mercato (no — vedi sotto) |
-| **Accento caldo** | `--c-accent-warm` | `#f0a868` ambra | roster colonie, capitale, sistema, pianeta base, scarsità low |
-| **Viola** | `--c-violet` | `#b89cff` viola | ricerca, gruppo stellare, tutorial, moduli/sale |
-| **Buono / verde** | `--c-good` | `#6fe0b8` verde | mercato, ok, surplus, stato operativo, cibo |
-| **Allerta / oro** | n/a | `#f0d670` oro | warn, scarsità in arrivo, energia |
-| **Critico / rosa** | `--c-bad` | `#f08296` rosa-rosso | crit, allerta militare, civ ostile, errori |
-| **Info / azzurro** | n/a | `#80c8e6` azzurro | acqua, pianeta, intel/spionaggio, info passive |
-| **Risorse fisse** | `.res-icon--{met,en,food,water}` | (palette dedicata) | Met=acciaio · En=oro · Cib=verde · Acq=azzurro — **MAI cambiare** |
+| **Accento / galassia** | `--c-accent` | `#5cc8d6` | navigazione, flotte, azione primaria, focus |
+| **Sistema / colonia** | `--c-accent-warm` | `#e3a35f` | roster colonie, capitale, sistema |
+| **Gruppo / ricerca** | `--c-violet` | `#a493f0` | ricerca, gruppo stellare, tutorial |
+| **Pianeta / info** | `--c-info` | `#74aee0` | pianeta, acqua, intel, stazioni |
+| **Buono** | `--c-good` | `#63c98f` | ok, surplus, mercato, cibo |
+| **Allerta** | `--c-warn` | `#dcbc5b` | warn, energia |
+| **Critico** | `--c-bad` | `#e2697a` | crit, militare, civiltà ostile |
+| **Testo** | `--c-text` / `--c-text-soft` / `--c-text-faint` | `#e8edf2` / `#aab4bf` / `#8f99a5` | primario / secondario / tenue |
+| **Linee** | `--c-line-rgb` → `--c-border` / `-soft` / `-strong` | `170 190 210` a .26 / .12 / .40 | bordi e separatori |
 
-### Sfondi / superfici (fonte di verità unica)
+Varianti scure/chiare di una tinta: `color-mix(in srgb, var(--c-accent) 55%, #000)` / `… 70%, #fff)`.
+Contrasto: testo tenue `#8f99a5` ≥ 4.5:1 sul pannello grigio.
+
+### Sfondi / superfici
 
 | Ruolo | Token | Valore | Uso |
 |---|---|---|---|
-| **Superficie** | `--c-surface-rgb` | `33 44 82` (navy, default *medio-scuro*) | pannelli, card, sheet, schede colonia. Si usa come `rgb(var(--c-surface-rgb) / .xx)` — l'**alpha vive per-uso**, l'RGB è unico. `--c-panel`/`--c-panel-solid` derivano da qui. |
-| **Superficie viola** | `--c-surface-violet-rgb` | `42 32 70` | superfici a tinta viola (commander, blocchi viola). |
-| **Fondo profondo** | `--c-bg-deep-rgb` | `21 28 60` | viewport (dietro la mappa) e Dashboard Impero. |
-| **Fondi pagina** | `--c-void` · `--c-space` · `--c-deep` | `#101a3a` · `#16224c` · `#1e2a5a` | body, starfield, gradienti profondi. |
+| **Fondo pagina** | `--c-void` / `--c-space` | `#121519` / `#171b21` | body, starfield (più scuro dei pannelli) |
+| **Pannello** | `--c-surface-rgb` | `36 40 47` (`#24282f`) | barre laterali, card, sheet — grigio scuro neutro, `rgb(var(--c-surface-rgb) / α)` |
+| **Card nel pannello** | `--c-surface2` | `#2c3139` | blocchi annidati |
+| **Superficie viola** | `--c-surface-violet-rgb` | `40 38 52` | blocchi a tinta viola |
+| **Centro della scena** | `--c-view-rgb` | `44 58 84` | centro del riquadro mappa/sistema/pianeta (blu-ardesia) |
+| **Fondo vista** | `--c-bg-deep-rgb` | `26 34 50` | bordi del riquadro centrale, dashboard, riquadri di vista |
 
-> **Regola**: per le superfici NON scrivere `rgba(...)` con terne hardcoded. Usa `rgb(var(--c-surface-rgb) / α)`. Per alzare/abbassare la luminosità di TUTTE le schede insieme si tocca **un solo numero** (`--c-surface-rgb`). Restano scuri di proposito solo gli scrim/dimmer dei modali e i `rgba(0,0,0,…)` di profondità (contrasto).
->
-> **Luminosità regolabile dal giocatore (decisione #67):** i valori `:root` qui sopra sono il **default** (livello *medio-scuro*). Le **Preferenze** (ingranaggio in HUD) offrono 4 livelli — *Scuro · Medio-scuro · Medio · Chiaro* — che sovrascrivono `--c-surface-rgb`/`--c-surface-violet-rgb`/`--c-bg-deep-rgb` a runtime (`applySurfaceLevel`, `SURFACE_LEVELS` in `main.js`). Preferenza di dispositivo/ambiente in `localStorage['orion.prefs']`, **mai nel save**.
+> Le **Preferenze** (luminosità) offrono 4 livelli di grafite (`SURFACE_LEVELS` in `main.js`) che sovrascrivono
+> i tre knob RGB a runtime. Preferenza di dispositivo, **mai nel save**.
 
 ### Mapping concetto → colore (canone)
 
@@ -98,7 +107,7 @@
 ### Principi
 
 - **Mai glyph "piatto" color-text.** Ogni icona porta la sua tinta tematica.
-- **Sempre con glow morbido** (`text-shadow` o `filter: drop-shadow`) coerente con `.res-icon` (decisione #8 NASA/Visions). **Specifica canonica**: blur `3-4px`, alpha `0.35-0.45`. Niente alone marcato (`5px` blur / `0.7` alpha stanca l'occhio nelle sessioni lunghe).
+- **Niente glow** (palette Plancia, Revisione 2026): la tinta basta. Le vecchie regole sul glow morbido sono decadute; `--glow-accent` resta come token vuoto per compatibilità.
 - **3 livelli di prominenza**:
   - Hero `1.05rem` (HUD risorse, header modali)
   - Standard `0.95-1.0rem` (sezioni, item card)
@@ -306,7 +315,8 @@ Ogni elemento "salute / stato" parla la stessa lingua. **Mai inventare** nuove t
 
 ## 11. Vincoli inderogabili del progetto
 
-- **Vanilla JS / no framework / no CDN / no WebGL** (GDD §2)
+- **Nessuna chiamata esterna a runtime**; librerie (Vite, PixiJS, Preact) solo **bundlate** (Revisione 2026, CLAUDE.md)
+- **Target desktop + tablet** (il telefono ≤760px non è più supportato: le voci mobile dello storico sono decadute)
 - **Determinismo seed+delta** (decisione #5): le preferenze UI NON entrano nel save
 - **Recovery-friendly** (decisione #22): nessun pattern UI deve incentivare "scelte permanentemente punitive"
 - **Tutorial sempre aggiornato** (decisione #29): ogni nuova sigla/icona/concetto ha una voce in `ORION.tutorial.LESSONS`
@@ -336,3 +346,5 @@ Modifiche a UI_GUIDE.md vanno discusse con l'utente PRIMA di applicarle (come pe
 - **2026-06-07** — Plancia di Colonia su telefono (decisione #65 follow-up): il deck sopra la sfera diventa **solo colpo d'occhio** (le azioni si fanno nella schermata Colonia). ≤760px: risorse e chip-classi popolazione in **griglia fluida** (`repeat(auto-fit, minmax(72/76px,1fr))`) che si stringe fino a misure minime; strutture **read-only** (nascosti "→ Vai a costruzione" e i "+Espandi"); **cronaca collassabile** (header cliccabile con icona, `data-deck-action="toggle-cron"`, default chiusa su mobile, stato volatile `ORION.deckCronOpen`).
 - **2026-06-07** — Luminosità superfici regolabile (decisione #67). Su richiesta utente, default riportato verso lo **scuro** (livello *medio-scuro*: `--c-surface-rgb` 41,55,98 → **33,44,82**; bg-deep 28,37,76 → **21,28,60**) e, grazie al knob unico, **esposta nelle Preferenze** (ingranaggio in HUD, già presente): 4 livelli *Scuro · Medio-scuro · Medio · Chiaro* applicati a runtime (`applySurfaceLevel`/`SURFACE_LEVELS` in `main.js`), live + persistiti in `localStorage['orion.prefs']` (mai nel save). Stili `.prefs-row--levels`/`.prefs-levels`/`.prefs-level`.
 - **2026-06-12** — Navigazione a zoom Galassia↔Sistema↔Pianeta (decisione #80). Nuovo pattern di transizione: `.is-zoom-entering` + `@keyframes zoom-fade-in` (200ms ease-out, **rispetta `prefers-reduced-motion`**) — mini-dissolvenza dell'holder che compare cambiando livello, applicata via `zoomFadeIn(holder)` in `main.js` su tutte le transizioni (scroll, bottoni, doppio-click). Durata coerente con `--transition` (§7). Nessun nuovo token, nessuna modifica agli standard esistenti. La navigazione sx (nav launcher) resta la via touch su mobile/tablet: lo scroll-in/out è **additivo**, non sostituisce i controlli esistenti.
+- **2026-11-27** — **Revisione 2026, Fase 3 — palette Plancia** (scelta utente tra 5 proposte). Grafite neutra, colore solo per stati/concetti, **nessun glow**, radius 5/3. ~1.260 colori scritti a mano nel CSS sostituiti dai token (con trasparenza e varianti scure/chiare via `color-mix`); token `-rgb` per ogni tinta; `--c-info` nuovo; alias storici (`--c-text-dim`, `--c-amber`, `--c-muted`, `--font-mono`, `--radius-md`…) definiti. Floor 0.70rem applicato (45 dichiarazioni). Marcatori d'angolo e titoli pannello neutri. `style.css` diviso in `css/parts/*.css` contigui (ordine e cascata invariati). Card Dashboard Impero: etichetta sopra il valore (niente più sovrapposizioni). Layout telefono rimosso (Fase 2).
+- **2026-11-27** — Ritocco Plancia (feedback utente): barre laterali **grigio scuro** (`#24282f`, non quasi-nero) per leggibilità; centro delle viste **blu-ardesia più chiaro** (`--c-view-rgb` 44 58 84 → bordo `--c-bg-deep-rgb` 26 34 50) al posto dello "scuro cosmico"; testo tenue alzato a `#8f99a5`; 4 livelli di luminosità ricalibrati di conseguenza.

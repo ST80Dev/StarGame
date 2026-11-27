@@ -1,0 +1,956 @@
+/* Orion Empires — Game loop, salvataggio, main menu, tutorial, insediamento, auto-pausa (estratto da style.css, Revisione 2026 Fase 3; ordine invariato). */
+/* ============================================================
+   M05 — game loop temporale: pulse HUD, scarsità, progress bar
+   ============================================================ */
+@keyframes hud-pulse-kf {
+  0%   { transform: scale(1);    color: var(--c-accent); text-shadow: none; }
+  60%  { transform: scale(1.12); color: var(--c-accent); text-shadow: none; }
+  100% { transform: scale(1); }
+}
+.hud-pulse { animation: hud-pulse-kf 380ms ease-out; transform-origin: center; display: inline-block; }
+@media (prefers-reduced-motion: reduce) { .hud-pulse { animation: none; } }
+
+.time-control__delta {
+  /* Larghezza fissa + testo centrato: il valore (es. "+1Κ·10Ι") cambia
+     lunghezza ad ogni avanzamento; bloccandone la larghezza il bottone
+     Evento — e quindi tutto il gruppo controlli tempo — resta immobile.
+     Nei rari countdown lunghissimi ellissi anziché spingere gli altri. */
+  display: inline-block;
+  box-sizing: border-box;
+  width: 74px;
+  margin-left: 4px;
+  padding: 2px 4px;
+  /* JetBrains Mono (durata, UI_GUIDE §2) — coerente col label velocità;
+     --font-mono non esiste, prima cadeva sul monospace di sistema (largo
+     e incoerente). */
+  font-family: var(--font-data);
+  font-size: 0.74rem;
+  letter-spacing: 0.02em;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: none;
+  color: var(--c-accent);
+  background: rgb(var(--c-accent-rgb) / 0.1);
+  border: 1px solid rgb(var(--c-accent-rgb) / 0.35);
+  border-radius: 4px;
+}
+
+/* Stati di scarsità §7.4 — frizione recuperabile, mai fail-state */
+.scar-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; }
+.scar-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  font-family: var(--font-data);
+  font-size: 0.80rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+.scar--low  { color: var(--c-accent-warm); background: rgb(var(--c-warm-rgb) / 0.1); }
+.scar--crit { color: var(--c-bad); background: rgb(var(--c-bad-rgb) / 0.14); }
+
+/* Decisione #48 (Fase 0 — rifiuti): tag saturazione, barra colorata, hint. */
+.waste-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  font-family: var(--font-data);
+  font-size: 0.80rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+.waste--ok   { color: var(--c-good); background: rgb(var(--c-good-rgb) / 0.1); }
+.waste--low  { color: var(--c-accent-warm); background: rgb(var(--c-warm-rgb) / 0.1); }
+.waste--crit { color: var(--c-bad); background: rgb(var(--c-bad-rgb) / 0.14); }
+.waste-fill--ok   { background: linear-gradient(90deg, var(--c-good), var(--c-good)) !important; }
+.waste-fill--low  { background: linear-gradient(90deg, var(--c-accent-warm), var(--c-accent-warm)) !important; }
+.waste-fill--crit { background: linear-gradient(90deg, var(--c-bad), var(--c-bad)) !important; }
+.waste-hint {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--c-text-dim, rgba(255,255,255,0.7));
+}
+.waste-energy { color: var(--c-warn); font-family: var(--font-data); }
+.waste-energy__note { font-size: 0.72rem; color: var(--c-text-dim, rgba(255,255,255,0.6)); }
+
+/* Progress bar generica per code (costruzione, scansione, colonizzazione) */
+.progress-bar {
+  height: 9px;
+  margin-top: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--c-border, rgba(255,255,255,0.15));
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-bar--mini { height: 4px; margin-top: 4px; }
+.progress-bar__fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--c-accent, var(--c-accent)), var(--c-accent-warm, var(--c-accent-warm)));
+  transition: width 200ms ease-out;
+}
+
+.struct-item.is-queue .progress-bar__fill {
+  background: linear-gradient(90deg, var(--c-accent), rgb(var(--c-accent-rgb) / 0.5));
+}
+
+/* =====================================================================
+   M06 — Salvataggio: pulsante HUD, modale, card slot, toast
+   ===================================================================== */
+.btn--save {
+  font-family: var(--font-data);
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  padding: 6px 12px;
+  margin-left: 12px;
+  background: rgb(var(--c-accent-rgb) / 0.08);
+  border: 1px solid rgb(var(--c-accent-rgb) / 0.3);
+  color: var(--c-accent);
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.btn--save:hover { background: rgb(var(--c-accent-rgb) / 0.18); }
+
+.btn--danger {
+  color: var(--c-bad);
+  border-color: rgb(var(--c-bad-rgb) / 0.45);
+  background: rgb(var(--c-bad-rgb) / 0.08);
+}
+.btn--danger:hover { background: rgb(var(--c-bad-rgb) / 0.16); }
+
+.save-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 300; /* sopra il main menu (200) per essere accessibile da entrambi i contesti */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgb(11 14 19 / 0.72);
+  backdrop-filter: blur(4px);
+}
+.save-modal[hidden] { display: none; }
+.save-modal__panel {
+  width: min(960px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  background: var(--c-panel);
+  border: 1px solid var(--c-border, rgba(255,255,255,0.15));
+  border-radius: 8px;
+  box-shadow: var(--shadow-panel), inset 0 1px 0 var(--c-panel-hilite);
+}
+.save-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--c-border, rgba(255,255,255,0.10));
+}
+.save-modal__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  letter-spacing: 0.12em;
+  color: var(--c-accent);
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+.save-modal__title-icon { font-size: 1.05rem; }
+.save-modal__body { padding: 18px; display: flex; flex-direction: column; gap: 18px; }
+
+.save-section { display: flex; flex-direction: column; gap: 10px; }
+.save-section__title {
+  margin: 0;
+  font-family: var(--font-data);
+  font-size: 0.74rem;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--c-text-soft);
+}
+.save-section--actions {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--c-border, rgba(255,255,255,0.10));
+}
+.save-empty {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--c-text-faint);
+  font-style: italic;
+}
+
+.save-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+.save-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--c-border, rgba(255,255,255,0.15));
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.save-card--auto { border-color: rgb(var(--c-accent-rgb) / 0.45); background: rgb(var(--c-accent-rgb) / 0.05); }
+.save-card--empty { background: rgba(255, 255, 255, 0.01); border-style: dashed; opacity: 0.85; }
+.save-card--cloud { border-color: rgb(var(--c-violet-rgb) / 0.45); background: rgb(var(--c-violet-rgb) / 0.04); }
+
+/* Cloud sync — sezione nella modale Save (decisione di sessione). */
+.cloud-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 8px;
+}
+.cloud-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.cloud-state {
+  font-family: var(--font-display); font-size: 0.78rem; letter-spacing: 0.06em;
+  padding: 4px 9px; border-radius: 4px; border: 1px solid var(--c-border, rgba(255,255,255,0.15));
+}
+.cloud-state--ok    { color: var(--c-good); border-color: rgb(var(--c-good-rgb) / 0.45); background: rgb(var(--c-good-rgb) / 0.08); }
+.cloud-state--sync  { color: var(--c-info); border-color: rgb(var(--c-info-rgb) / 0.45); background: rgb(var(--c-info-rgb) / 0.08); }
+.cloud-state--err   { color: var(--c-bad); border-color: rgb(var(--c-bad-rgb) / 0.45); background: rgb(var(--c-bad-rgb) / 0.08); }
+.cloud-state--off   { color: var(--c-text-faint); }
+.cloud-state--idle  { color: var(--c-text-faint); }
+.cloud-remote:empty { display: none; }
+
+/* Backup automatici locali — lista compatta nel pannello Save. */
+.backup-list { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 6px; }
+.backup-list__item {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 10px; padding: 8px 10px;
+  border: 1px solid rgb(var(--c-violet-rgb) / 0.3);
+  background: rgb(var(--c-violet-rgb) / 0.05);
+  border-radius: 5px; flex-wrap: wrap;
+}
+.backup-list__meta { font-size: 0.82rem; flex: 1 1 220px; min-width: 0; }
+.backup-list__date { color: var(--c-text-faint); font-size: 0.74rem; margin-top: 2px; }
+.backup-list__actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.save-section__hint { color: var(--c-text-faint); font-size: 0.78rem; margin: 2px 0 6px; }
+
+.save-card__name {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--c-text);
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.save-card__meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+  margin: 0;
+  font-size: 0.86rem;
+}
+.save-card__meta div { display: flex; flex-direction: column; gap: 2px; }
+.save-card__meta dt {
+  color: var(--c-text-soft);
+  font-family: var(--font-display);
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.save-card__meta dt .ui-icon { font-size: 0.85rem; }
+.save-card__meta dd {
+  margin: 0;
+  color: var(--c-text);
+  font-family: var(--font-data);
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+.save-card__meta code { font-family: var(--font-data); font-size: 0.86rem; font-weight: 700; color: var(--c-accent); }
+.save-card__actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+
+.save-toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  padding: 8px 16px;
+  background: rgb(var(--c-surface-rgb) / 0.92);
+  border: 1px solid rgb(var(--c-accent-rgb) / 0.35);
+  border-radius: 999px;
+  color: var(--c-accent);
+  font-family: var(--font-data);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  z-index: 400;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
+}
+.save-toast.is-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* =====================================================================
+   Main menu pre-partita (decisione #25)
+   Overlay sopra l'app-shell con la stessa palette NASA/Visions (#8).
+   ===================================================================== */
+.main-menu {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(ellipse at 30% 20%, color-mix(in srgb, color-mix(in srgb, var(--c-violet) 55%, #000) 32%, transparent), transparent 55%),
+    radial-gradient(ellipse at 75% 85%, rgb(var(--c-surface-rgb) / 0.28), transparent 55%),
+    rgb(11 14 19 / 0.86);
+  backdrop-filter: blur(6px);
+}
+.main-menu[hidden] { display: none; }
+.main-menu__panel {
+  width: min(520px, 100%);
+  max-height: 92vh;
+  overflow: auto;
+  background: var(--c-panel);
+  border: 1px solid var(--c-border, rgb(var(--c-info-rgb) / 0.55));
+  border-radius: 10px;
+  box-shadow: var(--shadow-panel), inset 0 1px 0 var(--c-panel-hilite);
+  padding: 28px 26px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.main-menu__header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--c-border-soft, rgb(var(--c-info-rgb) / 0.32));
+}
+.main-menu__mark {
+  font-size: 2.4rem;
+  color: var(--c-accent);
+  filter: drop-shadow(var(--glow-accent));
+}
+.main-menu__title {
+  font-family: var(--font-display);
+  font-size: 1.65rem;
+  letter-spacing: 0.18em;
+  color: var(--c-text);
+  text-transform: uppercase;
+}
+.main-menu__sub {
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  color: var(--c-text-faint);
+}
+.main-menu__body { display: flex; flex-direction: column; gap: 14px; }
+
+.main-menu__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.btn--menu {
+  font-family: var(--font-data);
+  font-size: 0.86rem;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--c-border-soft, rgb(var(--c-info-rgb) / 0.32));
+  color: var(--c-text);
+  padding: 12px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  align-items: center;
+  gap: 4px 10px;
+  transition: background 160ms ease, border-color 160ms ease, transform 80ms ease;
+}
+.btn--menu:hover:not([disabled]) {
+  background: rgb(var(--c-accent-rgb) / 0.1);
+  border-color: rgb(var(--c-accent-rgb) / 0.55);
+}
+.btn--menu:active:not([disabled]) { transform: translateY(1px); }
+.btn--menu .btn__glyph {
+  font-size: 1.1rem;
+  color: var(--c-accent);
+  grid-row: span 2;
+}
+.btn--menu .btn__sub {
+  grid-column: 2;
+  font-size: 0.7rem;
+  color: var(--c-text-faint);
+  letter-spacing: 0.04em;
+  font-family: var(--font-text);
+}
+.btn--menu[disabled],
+.btn--menu.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn--menu-primary {
+  border-color: rgb(var(--c-accent-rgb) / 0.55);
+  background: rgb(var(--c-accent-rgb) / 0.06);
+}
+
+.main-menu__form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.main-menu__form-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  letter-spacing: 0.12em;
+  color: var(--c-accent);
+  text-transform: uppercase;
+}
+.main-menu__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.main-menu__field--row {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.main-menu__field-label {
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-accent);
+}
+.main-menu__field-hint {
+  font-size: 0.80rem;
+  line-height: 1.45;
+  color: var(--c-text-soft);
+  font-style: italic;
+}
+.main-menu__field-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.main-menu__input {
+  flex: 1;
+  background: rgb(11 14 19 / 0.6);
+  border: 1px solid var(--c-border-soft, rgb(var(--c-info-rgb) / 0.32));
+  color: var(--c-text);
+  font-family: var(--font-data);
+  font-size: 0.9rem;
+  padding: 8px 10px;
+  border-radius: 4px;
+  outline: none;
+  letter-spacing: 0.04em;
+}
+.main-menu__input:focus {
+  border-color: var(--c-accent);
+  box-shadow: var(--glow-focus);
+}
+select.main-menu__input { cursor: pointer; }
+
+/* Identità del popolo (decisione #65) — step menu + editor in-game */
+.main-menu__select {
+  width: 100%;
+  background: rgb(var(--c-surface-rgb) / 0.55);
+  border: 1px solid var(--c-border-soft, rgb(var(--c-info-rgb) / 0.32));
+  color: var(--c-text);
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  padding: 8px 10px;
+  border-radius: 4px;
+  outline: none;
+  cursor: pointer;
+}
+.main-menu__select:focus { border-color: var(--c-accent); box-shadow: var(--glow-focus); }
+.main-menu__seedrow { display: flex; gap: 8px; align-items: stretch; }
+.main-menu__empire-preview {
+  margin: 4px 0 0;
+  font-size: 0.86rem;
+  color: var(--c-text-soft);
+}
+.main-menu__empire-preview strong {
+  font-family: var(--font-display);
+  color: var(--c-accent-warm);
+  letter-spacing: 0.03em;
+}
+
+/* Banner identità in testa alla Plancia d'Impero */
+.lp-empire {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  margin: 0 0 8px;
+  padding: 7px 10px;
+  background: rgb(var(--c-surface-rgb) / 0.6);
+  border: 1px solid var(--c-border-soft);
+  border-left: 3px solid var(--c-accent-warm);
+  border-radius: 6px;
+  color: var(--c-text);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.lp-empire:hover { border-color: var(--c-accent-warm); }
+.lp-empire__name {
+  flex: 1 1 auto; min-width: 0;
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  letter-spacing: 0.02em;
+  color: var(--c-accent-warm);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lp-empire__edit { flex: 0 0 auto; opacity: 0.7; font-size: 0.9rem; }
+.lp-empire:hover .lp-empire__edit { opacity: 1; }
+.main-menu__galname {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--c-text);
+  text-shadow: none;
+  padding: 4px 0 6px;
+}
+.main-menu__input--seed {
+  font-size: 0.78rem;
+  opacity: 0.78;
+  padding: 6px 8px;
+}
+.main-menu__form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--c-border-soft, rgb(var(--c-info-rgb) / 0.2));
+}
+.main-menu__info p {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--c-text-soft);
+}
+.main-menu__info code {
+  font-family: var(--font-data);
+  font-size: 0.78rem;
+  color: var(--c-accent);
+  background: rgb(var(--c-accent-rgb) / 0.06);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.main-menu__footer {
+  text-align: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--c-border-soft, rgb(var(--c-info-rgb) / 0.2));
+}
+.main-menu__version {
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  color: var(--c-text-faint);
+}
+
+/* =====================================================================
+   M06.6 — Tutorial contestuale: bottone "?", popup card, indice
+   (decisione #28). Pattern simile alla save-modal ma più leggero;
+   z-index 400 sopra main-menu (200) e save-modal (300).
+   ===================================================================== */
+.btn--tutorial {
+  font-family: var(--font-data);
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 4px 10px;
+  margin-left: 8px;
+  background: rgb(var(--c-violet-rgb) / 0.1);
+  border: 1px solid rgb(var(--c-violet-rgb) / 0.35);
+  color: color-mix(in srgb, var(--c-violet) 70%, #fff);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.btn--tutorial:hover { background: rgb(var(--c-violet-rgb) / 0.2); }
+
+.tutorial-modal[hidden] { display: none; }
+.tutorial-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background: rgb(var(--c-surface-rgb) / 0.66);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.tutorial-card {
+  width: min(540px, 100%);
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, rgb(var(--c-surface-rgb) / 0.96), rgb(var(--c-surface-rgb) / 0.96));
+  border: 1px solid rgb(var(--c-violet-rgb) / 0.35);
+  border-radius: 10px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5),
+              0 0 0 1px rgb(var(--c-violet-rgb) / 0.1) inset;
+  overflow: hidden;
+}
+.tutorial-card--index { width: min(640px, 100%); }
+.tutorial-card__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgb(var(--c-violet-rgb) / 0.2);
+}
+.tutorial-card__tag {
+  font-family: var(--font-data);
+  font-size: 0.70rem;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--c-violet) 70%, #fff);
+  background: rgb(var(--c-violet-rgb) / 0.12);
+  border: 1px solid rgb(var(--c-violet-rgb) / 0.35);
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+.tutorial-card__title {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  letter-spacing: 0.05em;
+  margin: 0;
+  flex: 1;
+  color: var(--c-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.tutorial-card__close { margin-left: auto; }
+
+.tutorial-card__body {
+  padding: 16px 20px;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: var(--c-text);
+  overflow-y: auto;
+}
+.tutorial-card__body p { margin: 0 0 10px 0; }
+.tutorial-card__body p:last-child { margin-bottom: 0; }
+.tutorial-card__body strong { color: var(--c-accent); }
+.tutorial-card__body em { color: var(--c-accent-warm); font-style: normal; }
+.tutorial-card__body code {
+  font-family: var(--font-data);
+  font-size: 0.78rem;
+  color: var(--c-accent);
+  background: rgb(var(--c-accent-rgb) / 0.06);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.tutorial-card__body kbd {
+  font-family: var(--font-data);
+  font-size: 0.72rem;
+  color: color-mix(in srgb, var(--c-violet) 70%, #fff);
+  background: rgb(var(--c-violet-rgb) / 0.1);
+  border: 1px solid rgb(var(--c-violet-rgb) / 0.3);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.tutorial-card__body .tut-hint {
+  font-size: 0.78rem;
+  color: var(--c-text-faint);
+  border-top: 1px dashed rgb(var(--c-info-rgb) / 0.18);
+  padding-top: 10px;
+  margin-top: 6px;
+}
+
+.tutorial-card__foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid rgb(var(--c-violet-rgb) / 0.2);
+  background: rgb(var(--c-surface-rgb) / 0.4);
+}
+.tutorial-card__off { margin-right: auto; }
+.tutorial-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+  font-size: 0.78rem;
+  color: var(--c-text-faint);
+  cursor: pointer;
+}
+.tutorial-toggle input { accent-color: var(--c-violet); }
+
+.tutorial-index {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tutorial-index__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  text-align: left;
+  padding: 8px 10px;
+  background: rgb(var(--c-surface-rgb) / 0.4);
+  border: 1px solid rgb(var(--c-info-rgb) / 0.14);
+  border-radius: 6px;
+  color: var(--c-text);
+  font-size: 0.84rem;
+  cursor: pointer;
+}
+.tutorial-index__row:hover {
+  background: rgb(var(--c-violet-rgb) / 0.1);
+  border-color: rgb(var(--c-violet-rgb) / 0.35);
+}
+.tutorial-index__tag {
+  font-family: var(--font-data);
+  font-size: 0.70rem;
+  letter-spacing: 0.08em;
+  color: color-mix(in srgb, var(--c-violet) 70%, #fff);
+  background: rgb(var(--c-violet-rgb) / 0.1);
+  border: 1px solid rgb(var(--c-violet-rgb) / 0.25);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.tutorial-index__title { font-family: var(--font-display); letter-spacing: 0.03em; }
+.tutorial-index__state {
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.tutorial-index__state .ui-icon { font-size: 0.85rem; }
+.tutorial-index__state.is-seen { color: var(--c-text-faint); }
+.tutorial-index__state.is-unseen { color: var(--c-accent-warm); }
+
+/* =====================================================================
+   M06.5 — Step "Scegli colonia originaria" (decisione #27 / GDD §6.2.bis)
+   ===================================================================== */
+.main-menu__pick {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 920px;
+  width: 100%;
+}
+.main-menu__pick .save-grid {
+  /* card un po' più larghe rispetto agli slot save per accogliere le barre */
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.save-card--candidate {
+  border-color: rgb(var(--c-accent-rgb) / 0.3);
+  background: rgb(var(--c-accent-rgb) / 0.035);
+}
+.save-card--candidate .save-card__name {
+  color: var(--c-accent);
+  text-shadow: none;
+}
+.main-menu__sub-inline {
+  color: var(--c-text-soft);
+  font-family: var(--font-data);
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+/* Rischio pirati (fascia regionale) nelle card candidato */
+.main-menu__risk { font-weight: 600; }
+.main-menu__risk--ok   { color: var(--c-good); }
+.main-menu__risk--warn { color: var(--c-warn); }
+.main-menu__risk--crit { color: var(--c-bad); }
+
+/* Barre dei potenziali §7.1 nelle card candidato */
+.main-menu__pot-bars {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 14px;
+  margin-top: 6px;
+}
+.main-menu__pot {
+  display: grid;
+  grid-template-columns: 44px 1fr 32px;
+  align-items: center;
+  gap: 8px;
+}
+.main-menu__pot-label {
+  font-family: var(--font-display);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-text-soft);
+}
+.main-menu__pot-track {
+  display: block;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--c-border, rgba(255,255,255,0.18));
+  border-radius: 3px;
+  overflow: hidden;
+}
+.main-menu__pot-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, rgb(var(--c-accent-rgb) / 0.55), var(--c-accent, var(--c-accent)));
+}
+.main-menu__pot-val {
+  font-family: var(--font-data);
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-align: right;
+  color: var(--c-text);
+  font-variant-numeric: tabular-nums;
+}
+.main-menu__adv {
+  margin: 0;
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--c-violet) 70%, #fff);
+}
+
+/* =====================================================================
+   M06.5 — Banner fase Insediamento (decisione #27 / GDD §6.2.bis)
+   ===================================================================== */
+.settle-banner {
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  border: 1.5px solid rgb(var(--c-warm-rgb) / 0.55);
+  background: rgb(var(--c-warm-rgb) / 0.1);
+  border-left: 4px solid var(--c-accent-warm);
+  border-radius: 5px;
+  box-shadow: inset 0 0 18px rgb(var(--c-warm-rgb) / 0.06);
+}
+.settle-banner__title {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--c-accent-warm);
+  text-shadow: none;
+}
+.settle-banner__hint {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--c-accent-warm);
+}
+.settle-banner .progress-bar__fill {
+  background: linear-gradient(90deg, rgb(var(--c-warm-rgb) / 0.95), rgb(var(--c-warm-rgb) / 0.55));
+}
+
+/* =====================================================================
+   Decisione #31 — Overlay di auto-pausa (eventi notevoli)
+   Niente modale invasiva: una card flottante in alto a destra con
+   l'elenco compatto degli eventi + bottoni "Riprendi" / "Chiudi" +
+   checkbox "non pausare più su questo tipo". Si chiude con Esc o
+   cliccando "Riprendi".
+   ===================================================================== */
+.event-overlay {
+  position: fixed;
+  top: 80px;
+  right: 18px;
+  z-index: 250;
+  max-width: 340px;
+  pointer-events: none;
+}
+.event-overlay[hidden] { display: none; }
+.event-overlay__panel {
+  pointer-events: auto;
+  padding: 12px 14px;
+  background: var(--c-panel);
+  border: 2px solid var(--c-accent-dim);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+  backdrop-filter: blur(6px);
+}
+.event-overlay__title {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.event-overlay__title-icon { font-size: 0.95rem; }
+.event-overlay__list {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.event-overlay__item {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--c-border-soft);
+}
+.event-overlay__item:last-child { border-bottom: none; }
+.event-overlay__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+.event-overlay__kind {
+  font-family: var(--font-display);
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-text);
+}
+.event-overlay__count {
+  font-family: var(--font-data);
+  font-size: 0.72rem;
+  color: var(--c-text-faint);
+}
+.event-overlay__pref {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: var(--c-text-soft);
+  cursor: pointer;
+}
+.event-overlay__pref input {
+  vertical-align: middle;
+  margin-right: 4px;
+  accent-color: var(--c-accent);
+}
+.event-overlay__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}

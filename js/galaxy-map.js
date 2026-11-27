@@ -116,7 +116,8 @@
   function groupLabelColor(id) { return GROUP_LABEL_COLORS[((id % GROUP_LABEL_COLORS.length) + GROUP_LABEL_COLORS.length) % GROUP_LABEL_COLORS.length]; }
 
   /* Palette nebulose (allineata agli accenti del tema). */
-  const NEBULA_COLORS = ['#2fe6e0', '#8a6cff', '#ff9d3c', '#d6457f', '#ffb000', '#5cc8ff'];
+  /* Palette Plancia (Revisione 2026, Fase 3): nebulose smorzate. */
+  const NEBULA_COLORS = ['#3a6e78', '#5a5290', '#7a5a3a', '#6a3a4a', '#6a6034', '#3e5a78'];
 
   function hexA(hex, a) {
     const n = parseInt(hex.slice(1), 16);

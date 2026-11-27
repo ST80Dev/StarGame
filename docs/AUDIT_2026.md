@@ -221,4 +221,5 @@ viaggio: 0% a 1-2 salti, 0,4% a 3, 1,6% a 4, 5,6% a 6.
    Valori di partenza (Fase 3): fondo `#0b0e13` · fondo 2 `#10141a` · pannello `#151a21` · pannello 2 `#1d242d` ·
    bordo `rgba(170,190,210,.26)` / morbido `.12` · testo `#e8edf2` / 2° `#aab4bf` / tenue `#808b97` ·
    accento/galassia `#5cc8d6` · sistema/colonia `#e3a35f` · gruppo/ricerca `#a493f0` · pianeta/info `#74aee0` ·
-   buono `#63c98f` · allerta `#dcbc5b` · critico `#e2697a` · raggio 5px. Contrasti tutti ≥ 5 sul pannello.
+   buono `#63c98f` · allerta `#dcbc5b` · critico `#e2697a` · raggio 5px.
+   Ritocco utente (2026-11-27): pannelli grigio scuro `#24282f`, centro vista blu-ardesia `44 58 84 → 26 34 50`, testo tenue `#8f99a5`.
