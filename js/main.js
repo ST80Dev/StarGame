@@ -11904,10 +11904,11 @@ ORION.prefs = Object.assign({}, DEFAULT_PREFS);
    preferenza di dispositivo, persistita in localStorage['orion.prefs'],
    NON nel save. */
 const SURFACE_LEVELS = {
-  'scuro':       { label: 'Scuro',       surface: '24 31 58',  violet: '32 24 54',  deep: '15 20 44' },
-  'medio-scuro': { label: 'Medio-scuro', surface: '33 44 82',  violet: '42 32 70',  deep: '21 28 60' },
-  'medio':       { label: 'Medio',       surface: '41 55 98',  violet: '52 40 86',  deep: '28 37 76' },
-  'chiaro':      { label: 'Chiaro',      surface: '52 68 120', violet: '64 50 104', deep: '36 47 94' }
+  /* Palette Plancia (Revisione 2026, Fase 3): grafite neutra. */
+  'scuro':       { label: 'Scuro',       surface: '17 21 27', violet: '22 20 30', deep: '9 11 15' },
+  'medio-scuro': { label: 'Medio-scuro', surface: '21 26 33', violet: '27 25 38', deep: '11 14 19' },
+  'medio':       { label: 'Medio',       surface: '29 36 45', violet: '35 32 48', deep: '16 20 26' },
+  'chiaro':      { label: 'Chiaro',      surface: '38 46 57', violet: '44 40 60', deep: '22 27 34' }
 };
 const SURFACE_ORDER = ['scuro', 'medio-scuro', 'medio', 'chiaro'];
 
@@ -18584,7 +18585,7 @@ function renderMainMenuInfo(body) {
   body.innerHTML =
     '<div class="main-menu__info">' +
       '<h2 class="main-menu__form-title">Informazioni</h2>' +
-      '<p><strong>Orion Empires</strong> — 4X strategico spaziale a pannelli, scritto in vanilla JS puro (no framework, no CDN, no WebGL).</p>' +
+      '<p><strong>Orion Empires</strong> — 4X strategico spaziale a pannelli. JavaScript, bundlato con Vite; gira interamente nel browser, senza chiamate esterne se non il sync cloud opzionale dei salvataggi.</p>' +
       '<p>Sviluppo modulo per modulo. Vedi <code>CLAUDE.md</code> per lo stato e <code>ORION_EMPIRES_GDD.md</code> per il design.</p>' +
       '<p class="main-menu__field-hint">Build: ' + escapeHtml(ORION.version) + '</p>' +
       '<div class="main-menu__form-actions">' +

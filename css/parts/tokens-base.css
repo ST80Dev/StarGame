@@ -1,0 +1,165 @@
+/* Orion Empires — Token di design, reset, sfondo stellare (estratto da style.css, Revisione 2026 Fase 3; ordine invariato). */
+/* =====================================================================
+   ORION EMPIRES — style.css
+   Modulo M01: tema scuro spaziale, HUD sci-fi, layout pannelli.
+   Tutto il theming passa per le custom properties qui sotto.
+   ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   Design tokens
+   --------------------------------------------------------------------- */
+:root {
+  /* --- Palette PLANCIA (Revisione 2026, Fase 3 — scelta utente) ---
+     Grafite neutra quasi monocroma: il colore compare solo per stati e
+     concetti (UI_GUIDE §1). Nessun glow. Ogni tinta ha anche la forma
+     `-rgb` per le trasparenze: rgb(var(--c-accent-rgb) / .2). */
+  --c-void:        #0b0e13;   /* fondo pagina                          */
+  --c-space:       #10141a;   /* fondo 2                               */
+  --c-deep:        #151a21;   /* = pannello                            */
+
+  /* Superfici: UN SOLO knob RGB; l'alpha vive per-uso. Regolabili dal
+     giocatore (Preferenze → applySurfaceLevel, 4 livelli di grafite). */
+  --c-surface-rgb:        21 26 33;    /* pannello #151a21 */
+  --c-surface-violet-rgb: 27 25 38;
+  --c-bg-deep-rgb:        11 14 19;    /* viewport / dashboard */
+  --c-surface2:    #1d242d;            /* card dentro un pannello */
+
+  --c-panel:       rgb(var(--c-surface-rgb) / 0.96);
+  --c-panel-solid: rgb(var(--c-surface-rgb));
+  --c-line-rgb:      170 190 210;
+  --c-border:        rgb(var(--c-line-rgb) / 0.26);
+  --c-border-soft:   rgb(var(--c-line-rgb) / 0.12);
+  --c-border-strong: rgb(var(--c-line-rgb) / 0.40);
+  --c-panel-hilite:  rgba(255, 255, 255, 0.04);
+
+  /* Tinte di concetto (UI_GUIDE §1: un concetto = una tinta). */
+  --c-accent-rgb:  92 200 214;  --c-accent:      #5cc8d6;   /* galassia, flotte, azione primaria */
+  --c-warm-rgb:    227 163 95;  --c-accent-warm: #e3a35f;   /* sistema, colonia, capitale */
+  --c-violet-rgb:  164 147 240; --c-violet:      #a493f0;   /* gruppo, ricerca */
+  --c-info-rgb:    116 174 224; --c-info:        #74aee0;   /* pianeta, acqua, intel */
+  --c-good-rgb:    99 201 143;  --c-good:        #63c98f;
+  --c-warn-rgb:    220 188 91;  --c-warn:        #dcbc5b;
+  --c-bad-rgb:     226 105 122; --c-bad:         #e2697a;
+  --c-accent-dim:      color-mix(in srgb, var(--c-accent) 55%, #000);
+  --c-accent-warm-dim: color-mix(in srgb, var(--c-accent-warm) 55%, #000);
+
+  --c-text:        #e8edf2;
+  --c-text-soft:   #aab4bf;
+  --c-text-faint:  #808b97;
+  /* Alias storici (usati nel CSS/JS esistente). */
+  --c-text-dim:    var(--c-text-faint);
+  --c-muted:       var(--c-text-faint);
+  --c-amber:       var(--c-accent-warm);
+  --c-cyan:        var(--c-accent);
+  --c-ok:          var(--c-good);
+  --c-crit:        var(--c-bad);
+  --font-mono:     var(--font-data);
+  --radius-md:     var(--radius);
+
+  /* --- Tipografia ---
+     NB: niente CDN/Google Fonts (vincolo "nessuna dipendenza esterna").
+     Lo stack usa Orbitron se presente localmente, con fallback di sistema. */
+  --font-display: "Orbitron", "Eurostile", "Bank Gothic", "Segoe UI", system-ui, sans-serif;
+  --font-data:    "JetBrains Mono", "SF Mono", "Consolas", "Roboto Mono", ui-monospace, monospace;
+  --font-text:    "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+
+  /* --- Geometria --- */
+  --gap:          12px;
+  --radius:       5px;
+  --radius-sm:    3px;
+  --panel-left-w: 312px;
+  --panel-right-w:400px;
+  --hud-top-h:    64px;
+  --hud-bottom-h: 130px;
+
+  /* --- Corner-marker (decisione UI v2): L agli angoli dei pannelli --- */
+  --corner-size:  14px;
+  --corner-thick: 2px;
+  --corner-color: rgb(var(--c-line-rgb) / 0.45);   /* Plancia: decorazione neutra */
+
+  /* --- Effetti --- */
+  /* Plancia: nessun glow. --glow-accent resta come token (vuoto) per i
+     selettori che lo usano; il focus è un anello netto. */
+  --glow-accent: 0 0 0 transparent;
+  --glow-focus:  0 0 0 2px rgb(var(--c-accent-rgb) / 0.55);
+  --shadow-panel: 0 6px 20px rgba(0, 0, 0, 0.45);
+  --transition: 180ms ease;
+}
+
+/* ---------------------------------------------------------------------
+   Reset essenziale
+   --------------------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font-text);
+  color: var(--c-text);
+  background: var(--c-void);
+  overflow: hidden;             /* lo scroll vive dentro i pannelli */
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { margin: 0; font-weight: 600; }
+ul { margin: 0; padding: 0; list-style: none; }
+button { font-family: inherit; }
+
+/* =====================================================================
+   Sfondo stellare parallax (CSS puro)
+   ===================================================================== */
+.starfield {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse at 20% 10%, rgb(var(--c-surface-rgb) / 0.35), transparent 55%),
+    radial-gradient(ellipse at 85% 80%, rgb(var(--c-surface-rgb) / 0.2), transparent 55%),
+    linear-gradient(160deg, var(--c-space) 0%, var(--c-void) 60%);
+  overflow: hidden;
+}
+
+.star-layer {
+  position: absolute;
+  inset: -50%;
+  background-repeat: repeat;
+  will-change: transform;
+}
+
+/* Le stelle sono generate con radial-gradient ripetuti su tile diverse. */
+.star-layer--far {
+  background-image:
+    radial-gradient(1px 1px at 20px 30px, var(--c-info) 50%, transparent),
+    radial-gradient(1px 1px at 140px 80px, var(--c-text-soft) 50%, transparent),
+    radial-gradient(1px 1px at 90px 160px, #ffffff 50%, transparent),
+    radial-gradient(1px 1px at 200px 120px, var(--c-info) 50%, transparent);
+  background-size: 240px 240px;
+  opacity: 0.5;
+  animation: drift-far 220s linear infinite;
+}
+.star-layer--mid {
+  background-image:
+    radial-gradient(1.4px 1.4px at 50px 60px, #ffffff 50%, transparent),
+    radial-gradient(1.4px 1.4px at 170px 30px, color-mix(in srgb, var(--c-info) 70%, #fff) 50%, transparent),
+    radial-gradient(1.4px 1.4px at 110px 190px, color-mix(in srgb, var(--c-info) 70%, #fff) 50%, transparent);
+  background-size: 320px 320px;
+  opacity: 0.65;
+  animation: drift-mid 150s linear infinite;
+}
+.star-layer--near {
+  background-image:
+    radial-gradient(2px 2px at 80px 100px, #ffffff 50%, transparent),
+    radial-gradient(2px 2px at 260px 200px, color-mix(in srgb, var(--c-info) 70%, #fff) 50%, transparent);
+  background-size: 420px 420px;
+  opacity: 0.8;
+  animation: drift-near 90s linear infinite;
+}
+
+@keyframes drift-far  { from { transform: translate3d(0,0,0); } to { transform: translate3d(-120px, 60px, 0); } }
+@keyframes drift-mid  { from { transform: translate3d(0,0,0); } to { transform: translate3d(160px, -90px, 0); } }
+@keyframes drift-near { from { transform: translate3d(0,0,0); } to { transform: translate3d(-200px, 120px, 0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .star-layer { animation: none; }
+}

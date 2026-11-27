@@ -1,0 +1,1100 @@
+/* Orion Empires — Mappa galattica, pannello sistema, viste Sistema e Pianeta (estratto da style.css, Revisione 2026 Fase 3; ordine invariato). */
+/* =====================================================================
+   M02 — Mappa galattica su Canvas (vista galassia)
+   ===================================================================== */
+.galaxy-root { position: absolute; inset: 0; }
+.galaxy-holder { position: absolute; inset: 0; }
+.galaxy-canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.galaxy-canvas:active { cursor: grabbing; }
+
+/* Tooltip mappa galattica — hover su sistema */
+.gmap-tooltip {
+  position: absolute;
+  z-index: 20;
+  pointer-events: none;
+  max-width: 260px;
+  padding: 6px 10px;
+  background: rgb(11 14 19 / 0.92);
+  border: 1px solid rgb(var(--c-info-rgb) / 0.35);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--c-info) 70%, #fff);
+  white-space: nowrap;
+}
+.gmap-tip__region { color: var(--c-info); }
+.gmap-tip__civs { margin-top: 4px; display: flex; flex-direction: column; gap: 2px; }
+.gmap-tip__civ { display: flex; align-items: center; gap: 4px; }
+.gmap-tip__sw {
+  display: inline-block;
+  width: 8px; height: 8px;
+  background: var(--tc, #888);
+  border: 1px solid rgba(0,0,0,0.4);
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+.gmap-tip__coh { margin-top: 3px; color: var(--c-accent-warm); }
+.gmap-tip__pirate { margin-top: 3px; color: var(--c-bad); }
+.gmap-tip__fog { margin-top: 3px; color: var(--c-text-faint); font-style: italic; }
+
+.gmap-layer-toggle {
+  position: absolute;
+  top: 8px; right: 8px;
+  z-index: 18;
+  padding: 5px 12px;
+  font: 700 0.72rem/1.3 'Orbitron', 'JetBrains Mono', monospace;
+  color: var(--c-info);
+  background: rgb(11 14 19 / 0.82);
+  border: 1px solid rgb(var(--c-info-rgb) / 0.3);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.gmap-layer-toggle:hover {
+  background: rgb(var(--c-surface-rgb) / 0.92);
+  color: color-mix(in srgb, var(--c-info) 70%, #fff);
+  border-color: rgb(var(--c-info-rgb) / 0.5);
+}
+.gmap-layer-toggle.is-active {
+  color: var(--c-accent);
+  border-color: rgb(var(--c-accent-rgb) / 0.45);
+  background: rgb(var(--c-surface-rgb) / 0.85);
+}
+
+/* Pulsanti zoom +/- su canvas (mappa galassia/gruppo + vista sistema), colonna
+   laterale a dx centrata in verticale. Solo touch/non-desktop (richiesta utente
+   2026-06-26): su desktop la rotella basta → nascosti. */
+.gmap-zoom {
+  position: absolute;
+  right: 8px; top: 50%;
+  transform: translateY(-50%);
+  z-index: 18;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+}
+.gmap-zoom-btn {
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  font: 700 1.5rem/1 'Orbitron', 'JetBrains Mono', monospace;
+  color: var(--c-info);
+  background: rgb(11 14 19 / 0.82);
+  border: 1px solid rgb(var(--c-info-rgb) / 0.3);
+  border-radius: 8px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.gmap-zoom-btn:hover, .gmap-zoom-btn:active {
+  background: rgb(var(--c-surface-rgb) / 0.92);
+  color: color-mix(in srgb, var(--c-info) 70%, #fff);
+  border-color: rgb(var(--c-info-rgb) / 0.5);
+}
+@media (hover: none) and (pointer: coarse) {
+  .gmap-zoom { display: flex; }
+}
+
+/* decisione #80 — navigazione a zoom: mini-dissolvenza dell'holder che
+   compare cambiando livello (Galassia↔Sistema↔Pianeta). */
+.is-zoom-entering { animation: zoom-fade-in 200ms ease-out; }
+@keyframes zoom-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .is-zoom-entering { animation: none; }
+}
+
+.btn--mini {
+  font-family: var(--font-data);
+  font-size: 0.70rem;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  padding: 5px 9px;
+}
+
+.galaxy-hint {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  font-size: 0.70rem;
+  color: var(--c-text-faint);
+  background: rgb(var(--c-surface-rgb) / 0.55);
+  border-radius: 999px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.galaxy-hint kbd {
+  display: inline-block;
+  padding: 0 5px;
+  margin: 0 1px;
+  font-family: var(--font-data);
+  font-size: 0.70rem;
+  color: var(--c-text-soft);
+  background: rgb(var(--c-info-rgb) / 0.18);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 3px;
+}
+
+/* =====================================================================
+   Pannello destro — dettagli sistema selezionato (M02)
+   ===================================================================== */
+.sysinfo__home {
+  margin: 0 0 12px;
+  padding: 6px 10px;
+  font-family: var(--font-display);
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--c-accent);
+  letter-spacing: 0.04em;
+  background: rgb(var(--c-accent-rgb) / 0.08);
+  border-left: 3px solid var(--c-accent);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: var(--radius-sm);
+  text-shadow: none;
+}
+.sysinfo__fog { font-size: 0.8rem; color: var(--c-text-faint); line-height: 1.6; }
+/* Coppie "etichetta — valore" come mini-card che fluiscono e vanno a capo,
+   ciascuna larga appena quel che serve (niente più righe stese al 100%). */
+.sysinfo__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  font-size: 0.78rem;
+}
+.sysinfo__list .kv {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 100%;
+  padding: 5px 9px;
+  background: rgb(var(--c-surface-rgb) / 0.55);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+}
+.sysinfo__list dt {
+  color: var(--c-text-soft);
+  font-family: var(--font-display);
+  font-size: 0.70rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.sysinfo__list dd {
+  margin: 0;
+  color: var(--c-text);
+  font-family: var(--font-data);
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.sysinfo__list dd code {
+  font-family: var(--font-data);
+  font-size: 0.85rem;
+  color: var(--c-accent);
+  background: rgb(var(--c-accent-rgb) / 0.08);
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid rgb(var(--c-accent-rgb) / 0.18);
+}
+/* Variante compatta delle mini-card etichetta/valore (richiesta utente:
+   riquadri più piccoli, meno "scritte grandi", più colpo d'occhio sui
+   numeri). Usata nella scheda Colonia (anagrafica, rifiuti, difesa). */
+.sysinfo__list--tight { gap: 4px; }
+.sysinfo__list--tight .kv { padding: 3px 8px; gap: 1px; }
+.sysinfo__list--tight dt { letter-spacing: 0.08em; }   /* resta 0.70rem (floor §2), meno sprawl */
+.sysinfo__list--tight dd { font-size: 0.82rem; }       /* da 0.95rem: meno "numeri giganti" */
+.sysinfo__tag {
+  font-size: 0.70rem;
+  color: var(--c-violet);
+  border: 1px solid rgb(var(--c-violet-rgb) / 0.4);
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-left: 4px;
+}
+/* Decisione #26 — tag di appartenenza (sigla regione / sistema) accanto
+   ai nomi propri dei corpi celesti. Visivamente discreto, font display per
+   richiamare la sensazione "etichetta di catalogo astronomico". */
+.pop-limit {
+  font-size: 0.82em;
+  color: var(--c-text-soft, var(--c-info));
+  letter-spacing: 0.02em;
+}
+.name-tag {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: 0.68em;
+  letter-spacing: 0.06em;
+  color: var(--c-amber);
+  background: rgb(var(--c-warm-rgb) / 0.1);
+  border: 1px solid rgb(var(--c-warm-rgb) / 0.28);
+  border-radius: 3px;
+  padding: 0 5px;
+  margin-left: 5px;
+  vertical-align: 2px;
+  font-weight: 500;
+  opacity: 0.92;
+  white-space: nowrap;
+}
+.chronicle__entry .name-tag {
+  font-size: 0.78em;
+  vertical-align: 1px;
+}
+.region-chip .name-tag {
+  margin-left: 4px;
+  font-size: 0.62em;
+}
+.danger-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-family: var(--font-data);
+}
+.tier--sicuro     { background: rgb(var(--c-good-rgb) / 0.16); color: var(--c-good); }
+.tier--instabile  { background: rgb(var(--c-warm-rgb) / 0.16); color: var(--c-warn); }
+.tier--pericoloso { background: rgb(var(--c-warm-rgb) / 0.16); color: var(--c-accent-warm); }
+.tier--letale     { background: rgb(var(--c-bad-rgb) / 0.18); color: var(--c-bad); }
+
+/* Sottotitolo di sezione nel pannello destro */
+.sysinfo__sub {
+  margin: 18px 0 10px;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: var(--c-accent);
+  padding-bottom: 6px;
+  border-bottom: 1.5px solid var(--c-border);
+  text-shadow: none;
+}
+
+/* Elenco regioni (livello Galassia) */
+.region-list { display: flex; flex-direction: column; gap: 6px; }
+.region-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 8px 12px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.80rem;
+  letter-spacing: 0.04em;
+  text-align: left;
+  color: var(--c-text);
+  background: rgb(var(--c-surface-rgb) / 0.55);
+  border: 1px solid var(--c-border-soft);
+  border-left: 5px solid var(--rc, var(--c-accent));
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.region-chip:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--rc, var(--c-accent));
+  box-shadow: inset 0 0 0 1px var(--rc, var(--c-accent));
+  transform: translateX(2px);
+}
+.region-chip__n {
+  margin-left: auto;
+  font-family: var(--font-data);
+  font-weight: 700;
+  font-size: 0.74rem;
+  color: var(--c-text-soft);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Elenco sistemi (livello Gruppo) */
+.sys-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.sys-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  font-family: var(--font-data);
+  font-size: 0.84rem;
+  font-weight: 600;
+  text-align: left;
+  color: var(--c-text);
+  background: rgb(var(--c-surface-rgb) / 0.35);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.sys-chip:hover { background: rgba(255, 255, 255, 0.05); color: var(--c-text); }
+.sys-chip.is-sel { border-color: var(--c-accent-warm); color: #fff; }
+.sys-chip.is-fog { color: var(--c-text-faint); font-style: italic; }
+.sys-chip__dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--sc, #fff);
+  box-shadow: 0 0 5px var(--sc, #fff);
+  flex: 0 0 auto;
+}
+
+/* Breadcrumb di navigazione sulla mappa */
+.galaxy-breadcrumb {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  background: rgb(var(--c-surface-rgb) / 0.78);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 999px;
+  backdrop-filter: blur(5px);
+  z-index: 4;             /* sopra Plancia di Colonia (z=3) */
+  max-width: calc(100% - 28px);
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+.galaxy-breadcrumb .breadcrumb__type,
+.galaxy-breadcrumb .crumb,
+.galaxy-breadcrumb .crumb-chip {
+  white-space: nowrap;
+}
+/* M07.2 (decisione #44): wrapper presente solo a livello pianeta —
+   raggruppa i crumb sinistri per separarli visivamente dal blocco info dx. */
+.breadcrumb__crumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.crumb {
+  font-family: var(--font-data);
+  font-size: 0.74rem;
+  color: var(--c-text-soft);
+  background: transparent;
+  border: none;
+  padding: 1px 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: var(--transition);
+}
+.crumb:hover { color: var(--c-accent); }
+.crumb.is-current { color: var(--c-text); font-weight: 600; cursor: default; }
+.crumb__sep { color: var(--c-text-faint); font-size: 0.74rem; }
+
+/* M07.2 polish (decisione #44): nome pianeta come crumb "hero" con font
+   display grande, e blocco info ausiliare a destra (tipo + chip fase).
+   Sostituisce la vecchia top-bar del deck e l'_infoBadge del canvas. */
+.crumb--body {
+  font-family: var(--font-display);
+  font-size: 1.0rem;
+  letter-spacing: 0.04em;
+  font-weight: 600 !important;
+  padding-left: 6px;
+}
+.breadcrumb__info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 8px;
+  border-left: 1px solid var(--c-border-soft);
+}
+.breadcrumb__type {
+  font-family: var(--font-data);
+  font-size: 0.70rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-text-soft);
+}
+.crumb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgb(var(--c-info-rgb) / 0.12);
+  border: 1px solid var(--c-border-soft);
+  font-family: var(--font-data, inherit);
+  font-size: 0.7rem;
+  color: var(--c-text-soft);
+  white-space: nowrap;
+}
+.crumb-chip--home {
+  background: rgb(var(--c-warm-rgb) / 0.18);
+  border-color: rgb(var(--c-warm-rgb) / 0.45);
+  color: var(--c-accent-warm);
+}
+.crumb-chip--phase {
+  background: rgb(var(--c-violet-rgb) / 0.18);
+  border-color: rgb(var(--c-violet-rgb) / 0.45);
+  color: var(--c-violet);
+}
+@media (max-width: 900px) {
+  .crumb--body { font-size: 0.88rem; }
+  .breadcrumb__type { display: none; }
+  .galaxy-breadcrumb { gap: 8px; padding: 4px 10px; }
+}
+
+/* =====================================================================
+   M03 — Vista interna del sistema stellare
+   ===================================================================== */
+.system-holder { position: absolute; inset: 0; z-index: 1; }
+.system-holder[hidden] { display: none; }
+.system-canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.system-canvas:active { cursor: grabbing; }
+
+.sysview-tooltip {
+  position: absolute;
+  z-index: 20;
+  pointer-events: none;
+  padding: 5px 10px;
+  background: rgb(11 14 19 / 0.92);
+  border: 1px solid rgb(var(--c-info-rgb) / 0.35);
+  border-radius: 5px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--c-info) 70%, #fff);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.svtip__sw {
+  display: inline-block;
+  width: 9px; height: 9px;
+  background: var(--tc, #888);
+  border: 1px solid rgba(0,0,0,0.4);
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+/* Pulsante "Apri sistema" nel pannello destro */
+.btn--enter {
+  margin-top: 12px;
+  width: 100%;
+  justify-content: center;
+}
+
+/* Chip dei corpi celesti (riusa .sys-chip; nome troncabile + lune) */
+.body-chip__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 13em;
+}
+.body-chip__moons {
+  margin-left: auto;
+  padding-left: 6px;
+  font-size: 0.80rem;
+  font-weight: 600;
+  color: var(--c-text-soft);
+  flex: 0 0 auto;
+  letter-spacing: 0.02em;
+}
+
+/* Stato colonia sui chip dei corpi celesti */
+.body-chip__badge {
+  margin-left: 6px;
+  padding: 2px 8px;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  flex: 0 0 auto;
+}
+.body-chip__badge--home {
+  color: var(--c-accent);
+  background: rgb(var(--c-accent-rgb) / 0.12);
+}
+.body-chip__badge--colony {
+  color: var(--c-accent-warm);
+  background: rgb(var(--c-warm-rgb) / 0.12);
+}
+.body-chip__badge--candidate {
+  color: var(--c-text-faint);
+  border-color: var(--c-border-soft);
+  background: transparent;
+  padding: 1px 5px;
+}
+.sys-chip.is-home {
+  background: rgb(var(--c-accent-rgb) / 0.06);
+  border-color: rgb(var(--c-accent-rgb) / 0.35);
+  color: var(--c-text);
+}
+.sys-chip.is-colony {
+  background: rgb(var(--c-warm-rgb) / 0.05);
+  border-color: rgb(var(--c-warm-rgb) / 0.3);
+  color: var(--c-text);
+}
+.sys-chip.is-home .sys-chip__dot,
+.sys-chip.is-colony .sys-chip__dot {
+  box-shadow: 0 0 6px var(--sc, #fff), 0 0 12px var(--sc, #fff);
+}
+
+/* Elenco anomalie del sistema (§6.1) */
+.anomaly-list { display: flex; flex-direction: column; gap: 4px; }
+.anomaly-item {
+  padding: 5px 9px;
+  font-family: var(--font-data);
+  font-size: 0.74rem;
+  color: var(--c-text-soft);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--c-border-soft);
+  border-left: 3px solid var(--c-text-faint);
+  border-radius: var(--radius-sm);
+}
+.anomaly--reliquie { border-left-color: var(--c-warn); }
+.anomaly--nebulosa { border-left-color: var(--c-violet); }
+.anomaly--detriti  { border-left-color: var(--c-text-soft); }
+
+/* =====================================================================
+   M04 — Vista Pianeta (layer Canvas + scheda tabella)
+   ===================================================================== */
+.planet-holder { position: absolute; inset: 0; z-index: 2; }
+.planet-holder[hidden] { display: none; }
+.planet-canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.planet-canvas:active { cursor: grabbing; }
+
+/* Cronaca: voce dedicata agli eventi di pianeta */
+.chronicle__entry--planet { color: var(--c-text); }
+.chronicle__entry--planet::before { color: var(--c-violet); }
+
+/* --- Scheda pianeta (pannello destro) --- */
+.planet-head {
+  margin: 0 0 8px;
+}
+.planet-head__type {
+  margin: 0;
+  font-family: var(--font-data);
+  font-size: 0.78rem;
+  color: var(--c-text-soft);
+}
+.planet-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 5px;
+  margin-bottom: 12px;
+  border-bottom: 2px solid var(--c-border);
+  padding: 6px 0 8px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--c-bg, rgb(var(--c-surface-rgb) / 0.92));
+  backdrop-filter: blur(6px);
+}
+.planet-tab {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 8px 10px;
+  color: var(--c-text);
+  background: rgb(var(--c-surface-rgb) / 0.55);
+  border: 1.5px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.planet-tab.is-active {
+  flex: 1 1 auto;
+}
+/* PR-B: planet-tab icone SVG con tinta tematica (UI_GUIDE §3).
+   Il color: <hex> propaga a currentColor sull'SVG stroke; il glow è
+   morbido (drop-shadow 3px) come da specifica canonica. */
+.planet-tab__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+.planet-tab__icon--amber  { color: var(--c-accent-warm); }
+.planet-tab__icon--gold   { color: var(--c-warn); }
+.planet-tab__icon--cyan   { color: var(--c-accent); }
+.planet-tab__icon--pink   { color: var(--c-bad); }
+.planet-tab__icon--red    { color: var(--c-bad); }
+.planet-tab__icon--violet { color: var(--c-violet); }
+.planet-tab__icon--green  { color: var(--c-good); }
+.planet-tab__label { white-space: nowrap; }
+.planet-tab:hover:not(:disabled) {
+  color: #fff;
+  border-color: var(--c-accent);
+  background: rgb(var(--c-accent-rgb) / 0.1);
+}
+.planet-tab.is-active {
+  background: linear-gradient(180deg, rgb(var(--c-accent-rgb) / 0.28), rgb(var(--c-accent-rgb) / 0.1));
+  border-color: var(--c-accent);
+  color: #fff;
+  box-shadow: inset 0 -3px 0 var(--c-accent);
+  text-shadow: none;
+}
+.planet-tab:disabled { opacity: 0.4; cursor: not-allowed; }
+.planet-tab-content { display: block; }
+
+/* Alert sulle linguette non attive: pulsa una piccola pastiglia colorata
+   in alto a destra (info=ciano, warn=ambra, bad=rosso). Le linguette
+   attive non lampeggiano: la scheda sotto già mostra lo stato. */
+.planet-tab { position: relative; }
+.planet-tab.has-alert::after {
+  content: '';
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--c-warn);
+  box-shadow: none;
+  animation: tab-alert-pulse 1.6s ease-in-out infinite;
+}
+.planet-tab.has-alert--info {
+  border-color: color-mix(in srgb, var(--c-accent) 60%, var(--c-border-soft));
+}
+.planet-tab.has-alert--info::after {
+  background: var(--c-accent);
+  box-shadow: none;
+}
+.planet-tab.has-alert--warn {
+  border-color: color-mix(in srgb, var(--c-warn) 60%, var(--c-border-soft));
+}
+.planet-tab.has-alert--bad {
+  border-color: color-mix(in srgb, var(--c-bad) 65%, var(--c-border-soft));
+}
+.planet-tab.has-alert--bad::after {
+  background: var(--c-bad);
+  box-shadow: none;
+}
+@keyframes tab-alert-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.78); }
+}
+
+/* Barre dei potenziali risorse (§7.1) */
+.pot-list, .class-list, .adv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+.pot-item, .class-item, .adv-item {
+  display: grid;
+  grid-template-columns: 5.4em 1fr 2.4em;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-data);
+  font-size: 0.74rem;
+  color: var(--c-text-soft);
+}
+.pot-item__label, .class-item__label, .adv-item__name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pot-item__bar, .class-item__bar, .adv-item__bar {
+  position: relative;
+  height: 9px;
+  background: rgb(var(--c-info-rgb) / 0.14);
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+/* Tacche ogni 25% — riferimento visivo sulla barra (decisione UI v2) */
+.pot-item__bar::after, .adv-item__bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent 0, transparent calc(25% - 1px), rgba(255,255,255,0.28) calc(25% - 1px), rgba(255,255,255,0.28) 25%, transparent 25%) ,
+    linear-gradient(90deg, transparent 0, transparent calc(50% - 1px), rgba(255,255,255,0.28) calc(50% - 1px), rgba(255,255,255,0.28) 50%, transparent 50%) ,
+    linear-gradient(90deg, transparent 0, transparent calc(75% - 1px), rgba(255,255,255,0.28) calc(75% - 1px), rgba(255,255,255,0.28) 75%, transparent 75%);
+}
+.pot-item__fill, .class-item__fill, .adv-item__fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 200ms ease;
+}
+.pot--met   { background: linear-gradient(90deg, #6a7894, var(--c-text)); }
+.pot--en    { background: linear-gradient(90deg, var(--c-accent-warm), var(--c-accent-warm)); }
+.pot--food  { background: linear-gradient(90deg, color-mix(in srgb, var(--c-good) 55%, #000), var(--c-good)); }
+.pot--water { background: linear-gradient(90deg, rgb(var(--c-line-rgb) / 0.4), var(--c-info)); }
+.pot-item__val, .class-item__val, .adv-item__val {
+  text-align: right;
+  color: var(--c-text);
+}
+
+/* Classi funzionali (§9.2)
+   Fix sessione 2026-06-09 P1: dopo il refactor "livelli" (decisione #66
+   estensione) la cella valore mostra "55% · 1.1 lv" (~12 char) invece
+   del precedente "55%" (3 char) — la colonna destra a 2.4em del grid
+   condiviso `.pot-item / .class-item / .adv-item` troncava verticalmente
+   il testo. Override locale: colonna label più larga (gestisce "Scienziati"
+   senza ellipsis) + colonna valore generosa, niente wrap. */
+.class-item {
+  grid-template-columns: 6.4em 1fr 6.2em;
+}
+.class-item__val {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.class-item__label { font-weight: 600; }
+
+.class--operai      { background: linear-gradient(90deg, #6a7894, var(--c-text)); }
+.class--scienziati  { background: linear-gradient(90deg, color-mix(in srgb, var(--c-accent) 55%, #000), var(--c-accent)); }
+.class--militari    { background: linear-gradient(90deg, var(--c-accent-warm), var(--c-accent-warm)); }
+.class--mercanti    { background: linear-gradient(90deg, var(--c-violet), var(--c-violet)); }
+.class--tecnici     { background: linear-gradient(90deg, rgb(var(--c-line-rgb) / 0.4), var(--c-info)); }
+
+/* Risorse avanzate (§7.2) — icone SVG neon dal catalogo (UI_GUIDE §3);
+   la tinta viola arriva da .ui-icon--violet, il glow da .ui-icon-svg. */
+.adv-item__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3em;
+  font-size: 0.95rem;
+  color: var(--c-violet);
+  text-align: center;
+}
+.advanced-hint .ui-icon,
+.bodyinfo__chip-k .ui-icon { font-size: 0.9em; vertical-align: -0.1em; }
+.adv-item__fill { background: linear-gradient(90deg, var(--c-violet), var(--c-violet)); }
+.advanced-hint {
+  margin: 4px 0 8px;
+  padding: 8px 10px;
+  font-family: var(--font-data);
+  font-size: 0.74rem;
+  color: var(--c-text-soft);
+  background: rgb(var(--c-violet-rgb) / 0.1);
+  border: 1px dashed rgb(var(--c-violet-rgb) / 0.4);
+  border-radius: var(--radius-sm);
+}
+.advanced-hint strong { color: var(--c-violet); }
+
+/* Tassi di produzione */
+.rate {
+  font-family: var(--font-data);
+  font-weight: 600;
+}
+.rate--pos { color: var(--c-good); }
+.rate--neg { color: var(--c-bad); }
+.rate-aux  { color: var(--c-text-faint); font-size: 0.72rem; }
+
+/* Strutture */
+.planet-slots {
+  margin: 0 0 10px;
+  font-family: var(--font-data);
+  font-size: 0.8rem;
+  color: var(--c-text-soft);
+}
+.planet-slots strong { color: var(--c-text); }
+.planet-slots__queue { color: var(--c-accent-warm); font-size: 0.74rem; margin-left: 6px; }
+
+.struct-cat {
+  margin: 4px 0;
+  padding: 4px 0;
+  border-top: 1px solid var(--c-border-soft);
+}
+.struct-cat > summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 0.70rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-text-soft);
+  padding: 2px 0;
+  list-style: none;
+}
+.struct-cat > summary::-webkit-details-marker { display: none; }
+.struct-cat[open] > summary { color: var(--c-text); }
+.struct-cat__count {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  font-family: var(--font-data);
+  font-size: 0.70rem;
+  letter-spacing: 0;
+  color: var(--c-text-faint);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 999px;
+}
+
+.struct-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 6px;
+}
+.struct-item {
+  display: grid;
+  grid-template-columns: 1.6em 1fr;
+  grid-auto-columns: auto;
+  grid-auto-flow: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-data);
+  font-size: 0.74rem;
+  color: var(--c-text);
+}
+/* Lascia un po' di respiro fra blocco-testo e cluster bottoni a destra. */
+.struct-item__main + * { margin-left: 4px; }
+.struct-item__glyph {
+  text-align: center;
+  color: var(--c-accent);
+  font-size: 0.95rem;
+}
+.struct-item__main { min-width: 0; }
+.struct-item__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.struct-item__lvl {
+  font-size: 0.70rem;
+  color: var(--c-accent-warm);
+  margin-left: 4px;
+}
+/* Badge livello — gradiente da pallido a oro col progresso lvl/maxLevel.
+   Sostituisce il vecchio "×N" testuale: dà a colpo d'occhio quanto è
+   sviluppata la struttura e non si confonde col "Prossimo · L<N+1>"
+   nella riga del costo. */
+.struct-item__lvl-badge {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: 0.70rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  margin-right: 6px;
+  vertical-align: 1px;
+  line-height: 1.25;
+}
+.struct-item__lvl-badge.lv-1 {
+  color: var(--c-info);
+  background: rgb(var(--c-info-rgb) / 0.1);
+}
+.struct-item__lvl-badge.lv-2 {
+  color: var(--c-accent);
+  background: rgb(var(--c-accent-rgb) / 0.14);
+}
+.struct-item__lvl-badge.lv-3 {
+  color: var(--c-accent-warm);
+  background: rgb(var(--c-warm-rgb) / 0.16);
+}
+.struct-item__lvl-badge.lv-4 {
+  color: var(--c-accent-warm);
+  background: rgb(var(--c-warm-rgb) / 0.18);
+}
+.struct-item__lvl-badge.lv-max {
+  color: var(--c-warn);
+  background: rgb(var(--c-warn-rgb) / 0.22);
+  box-shadow: none;
+}
+.struct-item__cat {
+  font-size: 0.70rem;
+  color: var(--c-text-faint);
+  margin-left: 4px;
+}
+.struct-item__cost {
+  font-size: 0.74rem;
+  color: var(--c-text-soft);
+  font-family: var(--font-data);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+.struct-item__cost-label {
+  color: var(--c-accent-warm);
+  font-weight: 600;
+  margin-right: 4px;
+}
+.struct-item__cost-item {
+  display: inline-block;
+  margin-right: 6px;
+  white-space: nowrap;
+}
+.struct-item__cost-time {
+  color: var(--c-text-faint);
+  margin-left: 2px;
+}
+.btn--icon {
+  padding: 2px 8px;
+  font-size: 1.25rem;
+  line-height: 1;
+  font-weight: 800;
+  min-width: 30px;
+  text-align: center;
+  color: var(--c-accent-warm);
+  border-color: color-mix(in srgb, var(--c-accent-warm) 55%, transparent);
+  background: color-mix(in srgb, var(--c-accent-warm) 8%, transparent);
+}
+.btn--icon:hover:not(:disabled) {
+  color: #fff;
+  border-color: var(--c-accent-warm);
+  background: color-mix(in srgb, var(--c-accent-warm) 22%, transparent);
+}
+.struct-item .btn--mini.btn--icon {
+  padding: 0 5px;
+  font-size: 1.4rem;
+  min-width: 22px;
+  border-color: transparent;
+  background: transparent;
+}
+.struct-item .btn--mini.btn--icon:hover:not(:disabled) {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--c-accent-warm) 18%, transparent);
+}
+.struct-item__locked--icon {
+  font-size: 1.4rem;
+  font-weight: 800;
+  padding: 0 5px;
+  color: color-mix(in srgb, var(--c-accent-warm) 45%, var(--c-text-faint));
+}
+.struct-item__cost--max {
+  color: var(--c-text-faint);
+  font-style: italic;
+}
+.struct-item__delta {
+  margin-left: 6px;
+  padding-left: 8px;
+  border-left: 1px solid var(--c-border-soft);
+}
+.struct-item__d--pos { color: var(--c-good); font-weight: 600; }
+.struct-item__d--neg { color: var(--c-bad);  font-weight: 600; }
+.struct-item.is-built {
+  background: rgb(var(--c-accent-rgb) / 0.06);
+  border-color: rgb(var(--c-accent-rgb) / 0.2);
+}
+.struct-item.is-queue {
+  background: rgb(var(--c-warm-rgb) / 0.06);
+  border-color: rgb(var(--c-warm-rgb) / 0.25);
+}
+.struct-item.is-locked { opacity: 0.55; }
+.struct-item__locked {
+  color: var(--c-text-faint);
+  font-size: 0.95rem;
+  padding: 0 6px;
+}
+.struct-item__locked.is-busy {
+  color: var(--c-amber);
+  border: 1px solid color-mix(in srgb, var(--c-amber) 45%, transparent);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-family: var(--font-data);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.struct-item__locked.is-building {
+  color: var(--c-accent);
+  border: 1px solid color-mix(in srgb, var(--c-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--c-accent) 12%, transparent);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-family: var(--font-data);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.struct-item.is-building {
+  opacity: 0.75;
+  filter: saturate(0.7);
+  background: color-mix(in srgb, var(--c-accent) 5%, transparent);
+}
+.struct-item__locked.is-demolish {
+  color: var(--c-bad);
+  border: 1px solid color-mix(in srgb, var(--c-bad) 55%, transparent);
+  background: color-mix(in srgb, var(--c-bad) 10%, transparent);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-family: var(--font-data);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.struct-item.is-queue.is-demolish {
+  background: color-mix(in srgb, var(--c-bad) 6%, transparent);
+}
+.struct-item.is-queue.is-demolish .progress-bar__fill {
+  background: var(--c-bad);
+}
+.struct-item .btn--mini.struct-item__demolish {
+  padding: 0 4px;
+  font-family: var(--font-data);
+  font-size: 1.05rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--c-bad);
+  opacity: 0.65;
+  border-color: transparent;
+  background: transparent;
+  min-width: 22px;
+  line-height: 1;
+}
+.struct-item .btn--mini.struct-item__demolish:hover:not(:disabled) {
+  opacity: 1;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--c-bad) 18%, transparent);
+}
+.struct-item__cancel {
+  grid-column: 3 / -1;
+  padding: 2px 8px;
+  font-family: var(--font-data);
+  font-size: 0.85rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--c-bad);
+}
+.struct-item .btn--mini {
+  padding: 4px 10px;
+  font-size: 0.70rem;
+  letter-spacing: 0.06em;
+}
+/* M06.7 + PR-I: bottone info ⓘ della scheda strutture — ora SVG icon
+   coerente con UI_GUIDE §3 e con il bottone tutorial in HUD. Niente
+   più border-radius/italic font weird "i" che sembrava una barra. */
+.struct-item .btn--mini.struct-item__info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  padding: 0 !important;
+  border: none !important;
+  background: transparent;
+  color: var(--c-violet);
+  font-size: 0.95rem;
+  line-height: 1;
+  opacity: 0.9;
+}
+.struct-item .btn--mini.struct-item__info:hover {
+  opacity: 1;
+  color: var(--c-text);
+}
+.struct-item .btn--mini.struct-item__info .ui-icon-svg { width: 1em; height: 1em; }
+
+/* btn--mini lite (riusa lo stile dei mini-pulsanti dell'overlay galassia) */

@@ -1,0 +1,410 @@
+/* Orion Empires — Civiltà, diplomazia, guerra e assedi (estratto da style.css, Revisione 2026 Fase 3; ordine invariato). */
+/* =====================================================================
+   M10 Fase B (decisione #47) — Vista "Civiltà" + dossier
+   ===================================================================== */
+.civ-view { padding: 8px 12px; place-self: stretch; max-height: 100%; overflow-y: auto; }
+
+/* Schermata di dettaglio civiltà. */
+.civ-detail__head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding-bottom: 8px; margin-bottom: 8px;
+  border-bottom: 1px solid var(--c-border);
+}
+.civ-detail__swatch {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--civ-color, #888);
+  box-shadow: 0 0 8px var(--civ-color, #888);
+  flex: 0 0 auto;
+}
+.civ-detail__name { margin: 0; font-size: 1.05rem; }
+.civ-detail__dossier { font-size: 0.84rem; color: var(--c-text-soft); margin: 0 0 12px; }
+.civ-detail__sec { margin: 0 0 14px; }
+.civ-detail__sec > h3 {
+  font-size: 0.82rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.03em; color: var(--c-violet, var(--c-violet));
+  margin: 0 0 6px;
+}
+.civ-detail__count {
+  font-family: var(--font-data, monospace); font-size: 0.74rem;
+  background: rgb(var(--c-surface-rgb) / 0.6); border-radius: 999px;
+  padding: 1px 7px; margin-left: 4px; color: var(--c-text-soft);
+}
+.civ-detail__cols, .civ-detail__fleets { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.civ-detail__col {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 9px; border-radius: 4px; cursor: pointer;
+  background: rgb(var(--c-surface-rgb) / 0.45);
+  border: 1px solid var(--c-border-soft);
+}
+.civ-detail__col:hover { border-color: var(--c-accent-warm); }
+.civ-detail__col-name { font-weight: 600; font-size: 0.84rem; }
+.civ-detail__fleet {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 6px 9px; border-radius: 4px;
+  background: rgb(var(--c-surface-rgb) / 0.45);
+  border-left: 3px solid var(--c-bad, var(--c-bad));
+}
+.civ-detail__fleet-mission { font-weight: 600; font-size: 0.82rem; }
+.civ-detail__fleet-comp { font-size: 0.8rem; color: var(--c-text-soft); }
+.civ-detail__fleet-where { font-size: 0.76rem; color: var(--c-text-faint); margin-left: auto; }
+
+/* Card lista: nome cliccabile + rimando al dettaglio. */
+.civ-card__name--link {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font: inherit; color: inherit; text-align: left;
+  text-decoration: underline; text-decoration-color: rgb(255 255 255 / 0.25);
+  text-underline-offset: 2px;
+}
+.civ-card__name--link:hover { text-decoration-color: var(--c-accent); }
+.civ-indices { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.civ-index {
+  font-size: 0.82rem; color: var(--c-text-faint);
+  background: rgb(var(--c-violet-rgb) / 0.1);
+  border: 1px solid rgb(var(--c-violet-rgb) / 0.3);
+  border-radius: 6px; padding: 3px 9px;
+}
+.civ-index strong { color: color-mix(in srgb, var(--c-violet) 70%, #fff); font-family: var(--font-display); margin-left: 2px; }
+
+.civ-list { list-style: none; margin: 12px 0 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
+.civ-card {
+  border: 1px solid var(--c-border);
+  border-left: 3px solid var(--civ-color, var(--c-violet));
+  border-radius: 8px; padding: 11px 13px;
+  background: rgb(var(--c-surface-rgb) / 0.55);
+}
+.civ-card__head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin-bottom: 8px; }
+.civ-card__swatch {
+  width: 11px; height: 11px; border-radius: 3px;
+  background: var(--civ-color, var(--c-violet)); flex: 0 0 auto;
+  box-shadow: none;
+}
+.civ-card__name { font-family: var(--font-display); font-size: 0.98rem; color: var(--c-text); flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.civ-chip {
+  font-size: 0.70rem; text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 2px 7px; border-radius: 4px; flex: 0 0 auto;
+}
+.civ-chip--bene     { background: rgb(var(--c-accent-rgb) / 0.16); color: var(--c-good); border: 1px solid rgb(var(--c-accent-rgb) / 0.4); }
+.civ-chip--male     { background: rgb(var(--c-bad-rgb) / 0.16); color: var(--c-bad); border: 1px solid rgb(var(--c-bad-rgb) / 0.4); }
+.civ-chip--neutrale { background: color-mix(in srgb, var(--c-text-soft) 14%, transparent); color: var(--c-text); border: 1px solid color-mix(in srgb, var(--c-text-soft) 34%, transparent); }
+
+.civ-card__row { display: flex; gap: 8px; align-items: baseline; font-size: 0.82rem; margin: 3px 0; flex-wrap: wrap; }
+.civ-card__k { color: var(--c-text-faint); font-size: 0.74rem; }
+.civ-power { text-transform: capitalize; font-weight: 600; }
+.civ-power--debole    { color: var(--c-text-soft); }
+.civ-power--media     { color: var(--c-warn); }
+.civ-power--forte     { color: var(--c-accent-warm); }
+.civ-power--dominante { color: var(--c-bad); }
+
+/* M10 Fase B-2: livello tecnologico AI (Arretrata→All'avanguardia). */
+.civ-tech { text-transform: capitalize; font-weight: 600; }
+.civ-tech--t0 { color: var(--c-text-soft); }
+.civ-tech--t1 { color: var(--c-text-soft); }
+.civ-tech--t2 { color: var(--c-accent); }
+.civ-tech--t3 { color: var(--c-info); }
+.civ-tech--t4 { color: var(--c-violet); }
+.civ-tech__note { color: var(--c-text-faint); font-size: 0.72rem; }
+
+.civ-disp { margin-top: 9px; }
+.civ-disp__top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+.civ-disp__label { font-size: 0.78rem; font-weight: 600; }
+.civ-disp__label--neg { color: var(--c-bad); }
+.civ-disp__label--mid { color: var(--c-text); }
+.civ-disp__label--pos { color: var(--c-good); }
+.civ-disp__bar {
+  position: relative; height: 7px; border-radius: 4px;
+  background: color-mix(in srgb, var(--c-text-soft) 14%, transparent); overflow: hidden;
+}
+.civ-disp__mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: color-mix(in srgb, color-mix(in srgb, var(--c-info) 70%, #fff) 35%, transparent); }
+.civ-disp__fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; opacity: 0.85; }
+.civ-disp__fill--neg { background: linear-gradient(90deg, var(--c-bad), var(--c-accent-warm)); }
+.civ-disp__fill--mid { background: linear-gradient(90deg, var(--c-text-faint), var(--c-text)); }
+.civ-disp__fill--pos { background: linear-gradient(90deg, var(--c-accent-warm), var(--c-accent)); }
+
+.chronicle__hint { color: var(--c-text-faint); font-style: italic; font-size: 0.92em; }
+
+/* =====================================================================
+   M11 Fase A (decisione #51) — Diplomazia: chip stato + proposte
+   Tinta concetto = rosa (civiltà/altri attori, UI_GUIDE §1). Gli stati
+   relazione riusano i semantici §7 (war→crit, truce→warn, peace→ok,
+   alliance→active).
+   ===================================================================== */
+.dip-relchip {
+  font-family: var(--font-display); font-size: 0.7rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 1px 8px; border-radius: 999px; border: 1px solid transparent;
+}
+.dip-relchip.is-crit   { background: rgb(var(--c-bad-rgb) / 0.16); color: var(--c-bad); border-color: rgb(var(--c-bad-rgb) / 0.4); }
+.dip-relchip.is-warn   { background: rgb(var(--c-warn-rgb) / 0.14); color: var(--c-warn); border-color: rgb(var(--c-warn-rgb) / 0.4); }
+.dip-relchip.is-ok     { background: rgb(var(--c-good-rgb) / 0.14); color: var(--c-good); border-color: rgb(var(--c-good-rgb) / 0.4); }
+.dip-relchip.is-active { background: rgb(var(--c-accent-rgb) / 0.14); color: var(--c-accent); border-color: rgb(var(--c-accent-rgb) / 0.42); }
+
+.dip-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.dip-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px; border-radius: var(--radius-sm, 5px);
+  background: rgb(var(--c-bad-rgb) / 0.12);
+  border: 1px solid rgb(var(--c-bad-rgb) / 0.34);
+  color: color-mix(in srgb, var(--c-bad) 70%, #fff); font-size: 0.78rem; font-weight: 600; cursor: pointer;
+  transition: var(--transition, 200ms ease);
+}
+.dip-btn:hover:not([disabled]) { background: rgb(var(--c-bad-rgb) / 0.2); border-color: rgb(var(--c-bad-rgb) / 0.55); }
+.dip-btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+.dip-btn--danger {
+  background: rgb(var(--c-bad-rgb) / 0.12); border-color: rgb(var(--c-bad-rgb) / 0.4); color: var(--c-bad);
+}
+.dip-btn--danger:hover:not([disabled]) { background: rgb(var(--c-bad-rgb) / 0.22); }
+.dip-btn__odds {
+  font-family: var(--font-data); font-size: 0.70rem; font-weight: 400;
+  opacity: 0.78; text-transform: lowercase;
+}
+.dip-btn--primary {
+  background: rgb(var(--c-accent-rgb) / 0.14); border-color: rgb(var(--c-accent-rgb) / 0.42); color: var(--c-accent);
+}
+.dip-btn--primary:hover:not([disabled]) { background: rgb(var(--c-accent-rgb) / 0.22); }
+
+/* M11 Fase B parziale — dispacci AI proattivi */
+.dip-offer {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin: 8px 0; padding: 8px 10px;
+  background: rgb(var(--c-bad-rgb) / 0.1);
+  border: 1px solid rgb(var(--c-bad-rgb) / 0.42);
+  border-left: 3px solid var(--c-bad);
+  border-radius: var(--radius-sm, 5px);
+}
+.dip-offer__icon { font-size: 1.1rem; color: var(--c-bad); }
+.dip-offer__text { flex: 1 1 auto; font-size: 0.82rem; }
+/* M11 Fase B piena (decisione #94) — varianti per controfferte / ultimatum /
+   preavvisi di tradimento. Coding visivo (UI_GUIDE §7): is-warn (oro) per
+   controfferta; is-crit (rosso) per ultimatum e warning di tradimento. */
+.dip-offer--counter {
+  background: rgb(var(--c-warm-rgb) / 0.12);
+  border-color: rgb(var(--c-warm-rgb) / 0.5);
+  border-left-color: var(--c-accent-warm);
+}
+.dip-offer--counter .dip-offer__icon { color: var(--c-accent-warm); }
+.dip-offer--ultimatum,
+.dip-offer--warning {
+  background: rgb(var(--c-bad-rgb) / 0.14);
+  border-color: rgb(var(--c-bad-rgb) / 0.55);
+  border-left-color: var(--c-bad);
+}
+.dip-offer--ultimatum .dip-offer__icon,
+.dip-offer--warning .dip-offer__icon { color: var(--c-bad); }
+/* M11 (decisione #95) — distress: alleato in difficoltà. Tinta verde "amica"
+   (UI_GUIDE §7 is-ok), per distinguerlo a colpo d'occhio dall'urgenza ostile. */
+.dip-offer--distress {
+  background: rgb(var(--c-good-rgb) / 0.12);
+  border-color: rgb(var(--c-good-rgb) / 0.5);
+  border-left-color: var(--c-good);
+}
+.dip-offer--distress .dip-offer__icon { color: var(--c-good); }
+
+/* M11 Fase B parziale — Sistemi occupati */
+.civ-occupations {
+  margin: 14px 0; padding: 12px;
+  background: rgb(var(--c-bad-rgb) / 0.05);
+  border: 1px solid rgb(var(--c-bad-rgb) / 0.28);
+  border-radius: var(--radius-md, 6px);
+}
+.civ-occupations__title {
+  margin: 0 0 7px; font-size: 0.92rem; color: color-mix(in srgb, var(--c-bad) 70%, #fff);
+  font-family: var(--font-display);
+}
+.civ-occ__count {
+  display: inline-block; padding: 1px 7px; margin-left: 4px;
+  background: rgb(var(--c-bad-rgb) / 0.18); border-radius: 999px;
+  font-size: 0.72rem; color: color-mix(in srgb, var(--c-bad) 70%, #fff);
+}
+.civ-occupations__list {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 5px;
+}
+.civ-occupation {
+  display: grid; grid-template-columns: 1.4fr 1fr auto auto; gap: 10px;
+  align-items: center; padding: 6px 9px;
+  background: rgba(0,0,0,0.25); border-left: 3px solid var(--occ-color, var(--c-bad));
+  border-radius: 4px; font-size: 0.82rem;
+}
+.civ-occ__since { font-family: var(--font-data); font-size: 0.74rem; opacity: 0.7; }
+
+/* =====================================================================
+   M09 Fase A (decisione #49) — Guerra / assedi / veteranità
+   ===================================================================== */
+.war-section {
+  margin: 10px 0 14px; padding: 12px;
+  background: rgb(var(--c-bad-rgb) / 0.06);
+  border: 1px solid rgb(var(--c-bad-rgb) / 0.22);
+  border-radius: 8px;
+}
+.war-meters { display: flex; gap: 14px; flex-wrap: wrap; }
+.war-meter { flex: 1 1 200px; display: flex; align-items: center; gap: 8px; }
+.war-meter__lbl { font-size: 0.74rem; color: var(--c-text-faint); white-space: nowrap; }
+.war-meter__bar {
+  flex: 1; height: 7px; border-radius: 4px;
+  background: color-mix(in srgb, var(--c-text-soft) 14%, transparent); overflow: hidden;
+}
+.war-meter__bar > i { display: block; height: 100%; border-radius: 4px; }
+.war-meter__val { font-size: 0.78rem; font-weight: 600; min-width: 38px; text-align: right; }
+.war-meter--ok   .war-meter__bar > i { background: linear-gradient(90deg, var(--c-accent), var(--c-good)); }
+.war-meter--warn .war-meter__bar > i { background: linear-gradient(90deg, var(--c-accent-warm), var(--c-accent-warm)); }
+.war-meter--crit .war-meter__bar > i { background: linear-gradient(90deg, var(--c-bad), var(--c-accent-warm)); }
+.war-meter--press .war-meter__bar > i { background: linear-gradient(90deg, var(--c-violet), var(--c-bad)); }
+
+.war-h { margin: 12px 0 6px; font-size: 0.82rem; color: var(--c-accent-warm); text-transform: uppercase; letter-spacing: 0.04em; }
+.war-incursions ul { list-style: none; margin: 0; padding: 0; }
+.war-incursions li { font-size: 0.84rem; color: var(--c-accent-warm); margin: 3px 0; }
+.war-incursion-link {
+  display: flex; align-items: center; gap: 4px; width: 100%;
+  background: none; border: 0; padding: 3px 6px; margin: 0;
+  font: inherit; font-size: 0.84rem; color: var(--c-accent-warm); text-align: left;
+  border-radius: 6px; cursor: pointer; transition: var(--transition);
+}
+.war-incursion-link:hover,
+.war-incursion-link:focus-visible {
+  background: rgb(var(--c-warm-rgb) / 0.12); color: color-mix(in srgb, var(--c-accent-warm) 70%, #fff); outline: none;
+}
+.war-incursion-link__txt { flex: 1 1 auto; }
+.war-incursion-link .ui-icon--soft { margin-left: auto; flex: 0 0 auto; }
+
+.war-siege {
+  margin: 6px 0; padding: 9px 10px;
+  background: rgb(var(--c-bad-rgb) / 0.1);
+  border-left: 3px solid var(--c-bad); border-radius: 5px;
+}
+.war-siege__head { font-size: 0.86rem; font-weight: 600; margin-bottom: 6px; }
+.war-siege__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.war-siege__hint { font-size: 0.74rem; color: var(--c-text-faint); margin: 6px 0 0; }
+.war-quiet { margin: 8px 0 0; }
+
+/* Pannello "Forze in campo" dentro la card d'assedio (decisione 2026-06-20) */
+.war-forces {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px;
+  margin: 6px 0 8px; padding: 8px 10px; border-radius: 5px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 0.78rem;
+}
+.war-forces__col { min-width: 0; }
+.war-forces__col h5 {
+  margin: 0 0 4px; font-size: 0.74rem; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--c-text-faint); font-weight: 600;
+}
+.war-forces__col--def h5 { color: var(--c-good); }
+.war-forces__col--atk h5 { color: var(--c-bad); }
+.war-forces__col ul { list-style: none; margin: 0; padding: 0; }
+.war-forces__col li {
+  margin: 1px 0; line-height: 1.35;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.war-forces__hp { color: var(--c-text-soft); }
+.war-forces__fp { color: var(--c-accent-warm); }
+.war-forces__empty { margin: 0; font-size: 0.76rem; color: var(--c-bad); }
+.war-forces__warn {
+  grid-column: 1 / -1;
+  margin: 4px 0 0; font-size: 0.74rem; color: var(--c-accent-warm);
+  display: flex; align-items: center; gap: 5px;
+}
+.war-forces__forecast {
+  grid-column: 1 / -1;
+  margin: 4px 0 0; padding-top: 4px; font-size: 0.78rem;
+  border-top: 1px dashed rgba(255, 255, 255, 0.10);
+}
+.war-forces__forecast--win  strong { color: var(--c-good); }
+.war-forces__forecast--even strong { color: var(--c-accent-warm); }
+.war-forces__forecast--lose strong { color: var(--c-bad); }
+
+/* Card assedio COMPATTA cliccabile nel riepilogo (decisione 2026-06-20):
+   meno dati, niente pulsanti → click apre la sottopagina dettaglio. */
+.war-siege--compact {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  color: inherit; font: inherit;
+  border: 1px solid transparent; border-left: 3px solid var(--c-bad);
+  transition: background var(--transition), border-color var(--transition);
+}
+.war-siege--compact:hover { background: rgb(var(--c-bad-rgb) / 0.16); }
+.war-siege--compact:focus-visible { outline: none; border-color: var(--c-accent); box-shadow: inset 2px 0 0 var(--c-accent); }
+.war-siege__compact {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  font-size: 0.8rem;
+}
+.war-siege__nums { color: var(--c-text-soft); }
+.war-siege__forecast {
+  font-size: 0.74rem; font-weight: 600; padding: 1px 8px; border-radius: 999px;
+  border: 1px solid currentColor;
+}
+.war-siege__forecast--win  { color: var(--c-good); }
+.war-siege__forecast--even { color: var(--c-accent-warm); }
+.war-siege__forecast--lose { color: var(--c-bad); }
+.war-siege__cta {
+  display: inline-flex; align-items: center; gap: 3px;
+  margin-top: 5px; font-size: 0.74rem; color: var(--c-accent);
+}
+
+/* Sottopagina DETTAGLIO assedio (decisione 2026-06-20) */
+.siege-detail { padding: 2px; }
+.siege-detail__head { margin-bottom: 8px; }
+.siege-detail__title {
+  margin: 8px 0 0; font-size: 1.0rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.siege-detail__sub { font-size: 0.78rem; font-weight: 400; color: var(--c-text-faint); }
+.siege-detail__log { margin: 10px 0 8px; }
+.siege-detail__table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.siege-detail__table th, .siege-detail__table td {
+  padding: 4px 8px; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.siege-detail__table th { color: var(--c-text-faint); font-weight: 600; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.03em; }
+.siege-detail__row--last { background: rgb(var(--c-accent-rgb) / 0.08); }
+.siege-detail__nowtag {
+  font-size: 0.70rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--c-accent); margin-left: 4px;
+}
+.siege-detail__loss { color: var(--c-bad); font-weight: 600; }
+.siege-detail__kill { color: var(--c-good); font-weight: 600; }
+.siege-detail__hold { color: var(--c-text-faint); }
+.siege-detail__noround { color: var(--c-text-faint); font-style: italic; }
+.siege-detail__actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+
+/* veteranità navi */
+.fleet-item__vets { display: flex; gap: 5px; flex-wrap: wrap; margin: 5px 0 0; }
+.vet-chip {
+  font-size: 0.70rem; padding: 1px 7px; border-radius: 9px;
+  background: color-mix(in srgb, var(--c-text-soft) 12%, transparent); color: var(--c-text-soft);
+  border: 1px solid color-mix(in srgb, var(--c-text-soft) 22%, transparent);
+}
+.vet-chip--1 { background: rgb(var(--c-info-rgb) / 0.14); color: var(--c-info); border-color: rgb(var(--c-info-rgb) / 0.34); }
+.vet-chip--2 { background: rgb(var(--c-violet-rgb) / 0.16); color: color-mix(in srgb, var(--c-violet) 70%, #fff); border-color: rgb(var(--c-violet-rgb) / 0.4); }
+.vet-chip--3 {
+  background: rgb(var(--c-warm-rgb) / 0.18); color: var(--c-accent-warm); border-color: rgb(var(--c-warm-rgb) / 0.45);
+  font-weight: 600; text-shadow: none;
+}
+
+/* report di battaglia */
+.battle-modal {
+  position: fixed; inset: 0; z-index: 400;
+  background: rgb(11 14 19 / 0.72); backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.battle-modal__panel {
+  width: min(560px, 94vw); max-height: 86vh; overflow: auto;
+  background: var(--c-panel-solid); border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 10px; padding: 18px 20px; box-shadow: var(--shadow-panel);
+}
+.battle-modal__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 10px; }
+.battle-modal__head h3 { margin: 0; font-size: 1.0rem; display: inline-flex; align-items: center; gap: 8px; }
+.battle-modal__verdict { font-weight: 700; margin: 6px 0; display: inline-flex; align-items: center; gap: 8px; }
+.battle-modal__verdict .ui-icon { font-size: 1.1rem; }
+.battle-modal__verdict--win  { color: var(--c-good); }
+.battle-modal__verdict--lose { color: var(--c-bad); }
+.battle-modal__sides { display: flex; justify-content: space-between; gap: 12px; font-size: 0.82rem; margin-bottom: 10px; flex-wrap: wrap; }
+.battle-modal__log { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+.battle-modal__log th, .battle-modal__log td { padding: 3px 6px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.battle-modal__log th { color: var(--c-text-faint); font-weight: 600; }
+
+/* M09 Fase B — esilio, assedio AI, leve di recovery */
+.war-exile {
+  margin: 0 0 10px; padding: 8px 10px; border-radius: 6px;
+  background: rgb(var(--c-bad-rgb) / 0.14); border: 1px solid rgb(var(--c-bad-rgb) / 0.4);
+  color: var(--c-bad); font-size: 0.86rem;
+}
+.war-siege--ai { border-left-color: var(--c-violet); background: rgb(var(--c-violet-rgb) / 0.1); }

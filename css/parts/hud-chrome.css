@@ -1,0 +1,284 @@
+/* Orion Empires — HUD inferiore, corner-marker, scrollbar, responsive tablet (estratto da style.css, Revisione 2026 Fase 3; ordine invariato). */
+/* =====================================================================
+   HUD inferiore: cronaca + controllo del tempo
+   ===================================================================== */
+/* .hud-bottom uses display:contents (definito su .app-shell) */
+.chronicle {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--c-panel);
+  border: 2px solid var(--c-border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel), inset 0 1px 0 var(--c-panel-hilite);
+  backdrop-filter: blur(6px);
+  padding: 10px 14px;
+  min-height: 0;
+}
+.chronicle__log {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+.chronicle__entry {
+  padding-left: 14px;
+  position: relative;
+  color: var(--c-text-soft);
+}
+.chronicle__entry::before {
+  content: "›";
+  position: absolute;
+  left: 0;
+  color: var(--c-accent);
+}
+.chronicle__entry--system { color: var(--c-text-faint); font-style: italic; }
+.chronicle__entry--explore { color: var(--c-text); }
+.chronicle__entry--explore::before { color: var(--c-accent-warm); }
+/* M10 Fase A (decisione #47): voci sulle civiltà AI — accento freddo
+   distinto dal resto (geopolitica galattica). */
+.chronicle__entry--civ { color: var(--c-text); }
+.chronicle__entry--civ::before { color: var(--c-violet); }
+
+/* --- Controllo del tempo (Tempo Standard Galattico) --- */
+.time-control {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 9px;
+  padding: 14px;
+  background: var(--c-panel);
+  border: 2px solid var(--c-border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel), inset 0 1px 0 var(--c-panel-hilite);
+  backdrop-filter: blur(6px);
+}
+.time-control__unit strong { color: var(--c-accent); font-weight: 600; }
+
+/* Versione inline nell'header — decisione #31 (auto-advance):
+   5 controlli compatti [−][▶ velocità][+][⏵Ι][⏭ Evento]. */
+.time-control--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: rgb(var(--c-surface-rgb) / 0.65);
+  border: 1px solid var(--c-border);
+  box-shadow: none;
+  backdrop-filter: none;
+  /* Ancorati a destra senza stringersi né traboccare oltre il bordo
+     dell'header: è la barra risorse a cedere lo spazio (vedi .resource-bar). */
+  flex: 0 0 auto;
+}
+.time-control--inline::before { display: none; }
+.time-control--inline .btn--mini {
+  padding: 4px 5px;
+  font-size: 1.05rem;
+  min-width: 28px;
+  font-family: var(--font-data);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.time-control--inline .btn--play {
+  padding: 4px 5px;
+  font-size: 0.78rem;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  text-transform: none;
+  font-family: var(--font-data);
+  /* Larghezza fissa, dimensionata sul label più lungo "0.5× · 60s/Ι"
+     (12 caratteri monospace, solo al livello più lento; tutti gli altri
+     ≤10). Fissa così non si stringe/allarga al cambio velocità.
+     Padding interno e spaziatura caratteri ridotti per recuperare spazio
+     nell'header → larghezza accorciata di conseguenza (130→116px). */
+  width: 116px;
+  justify-content: center;
+  background: rgb(var(--c-accent-rgb) / 0.06);
+  border-color: var(--c-accent-dim);
+}
+.time-control--inline .btn--play:hover:not(:disabled) {
+  background: rgb(var(--c-accent-rgb) / 0.18);
+  border-color: var(--c-accent);
+}
+.time-control--inline .btn--play .btn__glyph {
+  font-size: 1.1rem;
+  color: var(--c-accent);
+}
+.time-control--inline .btn--step,
+.time-control--inline .btn--play-step {
+  padding: 4px 6px;
+}
+.time-control--inline .btn--next-event {
+  padding: 4px 6px;
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  /* Larghezza FISSA (non min-width): il delta varia di lunghezza al
+     variare del countdown ("+Ι9" → "+1Φ·4Κ·9Ι") e, essendo il gruppo
+     ancorato a destra, qualunque crescita spingeva a sinistra play/pause
+     facendolo "scappare" da sotto il mouse. Bloccando la larghezza il
+     gruppo non si sposta più. */
+  width: 106px;
+  gap: 4px;
+  justify-content: center;
+}
+/* Etichetta "EVENTO" nascosta anche su desktop: resta glifo ⏭ + countdown. */
+.time-control--inline .btn--next-event .btn__label { display: none; }
+.time-control--inline .btn__glyph { font-size: 0.95rem; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-text);
+  background: transparent;
+  border: 2px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.btn__glyph { font-size: 0.9rem; }
+.btn:hover:not(:disabled) {
+  border-color: var(--c-accent);
+  color: #fff;
+  box-shadow: none;
+}
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--glow-focus);
+}
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn--primary {
+  background: linear-gradient(180deg, rgb(var(--c-accent-rgb) / 0.18), rgb(var(--c-accent-rgb) / 0.06));
+  border-color: var(--c-accent-dim);
+}
+.btn--primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgb(var(--c-accent-rgb) / 0.3), rgb(var(--c-accent-rgb) / 0.1));
+  box-shadow: var(--glow-accent);
+}
+/* Pulsanti-passo +1/+2/+5/+10 Impulsi */
+.btn--step {
+  font-family: var(--font-data);
+  font-size: 0.95rem;
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 10px 0;
+  color: var(--c-text);
+}
+.btn--step:hover:not(:disabled) {
+  background: rgb(var(--c-accent-rgb) / 0.1);
+  border-color: var(--c-accent);
+}
+
+/* =====================================================================
+   Corner-marker — L sci-fi agli angoli dei pannelli (decisione UI v2)
+   Tono "misurato": L ciano a 4 angoli via pseudo-element, niente animazioni.
+   Implementazione: un singolo ::before steso su tutto il box con 4 L disegnate
+   come background-image (8 gradient sottili, 4 corner × 2 bracci L).
+   ===================================================================== */
+.hud-top::before,
+.panel::before,
+.chronicle::before,
+.time-control::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  pointer-events: none;
+  z-index: 4;
+  background-image:
+    /* top-left:  H + V */
+    linear-gradient(var(--corner-color), var(--corner-color)),
+    linear-gradient(var(--corner-color), var(--corner-color)),
+    /* top-right: H + V */
+    linear-gradient(var(--corner-color), var(--corner-color)),
+    linear-gradient(var(--corner-color), var(--corner-color)),
+    /* bottom-left:  H + V */
+    linear-gradient(var(--corner-color), var(--corner-color)),
+    linear-gradient(var(--corner-color), var(--corner-color)),
+    /* bottom-right: H + V */
+    linear-gradient(var(--corner-color), var(--corner-color)),
+    linear-gradient(var(--corner-color), var(--corner-color));
+  background-repeat: no-repeat;
+  background-position:
+    top left,     top left,
+    top right,    top right,
+    bottom left,  bottom left,
+    bottom right, bottom right;
+  background-size:
+    var(--corner-size) var(--corner-thick), var(--corner-thick) var(--corner-size),
+    var(--corner-size) var(--corner-thick), var(--corner-thick) var(--corner-size),
+    var(--corner-size) var(--corner-thick), var(--corner-thick) var(--corner-size),
+    var(--corner-size) var(--corner-thick), var(--corner-thick) var(--corner-size);
+  filter: );
+}
+
+/* =====================================================================
+   Scrollbar coerente col tema
+   ===================================================================== */
+.panel__content::-webkit-scrollbar,
+.chronicle__log::-webkit-scrollbar,
+.viewport__stage::-webkit-scrollbar,
+.viewport__stage ::-webkit-scrollbar { width: 8px; height: 8px; }
+.panel__content::-webkit-scrollbar-thumb,
+.chronicle__log::-webkit-scrollbar-thumb,
+.viewport__stage::-webkit-scrollbar-thumb,
+.viewport__stage ::-webkit-scrollbar-thumb {
+  background: var(--c-border);
+  border-radius: 4px;
+}
+.panel__content::-webkit-scrollbar-track,
+.chronicle__log::-webkit-scrollbar-track,
+.viewport__stage::-webkit-scrollbar-track,
+.viewport__stage ::-webkit-scrollbar-track { background: transparent; }
+/* Firefox: stessa tinta tema sui scroller del viewport centrale. */
+.panel__content,
+.chronicle__log,
+.viewport__stage,
+.viewport__stage * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-border) transparent;
+}
+
+/* =====================================================================
+   Responsive — riduzione su schermi stretti.
+   (Ottimizzato desktop, ma mobile-friendly come da GDD.)
+   ===================================================================== */
+
+/* =====================================================================
+   Layout responsivo — tablet (Revisione 2026: telefono non più target,
+   rimossi i breakpoint ≤760/640/540/480 e la navigazione mobile).
+   NB: le vecchie media query ≤900/≤560 referenziavano l'area grid "chron"
+   e il pannello .chronicle, RIMOSSI dal refactor #50 (la cronaca vive ora
+   nella Plancia d'Impero sx) → erano obsolete. Riscritte da zero sulla
+   shell attuale (top / left / view / right).
+   Stato UI volatile, mai nel save (UI_GUIDE §9).
+   ===================================================================== */
+
+
+/* --- Tablet landscape / finestre medie: pannelli più stretti --- */
+@media (max-width: 1000px) {
+  :root { --panel-left-w: 232px; --panel-right-w: 322px; }
+  .brand-title { font-size: 1.05rem; }
+  .resource__label { display: none; }
+  .index { min-width: 48px; }
+  .btn--save .btn__label { display: none; }
+}
+
+/* --- Telefono / portrait stretto (≤760px) ---------------------------
+   Colonna unica: il centro (mappa/flotte/civiltà) occupa tutto; le due
+   plance diventano sheet a tutto schermo richiamate dalla bottom tab bar.
+   -------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .panel--left, .panel--right { transition: none; }
+}
